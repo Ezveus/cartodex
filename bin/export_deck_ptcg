@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+
+# --- Helpers ---
+
+ENERGY_SYMBOL_TO_CODE = {
+  "Grass" => "G", "Fire" => "R", "Water" => "W", "Lightning" => "L",
+  "Fighting" => "F", "Psychic" => "P", "Darkness" => "D", "Metal" => "M",
+  "Fairy" => "Y", "Dragon" => "N", "Colorless" => "C"
+}.freeze
+
+def format_energy_name(card)
+  if card.subtype == "Basic Energy" && card.type_symbol.nil?
+    # Try to infer symbol from name (e.g. "Fighting Energy" -> {F})
+    type = card.name.sub(/ Energy$/, "")
+    code = ENERGY_SYMBOL_TO_CODE[type]
+    code ? "Basic {#{code}} Energy" : card.name
+  else
+    card.name
+  end
+end
+
+def card_line(deck_card)
+  card = deck_card.card
+  name = card.card_type == "Energy" ? format_energy_name(card) : card.name
+  "#{deck_card.quantity} #{name} #{card.set_name} #{card.set_number}"
+end
+
+def export_deck(deck)
+  deck_cards = deck.deck_cards.includes(:card).order("cards.name")
+
+  pokemon = deck_cards.select { |dc| dc.card.card_type == "Pokémon" }
+  trainers = deck_cards.select { |dc| dc.card.card_type == "Trainer" }
+  energy = deck_cards.select { |dc| dc.card.card_type == "Energy" }
+
+  lines = []
+  lines << "Pokémon: #{pokemon.size}"
+  pokemon.each { |dc| lines << card_line(dc) }
+  lines << ""
+  lines << "Trainer: #{trainers.size}"
+  trainers.each { |dc| lines << card_line(dc) }
+  lines << ""
+  lines << "Energy: #{energy.size}"
+  energy.each { |dc| lines << card_line(dc) }
+  lines.join("\n") + "\n"
+end
+
+# --- Interactive selection ---
+
+decks = Deck.order(:name).to_a
+
+if decks.empty?
+  abort "No decks found. Import a deck first with bin/import_deck."
+end
+
+$stderr.puts "Available decks:"
+$stderr.puts ""
+decks.each_with_index do |deck, i|
+  card_count = deck.deck_cards.sum(:quantity)
+  $stderr.puts "  #{i + 1}. #{deck.name} (#{card_count} cards)"
+end
+$stderr.puts ""
+$stderr.print "Select a deck (number): "
+
+input = $stdin.gets&.strip
+abort "No selection." if input.nil? || input.empty?
+
+index = input.to_i - 1
+abort "Invalid selection." unless (0...decks.size).cover?(index)
+
+deck = decks[index]
+$stdout.print export_deck(deck)
+$stderr.puts ""
+$stderr.puts "Exported \"#{deck.name}\" to stdout."
