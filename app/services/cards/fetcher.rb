@@ -16,10 +16,13 @@ class Cards::Fetcher < ApplicationService
   end
 
   def call
+    card = Card.find_by(set_name: @set_name, set_number: @set_number)
+    return card if card && card.updated_at > 1.day.ago
+
     html = HttpFetcher.call(@url)
     doc = Nokogiri::HTML(html)
 
-    card = Card.find_or_initialize_by(set_name: @set_name, set_number: @set_number)
+    card ||= Card.new(set_name: @set_name, set_number: @set_number)
     assign_attributes(card, doc)
     assign_attacks(card, doc)
     assign_abilities(card, doc)

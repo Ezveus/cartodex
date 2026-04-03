@@ -34,22 +34,6 @@ abort "Empty decklist" if decklist.strip.empty?
 user = User.first
 abort "No user found. Create a user first." unless user
 
-card_entries = decklist.lines.filter_map { |line|
-  match = line.strip.match(Decks::Fetcher::CARD_LINE_RE)
-  next unless match
-  { quantity: match[1].to_i, card_name: match[2], set_code: match[3], card_number: match[4] }
-}
-
-puts "Importing deck \"#{deck_name}\" (#{card_entries.size} card lines)..."
-
-card_entries.each_with_index do |entry, i|
-  print "  [#{i + 1}/#{card_entries.size}] #{entry[:card_name]} (#{entry[:set_code]} #{entry[:card_number]})... "
-  $stdout.flush
-  url = "#{Decks::Fetcher::LIMITLESS_BASE_URL}/#{entry[:set_code]}/#{entry[:card_number]}"
-  Cards::Fetcher.call(url)
-  puts "ok"
-end
-
-puts "Creating deck..."
+puts "Importing deck \"#{deck_name}\"..."
 deck = Decks::Fetcher.call(decklist, user, deck_name)
 puts "Done! Deck \"#{deck.name}\" created with #{deck.deck_cards.count} cards."

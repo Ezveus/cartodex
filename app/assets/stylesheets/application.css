@@ -96,6 +96,61 @@ body {
   text-align: center;
 }
 
+/* Importing list */
+.importing-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.importing-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-color);
+}
+
+.importing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.importing-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.importing-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.import-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.import-actions .btn {
+  flex: 1;
+}
+
 #scanner-video {
   width: 100%;
   max-width: 400px;
