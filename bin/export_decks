@@ -1,0 +1,139 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+require "json"
+
+# --- Helpers ---
+
+def card_json(card, quantity)
+  data = {
+    name: card.name,
+    quantity: quantity,
+    card_type: card.card_type,
+    set: card.set_full_name,
+    set_code: card.set_name,
+    number: card.set_number.to_i,
+    regulation_mark: card.regulation_mark
+  }
+
+  case card.card_type
+  when "Pokémon"
+    data.merge!(pokemon_fields(card))
+  when "Trainer"
+    data[:subtype] = card.subtype
+    data[:effect] = card.effect
+  when "Energy"
+    data[:subtype] = card.subtype
+    data[:effect] = card.effect
+  end
+
+  data.compact
+end
+
+def pokemon_fields(card)
+  fields = {
+    type: card.type_symbol,
+    hp: card.hp,
+    stage: card.stage,
+    evolves_from: card.evolves_from,
+    weakness: card.weakness,
+    resistance: card.resistance == "none" ? nil : card.resistance,
+    retreat_cost: card.retreat_cost
+  }
+
+  if card.pokemon_subtype
+    fields[:pokemon_subtype] = card.pokemon_subtype.name
+    fields[:rule_box] = card.pokemon_subtype.rule_box
+    fields[:prize_cards_on_ko] = card.pokemon_subtype.prize_cards_on_ko
+    fields[:rule_text] = card.pokemon_subtype.rule_text
+  end
+
+  if card.abilities.any?
+    fields[:abilities] = card.abilities.map { |a|
+      { name: a.name, effect: a.effect }.compact
+    }
+  end
+
+  if card.attacks.any?
+    fields[:attacks] = card.attacks.map { |a|
+      {
+        name: a.name,
+        cost: a.cost&.chars,
+        damage: a.damage,
+        effect: a.effect
+      }.compact
+    }
+  end
+
+  fields
+end
+
+def deck_json(deck)
+  deck_cards = deck.deck_cards.includes(card: [:attacks, :abilities, :pokemon_subtype])
+
+  pokemon = deck_cards.select { |dc| dc.card.card_type == "Pokémon" }
+  trainers = deck_cards.select { |dc| dc.card.card_type == "Trainer" }
+  energy = deck_cards.select { |dc| dc.card.card_type == "Energy" }
+
+  {
+    deck: {
+      name: deck.name,
+      total_cards: deck_cards.sum(&:quantity)
+    },
+    pokemon: {
+      count: pokemon.sum(&:quantity),
+      cards: pokemon.map { |dc| card_json(dc.card, dc.quantity) }
+    },
+    trainers: {
+      count: trainers.sum(&:quantity),
+      cards: trainers.map { |dc| card_json(dc.card, dc.quantity) }
+    },
+    energy: {
+      count: energy.sum(&:quantity),
+      cards: energy.map { |dc| card_json(dc.card, dc.quantity) }
+    }
+  }
+end
+
+# --- Interactive selection ---
+
+decks = Deck.order(:name).to_a
+
+if decks.empty?
+  abort "No decks found. Import a deck first with bin/import_deck."
+end
+
+$stderr.puts "Available decks:"
+$stderr.puts ""
+decks.each_with_index do |deck, i|
+  card_count = deck.deck_cards.sum(:quantity)
+  $stderr.puts "  #{i + 1}. #{deck.name} (#{card_count} cards)"
+end
+$stderr.puts ""
+$stderr.puts "  a. Export all decks"
+$stderr.puts ""
+$stderr.print "Select decks (comma-separated numbers, or 'a' for all): "
+
+input = $stdin.gets&.strip
+abort "No selection." if input.nil? || input.empty?
+
+selected = if input.downcase == "a"
+  decks
+else
+  indices = input.split(",").map { |s| s.strip.to_i - 1 }
+  indices.map { |i|
+    abort "Invalid selection: #{i + 1}" unless (0...decks.size).cover?(i)
+    decks[i]
+  }
+end
+
+# --- Export ---
+
+output = if selected.size == 1
+  deck_json(selected.first)
+else
+  { decks: selected.map { |d| deck_json(d) } }
+end
+
+$stdout.puts JSON.pretty_generate(output)
+$stderr.puts ""
+$stderr.puts "Exported #{selected.size} deck(s) to stdout."
