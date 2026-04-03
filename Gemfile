@@ -46,6 +46,9 @@ gem "image_processing", "~> 1.2"
 # Authentication
 gem "devise"
 
+# Component library
+gem "phlex-rails", "~> 2.2"
+
 # API Support
 gem "rack-cors"
 

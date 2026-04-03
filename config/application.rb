@@ -22,7 +22,7 @@ module Cartodex
     # in config/environments, which are processed later.
     #
     config.time_zone = "Europe/Paris"
-    # config.eager_load_paths << Rails.root.join("extras")
+    config.autoload_paths << Rails.root.join("app/views/components")
 
     I18n.available_locales = %i[en]
     I18n.default_locale    = ENV.fetch("LOCALE", "en").to_sym
