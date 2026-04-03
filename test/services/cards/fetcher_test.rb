@@ -4,6 +4,11 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   setup do
     @honedge_html = File.read(Rails.root.join("test/fixtures/files/POR_56.html"))
     @doublade_html = File.read(Rails.root.join("test/fixtures/files/POR_57.html"))
+    @original_http_fetcher_call = HttpFetcher.method(:call)
+  end
+
+  teardown do
+    HttpFetcher.define_singleton_method(:call, @original_http_fetcher_call)
   end
 
   # --- URL parsing ---

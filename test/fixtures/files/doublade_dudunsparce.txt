@@ -1,0 +1,31 @@
+Pokémon: 11
+2 Genesect ex BLK 67
+3 Dudunsparce TEF 129
+4 Aegislash POR 58
+3 Dunsparce JTG 120
+4 Honedge POR 56
+1 Fezandipiti ex ASC 142
+1 Fan Rotom SCR 118
+1 Shaymin DRI 10
+1 Moltres PFL 14
+1 Psyduck ASC 39
+4 Doublade POR 57
+
+Trainer: 13
+2 Dawn PFL 87
+1 Max Rod PRE 116
+2 Battle Cage PFL 85
+2 Morty's Conviction TEF 155
+3 Pokégear 3.0 SVI 186
+3 Poké Pad ASC 198
+1 Night Stretcher ASC 196
+2 Air Balloon BLK 79
+1 Sacred Ash DRI 168
+2 Hilda WHT 84
+4 Buddy-Buddy Poffin TEF 144
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+
+Energy: 2
+2 Basic {R} Energy MEE 2
+4 Ignition Energy WHT 86

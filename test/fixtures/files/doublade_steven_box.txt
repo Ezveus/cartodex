@@ -1,0 +1,30 @@
+Pokémon: 24
+4 Honedge POR 56
+4 Doublade POR 57
+4 Aegislash POR 58
+2 Genesect ex BLK 67
+3 Steven's Beldum DRI 143
+2 Steven's Metang DRI 144
+2 Steven's Metagross ex DRI 145
+1 Mega Skarmory ex POR 55
+1 Mega Mawile ex MEG 94
+1 Fezandipiti ex ASC 142
+
+Trainer: 24
+3 Buddy-Buddy Poffin ASC 184
+3 Ultra Ball ASC 213
+2 Rare Candy MEG 125
+2 Night Stretcher ASC 196
+1 Energy Recycler DRI 164
+1 Sacred Ash DRI 168
+1 Switch MEG 130
+1 Prime Catcher PRE 119
+3 Lillie's Determination ASC 192
+2 Dawn PFL 87
+1 Cyrano SSP 170
+2 Boss's Orders ASC 183
+2 Kofu SCR 138
+
+Energy: 12
+5 Psychic Energy MEE 5
+7 Metal Energy MEE 8
