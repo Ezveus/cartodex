@@ -1,0 +1,66 @@
+fr:
+  app_name: "Cartodex"
+  tagline: "Votre gestionnaire de cartes Pokémon"
+
+  auth:
+    sign_in: "Se connecter"
+    sign_up: "S'inscrire"
+    sign_out: "Se déconnecter"
+    email: "Email"
+    password: "Mot de passe"
+    password_confirmation: "Confirmation du mot de passe"
+    remember_me: "Se souvenir de moi"
+    forgot_password: "Mot de passe oublié ?"
+
+  dashboard:
+    welcome: "Bienvenue, %{email}"
+    collection:
+      title: "Ma Collection"
+      card_count: "%{count} cartes"
+      view: "Voir la Collection"
+      scan: "Scanner une Carte"
+      scan_title: "Scanner une Carte"
+      close: "Fermer"
+    decks:
+      title: "Mes Decks"
+      deck_count: "%{count} decks"
+      view: "Voir les Decks"
+      create: "Créer un Deck"
+      wins: "Victoires"
+      losses: "Défaites"
+
+  cards:
+    types:
+      pokemon: "Pokémon"
+      energy: "Énergie"
+      trainer: "Dresseur"
+    attributes:
+      name: "Nom"
+      card_type: "Type"
+      set_name: "Série"
+      set_number: "Numéro"
+      rarity: "Rareté"
+      hp: "PV"
+      type_symbol: "Symbole de Type"
+      retreat_cost: "Coût de Retraite"
+
+  collections:
+    quantity: "Quantité"
+    add_success: "Carte ajoutée à la collection"
+    update_success: "Collection mise à jour"
+    remove_success: "Carte retirée de la collection"
+
+  decks:
+    name: "Nom"
+    description: "Description"
+    create_success: "Deck créé"
+    update_success: "Deck mis à jour"
+    delete_success: "Deck supprimé"
+    cards:
+      add_success: "Carte ajoutée au deck"
+      remove_success: "Carte retirée du deck"
+    results:
+      add_success: "Résultat enregistré"
+      win: "Victoire"
+      loss: "Défaite"
+      notes: "Notes"

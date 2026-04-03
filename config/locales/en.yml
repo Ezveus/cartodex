@@ -1,31 +1,66 @@
-# Files in the config/locales directory are used for internationalization and
-# are automatically loaded by Rails. If you want to use locales other than
-# English, add the necessary files in this directory.
-#
-# To use the locales, use `I18n.t`:
-#
-#     I18n.t "hello"
-#
-# In views, this is aliased to just `t`:
-#
-#     <%= t("hello") %>
-#
-# To use a different locale, set it with `I18n.locale`:
-#
-#     I18n.locale = :es
-#
-# This would use the information in config/locales/es.yml.
-#
-# To learn more about the API, please read the Rails Internationalization guide
-# at https://guides.rubyonrails.org/i18n.html.
-#
-# Be aware that YAML interprets the following case-insensitive strings as
-# booleans: `true`, `false`, `on`, `off`, `yes`, `no`. Therefore, these strings
-# must be quoted to be interpreted as strings. For example:
-#
-#     en:
-#       "yes": yup
-#       enabled: "ON"
-
 en:
-  hello: "Hello world"
+  app_name: "Cartodex"
+  tagline: "Your Pokémon Trading Card Game Manager"
+
+  auth:
+    sign_in: "Sign In"
+    sign_up: "Sign Up"
+    sign_out: "Sign Out"
+    email: "Email"
+    password: "Password"
+    password_confirmation: "Password Confirmation"
+    remember_me: "Remember me"
+    forgot_password: "Forgot your password?"
+
+  dashboard:
+    welcome: "Welcome, %{email}"
+    collection:
+      title: "My Collection"
+      card_count: "%{count} cards"
+      view: "View Collection"
+      scan: "Scan Card"
+      scan_title: "Scan Card"
+      close: "Close"
+    decks:
+      title: "My Decks"
+      deck_count: "%{count} decks"
+      view: "View Decks"
+      create: "Create Deck"
+      wins: "Wins"
+      losses: "Losses"
+
+  cards:
+    types:
+      pokemon: "Pokémon"
+      energy: "Energy"
+      trainer: "Trainer"
+    attributes:
+      name: "Name"
+      card_type: "Type"
+      set_name: "Set"
+      set_number: "Number"
+      rarity: "Rarity"
+      hp: "HP"
+      type_symbol: "Type Symbol"
+      retreat_cost: "Retreat Cost"
+
+  collections:
+    quantity: "Quantity"
+    add_success: "Card added to collection"
+    update_success: "Collection updated"
+    remove_success: "Card removed from collection"
+
+  decks:
+    name: "Name"
+    description: "Description"
+    create_success: "Deck created"
+    update_success: "Deck updated"
+    delete_success: "Deck deleted"
+    cards:
+      add_success: "Card added to deck"
+      remove_success: "Card removed from deck"
+    results:
+      add_success: "Result recorded"
+      win: "Win"
+      loss: "Loss"
+      notes: "Notes"

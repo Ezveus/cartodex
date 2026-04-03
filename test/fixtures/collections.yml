@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  card: one
+  quantity: 1
+  foil: false
+
+two:
+  user: two
+  card: two
+  quantity: 1
+  foil: false
