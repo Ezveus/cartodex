@@ -10,7 +10,17 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_03_084815) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_03_104925) do
+  create_table "abilities", force: :cascade do |t|
+    t.integer "card_id", null: false
+    t.string "name"
+    t.text "effect"
+    t.integer "position"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["card_id"], name: "index_abilities_on_card_id"
+  end
+
   create_table "attacks", force: :cascade do |t|
     t.integer "card_id", null: false
     t.string "name"
@@ -45,6 +55,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_03_084815) do
     t.string "set_full_name"
     t.decimal "price_usd", precision: 8, scale: 2
     t.decimal "price_eur", precision: 8, scale: 2
+    t.text "effect"
+    t.integer "pokemon_subtype_id"
+    t.index ["pokemon_subtype_id"], name: "index_cards_on_pokemon_subtype_id"
   end
 
   create_table "collections", force: :cascade do |t|
@@ -88,6 +101,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_03_084815) do
     t.index ["user_id"], name: "index_decks_on_user_id"
   end
 
+  create_table "pokemon_subtypes", force: :cascade do |t|
+    t.string "name"
+    t.boolean "rule_box"
+    t.integer "prize_cards_on_ko"
+    t.text "rule_text"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
@@ -100,7 +122,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_03_084815) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "abilities", "cards"
   add_foreign_key "attacks", "cards"
+  add_foreign_key "cards", "pokemon_subtypes"
   add_foreign_key "collections", "cards"
   add_foreign_key "collections", "users"
   add_foreign_key "deck_cards", "cards"

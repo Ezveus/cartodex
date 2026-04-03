@@ -4,6 +4,11 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   setup do
     @honedge_html = File.read(Rails.root.join("test/fixtures/files/POR_56.html"))
     @doublade_html = File.read(Rails.root.join("test/fixtures/files/POR_57.html"))
+    @barbaracle_html = File.read(Rails.root.join("test/fixtures/files/POR_43.html"), encoding: "utf-8")
+    @lillie_html = File.read(Rails.root.join("test/fixtures/files/MEG_119.html"), encoding: "utf-8")
+    @basic_energy_html = File.read(Rails.root.join("test/fixtures/files/MEE_6.html"), encoding: "utf-8")
+    @special_energy_html = File.read(Rails.root.join("test/fixtures/files/POR_87.html"), encoding: "utf-8")
+    @mega_zygarde_html = File.read(Rails.root.join("test/fixtures/files/POR_47.html"), encoding: "utf-8")
     @original_http_fetcher_call = HttpFetcher.method(:call)
   end
 
@@ -85,6 +90,76 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     assert_equal "CC", attack.cost
     assert_equal "60×", attack.damage
     assert_includes attack.effect, "Reveal any number of Honedge"
+  end
+
+  # --- Abilities ---
+
+  test "parses abilities" do
+    stub_http("https://limitlesstcg.com/cards/POR/43", @barbaracle_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/43")
+
+    assert_equal 1, card.abilities.size
+    ability = card.abilities.first
+    assert_equal "Stone Arms", ability.name
+    assert_includes ability.effect, "Attach a Basic"
+    assert_equal 0, ability.position
+  end
+
+  # --- Trainer cards ---
+
+  test "parses trainer subtype and effect" do
+    stub_http("https://limitlesstcg.com/cards/MEG/119", @lillie_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/MEG/119")
+
+    assert_equal "Trainer", card.card_type
+    assert_equal "Supporter", card.subtype
+    assert_includes card.effect, "draw 6 cards"
+    assert_nil card.hp
+  end
+
+  # --- Energy cards ---
+
+  test "parses basic energy" do
+    stub_http("https://limitlesstcg.com/cards/MEE/6", @basic_energy_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/MEE/6")
+
+    assert_equal "Energy", card.card_type
+    assert_equal "Basic Energy", card.subtype
+    assert_nil card.effect
+    assert_nil card.rarity
+  end
+
+  test "parses special energy with effect" do
+    stub_http("https://limitlesstcg.com/cards/POR/87", @special_energy_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/87")
+
+    assert_equal "Energy", card.card_type
+    assert_equal "Special Energy", card.subtype
+    assert_includes card.effect, "Energy"
+  end
+
+  # --- Pokémon subtype ---
+
+  test "detects Mega Evolution ex subtype" do
+    stub_http("https://limitlesstcg.com/cards/POR/47", @mega_zygarde_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/47")
+
+    assert_equal "Mega Evolution ex", card.pokemon_subtype.name
+    assert card.pokemon_subtype.rule_box
+    assert_equal 3, card.pokemon_subtype.prize_cards_on_ko
+  end
+
+  test "regular pokemon has no pokemon_subtype" do
+    stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
+
+    assert_nil card.pokemon_subtype
   end
 
   # --- find_or_create behavior ---

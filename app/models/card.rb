@@ -1,6 +1,8 @@
 class Card < ApplicationRecord
   # Relationships
+  belongs_to :pokemon_subtype, optional: true
   has_many :attacks, -> { order(:position) }, dependent: :destroy
+  has_many :abilities, -> { order(:position) }, dependent: :destroy
   has_many :collections, dependent: :destroy
   has_many :users, through: :collections
   has_many :deck_cards, dependent: :destroy
@@ -11,7 +13,7 @@ class Card < ApplicationRecord
   validates :card_type, presence: true, inclusion: { in: %w[Pokémon Energy Trainer] }
   validates :set_name, presence: true
   validates :set_number, presence: true
-  validates :rarity, presence: true
+  validates :rarity, presence: true, unless: -> { subtype == "Basic Energy" }
 
   # Conditional validations for Pokémon cards
   with_options if: -> { card_type == "Pokémon" } do

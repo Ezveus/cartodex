@@ -22,6 +22,7 @@ class Cards::Fetcher < ApplicationService
     card = Card.find_or_initialize_by(set_name: @set_name, set_number: @set_number)
     assign_attributes(card, doc)
     assign_attacks(card, doc)
+    assign_abilities(card, doc)
     card.save!
     card
   end
@@ -47,6 +48,7 @@ class Cards::Fetcher < ApplicationService
 
     card.name = title.at_css(".card-text-name").text.strip
     card.card_type = parse_card_type(type_line)
+    card.subtype = parse_subtype(type_line)
     card.hp = parse_hp(title)
     card.type_symbol = parse_type_symbol(title)
     card.stage = parse_stage(type_line)
@@ -57,6 +59,8 @@ class Cards::Fetcher < ApplicationService
     card.regulation_mark = parse_regulation_mark(doc)
     card.price_usd = parse_price(doc, "usd")
     card.price_eur = parse_price(doc, "eur")
+    card.effect = parse_effect(card_text, card.card_type)
+    card.pokemon_subtype = detect_pokemon_subtype(card) if card.card_type == "Pokémon"
 
     wrr = card_text.at_css(".card-text-wrr")
     if wrr
@@ -84,6 +88,23 @@ class Cards::Fetcher < ApplicationService
         name: name,
         cost: cost,
         damage: damage,
+        effect: effect_el&.text&.strip.presence,
+        position: index
+      )
+    end
+  end
+
+  def assign_abilities(card, doc)
+    card.abilities.destroy_all if card.persisted?
+
+    doc.css(".card-text-ability").each_with_index do |ability_el, index|
+      info = ability_el.at_css(".card-text-ability-info")
+      effect_el = ability_el.at_css(".card-text-ability-effect")
+
+      name = info.text.strip.sub(/\AAbility:\s*/, "").strip
+
+      card.abilities.build(
+        name: name,
         effect: effect_el&.text&.strip.presence,
         position: index
       )
@@ -176,6 +197,53 @@ class Cards::Fetcher < ApplicationService
     return nil unless price_el
 
     price_el.text.strip.gsub(/[$€]/, "").to_d
+  end
+
+  def parse_subtype(type_line)
+    text = type_line.text.strip.gsub(/\s+/, " ")
+    # "Pokémon - Stage 1 - Evolves from Binacle" -> nil (no subtype)
+    # "Trainer - Supporter" -> "Supporter"
+    # "Energy - Basic Energy" -> "Basic Energy"
+    # "Energy - Special Energy" -> "Special Energy"
+    parts = text.split(" - ").map(&:strip)
+
+    case parts.first
+    when "Trainer"
+      parts[1] # "Supporter", "Item", "Stadium", "Pokémon Tool"
+    when "Energy"
+      parts[1] # "Basic Energy", "Special Energy"
+    end
+  end
+
+  def parse_effect(card_text, card_type)
+    return nil if card_type == "Pokémon"
+
+    # For Trainer/Energy, the effect text is in the second card-text-section (not title, not artist)
+    sections = card_text.css(".card-text-section")
+    effect_section = sections[1]
+    return nil unless effect_section
+    return nil if effect_section.classes.include?("card-text-artist")
+
+    effect_section.text.strip.presence
+  end
+
+  def detect_pokemon_subtype(card)
+    name = card.name
+    if name.include?("Mega ") && name.end_with?(" ex")
+      PokemonSubtype.find_by(name: "Mega Evolution ex")
+    elsif name.end_with?(" ex")
+      PokemonSubtype.find_by(name: "Pokémon ex")
+    elsif name.end_with?(" EX")
+      PokemonSubtype.find_by(name: "Pokémon EX")
+    elsif name.include?("VMAX")
+      PokemonSubtype.find_by(name: "Pokémon VMAX")
+    elsif name.include?("VSTAR")
+      PokemonSubtype.find_by(name: "Pokémon VSTAR")
+    elsif name.include?("V-UNION")
+      PokemonSubtype.find_by(name: "Pokémon V-UNION")
+    elsif name =~ / V$/
+      PokemonSubtype.find_by(name: "Pokémon V")
+    end
   end
 
   def parse_wrr_field(wrr, field)
