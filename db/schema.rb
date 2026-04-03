@@ -10,113 +10,113 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_03_104925) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_03_144849) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
-    t.string "name"
-    t.text "effect"
-    t.integer "position"
     t.datetime "created_at", null: false
+    t.text "effect"
+    t.string "name"
+    t.integer "position"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_abilities_on_card_id"
   end
 
   create_table "attacks", force: :cascade do |t|
     t.integer "card_id", null: false
-    t.string "name"
     t.string "cost"
+    t.datetime "created_at", null: false
     t.string "damage"
     t.text "effect"
+    t.string "name"
     t.integer "position"
-    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_attacks_on_card_id"
   end
 
   create_table "cards", force: :cascade do |t|
-    t.string "name"
+    t.string "artist"
     t.string "card_type"
-    t.string "subtype"
+    t.datetime "created_at", null: false
+    t.text "effect"
+    t.string "evolves_from"
+    t.integer "hp"
+    t.string "image_url"
+    t.string "name"
+    t.integer "pokemon_subtype_id"
+    t.decimal "price_eur", precision: 8, scale: 2
+    t.decimal "price_usd", precision: 8, scale: 2
+    t.string "rarity"
+    t.string "regulation_mark"
+    t.string "resistance"
+    t.integer "retreat_cost"
+    t.string "set_full_name"
     t.string "set_name"
     t.string "set_number"
-    t.string "rarity"
-    t.string "image_url"
-    t.integer "hp"
     t.string "stage"
+    t.string "subtype"
     t.string "type_symbol"
-    t.integer "retreat_cost"
-    t.string "artist"
-    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "weakness"
-    t.string "resistance"
-    t.string "evolves_from"
-    t.string "regulation_mark"
-    t.string "set_full_name"
-    t.decimal "price_usd", precision: 8, scale: 2
-    t.decimal "price_eur", precision: 8, scale: 2
-    t.text "effect"
-    t.integer "pokemon_subtype_id"
     t.index ["pokemon_subtype_id"], name: "index_cards_on_pokemon_subtype_id"
   end
 
   create_table "collections", force: :cascade do |t|
-    t.integer "user_id", null: false
     t.integer "card_id", null: false
-    t.integer "quantity"
-    t.boolean "foil"
     t.datetime "created_at", null: false
+    t.boolean "foil"
+    t.integer "quantity"
     t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
     t.index ["card_id"], name: "index_collections_on_card_id"
     t.index ["user_id"], name: "index_collections_on_user_id"
   end
 
   create_table "deck_cards", force: :cascade do |t|
-    t.integer "deck_id", null: false
     t.integer "card_id", null: false
-    t.integer "quantity"
     t.datetime "created_at", null: false
+    t.integer "deck_id", null: false
+    t.integer "quantity"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_deck_cards_on_card_id"
     t.index ["deck_id"], name: "index_deck_cards_on_deck_id"
   end
 
   create_table "deck_results", force: :cascade do |t|
-    t.integer "deck_id", null: false
-    t.string "result"
-    t.string "opponent_deck_name"
-    t.text "notes"
-    t.datetime "played_at"
     t.datetime "created_at", null: false
+    t.integer "deck_id", null: false
+    t.text "notes"
+    t.string "opponent_deck_name"
+    t.datetime "played_at"
+    t.string "result"
     t.datetime "updated_at", null: false
     t.index ["deck_id"], name: "index_deck_results_on_deck_id"
   end
 
   create_table "decks", force: :cascade do |t|
-    t.integer "user_id", null: false
-    t.string "name"
-    t.text "description"
     t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name"
     t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
     t.index ["user_id"], name: "index_decks_on_user_id"
   end
 
   create_table "pokemon_subtypes", force: :cascade do |t|
-    t.string "name"
-    t.boolean "rule_box"
-    t.integer "prize_cards_on_ko"
-    t.text "rule_text"
     t.datetime "created_at", null: false
+    t.string "name"
+    t.integer "prize_cards_on_ko"
+    t.boolean "rule_box"
+    t.text "rule_text"
     t.datetime "updated_at", null: false
   end
 
   create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
-    t.string "reset_password_token"
-    t.datetime "reset_password_sent_at"
     t.datetime "remember_created_at"
-    t.datetime "created_at", null: false
+    t.datetime "reset_password_sent_at"
+    t.string "reset_password_token"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
