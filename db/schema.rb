@@ -10,7 +10,19 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_01_17_194654) do
+ActiveRecord::Schema[8.0].define(version: 2026_04_03_084815) do
+  create_table "attacks", force: :cascade do |t|
+    t.integer "card_id", null: false
+    t.string "name"
+    t.string "cost"
+    t.string "damage"
+    t.text "effect"
+    t.integer "position"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["card_id"], name: "index_attacks_on_card_id"
+  end
+
   create_table "cards", force: :cascade do |t|
     t.string "name"
     t.string "card_type"
@@ -26,6 +38,13 @@ ActiveRecord::Schema[8.0].define(version: 2025_01_17_194654) do
     t.string "artist"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "weakness"
+    t.string "resistance"
+    t.string "evolves_from"
+    t.string "regulation_mark"
+    t.string "set_full_name"
+    t.decimal "price_usd", precision: 8, scale: 2
+    t.decimal "price_eur", precision: 8, scale: 2
   end
 
   create_table "collections", force: :cascade do |t|
@@ -81,6 +100,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_01_17_194654) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "attacks", "cards"
   add_foreign_key "collections", "cards"
   add_foreign_key "collections", "users"
   add_foreign_key "deck_cards", "cards"

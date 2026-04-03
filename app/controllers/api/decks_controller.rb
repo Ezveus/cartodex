@@ -1,7 +1,7 @@
 module Api
   class DecksController < ApplicationController
     before_action :authenticate_user!
-    before_action :set_deck, only: [:show, :update, :destroy]
+    before_action :set_deck, only: [ :show, :update, :destroy ]
 
     def index
       decks = current_user.decks.includes(:deck_cards, :cards)
@@ -52,8 +52,8 @@ module Api
         description: deck.description,
         cards: deck.deck_cards.map { |dc| deck_card_json(dc) },
         results: {
-          wins: deck.deck_results.where(result: 'win').count,
-          losses: deck.deck_results.where(result: 'loss').count
+          wins: deck.deck_results.where(result: "win").count,
+          losses: deck.deck_results.where(result: "loss").count
         }
       }
     end

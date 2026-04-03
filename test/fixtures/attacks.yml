@@ -1,0 +1,14 @@
+honedge_cut:
+  card: honedge
+  name: Cut
+  cost: C
+  damage: "10"
+  position: 0
+
+doublade_weaponized_swords:
+  card: doublade
+  name: Weaponized Swords
+  cost: CC
+  damage: "60×"
+  effect: "Reveal any number of Honedge, Doublade, and Aegislash from your hand, and this attack does 60 damage for each card you revealed in this way."
+  position: 0

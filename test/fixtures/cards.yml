@@ -1,29 +1,33 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+honedge:
+  name: Honedge
+  card_type: "Pokémon"
+  set_name: POR
+  set_number: "56"
+  rarity: Common
+  hp: 70
+  stage: Basic
+  type_symbol: Metal
+  retreat_cost: 2
+  weakness: Fire
+  resistance: Grass
 
-one:
-  name: MyString
-  card_type: MyString
-  subtype: MyString
-  set_name: MyString
-  set_number: MyString
-  rarity: MyString
-  image_url: MyString
-  hp: 1
-  stage: MyString
-  type_symbol: MyString
-  retreat_cost: 1
-  artist: MyString
+doublade:
+  name: Doublade
+  card_type: "Pokémon"
+  set_name: POR
+  set_number: "57"
+  rarity: Common
+  hp: 100
+  stage: "Stage 1"
+  type_symbol: Metal
+  retreat_cost: 2
+  evolves_from: Honedge
+  weakness: Fire
+  resistance: Grass
 
-two:
-  name: MyString
-  card_type: MyString
-  subtype: MyString
-  set_name: MyString
-  set_number: MyString
-  rarity: MyString
-  image_url: MyString
-  hp: 1
-  stage: MyString
-  type_symbol: MyString
-  retreat_cost: 1
-  artist: MyString
+trainer_card:
+  name: Boss's Orders
+  card_type: Trainer
+  set_name: PAL
+  set_number: "172"
+  rarity: Rare

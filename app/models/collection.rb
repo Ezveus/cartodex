@@ -7,5 +7,5 @@ class Collection < ApplicationRecord
   validates :user_id, uniqueness: { scope: :card_id, message: "already has this card in collection" }
 
   # Scopes
-  scope :with_cards, -> { where('quantity > 0') }
+  scope :with_cards, -> { where("quantity > 0") }
 end

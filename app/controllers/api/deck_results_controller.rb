@@ -13,8 +13,8 @@ module Api
           notes: result.notes,
           created_at: result.created_at,
           deck_stats: {
-            wins: @deck.deck_results.where(result: 'win').count,
-            losses: @deck.deck_results.where(result: 'loss').count
+            wins: @deck.deck_results.where(result: "win").count,
+            losses: @deck.deck_results.where(result: "loss").count
           }
         }, status: :created
       else

@@ -12,14 +12,14 @@ Rails.application.routes.draw do
 
   # Authenticated routes
   authenticate :user do
-    get 'dashboard', to: 'home#dashboard'
+    get "dashboard", to: "home#dashboard"
 
     # API endpoints
     namespace :api do
-      resources :collections, only: [:index, :create, :update, :destroy]
+      resources :collections, only: [ :index, :create, :update, :destroy ]
       resources :decks do
-        resources :cards, only: [:index, :create, :destroy], controller: 'deck_cards'
-        resources :results, only: [:create], controller: 'deck_results'
+        resources :cards, only: [ :index, :create, :destroy ], controller: "deck_cards"
+        resources :results, only: [ :create ], controller: "deck_results"
       end
     end
   end
