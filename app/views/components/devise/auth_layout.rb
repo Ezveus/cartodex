@@ -8,8 +8,6 @@ module Devise
     end
 
     def view_template(&block)
-      render Ui::FlashMessages.new
-
       render Ui::Card.new(title: @title) do
         render Ui::FormErrors.new(resource: @resource)
         yield
