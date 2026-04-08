@@ -56,11 +56,7 @@ module Api
         id: deck.id,
         name: deck.name,
         description: deck.description,
-        cards: deck.deck_cards.map { |dc| deck_card_json(dc) },
-        results: {
-          wins: deck.deck_results.where(result: "win").count,
-          losses: deck.deck_results.where(result: "loss").count
-        }
+        cards: deck.deck_cards.map { |dc| deck_card_json(dc) }
       }
     end
 

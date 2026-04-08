@@ -3,8 +3,8 @@ module Api
     before_action :authenticate_user!
 
     def index
-      collections = current_user.collections.includes(:card)
-      total_cards = collections.sum(:quantity)
+      collections = current_user.collections.includes(:card).load
+      total_cards = collections.sum(&:quantity)
 
       render json: {
         collections: collections.map { |c| collection_json(c) },
