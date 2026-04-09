@@ -38,6 +38,7 @@
             <% group.sort_by { |dc| dc.card.name }.each do |dc| %>
               <li class="deck-card-item"
                   data-card-preview-url="<%= dc.card.image_url %>"
+                  data-card-preview-card-id="<%= dc.card.id %>"
                   data-action="mouseenter->card-preview#show">
                 <span class="deck-card-qty"><%= dc.quantity %>&times;</span>
                 <span class="deck-card-name"><%= dc.card.name %></span>
@@ -51,6 +52,7 @@
 
     <div class="deck-show-preview">
       <%= image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none" %>
+      <%= link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none" %>
     </div>
   </div>
 </div>

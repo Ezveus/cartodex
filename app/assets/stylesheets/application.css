@@ -531,6 +531,113 @@ textarea.form-input {
   background-color: #f0f7ff;
 }
 
+.card-preview-link {
+  display: block;
+  text-align: center;
+  margin-top: 0.75rem;
+  color: var(--secondary-color);
+  font-size: 0.9rem;
+}
+
+/* Card show */
+.card-show-container {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.card-show-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.card-show-header h1 {
+  margin: 0;
+}
+
+.card-show-content {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.card-show-image {
+  width: 350px;
+  flex-shrink: 0;
+}
+
+.card-full-image {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-show-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-info-section {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.card-info-section h2 {
+  margin-top: 0;
+  color: var(--primary-color);
+  font-size: 1.1rem;
+  border-bottom: 2px solid var(--primary-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.card-info-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.card-info-list dt {
+  font-weight: 600;
+  color: #666;
+}
+
+.card-info-list dd {
+  margin: 0;
+}
+
+.card-move {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.card-move:last-child {
+  border-bottom: none;
+}
+
+.card-move-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.card-move-cost {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.card-move-damage {
+  font-weight: bold;
+  color: var(--primary-color);
+  margin-left: auto;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .dashboard-grid {

@@ -1,13 +1,17 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["image"]
+  static targets = ["image", "link"]
 
   show(event) {
-    const url = event.currentTarget.dataset.cardPreviewUrl
-    if (url) {
-      this.imageTarget.src = url
+    const { cardPreviewUrl, cardPreviewCardId } = event.currentTarget.dataset
+    if (cardPreviewUrl) {
+      this.imageTarget.src = cardPreviewUrl
       this.imageTarget.style.display = "block"
+    }
+    if (cardPreviewCardId && this.hasLinkTarget) {
+      this.linkTarget.href = `/cards/${cardPreviewCardId}`
+      this.linkTarget.style.display = "inline-block"
     }
   }
 }

@@ -14,6 +14,7 @@ Rails.application.routes.draw do
   authenticate :user do
     get "dashboard", to: "home#dashboard"
     resources :decks, only: [ :index, :show ]
+    resources :cards, only: [ :show ]
 
     # API endpoints
     namespace :api do
