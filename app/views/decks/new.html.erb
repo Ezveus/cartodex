@@ -1,0 +1,31 @@
+<div class="deck-form-container">
+  <h1>New Deck</h1>
+
+  <%= form_with model: @deck, class: "deck-form" do |f| %>
+    <% if @deck.errors.any? %>
+      <div class="form-errors">
+        <h3><%= pluralize(@deck.errors.count, "error") %> prevented this deck from being saved:</h3>
+        <ul>
+          <% @deck.errors.full_messages.each do |msg| %>
+            <li><%= msg %></li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+
+    <div class="form-group">
+      <%= f.label :name, class: "form-label" %>
+      <%= f.text_field :name, class: "form-input", autofocus: true, placeholder: "My Deck" %>
+    </div>
+
+    <div class="form-group">
+      <%= f.label :description, class: "form-label" %>
+      <%= f.text_area :description, class: "form-input", rows: 3, placeholder: "Optional description…" %>
+    </div>
+
+    <div class="form-actions deck-form-actions">
+      <%= f.submit "Create Deck", class: "btn btn-primary" %>
+      <%= link_to "Cancel", decks_path, class: "btn btn-secondary" %>
+    </div>
+  <% end %>
+</div>

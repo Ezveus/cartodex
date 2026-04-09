@@ -17,10 +17,6 @@ export default class extends Controller {
     }
   }
 
-  async create() {
-    // Will be implemented with deck creation form
-  }
-
   openImport(event) {
     event.preventDefault()
     this.importModalTarget.style.display = "block"

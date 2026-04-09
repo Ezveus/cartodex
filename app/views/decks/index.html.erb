@@ -1,7 +1,9 @@
 <div class="decks-container">
   <div class="decks-header">
     <h1>My Decks</h1>
-    <%= link_to "Back to Dashboard", dashboard_path, class: "btn btn-secondary" %>
+    <div class="decks-header-actions">
+      <%= link_to "New Deck", new_deck_path, class: "btn btn-primary" %>
+    </div>
   </div>
 
   <% if @decks.any? %>
