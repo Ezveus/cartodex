@@ -498,6 +498,39 @@ textarea.form-input {
   color: #999;
 }
 
+/* Deck show layout */
+.deck-show-content {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.deck-show-list {
+  flex: 1;
+  min-width: 0;
+}
+
+.deck-show-preview {
+  width: 300px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 2rem;
+}
+
+.card-preview-image {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.deck-card-item {
+  cursor: pointer;
+}
+
+.deck-card-item:hover {
+  background-color: #f0f7ff;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .dashboard-grid {

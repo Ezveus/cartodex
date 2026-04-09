@@ -26,21 +26,31 @@
     </div>
   </div>
 
-  <% card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type } %>
-  <% %w[Pokémon Trainer Energy].each do |type| %>
-    <% group = card_groups[type] %>
-    <% next unless group.present? %>
-    <div class="deck-section">
-      <h2><%= type %> (<%= group.sum(&:quantity) %>)</h2>
-      <ul class="deck-card-list">
-        <% group.sort_by { |dc| dc.card.name }.each do |dc| %>
-          <li class="deck-card-item">
-            <span class="deck-card-qty"><%= dc.quantity %>&times;</span>
-            <span class="deck-card-name"><%= dc.card.name %></span>
-            <span class="deck-card-set"><%= dc.card.set_name %> <%= dc.card.set_number %></span>
-          </li>
-        <% end %>
-      </ul>
+  <div class="deck-show-content" data-controller="card-preview">
+    <div class="deck-show-list">
+      <% card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type } %>
+      <% %w[Pokémon Trainer Energy].each do |type| %>
+        <% group = card_groups[type] %>
+        <% next unless group.present? %>
+        <div class="deck-section">
+          <h2><%= type %> (<%= group.sum(&:quantity) %>)</h2>
+          <ul class="deck-card-list">
+            <% group.sort_by { |dc| dc.card.name }.each do |dc| %>
+              <li class="deck-card-item"
+                  data-card-preview-url="<%= dc.card.image_url %>"
+                  data-action="mouseenter->card-preview#show">
+                <span class="deck-card-qty"><%= dc.quantity %>&times;</span>
+                <span class="deck-card-name"><%= dc.card.name %></span>
+                <span class="deck-card-set"><%= dc.card.set_name %> <%= dc.card.set_number %></span>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
     </div>
-  <% end %>
+
+    <div class="deck-show-preview">
+      <%= image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none" %>
+    </div>
+  </div>
 </div>
