@@ -18,6 +18,7 @@ Rails.application.routes.draw do
 
     # API endpoints
     namespace :api do
+      resources :cards, only: [ :index ]
       resources :collections, only: [ :index, :create, :update, :destroy ]
       resources :decks do
         post :import, on: :collection

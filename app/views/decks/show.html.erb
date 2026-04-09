@@ -1,4 +1,4 @@
-<div class="deck-show-container">
+<div class="deck-show-container" data-controller="card-preview">
   <div class="deck-show-header">
     <div>
       <h1><%= @deck.name %></h1>
@@ -26,8 +26,17 @@
     </div>
   </div>
 
-  <div class="deck-show-content" data-controller="card-preview">
-    <div class="deck-show-list">
+  <div class="deck-show-content">
+    <div class="deck-show-main">
+      <div class="deck-card-search" data-controller="card-search" data-card-search-deck-id-value="<%= @deck.id %>">
+        <input type="text"
+               placeholder="Search cards to add..."
+               data-card-search-target="input"
+               data-action="input->card-search#search"
+               class="form-input card-search-input" />
+        <div data-card-search-target="results" class="card-search-results"></div>
+      </div>
+
       <% card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type } %>
       <% %w[Pokémon Trainer Energy].each do |type| %>
         <% group = card_groups[type] %>
