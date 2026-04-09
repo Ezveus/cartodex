@@ -13,6 +13,7 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
+    resources :decks, only: [ :index ]
 
     # API endpoints
     namespace :api do

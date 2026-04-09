@@ -19,7 +19,7 @@
         <span id="deck-count" data-decks-target="count">0</span> decks
       </div>
       <div class="deck-actions">
-        <%= link_to "View Decks", "#", class: "btn btn-primary", data: { action: "decks#view" } %>
+        <%= link_to "View Decks", decks_path, class: "btn btn-primary" %>
         <%= link_to "Create Deck", "#", class: "btn btn-secondary", data: { action: "decks#create" } %>
         <%= link_to "Import Deck", "#", class: "btn btn-secondary", data: { action: "decks#openImport" } %>
       </div>

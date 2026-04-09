@@ -350,6 +350,53 @@ textarea.form-input {
   color: #c62f0c;
 }
 
+/* Decks list */
+.decks-container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.decks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.decks-header h1 {
+  margin: 0;
+}
+
+.decks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.deck-item {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.deck-item h2 {
+  margin-top: 0;
+  color: var(--primary-color);
+  font-size: 1.2rem;
+}
+
+.deck-description {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.deck-card-count {
+  font-weight: 600;
+  color: var(--secondary-color);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .dashboard-grid {

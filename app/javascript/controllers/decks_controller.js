@@ -17,10 +17,6 @@ export default class extends Controller {
     }
   }
 
-  async view() {
-    // Will be implemented with deck list view
-  }
-
   async create() {
     // Will be implemented with deck creation form
   }
