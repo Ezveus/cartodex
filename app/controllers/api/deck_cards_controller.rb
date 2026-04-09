@@ -19,6 +19,20 @@ module Api
       end
     end
 
+    def update
+      deck_card = @deck.deck_cards.find_by!(card_id: params[:id])
+      new_quantity = deck_card_params[:quantity].to_i
+
+      if new_quantity <= 0
+        deck_card.destroy
+        head :no_content
+      elsif deck_card.update(quantity: new_quantity)
+        render json: deck_card_json(deck_card)
+      else
+        render json: { errors: deck_card.errors.full_messages }, status: :unprocessable_entity
+      end
+    end
+
     def destroy
       deck_card = @deck.deck_cards.find_by!(card_id: params[:id])
       deck_card.destroy

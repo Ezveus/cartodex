@@ -592,6 +592,36 @@ textarea.form-input {
   background-color: #f0f7ff;
 }
 
+.deck-card-qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 4.5rem;
+}
+
+.qty-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: white;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color);
+  padding: 0;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.qty-btn:hover {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
 .card-preview-link {
   display: block;
   text-align: center;

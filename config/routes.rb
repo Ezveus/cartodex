@@ -22,7 +22,7 @@ Rails.application.routes.draw do
       resources :collections, only: [ :index, :create, :update, :destroy ]
       resources :decks do
         post :import, on: :collection
-        resources :cards, only: [ :index, :create, :destroy ], controller: "deck_cards"
+        resources :cards, only: [ :index, :create, :update, :destroy ], controller: "deck_cards"
         resources :results, only: [ :create ], controller: "deck_results"
       end
     end

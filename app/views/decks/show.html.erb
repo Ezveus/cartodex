@@ -48,8 +48,16 @@
               <li class="deck-card-item"
                   data-card-preview-url="<%= dc.card.image_url %>"
                   data-card-preview-card-id="<%= dc.card.id %>"
-                  data-action="mouseenter->card-preview#show">
-                <span class="deck-card-qty"><%= dc.quantity %>&times;</span>
+                  data-action="mouseenter->card-preview#show"
+                  data-controller="deck-card-quantity"
+                  data-deck-card-quantity-deck-id-value="<%= @deck.id %>"
+                  data-deck-card-quantity-card-id-value="<%= dc.card.id %>"
+                  data-deck-card-quantity-quantity-value="<%= dc.quantity %>">
+                <div class="deck-card-qty-controls">
+                  <button class="qty-btn" data-action="deck-card-quantity#decrement">-</button>
+                  <span class="deck-card-qty"><%= dc.quantity %></span>
+                  <button class="qty-btn" data-action="deck-card-quantity#increment">+</button>
+                </div>
                 <span class="deck-card-name"><%= dc.card.name %></span>
                 <span class="deck-card-set"><%= dc.card.set_name %> <%= dc.card.set_number %></span>
               </li>
