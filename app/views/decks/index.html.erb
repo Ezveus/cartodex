@@ -12,7 +12,7 @@
           <% if deck.description.present? %>
             <p class="deck-description"><%= deck.description %></p>
           <% end %>
-          <p class="deck-card-count"><%= deck.deck_cards.size %> cards</p>
+          <p class="deck-card-count"><%= deck.deck_cards.sum(&:quantity) %> cards</p>
         <% end %>
       <% end %>
     </div>
