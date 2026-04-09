@@ -848,6 +848,136 @@ textarea.form-input {
   font-size: 0.9rem;
 }
 
+/* Cards index */
+.cards-container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.cards-container > h1 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+.cards-layout {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.sets-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+}
+
+.sets-sidebar h2 {
+  margin-top: 0;
+  font-size: 1rem;
+  color: var(--primary-color);
+}
+
+.sets-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sets-list li a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  text-decoration: none;
+  color: var(--text-color);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  transition: background-color 0.2s;
+}
+
+.sets-list li a:hover {
+  background-color: var(--background-color);
+}
+
+.sets-list li.active a {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.set-full-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.set-code {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+
+.cards-grid-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.cards-grid-area h2 {
+  margin-top: 0;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.card-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-color);
+  transition: transform 0.2s;
+}
+
+.card-grid-item:hover {
+  transform: scale(1.05);
+}
+
+.card-grid-image {
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.card-grid-name {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.card-grid-number {
+  font-size: 0.7rem;
+  color: #999;
+}
+
+.cards-empty {
+  color: #666;
+  font-size: 1.1rem;
+}
+
 /* Deck form */
 .deck-form-container {
   max-width: 600px;

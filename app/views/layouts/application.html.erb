@@ -31,6 +31,7 @@
           <div class="navbar-links">
             <%= link_to "Dashboard", dashboard_path, class: "navbar-link #{'active' if controller_name == 'home'}" %>
             <%= link_to "Decks", decks_path, class: "navbar-link #{'active' if controller_name == 'decks'}" %>
+            <%= link_to "Cards", cards_path, class: "navbar-link #{'active' if controller_name == 'cards'}" %>
             <%= link_to "Collection", "#", class: "navbar-link #{'active' if controller_name == 'collections'}" %>
           </div>
           <div class="navbar-right">

@@ -1,0 +1,38 @@
+<div class="cards-container">
+  <h1>Cards</h1>
+
+  <div class="cards-layout">
+    <nav class="sets-sidebar">
+      <h2>Sets</h2>
+      <ul class="sets-list">
+        <% @sets.each do |(set_name, set_full_name), count| %>
+          <%= content_tag :li, class: ("active" if @current_set == set_name) do %>
+            <%= link_to cards_path(set: set_name) do %>
+              <span class="set-full-name"><%= set_full_name || set_name %></span>
+              <span class="set-code"><%= set_name %> (<%= count %>)</span>
+            <% end %>
+          <% end %>
+        <% end %>
+      </ul>
+    </nav>
+
+    <div class="cards-grid-area">
+      <% if @current_set.present? %>
+        <h2><%= @cards.first&.set_full_name || @current_set %></h2>
+        <div class="cards-grid">
+          <% @cards.each do |card| %>
+            <%= link_to card_path(card), class: "card-grid-item" do %>
+              <% if card.image_url.present? %>
+                <%= image_tag card.image_url, alt: card.name, class: "card-grid-image", loading: "lazy" %>
+              <% end %>
+              <span class="card-grid-name"><%= card.name %></span>
+              <span class="card-grid-number">#<%= card.set_number %></span>
+            <% end %>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="cards-empty">Select a set to browse cards.</p>
+      <% end %>
+    </div>
+  </div>
+</div>
