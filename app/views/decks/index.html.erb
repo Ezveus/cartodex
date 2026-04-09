@@ -7,13 +7,13 @@
   <% if @decks.any? %>
     <div class="decks-grid">
       <% @decks.each do |deck| %>
-        <div class="deck-item">
+        <%= link_to deck_path(deck), class: "deck-item" do %>
           <h2><%= deck.name %></h2>
           <% if deck.description.present? %>
             <p class="deck-description"><%= deck.description %></p>
           <% end %>
           <p class="deck-card-count"><%= deck.deck_cards.size %> cards</p>
-        </div>
+        <% end %>
       <% end %>
     </div>
   <% else %>

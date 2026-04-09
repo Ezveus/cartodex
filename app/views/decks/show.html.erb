@@ -1,0 +1,46 @@
+<div class="deck-show-container">
+  <div class="deck-show-header">
+    <div>
+      <h1><%= @deck.name %></h1>
+      <% if @deck.description.present? %>
+        <p class="deck-show-description"><%= @deck.description %></p>
+      <% end %>
+    </div>
+    <%= link_to "Back to Decks", decks_path, class: "btn btn-secondary" %>
+  </div>
+
+  <div class="deck-show-stats">
+    <div class="stat">
+      <span class="stat-value"><%= @deck.deck_cards.sum(&:quantity) %></span>
+      <span class="stat-label">cards</span>
+    </div>
+    <% wins = @deck.deck_results.count { |r| r.result == "win" } %>
+    <% losses = @deck.deck_results.count { |r| r.result == "loss" } %>
+    <div class="stat">
+      <span class="stat-value"><%= wins %></span>
+      <span class="stat-label">wins</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value"><%= losses %></span>
+      <span class="stat-label">losses</span>
+    </div>
+  </div>
+
+  <% card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type } %>
+  <% %w[Pokémon Trainer Energy].each do |type| %>
+    <% group = card_groups[type] %>
+    <% next unless group.present? %>
+    <div class="deck-section">
+      <h2><%= type %> (<%= group.sum(&:quantity) %>)</h2>
+      <ul class="deck-card-list">
+        <% group.sort_by { |dc| dc.card.name }.each do |dc| %>
+          <li class="deck-card-item">
+            <span class="deck-card-qty"><%= dc.quantity %>&times;</span>
+            <span class="deck-card-name"><%= dc.card.name %></span>
+            <span class="deck-card-set"><%= dc.card.set_name %> <%= dc.card.set_number %></span>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+</div>
