@@ -3,22 +3,26 @@
 
   <div class="cards-layout">
     <nav class="sets-sidebar">
-      <h2>Sets</h2>
-      <ul class="sets-list">
-        <% @sets.each do |(set_name, set_full_name), count| %>
-          <%= content_tag :li, class: ("active" if @current_set == set_name) do %>
-            <%= link_to cards_path(set: set_name) do %>
-              <span class="set-full-name"><%= set_full_name || set_name %></span>
-              <span class="set-code"><%= set_name %> (<%= count %>)</span>
+      <% @blocks.each do |block_name, sets| %>
+        <div class="sets-block">
+          <h3 class="sets-block-name"><%= block_name %></h3>
+          <ul class="sets-list">
+            <% sets.each do |card_set| %>
+              <%= content_tag :li, class: ("active" if @current_set == card_set) do %>
+                <%= link_to cards_path(set: card_set.code) do %>
+                  <span class="set-full-name"><%= card_set.name %></span>
+                  <span class="set-code"><%= card_set.code %> (<%= card_set.cards.size %>)</span>
+                <% end %>
+              <% end %>
             <% end %>
-          <% end %>
-        <% end %>
-      </ul>
+          </ul>
+        </div>
+      <% end %>
     </nav>
 
     <div class="cards-grid-area">
-      <% if @current_set.present? %>
-        <h2><%= @cards.first&.set_full_name || @current_set %></h2>
+      <% if @current_set %>
+        <h2><%= @current_set.name %></h2>
         <div class="cards-grid">
           <% @cards.each do |card| %>
             <%= link_to card_path(card), class: "card-grid-item" do %>

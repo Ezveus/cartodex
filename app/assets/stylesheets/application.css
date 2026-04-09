@@ -879,10 +879,22 @@ textarea.form-input {
   overflow-y: auto;
 }
 
-.sets-sidebar h2 {
-  margin-top: 0;
-  font-size: 1rem;
+.sets-block {
+  margin-bottom: 1rem;
+}
+
+.sets-block:last-child {
+  margin-bottom: 0;
+}
+
+.sets-block-name {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--primary-color);
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .sets-list {

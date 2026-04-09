@@ -1,5 +1,6 @@
 class Card < ApplicationRecord
   # Relationships
+  belongs_to :card_set, optional: true
   belongs_to :pokemon_subtype, optional: true
   has_many :attacks, -> { order(:position) }, dependent: :destroy
   has_many :abilities, -> { order(:position) }, dependent: :destroy

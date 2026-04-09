@@ -1,14 +1,12 @@
 class CardsController < ApplicationController
   def index
-    @sets = Card.group(:set_name, :set_full_name)
-               .order(:set_full_name)
-               .count
-    @current_set = params[:set]
-    @cards = if @current_set.present?
-      Card.where(set_name: @current_set).order(:set_number)
-    else
-      Card.none
+    @blocks = CardSet.by_release
+                     .includes(:cards)
+                     .group_by(&:block_name)
+    @current_set = if params[:set].present?
+      CardSet.find_by(code: params[:set])
     end
+    @cards = @current_set ? @current_set.cards.order(:set_number) : Card.none
   end
 
   def show

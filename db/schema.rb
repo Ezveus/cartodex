@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_09_131250) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_09_134246) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -33,8 +33,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_131250) do
     t.index ["card_id"], name: "index_attacks_on_card_id"
   end
 
+  create_table "card_sets", force: :cascade do |t|
+    t.string "block_name"
+    t.string "code"
+    t.datetime "created_at", null: false
+    t.string "logo_url"
+    t.string "name"
+    t.date "release_date"
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_card_sets_on_code", unique: true
+  end
+
   create_table "cards", force: :cascade do |t|
     t.string "artist"
+    t.integer "card_set_id"
     t.string "card_type"
     t.datetime "created_at", null: false
     t.text "effect"
@@ -58,6 +70,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_131250) do
     t.string "type_symbol"
     t.datetime "updated_at", null: false
     t.string "weakness"
+    t.index ["card_set_id"], name: "index_cards_on_card_set_id"
     t.index ["name", "fingerprint"], name: "index_cards_on_name_and_fingerprint"
     t.index ["pokemon_subtype_id"], name: "index_cards_on_pokemon_subtype_id"
   end
@@ -126,6 +139,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_131250) do
 
   add_foreign_key "abilities", "cards"
   add_foreign_key "attacks", "cards"
+  add_foreign_key "cards", "card_sets"
   add_foreign_key "cards", "pokemon_subtypes"
   add_foreign_key "collections", "cards"
   add_foreign_key "collections", "users"

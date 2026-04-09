@@ -23,3 +23,5 @@
     st.rule_text = attrs[:rule_text]
   end
 end
+
+load Rails.root.join("db/seeds/card_sets.rb")

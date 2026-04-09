@@ -23,6 +23,7 @@ class Cards::Fetcher < ApplicationService
     doc = Nokogiri::HTML(html)
 
     card ||= Card.new(set_name: @set_name, set_number: @set_number)
+    card.card_set ||= CardSet.find_by(code: @set_name)
     assign_attributes(card, doc)
     assign_attacks(card, doc)
     assign_abilities(card, doc)
