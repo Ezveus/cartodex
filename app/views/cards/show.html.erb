@@ -129,6 +129,22 @@
           <p><%= @card.effect %></p>
         </div>
       <% end %>
+
+      <% if @alt_printings.any? %>
+        <div class="card-info-section">
+          <h2>Alternative Printings</h2>
+          <div class="alt-printings">
+            <% @alt_printings.each do |alt| %>
+              <%= link_to card_path(alt), class: "alt-printing-item" do %>
+                <% if alt.image_url.present? %>
+                  <%= image_tag alt.image_url, alt: alt.name, class: "alt-printing-image" %>
+                <% end %>
+                <span class="alt-printing-set"><%= alt.set_full_name || alt.set_name %> (<%= alt.set_number %>)</span>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
     </div>
   </div>
 </div>

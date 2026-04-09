@@ -729,6 +729,38 @@ textarea.form-input {
   margin-left: auto;
 }
 
+.alt-printings {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.alt-printing-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  width: 120px;
+  transition: transform 0.2s;
+}
+
+.alt-printing-item:hover {
+  transform: scale(1.05);
+}
+
+.alt-printing-image {
+  width: 120px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.alt-printing-set {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+}
+
 /* Card search */
 .deck-card-search {
   position: relative;

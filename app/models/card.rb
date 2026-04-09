@@ -8,6 +8,9 @@ class Card < ApplicationRecord
   has_many :deck_cards, dependent: :destroy
   has_many :decks, through: :deck_cards
 
+  # Callbacks
+  before_save :compute_fingerprint
+
   # Validations
   validates :name, presence: true
   validates :card_type, presence: true, inclusion: { in: %w[Pokémon Energy Trainer] }
@@ -22,5 +25,16 @@ class Card < ApplicationRecord
       in: %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless]
     }
     validates :retreat_cost, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  end
+
+  def compute_fingerprint
+    self.fingerprint = if card_type == "Pokémon"
+      data = [ name, hp, type_symbol,
+               attacks.sort_by(&:position).map { |a| [ a.name, a.cost, a.damage ] },
+               abilities.sort_by(&:position).map(&:name) ]
+      Digest::SHA256.hexdigest(data.to_json)[0, 16]
+    else
+      Digest::SHA256.hexdigest(name.to_s)[0, 16]
+    end
   end
 end
