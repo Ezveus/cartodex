@@ -33,6 +33,19 @@ module Admin
       end
     end
 
+    def import
+      url = params[:url].to_s.strip
+      if url.blank? || !url.start_with?("https://limitlesstcg.com/cards/")
+        render json: { error: "Invalid Limitless URL." }, status: :unprocessable_entity
+        return
+      end
+
+      import_id = SecureRandom.uuid
+      set_code = url.split("/").last
+      CardSets::ImportJob.perform_later(url, current_user, import_id)
+      render json: { import_id: import_id, set_code: set_code }
+    end
+
     def destroy
       @card_set.destroy
       redirect_to admin_card_sets_path, notice: "Card set deleted."

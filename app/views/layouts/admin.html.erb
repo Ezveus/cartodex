@@ -27,6 +27,7 @@
         </div>
       </div>
     </nav>
+    <%= turbo_stream_from current_user, :notifications %>
     <%= render Ui::FlashMessages.new %>
     <%= yield %>
   </body>

@@ -4,6 +4,21 @@
     <%= link_to "New Set", new_admin_card_set_path, class: "btn btn-primary" %>
   </div>
 
+  <div data-controller="set-import">
+    <%= form_with url: import_admin_card_sets_path, method: :post, class: "admin-search",
+          data: { action: "submit->set-import#import" } do %>
+      <%= text_field_tag :url, nil, placeholder: "https://limitlesstcg.com/cards/POR", class: "form-input admin-search-input",
+            data: { set_import_target: "url" } %>
+      <%= submit_tag "Import from Limitless", class: "btn btn-primary btn-sm",
+            data: { set_import_target: "submit" } %>
+    <% end %>
+
+    <div class="importing-section" style="display: none;" data-controller="importing-list">
+      <h3>Importing...</h3>
+      <ul data-set-import-target="list" data-importing-list-target="list" class="importing-list"></ul>
+    </div>
+  </div>
+
   <table class="admin-table">
     <thead>
       <tr>

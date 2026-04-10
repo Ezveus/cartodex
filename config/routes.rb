@@ -19,7 +19,9 @@ Rails.application.routes.draw do
     # Admin
     namespace :admin do
       root "dashboard#index"
-      resources :card_sets
+      resources :card_sets do
+        post :import, on: :collection
+      end
       resources :cards, only: [ :index, :show, :edit, :update ] do
         post :rescrape, on: :member
       end
