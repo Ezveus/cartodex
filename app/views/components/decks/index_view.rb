@@ -5,13 +5,16 @@ module Decks
     end
 
     def view_template
-      div(class: "decks-container") do
+      div(class: "decks-container", data: { controller: "decks" }) do
         div(class: "decks-header") do
           h1 { "My Decks" }
           div(class: "decks-header-actions") do
             link_to "New Deck", helpers.new_deck_path, class: "btn btn-primary"
+            link_to "Import Deck", "#", class: "btn btn-secondary", data: { action: "decks#openImport" }
           end
         end
+
+        render Ui::DeckImport.new
 
         if @decks.any?
           div(class: "decks-grid") do

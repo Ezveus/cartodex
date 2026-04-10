@@ -429,6 +429,11 @@ textarea.form-input {
   margin: 0;
 }
 
+.decks-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .decks-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
