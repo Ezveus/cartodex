@@ -39,7 +39,7 @@ Key services:
 
 **Controllers**: API endpoints under `Api::` namespace serve JSON. Admin panel under `Admin::` namespace (dashboard, card sets with import, cards with rescrape, users with toggle_admin, decks). All app routes (except root/health) require Devise authentication.
 
-**Frontend**: Hotwire (Turbo + Stimulus), Propshaft asset pipeline, importmap for JS.
+**Frontend**: Hotwire (Turbo + Stimulus), Propshaft asset pipeline, importmap for JS. **All views use Phlex components** — see the `phlex-architecture` skill for conventions and patterns. Always use Phlex, never write view logic in ERB.
 
 ## Bin Scripts
 
