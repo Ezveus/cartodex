@@ -6,7 +6,7 @@ class CardsController < ApplicationController
     @current_set = if params[:set].present?
       CardSet.find_by(code: params[:set])
     end
-    @cards = @current_set ? @current_set.cards.order(:set_number) : Card.none
+    @cards = @current_set ? @current_set.cards.order(Arel.sql("CAST(set_number AS INTEGER)")) : Card.none
   end
 
   def show

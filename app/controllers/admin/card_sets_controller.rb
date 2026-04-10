@@ -7,7 +7,7 @@ module Admin
     end
 
     def show
-      @cards = @card_set.cards.order(:set_number)
+      @cards = @card_set.cards.order(Arel.sql("CAST(set_number AS INTEGER)"))
     end
 
     def new
