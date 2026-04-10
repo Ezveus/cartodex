@@ -1,0 +1,28 @@
+<div class="admin-container">
+  <h1>Cards</h1>
+
+  <%= form_with url: admin_cards_path, method: :get, class: "admin-search" do %>
+    <%= text_field_tag :q, params[:q], placeholder: "Search by name...", class: "form-input admin-search-input" %>
+    <%= submit_tag "Search", class: "btn btn-secondary btn-sm" %>
+  <% end %>
+
+  <table class="admin-table">
+    <thead>
+      <tr><th>Name</th><th>Set</th><th>Type</th><th>HP</th><th>Rarity</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% @cards.each do |card| %>
+        <tr>
+          <td><%= link_to card.name, admin_card_path(card) %></td>
+          <td><%= card.set_name %> <%= card.set_number %></td>
+          <td><%= card.card_type %></td>
+          <td><%= card.hp %></td>
+          <td><%= card.rarity %></td>
+          <td>
+            <%= link_to "Edit", edit_admin_card_path(card), class: "btn btn-secondary btn-sm" %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

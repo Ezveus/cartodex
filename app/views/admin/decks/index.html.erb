@@ -1,0 +1,19 @@
+<div class="admin-container">
+  <h1>Decks</h1>
+
+  <table class="admin-table">
+    <thead>
+      <tr><th>Name</th><th>Owner</th><th>Cards</th><th>Created</th></tr>
+    </thead>
+    <tbody>
+      <% @decks.each do |deck| %>
+        <tr>
+          <td><%= link_to deck.name, admin_deck_path(deck) %></td>
+          <td><%= deck.user.email %></td>
+          <td><%= deck.deck_cards.sum(&:quantity) %></td>
+          <td><%= deck.created_at.strftime("%Y-%m-%d") %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

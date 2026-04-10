@@ -1,0 +1,29 @@
+<div class="admin-container">
+  <h1>Users</h1>
+
+  <table class="admin-table">
+    <thead>
+      <tr><th>Email</th><th>Admin</th><th>Decks</th><th>Joined</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <% @users.each do |user| %>
+        <tr>
+          <td><%= user.email %></td>
+          <td><%= user.admin? ? "Yes" : "No" %></td>
+          <td><%= user.decks.size %></td>
+          <td><%= user.created_at.strftime("%Y-%m-%d") %></td>
+          <td>
+            <% if user != current_user %>
+              <%= link_to user.admin? ? "Remove admin" : "Make admin",
+                    toggle_admin_admin_user_path(user),
+                    data: { turbo_method: :patch, turbo_confirm: "#{user.admin? ? 'Remove' : 'Grant'} admin for #{user.email}?" },
+                    class: "btn btn-secondary btn-sm" %>
+            <% else %>
+              <span class="text-muted">You</span>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

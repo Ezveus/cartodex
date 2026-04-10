@@ -16,6 +16,19 @@ Rails.application.routes.draw do
     resources :decks, only: [ :index, :show, :new, :create ]
     resources :cards, only: [ :index, :show ]
 
+    # Admin
+    namespace :admin do
+      root "dashboard#index"
+      resources :card_sets
+      resources :cards, only: [ :index, :show, :edit, :update ] do
+        post :rescrape, on: :member
+      end
+      resources :users, only: [ :index ] do
+        patch :toggle_admin, on: :member
+      end
+      resources :decks, only: [ :index, :show ]
+    end
+
     # API endpoints
     namespace :api do
       resources :cards, only: [ :index ]

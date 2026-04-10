@@ -1015,6 +1015,142 @@ textarea.form-input {
   text-align: center;
 }
 
+/* Admin */
+.admin-navbar {
+  background: #2d3748;
+}
+
+.admin-navbar .navbar-brand {
+  color: #e2e8f0;
+}
+
+.admin-navbar .navbar-link {
+  color: #cbd5e0;
+}
+
+.admin-navbar .navbar-link:hover {
+  background: #4a5568;
+}
+
+.admin-navbar .navbar-link.active {
+  color: white;
+  font-weight: 600;
+}
+
+.admin-navbar .navbar-user {
+  color: #a0aec0;
+}
+
+.admin-container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.admin-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.admin-stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.admin-stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.admin-stat-label {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.admin-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.admin-table {
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-collapse: collapse;
+}
+
+.admin-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--border-color);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+}
+
+.admin-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+.admin-table a:not(.btn) {
+  color: var(--secondary-color);
+  text-decoration: none;
+}
+
+.admin-table a:not(.btn):hover {
+  text-decoration: underline;
+}
+
+.admin-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-search-input {
+  max-width: 300px;
+}
+
+.btn-sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.text-muted {
+  color: #999;
+  font-size: 0.85rem;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .dashboard-grid {

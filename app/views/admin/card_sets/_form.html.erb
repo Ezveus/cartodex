@@ -1,0 +1,38 @@
+<%= form_with model: [:admin, card_set], class: "deck-form" do |f| %>
+  <% if card_set.errors.any? %>
+    <div class="form-errors">
+      <h3><%= pluralize(card_set.errors.count, "error") %>:</h3>
+      <ul><% card_set.errors.full_messages.each do |msg| %><li><%= msg %></li><% end %></ul>
+    </div>
+  <% end %>
+
+  <div class="form-group">
+    <%= f.label :code, class: "form-label" %>
+    <%= f.text_field :code, class: "form-input" %>
+  </div>
+
+  <div class="form-group">
+    <%= f.label :name, class: "form-label" %>
+    <%= f.text_field :name, class: "form-input" %>
+  </div>
+
+  <div class="form-group">
+    <%= f.label :block_name, "Block", class: "form-label" %>
+    <%= f.text_field :block_name, class: "form-input" %>
+  </div>
+
+  <div class="form-group">
+    <%= f.label :release_date, class: "form-label" %>
+    <%= f.date_field :release_date, class: "form-input" %>
+  </div>
+
+  <div class="form-group">
+    <%= f.label :logo_url, "Logo URL", class: "form-label" %>
+    <%= f.text_field :logo_url, class: "form-input" %>
+  </div>
+
+  <div class="form-actions deck-form-actions">
+    <%= f.submit class: "btn btn-primary" %>
+    <%= link_to "Cancel", admin_card_sets_path, class: "btn btn-secondary" %>
+  </div>
+<% end %>

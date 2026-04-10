@@ -1,0 +1,30 @@
+<div class="admin-container">
+  <div class="admin-header">
+    <h1><%= @card.name %> — <%= @card.set_name %> <%= @card.set_number %></h1>
+    <div class="admin-header-actions">
+      <%= link_to "Edit", edit_admin_card_path(@card), class: "btn btn-secondary" %>
+      <%= link_to "Rescrape", rescrape_admin_card_path(@card), data: { turbo_method: :post, turbo_confirm: "Rescrape #{@card.name} from Limitless?" }, class: "btn btn-primary" %>
+    </div>
+  </div>
+
+  <div class="admin-grid-2col">
+    <div>
+      <% if @card.image_url.present? %>
+        <%= image_tag @card.image_url, alt: @card.name, style: "width: 300px; border-radius: 12px;" %>
+      <% end %>
+    </div>
+    <div>
+      <table class="admin-table">
+        <tbody>
+          <tr><td><strong>Type</strong></td><td><%= @card.card_type %></td></tr>
+          <tr><td><strong>HP</strong></td><td><%= @card.hp %></td></tr>
+          <tr><td><strong>Energy Type</strong></td><td><%= @card.type_symbol %></td></tr>
+          <tr><td><strong>Rarity</strong></td><td><%= @card.rarity %></td></tr>
+          <tr><td><strong>Set</strong></td><td><%= @card.set_full_name %> (<%= @card.set_name %> <%= @card.set_number %>)</td></tr>
+          <tr><td><strong>Fingerprint</strong></td><td><code><%= @card.fingerprint %></code></td></tr>
+          <tr><td><strong>Card Set</strong></td><td><%= @card.card_set ? link_to(@card.card_set.name, admin_card_set_path(@card.card_set)) : "—" %></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

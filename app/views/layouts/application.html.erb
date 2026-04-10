@@ -36,6 +36,9 @@
           </div>
           <div class="navbar-right">
             <span class="navbar-user"><%= current_user.email %></span>
+            <% if current_user.admin? %>
+              <%= link_to "Admin", admin_root_path, class: "navbar-link" %>
+            <% end %>
             <%= link_to "Sign out", destroy_user_session_path, data: { turbo_method: :delete }, class: "navbar-link" %>
           </div>
         </div>

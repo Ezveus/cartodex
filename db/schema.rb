@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_09_134246) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_09_190129) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -126,6 +126,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_134246) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
