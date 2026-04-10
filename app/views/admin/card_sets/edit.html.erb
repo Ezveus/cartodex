@@ -1,4 +1,1 @@
-<div class="admin-container">
-  <h1>Edit <%= @card_set.name %></h1>
-  <%= render "form", card_set: @card_set %>
-</div>
+<%= render Admin::CardSets::EditView.new(card_set: @card_set) %>

@@ -1,7 +1,7 @@
 module Admin
   class BaseController < ApplicationController
     before_action :require_admin!
-    layout "admin"
+    layout -> { Layouts::AdminLayout }
 
     private
 
