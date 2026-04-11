@@ -11,4 +11,8 @@ class Import < ApplicationRecord
   scope :pending, -> { where(status: "pending") }
   scope :deck_imports, -> { where(kind: "deck") }
   scope :card_set_imports, -> { where(kind: "card_set") }
+
+  def pending? = status == "pending"
+  def completed? = status == "completed"
+  def failed? = status == "failed"
 end

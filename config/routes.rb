@@ -33,6 +33,9 @@ Rails.application.routes.draw do
         patch :toggle_admin, on: :member
       end
       resources :decks, only: [ :index, :show ]
+      resources :imports, only: [ :index, :destroy ] do
+        post :retry, on: :member
+      end
     end
 
     # API endpoints
