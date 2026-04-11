@@ -42,6 +42,12 @@ module Admin
       end
 
       set_code = url.split("/").last
+
+      if Import.card_set_imports.pending.exists?(label: set_code)
+        render json: { error: "Set #{set_code} is already being imported." }, status: :unprocessable_entity
+        return
+      end
+
       import = current_user.imports.create!(kind: "card_set", label: set_code)
       ::CardSets::ImportJob.perform_later(url, current_user, import)
       render json: { import_id: import.id, set_code: set_code }
