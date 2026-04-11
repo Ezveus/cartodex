@@ -12,8 +12,8 @@ module Admin
     end
 
     def retry
-      unless @import.failed?
-        redirect_to admin_imports_path, alert: "Only failed imports can be retried."
+      unless @import.failed? || @import.pending?
+        redirect_to admin_imports_path, alert: "Only failed or pending imports can be retried."
         return
       end
 

@@ -47,7 +47,7 @@ module Admin
       end
 
       def actions_cell(imp)
-        if imp.failed?
+        if imp.failed? || imp.pending?
           link_to "Retry", helpers.retry_admin_import_path(imp),
             data: { turbo_method: :post, turbo_confirm: "Retry import #{imp.label}?" },
             class: "btn btn-primary btn-sm"
