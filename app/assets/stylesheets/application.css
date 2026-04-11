@@ -596,8 +596,8 @@ textarea.form-input {
 .deck-show-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
 }
 
 .deck-show-header h1 {
@@ -606,7 +606,14 @@ textarea.form-input {
 
 .deck-show-description {
   color: #666;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.deck-actions-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
 
 .deck-show-stats {

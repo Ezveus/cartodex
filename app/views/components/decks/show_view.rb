@@ -28,16 +28,16 @@ module Decks
           h1 { @deck.name }
           p(class: "deck-show-description") { @deck.description } if @deck.description.present?
         end
-        div(class: "decks-header-actions") do
-          button(class: "btn btn-primary", data: { action: "result-modal#open" }) { "Log Result" }
-          button(
-            class: "btn btn-primary",
-            data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
-          ) { "Export" }
-          link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary"
-          link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary"
-          link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
-        end
+        link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
+      end
+      nav(class: "deck-actions-bar") do
+        button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
+        button(
+          class: "btn btn-secondary btn-sm",
+          data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
+        ) { "Export" }
+        link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
+        link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
       end
     end
 
