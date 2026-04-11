@@ -5,7 +5,7 @@ module Decks
     end
 
     def view_template
-      div(class: "deck-show-container", data: { controller: "card-preview" }) do
+      div(class: "deck-show-container", data: { controller: "card-preview deck-totals", action: "deck-card-quantity:changed->deck-totals#updateTotals" }) do
         header_section
         stats_section
         div(class: "deck-show-content") do
@@ -38,15 +38,15 @@ module Decks
       losses = @deck.deck_results.count { |r| r.result == "loss" }
 
       div(class: "deck-show-stats") do
-        stat(@deck.deck_cards.sum(&:quantity), "cards")
+        stat(@deck.deck_cards.sum(&:quantity), "cards", data: { deck_totals_target: "total" })
         stat(wins, "wins")
         stat(losses, "losses")
       end
     end
 
-    def stat(value, label)
+    def stat(value, label, **data)
       div(class: "stat") do
-        span(class: "stat-value") { value.to_s }
+        span(class: "stat-value", **data) { value.to_s }
         span(class: "stat-label") { label }
       end
     end

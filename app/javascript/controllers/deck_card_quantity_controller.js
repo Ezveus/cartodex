@@ -8,6 +8,7 @@ export default class extends Controller {
   }
 
   decrement() {
+    if (this.quantityValue <= 1) return
     this.#updateQuantity(this.quantityValue - 1)
   }
 
@@ -22,7 +23,10 @@ export default class extends Controller {
     })
 
     if (response.ok) {
-      window.Turbo.visit(window.location.href, { action: "replace" })
+      const delta = newQuantity - this.quantityValue
+      this.quantityValue = newQuantity
+      this.element.querySelector(".deck-card-qty").textContent = newQuantity
+      this.dispatch("changed", { detail: { delta } })
     }
   }
 }
