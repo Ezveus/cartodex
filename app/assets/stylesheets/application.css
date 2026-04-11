@@ -500,6 +500,29 @@ textarea.form-input {
   font-size: 0.85em;
 }
 
+.result-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.result-modal-actions .btn {
+  flex: 1;
+  text-align: center;
+}
+
+.archetype-create-item {
+  color: #2563eb;
+  border-top: 2px solid #eee;
+}
+
+.create-archetype-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
 /* Decks list */
 .decks-container {
   max-width: 1200px;

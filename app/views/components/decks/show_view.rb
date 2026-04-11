@@ -154,16 +154,49 @@ module Decks
             div(class: "archetype-search-results", data: { result_modal_target: "archetypeResults" })
           end
 
+          create_archetype_section
+
           div(class: "form-group") do
             label(class: "form-label") { "Notes (optional)" }
             textarea(class: "form-input", rows: "2", data: { result_modal_target: "notesInput" })
           end
 
-          div(class: "form-actions") do
+          div(class: "form-actions result-modal-actions") do
             button(class: "btn btn-primary", data: { action: "result-modal#submit" }) { "Save" }
             button(class: "btn btn-secondary", type: "button", data: { action: "result-modal#close" }) { "Cancel" }
           end
         end
+      end
+    end
+    def create_archetype_section
+      div(class: "create-archetype-section", style: "display: none;", data: { result_modal_target: "createSection" }) do
+        p(class: "form-label", style: "font-weight: 600; margin-bottom: 0.5rem;") { "New archetype" }
+
+        div(class: "form-group") do
+          label(class: "form-label") { "Primary Pokémon" }
+          input(type: "hidden", data: { result_modal_target: "primaryId" })
+          input(
+            type: "text",
+            class: "form-input",
+            placeholder: "Search Pokémon...",
+            data: { result_modal_target: "primaryInput", action: "input->result-modal#searchPrimary" }
+          )
+          div(class: "archetype-search-results", data: { result_modal_target: "primaryResults" })
+        end
+
+        div(class: "form-group") do
+          label(class: "form-label") { "Secondary Pokémon (optional)" }
+          input(type: "hidden", data: { result_modal_target: "secondaryId" })
+          input(
+            type: "text",
+            class: "form-input",
+            placeholder: "Search Pokémon...",
+            data: { result_modal_target: "secondaryInput", action: "input->result-modal#searchSecondary" }
+          )
+          div(class: "archetype-search-results", data: { result_modal_target: "secondaryResults" })
+        end
+
+        button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "result-modal#cancelCreate" }) { "Cancel new archetype" }
       end
     end
   end

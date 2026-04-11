@@ -1,7 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["dialog", "resultInput", "archetypeInput", "archetypeId", "archetypeResults", "notesInput", "resultBtn"]
+  static targets = [
+    "dialog", "resultInput", "archetypeInput", "archetypeId", "archetypeResults",
+    "notesInput", "resultBtn", "createSection", "primaryInput", "primaryId",
+    "primaryResults", "secondaryInput", "secondaryId", "secondaryResults"
+  ]
   static values = { deckId: Number }
 
   open() {
@@ -19,9 +23,12 @@ export default class extends Controller {
     this.resultInputTarget.value = event.currentTarget.dataset.result
   }
 
+  // --- Archetype search ---
+
   searchArchetypes() {
     clearTimeout(this.searchTimeout)
     const query = this.archetypeInputTarget.value.trim()
+    this.archetypeIdTarget.value = ""
 
     if (query.length < 2) {
       this.archetypeResultsTarget.innerHTML = ""
@@ -35,7 +42,41 @@ export default class extends Controller {
     this.archetypeIdTarget.value = event.currentTarget.dataset.archetypeId
     this.archetypeInputTarget.value = event.currentTarget.dataset.archetypeName
     this.archetypeResultsTarget.innerHTML = ""
+    this.#hideCreateSection()
   }
+
+  showCreateForm() {
+    this.archetypeResultsTarget.innerHTML = ""
+    this.createSectionTarget.style.display = "block"
+  }
+
+  cancelCreate() {
+    this.#hideCreateSection()
+  }
+
+  // --- Pokemon search for create ---
+
+  searchPrimary() {
+    this.#searchPokemon(this.primaryInputTarget, this.primaryResultsTarget, "primary")
+  }
+
+  searchSecondary() {
+    this.#searchPokemon(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
+  }
+
+  selectPrimary(event) {
+    this.primaryIdTarget.value = event.currentTarget.dataset.cardId
+    this.primaryInputTarget.value = event.currentTarget.dataset.cardName
+    this.primaryResultsTarget.innerHTML = ""
+  }
+
+  selectSecondary(event) {
+    this.secondaryIdTarget.value = event.currentTarget.dataset.cardId
+    this.secondaryInputTarget.value = event.currentTarget.dataset.cardName
+    this.secondaryResultsTarget.innerHTML = ""
+  }
+
+  // --- Submit ---
 
   async submit(event) {
     event.preventDefault()
@@ -43,11 +84,19 @@ export default class extends Controller {
     const result = this.resultInputTarget.value
     if (!result) return
 
+    let archetypeId = this.archetypeIdTarget.value
+
+    // If create section is visible and no archetype selected, create one first
+    if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
+      archetypeId = await this.#createArchetype()
+      if (!archetypeId) return
+    }
+
     const token = document.querySelector('meta[name="csrf-token"]').content
     const body = {
       deck_result: {
-        result: result,
-        archetype_id: this.archetypeIdTarget.value || null,
+        result,
+        archetype_id: archetypeId || null,
         notes: this.notesInputTarget.value,
         played_at: new Date().toISOString()
       }
@@ -67,6 +116,29 @@ export default class extends Controller {
     }
   }
 
+  // --- Private ---
+
+  async #createArchetype() {
+    const token = document.querySelector('meta[name="csrf-token"]').content
+    const body = {
+      primary_pokemon_id: this.primaryIdTarget.value,
+      secondary_pokemon_id: this.secondaryIdTarget.value || null
+    }
+
+    const response = await fetch("/api/archetypes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      credentials: "same-origin",
+      body: JSON.stringify(body)
+    })
+
+    if (response.ok || response.status === 201) {
+      const archetype = await response.json()
+      return archetype.id
+    }
+    return null
+  }
+
   async #fetchArchetypes(query) {
     const response = await fetch(`/api/archetypes?q=${encodeURIComponent(query)}`, {
       credentials: "same-origin"
@@ -74,16 +146,11 @@ export default class extends Controller {
 
     if (!response.ok) return
     const archetypes = await response.json()
-    this.#renderArchetypeResults(archetypes)
+    this.#renderArchetypeResults(archetypes, query)
   }
 
-  #renderArchetypeResults(archetypes) {
-    if (archetypes.length === 0) {
-      this.archetypeResultsTarget.innerHTML = '<div class="archetype-search-empty">No archetypes found</div>'
-      return
-    }
-
-    const html = archetypes.map(a => `
+  #renderArchetypeResults(archetypes, query) {
+    let html = archetypes.map(a => `
       <div class="archetype-search-item"
            data-action="click->result-modal#selectArchetype"
            data-archetype-id="${a.id}"
@@ -93,14 +160,65 @@ export default class extends Controller {
       </div>
     `).join("")
 
+    html += `
+      <div class="archetype-search-item archetype-create-item"
+           data-action="click->result-modal#showCreateForm">
+        <strong>+ Create new archetype</strong>
+      </div>
+    `
+
     this.archetypeResultsTarget.innerHTML = html
+  }
+
+  #searchPokemon(inputTarget, resultsTarget, prefix) {
+    clearTimeout(this[`${prefix}Timeout`])
+    const query = inputTarget.value.trim()
+
+    if (query.length < 2) {
+      resultsTarget.innerHTML = ""
+      return
+    }
+
+    this[`${prefix}Timeout`] = setTimeout(async () => {
+      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}&type=Pokémon`, {
+        credentials: "same-origin"
+      })
+      if (!response.ok) return
+      const cards = await response.json()
+
+      const seen = new Set()
+      const unique = cards.filter(c => {
+        if (seen.has(c.name)) return false
+        seen.add(c.name)
+        return true
+      })
+
+      resultsTarget.innerHTML = unique.map(card => `
+        <div class="archetype-search-item"
+             data-action="click->result-modal#select${prefix === 'primary' ? 'Primary' : 'Secondary'}"
+             data-card-id="${card.id}"
+             data-card-name="${this.#escape(card.name)}">
+          <strong>${this.#escape(card.name)}</strong>
+          <span class="archetype-search-pokemon">${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
+        </div>
+      `).join("")
+    }, 300)
+  }
+
+  #hideCreateSection() {
+    this.createSectionTarget.style.display = "none"
+    this.primaryInputTarget.value = ""
+    this.primaryIdTarget.value = ""
+    this.primaryResultsTarget.innerHTML = ""
+    this.secondaryInputTarget.value = ""
+    this.secondaryIdTarget.value = ""
+    this.secondaryResultsTarget.innerHTML = ""
   }
 
   #updateStats(stats) {
     const container = document.querySelector(".deck-show-stats")
     if (!container) return
     const values = container.querySelectorAll(".stat-value")
-    // Order: cards, wins, losses, draws, timeouts
     if (values[1]) values[1].textContent = stats.wins
     if (values[2]) values[2].textContent = stats.losses
     if (values[3]) values[3].textContent = stats.draws
@@ -114,6 +232,7 @@ export default class extends Controller {
     this.archetypeResultsTarget.innerHTML = ""
     this.notesInputTarget.value = ""
     this.resultBtnTargets.forEach(btn => btn.classList.remove("active"))
+    this.#hideCreateSection()
   }
 
   #escape(text) {

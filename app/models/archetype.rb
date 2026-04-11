@@ -13,7 +13,7 @@ class Archetype < ApplicationRecord
   scope :roots, -> { where(parent_id: nil) }
   scope :search, ->(q) {
     left_joins(:primary_pokemon, :secondary_pokemon)
-      .where("archetypes.name LIKE :q OR primary_pokemons_archetypes.name LIKE :q OR secondary_pokemons_archetypes.name LIKE :q", q: "%#{q}%")
+      .where("archetypes.name LIKE :q OR cards.name LIKE :q OR secondary_pokemons_archetypes.name LIKE :q", q: "%#{q}%")
       .distinct
   }
 
