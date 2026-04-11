@@ -1,7 +1,8 @@
 module Home
   class DashboardView < ApplicationComponent
-    def initialize(current_user:)
+    def initialize(current_user:, pending_deck_imports: [])
       @current_user = current_user
+      @pending_deck_imports = pending_deck_imports
     end
 
     def view_template
@@ -13,7 +14,7 @@ module Home
           decks_card
         end
 
-        render Ui::DeckImport.new
+        render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
         scanner_modal
       end
     end

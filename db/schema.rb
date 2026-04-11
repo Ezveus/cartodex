@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_09_190129) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -116,6 +116,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_190129) do
     t.index ["user_id"], name: "index_decks_on_user_id"
   end
 
+  create_table "imports", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.string "kind", null: false
+    t.string "label", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["kind", "status"], name: "index_imports_on_kind_and_status"
+    t.index ["user_id", "status"], name: "index_imports_on_user_id_and_status"
+    t.index ["user_id"], name: "index_imports_on_user_id"
+  end
+
   create_table "pokemon_subtypes", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "name"
@@ -148,4 +161,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_190129) do
   add_foreign_key "deck_cards", "decks"
   add_foreign_key "deck_results", "decks"
   add_foreign_key "decks", "users"
+  add_foreign_key "imports", "users"
 end

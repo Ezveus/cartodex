@@ -1,7 +1,8 @@
 module Decks
   class IndexView < ApplicationComponent
-    def initialize(decks:)
+    def initialize(decks:, pending_deck_imports: [])
       @decks = decks
+      @pending_deck_imports = pending_deck_imports
     end
 
     def view_template
@@ -14,7 +15,7 @@ module Decks
           end
         end
 
-        render Ui::DeckImport.new
+        render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
 
         if @decks.any?
           div(class: "decks-grid") do

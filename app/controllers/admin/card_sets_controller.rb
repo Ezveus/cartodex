@@ -4,6 +4,7 @@ module Admin
 
     def index
       @card_sets = CardSet.by_release.includes(:cards)
+      @pending_set_imports = Import.card_set_imports.pending
     end
 
     def show
@@ -40,10 +41,10 @@ module Admin
         return
       end
 
-      import_id = SecureRandom.uuid
       set_code = url.split("/").last
-      CardSets::ImportJob.perform_later(url, current_user, import_id)
-      render json: { import_id: import_id, set_code: set_code }
+      import = current_user.imports.create!(kind: "card_set", label: set_code)
+      ::CardSets::ImportJob.perform_later(url, current_user, import)
+      render json: { import_id: import.id, set_code: set_code }
     end
 
     def destroy

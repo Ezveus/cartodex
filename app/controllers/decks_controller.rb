@@ -1,6 +1,7 @@
 class DecksController < ApplicationController
   def index
     @decks = current_user.decks.includes(:deck_cards)
+    @pending_deck_imports = current_user.imports.deck_imports.pending
   end
 
   def show

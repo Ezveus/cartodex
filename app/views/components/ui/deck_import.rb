@@ -1,5 +1,9 @@
 module Ui
   class DeckImport < ApplicationComponent
+    def initialize(pending_imports: [])
+      @pending_imports = pending_imports
+    end
+
     def view_template
       importing_section
       import_modal
@@ -8,9 +12,17 @@ module Ui
     private
 
     def importing_section
-      div(class: "importing-section", style: "display: none;", data: { controller: "importing-list" }) do
+      visible = @pending_imports.any?
+      div(class: "importing-section", style: (visible ? nil : "display: none;"), data: { controller: "importing-list" }) do
         h3 { "Importing\u2026" }
-        ul(id: "importing-decks", data: { decks_target: "importingList", importing_list_target: "list" }, class: "importing-list")
+        ul(id: "importing-decks", data: { decks_target: "importingList", importing_list_target: "list" }, class: "importing-list") do
+          @pending_imports.each do |imp|
+            li(id: "importing-#{imp.id}", class: "importing-item") do
+              span(class: "importing-spinner")
+              plain " #{imp.label}"
+            end
+          end
+        end
       end
     end
 

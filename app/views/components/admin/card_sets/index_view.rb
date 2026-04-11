@@ -1,8 +1,9 @@
 module Admin
   module CardSets
     class IndexView < ApplicationComponent
-      def initialize(card_sets:)
+      def initialize(card_sets:, pending_set_imports: [])
         @card_sets = card_sets
+        @pending_set_imports = pending_set_imports
       end
 
       def view_template
@@ -39,19 +40,30 @@ module Admin
       def import_section
         div(data: { controller: "set-import" }) do
           form_with(url: helpers.import_admin_card_sets_path, method: :post, class: "admin-search",
-            data: { action: "submit->set-import#import" }) do
-            helpers.text_field_tag :url, nil,
+            data: { action: "submit->set-import#import" }) do |f|
+            input(
+              type: "text", name: "url",
               placeholder: "https://limitlesstcg.com/cards/POR",
               class: "form-input admin-search-input",
               data: { set_import_target: "url" }
-            helpers.submit_tag "Import from Limitless",
+            )
+            input(
+              type: "submit", value: "Import from Limitless",
               class: "btn btn-primary btn-sm",
               data: { set_import_target: "submit" }
+            )
           end
 
-          div(class: "importing-section", style: "display: none;", data: { controller: "importing-list" }) do
+          div(class: "importing-section", style: (@pending_set_imports.any? ? nil : "display: none;"), data: { controller: "importing-list" }) do
             h3 { "Importing..." }
-            ul(data: { set_import_target: "list", importing_list_target: "list" }, class: "importing-list")
+            ul(data: { set_import_target: "list", importing_list_target: "list" }, class: "importing-list") do
+              @pending_set_imports.each do |imp|
+                li(id: "importing-set-#{imp.id}", class: "importing-item") do
+                  span(class: "importing-spinner")
+                  plain " #{imp.label}"
+                end
+              end
+            end
           end
         end
       end

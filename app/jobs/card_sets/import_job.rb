@@ -1,13 +1,14 @@
 class CardSets::ImportJob < ApplicationJob
   queue_as :default
 
-  def perform(url, user, import_id)
+  def perform(url, user, import)
     result = CardSets::Importer.call(url)
     card_set = result[:card_set]
+    import.update!(status: "completed")
 
     Turbo::StreamsChannel.broadcast_remove_to(
       user, :notifications,
-      target: "importing-set-#{import_id}"
+      target: "importing-set-#{import.id}"
     )
 
     Turbo::StreamsChannel.broadcast_append_to(
@@ -20,9 +21,11 @@ class CardSets::ImportJob < ApplicationJob
       HTML
     )
   rescue => e
+    import.update!(status: "failed", error_message: e.message)
+
     Turbo::StreamsChannel.broadcast_remove_to(
       user, :notifications,
-      target: "importing-set-#{import_id}"
+      target: "importing-set-#{import.id}"
     )
 
     Turbo::StreamsChannel.broadcast_append_to(

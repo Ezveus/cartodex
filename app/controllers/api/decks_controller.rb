@@ -23,9 +23,9 @@ module Api
     end
 
     def import
-      import_id = SecureRandom.uuid
-      Decks::ImportJob.perform_later(params[:decklist], current_user, params[:name], import_id)
-      render json: { import_id: import_id }, status: :accepted
+      import = current_user.imports.create!(kind: "deck", label: params[:name])
+      Decks::ImportJob.perform_later(params[:decklist], current_user, params[:name], import)
+      render json: { import_id: import.id }, status: :accepted
     end
 
     def update

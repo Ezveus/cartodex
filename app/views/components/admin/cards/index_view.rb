@@ -10,9 +10,9 @@ module Admin
         div(class: "admin-container") do
           h1 { "Cards" }
 
-          form_with(url: helpers.admin_cards_path, method: :get, class: "admin-search") do
-            helpers.text_field_tag :q, @query, placeholder: "Search by name...", class: "form-input admin-search-input"
-            helpers.submit_tag "Search", class: "btn btn-secondary btn-sm"
+          form_with(url: helpers.admin_cards_path, method: :get, class: "admin-search") do |f|
+            input(type: "text", name: "q", value: @query, placeholder: "Search by name...", class: "form-input admin-search-input")
+            input(type: "submit", value: "Search", class: "btn btn-secondary btn-sm")
           end
 
           render Ui::AdminTable.new(columns: %w[Name Set Type HP Rarity Actions]) do

@@ -4,7 +4,7 @@ class Decks::ImportJobTest < ActiveSupport::TestCase
   setup do
     @user = users(:one)
     @decklist = File.read(Rails.root.join("test/fixtures/files/doublade_dudunsparce.txt"))
-    @import_id = SecureRandom.uuid
+    @import = @user.imports.create!(kind: "deck", label: "Test Deck")
     @original_cards_fetcher_call = Cards::Fetcher.method(:call)
     stub_cards_fetcher
   end
@@ -17,17 +17,18 @@ class Decks::ImportJobTest < ActiveSupport::TestCase
 
   test "creates a deck via Decks::Fetcher" do
     assert_difference "Deck.count", 1 do
-      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import)
     end
 
     deck = Deck.last
     assert_equal "Test Deck", deck.name
     assert_equal @user, deck.user
+    assert_equal "completed", @import.reload.status
   end
 
   test "broadcasts success flash via Turbo Streams" do
     broadcasts = capture_turbo_broadcasts do
-      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import)
     end
 
     flash_broadcast = broadcasts.find { |b| b[:target] == "flash-messages" }
@@ -38,17 +39,17 @@ class Decks::ImportJobTest < ActiveSupport::TestCase
 
   test "broadcasts remove of importing entry" do
     broadcasts = capture_turbo_broadcasts do
-      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import)
     end
 
     remove_broadcast = broadcasts.find { |b| b[:action] == :remove }
     assert_not_nil remove_broadcast, "Should broadcast remove of importing entry"
-    assert_equal "importing-#{@import_id}", remove_broadcast[:target]
+    assert_equal "importing-#{@import.id}", remove_broadcast[:target]
   end
 
   test "broadcasts deck count update" do
     broadcasts = capture_turbo_broadcasts do
-      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Test Deck", @import)
     end
 
     count_broadcast = broadcasts.find { |b| b[:target] == "deck-count" }
@@ -62,7 +63,7 @@ class Decks::ImportJobTest < ActiveSupport::TestCase
     Cards::Fetcher.define_singleton_method(:call) { |_url| raise "connection failed" }
 
     broadcasts = capture_turbo_broadcasts do
-      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import)
     end
 
     flash_broadcast = broadcasts.find { |b| b[:target] == "flash-messages" }
@@ -75,20 +76,23 @@ class Decks::ImportJobTest < ActiveSupport::TestCase
     Cards::Fetcher.define_singleton_method(:call) { |_url| raise "boom" }
 
     broadcasts = capture_turbo_broadcasts do
-      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import)
     end
 
     remove_broadcast = broadcasts.find { |b| b[:action] == :remove }
     assert_not_nil remove_broadcast
-    assert_equal "importing-#{@import_id}", remove_broadcast[:target]
+    assert_equal "importing-#{@import.id}", remove_broadcast[:target]
   end
 
   test "does not create a deck on failure" do
     Cards::Fetcher.define_singleton_method(:call) { |_url| raise "boom" }
 
     assert_no_difference "Deck.count" do
-      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import_id)
+      Decks::ImportJob.perform_now(@decklist, @user, "Broken Deck", @import)
     end
+
+    assert_equal "failed", @import.reload.status
+    assert_equal "boom", @import.error_message
   end
 
   private

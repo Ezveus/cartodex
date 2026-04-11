@@ -7,5 +7,6 @@ class HomeController < ApplicationController
 
   def dashboard
     authenticate_user!
+    @pending_deck_imports = current_user.imports.deck_imports.pending
   end
 end
