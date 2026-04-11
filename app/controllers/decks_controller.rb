@@ -8,6 +8,11 @@ class DecksController < ApplicationController
     @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
   end
 
+  def export
+    deck = current_user.decks.includes(deck_cards: :card).find(params[:id])
+    render json: { text: Decks::Exporter.call(deck) }
+  end
+
   def new
     @deck = Deck.new
   end

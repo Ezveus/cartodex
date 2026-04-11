@@ -13,7 +13,9 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
-    resources :decks, only: [ :index, :show, :new, :create ]
+    resources :decks, only: [ :index, :show, :new, :create ] do
+      get :export, on: :member
+    end
     resources :cards, only: [ :index, :show ]
 
     # Admin
