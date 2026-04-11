@@ -5,13 +5,18 @@ module Decks
     end
 
     def view_template
-      div(class: "deck-show-container", data: { controller: "card-preview deck-totals", action: "deck-card-quantity:changed->deck-totals#updateTotals" }) do
+      div(class: "deck-show-container", data: {
+        controller: "card-preview deck-totals result-modal",
+        action: "deck-card-quantity:changed->deck-totals#updateTotals",
+        result_modal_deck_id_value: @deck.id
+      }) do
         header_section
         stats_section
         div(class: "deck-show-content") do
           main_section
           preview_section
         end
+        result_dialog
       end
     end
 
@@ -24,23 +29,30 @@ module Decks
           p(class: "deck-show-description") { @deck.description } if @deck.description.present?
         end
         div(class: "decks-header-actions") do
+          button(class: "btn btn-primary", data: { action: "result-modal#open" }) { "Log Result" }
           button(
             class: "btn btn-primary",
             data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
           ) { "Export" }
+          link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary"
           link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
         end
       end
     end
 
     def stats_section
-      wins = @deck.deck_results.count { |r| r.result == "win" }
-      losses = @deck.deck_results.count { |r| r.result == "loss" }
+      results = @deck.deck_results
+      wins = results.count { |r| r.result == "win" }
+      losses = results.count { |r| r.result == "loss" }
+      draws = results.count { |r| r.result == "draw" }
+      timeouts = results.count { |r| r.result == "timeout" }
 
       div(class: "deck-show-stats") do
         stat(@deck.deck_cards.sum(&:quantity), "cards", data: { deck_totals_target: "total" })
         stat(wins, "wins")
         stat(losses, "losses")
+        stat(draws, "draws")
+        stat(timeouts, "timeouts")
       end
     end
 
@@ -111,6 +123,47 @@ module Decks
       div(class: "deck-show-preview") do
         image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
         link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
+      end
+    end
+
+    def result_dialog
+      dialog(class: "result-modal", data: { result_modal_target: "dialog" }) do
+        div(class: "result-modal-content") do
+          h2 { "Log Result" }
+          input(type: "hidden", data: { result_modal_target: "resultInput" })
+          input(type: "hidden", data: { result_modal_target: "archetypeId" })
+
+          div(class: "result-type-buttons") do
+            %w[win loss draw timeout].each do |r|
+              button(
+                type: "button",
+                class: "result-type-btn result-#{r}",
+                data: { result: r, action: "result-modal#selectResult", result_modal_target: "resultBtn" }
+              ) { r.capitalize }
+            end
+          end
+
+          div(class: "form-group") do
+            label(class: "form-label") { "Opponent archetype" }
+            input(
+              type: "text",
+              class: "form-input",
+              placeholder: "Search archetype...",
+              data: { result_modal_target: "archetypeInput", action: "input->result-modal#searchArchetypes" }
+            )
+            div(class: "archetype-search-results", data: { result_modal_target: "archetypeResults" })
+          end
+
+          div(class: "form-group") do
+            label(class: "form-label") { "Notes (optional)" }
+            textarea(class: "form-input", rows: "2", data: { result_modal_target: "notesInput" })
+          end
+
+          div(class: "form-actions") do
+            button(class: "btn btn-primary", data: { action: "result-modal#submit" }) { "Save" }
+            button(class: "btn btn-secondary", type: "button", data: { action: "result-modal#close" }) { "Cancel" }
+          end
+        end
       end
     end
   end

@@ -15,6 +15,7 @@ Rails.application.routes.draw do
     get "dashboard", to: "home#dashboard"
     resources :decks, only: [ :index, :show, :new, :create ] do
       get :export, on: :member
+      get :stats, on: :member
     end
     resources :cards, only: [ :index, :show ]
 
@@ -38,10 +39,12 @@ Rails.application.routes.draw do
       resources :imports, only: [ :index, :destroy ] do
         post :retry, on: :member
       end
+      resources :archetypes
     end
 
     # API endpoints
     namespace :api do
+      resources :archetypes, only: [ :index, :create ]
       resources :cards, only: [ :index ]
       resources :collections, only: [ :index, :create, :update, :destroy ]
       resources :decks do

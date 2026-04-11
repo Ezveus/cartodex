@@ -1,0 +1,53 @@
+module Admin
+  module Archetypes
+    class ShowView < ApplicationComponent
+      def initialize(archetype:)
+        @archetype = archetype
+      end
+
+      def view_template
+        div(class: "admin-container") do
+          render Ui::PageHeader.new(title: @archetype.name) do
+            div(class: "admin-header-actions") do
+              link_to "Edit", helpers.edit_admin_archetype_path(@archetype), class: "btn btn-secondary"
+              link_to "Delete", helpers.admin_archetype_path(@archetype),
+                data: { turbo_method: :delete, turbo_confirm: "Delete #{@archetype.name}?" },
+                class: "btn-danger"
+            end
+          end
+
+          table(class: "admin-table") do
+            tbody do
+              info_row("Primary Pokémon", @archetype.primary_pokemon.name)
+              info_row("Secondary Pokémon", @archetype.secondary_pokemon&.name || "\u2014")
+              info_row("Parent", @archetype.parent&.name || "\u2014")
+              info_row("Results", @archetype.deck_results.count.to_s)
+            end
+          end
+
+          if @archetype.children.any?
+            h2 { "Sub-archetypes" }
+            render Ui::AdminTable.new(columns: %w[Name Primary Secondary]) do
+              @archetype.children.includes(:primary_pokemon, :secondary_pokemon).each do |child|
+                tr do
+                  td { link_to child.name, helpers.admin_archetype_path(child) }
+                  td { child.primary_pokemon.name }
+                  td { child.secondary_pokemon&.name || "\u2014" }
+                end
+              end
+            end
+          end
+        end
+      end
+
+      private
+
+      def info_row(label, value)
+        tr do
+          td { strong { label } }
+          td { value }
+        end
+      end
+    end
+  end
+end

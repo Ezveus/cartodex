@@ -1,15 +1,11 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
 one:
   deck: one
-  result: MyString
-  opponent_deck_name: MyString
-  notes: MyText
+  result: win
+  notes: Good game
   played_at: 2025-01-17 19:46:54
 
 two:
   deck: two
-  result: MyString
-  opponent_deck_name: MyString
-  notes: MyText
+  result: loss
+  notes: Close match
   played_at: 2025-01-17 19:46:54

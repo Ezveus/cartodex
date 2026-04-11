@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_11_151349) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -19,6 +19,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
     t.integer "position"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_abilities_on_card_id"
+  end
+
+  create_table "archetypes", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.integer "parent_id"
+    t.integer "primary_pokemon_id", null: false
+    t.integer "secondary_pokemon_id"
+    t.datetime "updated_at", null: false
+    t.index ["parent_id"], name: "index_archetypes_on_parent_id"
+    t.index ["primary_pokemon_id", "secondary_pokemon_id"], name: "idx_on_primary_pokemon_id_secondary_pokemon_id_2a04cf9ccd", unique: true
   end
 
   create_table "attacks", force: :cascade do |t|
@@ -97,13 +108,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
   end
 
   create_table "deck_results", force: :cascade do |t|
+    t.integer "archetype_id"
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
     t.text "notes"
-    t.string "opponent_deck_name"
     t.datetime "played_at"
     t.string "result"
     t.datetime "updated_at", null: false
+    t.index ["archetype_id"], name: "index_deck_results_on_archetype_id"
     t.index ["deck_id"], name: "index_deck_results_on_deck_id"
   end
 
@@ -152,6 +164,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
   end
 
   add_foreign_key "abilities", "cards"
+  add_foreign_key "archetypes", "archetypes", column: "parent_id"
+  add_foreign_key "archetypes", "cards", column: "primary_pokemon_id"
+  add_foreign_key "archetypes", "cards", column: "secondary_pokemon_id"
   add_foreign_key "attacks", "cards"
   add_foreign_key "cards", "card_sets"
   add_foreign_key "cards", "pokemon_subtypes"
@@ -159,6 +174,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_110951) do
   add_foreign_key "collections", "users"
   add_foreign_key "deck_cards", "cards"
   add_foreign_key "deck_cards", "decks"
+  add_foreign_key "deck_results", "archetypes"
   add_foreign_key "deck_results", "decks"
   add_foreign_key "decks", "users"
   add_foreign_key "imports", "users"

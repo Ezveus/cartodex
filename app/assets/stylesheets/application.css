@@ -434,6 +434,72 @@ textarea.form-input {
   color: #721c24;
 }
 
+/* Result modal */
+.result-modal {
+  border: none;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.result-modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.result-modal-content h2 {
+  margin: 0 0 1.5rem;
+}
+
+.result-type-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.result-type-btn {
+  flex: 1;
+  padding: 0.6rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.result-type-btn.active {
+  color: white;
+}
+
+.result-win.active { background: #28a745; border-color: #28a745; }
+.result-loss.active { background: #dc3545; border-color: #dc3545; }
+.result-draw.active { background: #6c757d; border-color: #6c757d; }
+.result-timeout.active { background: #fd7e14; border-color: #fd7e14; }
+
+.archetype-search-results {
+  position: relative;
+}
+
+.archetype-search-item {
+  padding: 0.5rem;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.archetype-search-item:hover {
+  background: #f0f0f0;
+}
+
+.archetype-search-pokemon {
+  color: #888;
+  font-size: 0.85em;
+}
+
 /* Decks list */
 .decks-container {
   max-width: 1200px;

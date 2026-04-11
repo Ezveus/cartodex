@@ -5,7 +5,9 @@ module Api
     def index
       query = params[:q].to_s.strip
       cards = if query.length >= 2
-        Card.where("name LIKE ?", "%#{query}%").limit(20)
+        scope = Card.where("name LIKE ?", "%#{query}%")
+        scope = scope.where(card_type: params[:type]) if params[:type].present?
+        scope.limit(20)
       else
         Card.none
       end

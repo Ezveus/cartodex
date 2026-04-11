@@ -8,6 +8,11 @@ class DecksController < ApplicationController
     @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
   end
 
+  def stats
+    @deck = current_user.decks.find(params[:id])
+    @results = @deck.deck_results.includes(archetype: [ :parent, :primary_pokemon, :secondary_pokemon ])
+  end
+
   def export
     deck = current_user.decks.includes(deck_cards: :card).find(params[:id])
     render json: { text: Decks::Exporter.call(deck) }
