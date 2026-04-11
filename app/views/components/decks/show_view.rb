@@ -34,6 +34,7 @@ module Decks
             class: "btn btn-primary",
             data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
           ) { "Export" }
+          link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary"
           link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary"
           link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
         end

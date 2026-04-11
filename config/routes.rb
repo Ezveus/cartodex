@@ -16,6 +16,7 @@ Rails.application.routes.draw do
     resources :decks, only: [ :index, :show, :new, :create ] do
       get :export, on: :member
       get :stats, on: :member
+      resources :deck_results, only: [ :index, :edit, :update, :destroy ]
     end
     resources :cards, only: [ :index, :show ]
 
