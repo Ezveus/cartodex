@@ -34,6 +34,7 @@ module Ui
           nav_link "Cards", helpers.admin_cards_path, "cards"
           nav_link "Users", helpers.admin_users_path, "users"
           nav_link "Decks", helpers.admin_decks_path, "decks"
+          link_to "Jobs", helpers.mission_control_jobs_path, class: "navbar-link"
         else
           nav_link "Dashboard", helpers.dashboard_path, "home"
           nav_link "Decks", helpers.decks_path, "decks"

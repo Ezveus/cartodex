@@ -17,6 +17,10 @@ Rails.application.routes.draw do
     resources :cards, only: [ :index, :show ]
 
     # Admin
+    constraints ->(request) { request.env["warden"].user&.admin? } do
+      mount MissionControl::Jobs::Engine, at: "/admin/jobs"
+    end
+
     namespace :admin do
       root "dashboard#index"
       resources :card_sets do
