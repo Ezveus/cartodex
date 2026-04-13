@@ -45,10 +45,8 @@ module Decks
 
       h2 { "By Archetype" }
 
-      grouped = build_archetype_tree
-
       render Ui::AdminTable.new(columns: %w[Archetype W L D T Total Win%]) do
-        grouped.each do |entry|
+        @deck.archetype_breakdown(@results).each do |entry|
           archetype_row(entry[:name], entry[:counts], false)
           entry[:children].each do |child|
             archetype_row(child[:name], child[:counts], true)
@@ -70,47 +68,6 @@ module Decks
         td { strong { total.to_s } }
         td { "#{win_pct}%" }
       end
-    end
-
-    def build_archetype_tree
-      by_archetype = @results.group_by(&:archetype)
-      entries = {}
-
-      by_archetype.each do |archetype, results|
-        counts = result_counts(results)
-
-        if archetype.nil?
-          entries["unknown"] ||= { name: "Unknown", counts: empty_counts, children: [] }
-          merge_counts!(entries["unknown"][:counts], counts)
-          next
-        end
-
-        parent = archetype.parent || archetype
-        parent_key = parent.id
-
-        entries[parent_key] ||= { name: parent.name, counts: empty_counts, children: [] }
-        merge_counts!(entries[parent_key][:counts], counts)
-
-        if archetype.parent
-          entries[parent_key][:children] << { name: archetype.name, counts: counts }
-        end
-      end
-
-      entries.values.sort_by { |e| -e[:counts].values.sum }
-    end
-
-    def result_counts(results)
-      counts = empty_counts
-      results.each { |r| counts[r.result] += 1 }
-      counts
-    end
-
-    def empty_counts
-      { "win" => 0, "loss" => 0, "draw" => 0, "timeout" => 0 }
-    end
-
-    def merge_counts!(target, source)
-      source.each { |k, v| target[k] += v }
     end
   end
 end
