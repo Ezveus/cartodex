@@ -25,10 +25,10 @@ module Admin
 
       def stats_grid
         div(class: "admin-stats-grid") do
-          render Ui::StatCard.new(value: @user_count, label: "Users")
-          render Ui::StatCard.new(value: @card_count, label: "Cards")
-          render Ui::StatCard.new(value: @set_count, label: "Sets")
-          render Ui::StatCard.new(value: @deck_count, label: "Decks")
+          render Ui::Stat.new(value: @user_count, label: "Users", variant: :admin)
+          render Ui::Stat.new(value: @card_count, label: "Cards", variant: :admin)
+          render Ui::Stat.new(value: @set_count, label: "Sets", variant: :admin)
+          render Ui::Stat.new(value: @deck_count, label: "Decks", variant: :admin)
         end
       end
 

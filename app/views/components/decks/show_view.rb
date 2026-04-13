@@ -45,18 +45,11 @@ module Decks
       counts = @deck.result_counts
 
       div(class: "deck-show-stats") do
-        stat(@deck.deck_cards.sum(&:quantity), "cards", data: { deck_totals_target: "total" })
-        stat(counts["win"], "wins")
-        stat(counts["loss"], "losses")
-        stat(counts["draw"], "draws")
-        stat(counts["timeout"], "timeouts")
-      end
-    end
-
-    def stat(value, label, **data)
-      div(class: "stat") do
-        span(class: "stat-value", **data) { value.to_s }
-        span(class: "stat-label") { label }
+        render Ui::Stat.new(value: @deck.deck_cards.sum(&:quantity), label: "cards", value_data: { deck_totals_target: "total" })
+        render Ui::Stat.new(value: counts["win"], label: "wins")
+        render Ui::Stat.new(value: counts["loss"], label: "losses")
+        render Ui::Stat.new(value: counts["draw"], label: "draws")
+        render Ui::Stat.new(value: counts["timeout"], label: "timeouts")
       end
     end
 

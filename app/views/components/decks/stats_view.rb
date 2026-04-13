@@ -24,19 +24,12 @@ module Decks
       win_rate = total > 0 ? (counts["win"].to_f / total * 100).round(0) : 0
 
       div(class: "deck-show-stats") do
-        stat(counts["win"], "wins")
-        stat(counts["loss"], "losses")
-        stat(counts["draw"], "draws")
-        stat(counts["timeout"], "timeouts")
-        stat(total, "total")
-        stat("#{win_rate}%", "win rate")
-      end
-    end
-
-    def stat(value, label)
-      div(class: "stat") do
-        span(class: "stat-value") { value.to_s }
-        span(class: "stat-label") { label }
+        render Ui::Stat.new(value: counts["win"], label: "wins")
+        render Ui::Stat.new(value: counts["loss"], label: "losses")
+        render Ui::Stat.new(value: counts["draw"], label: "draws")
+        render Ui::Stat.new(value: counts["timeout"], label: "timeouts")
+        render Ui::Stat.new(value: total, label: "total")
+        render Ui::Stat.new(value: "#{win_rate}%", label: "win rate")
       end
     end
 
