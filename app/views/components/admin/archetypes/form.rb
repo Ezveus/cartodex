@@ -32,17 +32,14 @@ module Admin
       private
 
       def pokemon_autocomplete(f, field, label_text, current_pokemon)
-        render Ui::FormGroup.new(data: { controller: "pokemon-select" }) do
-          f.label field, label_text, class: "form-label"
-          input(
-            type: "text",
-            class: "form-input",
-            placeholder: "Search Pokémon...",
-            value: current_pokemon&.name,
-            data: { pokemon_select_target: "input", action: "input->pokemon-select#search" }
-          )
+        render Ui::PokemonSelect.new(
+          label: label_text,
+          current_value: current_pokemon&.name,
+          wrapper_data: { controller: "pokemon-select" },
+          input_data:   { pokemon_select_target: "input", action: "input->pokemon-select#search" },
+          results_data: { pokemon_select_target: "results" }
+        ) do
           f.hidden_field field, data: { pokemon_select_target: "hiddenField" }
-          div(class: "archetype-search-results", data: { pokemon_select_target: "results" })
         end
       end
     end

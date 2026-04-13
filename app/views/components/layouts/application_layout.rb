@@ -22,8 +22,7 @@ module Layouts
         body do
           if helpers.user_signed_in?
             turbo_stream_from(helpers.current_user, :notifications)
-            render Ui::Navbar.new(
-              variant: :app,
+            render Ui::AppNavbar.new(
               current_user: helpers.current_user,
               active_controller: helpers.controller_name
             )

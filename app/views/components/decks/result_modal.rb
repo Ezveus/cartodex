@@ -54,16 +54,12 @@ module Decks
     end
 
     def pokemon_search_group(label_text:, target:)
-      render Ui::FormGroup.new(label: label_text) do
-        input(type: "hidden", data: { result_modal_target: "#{target}Id" })
-        input(
-          type: "text",
-          class: "form-input",
-          placeholder: "Search Pokémon...",
-          data: { result_modal_target: "#{target}Input", action: "input->result-modal#search#{target.capitalize}" }
-        )
-        div(class: "archetype-search-results", data: { result_modal_target: "#{target}Results" })
-      end
+      render Ui::PokemonSelect.new(
+        label: label_text,
+        hidden_data:  { result_modal_target: "#{target}Id" },
+        input_data:   { result_modal_target: "#{target}Input", action: "input->result-modal#search#{target.capitalize}" },
+        results_data: { result_modal_target: "#{target}Results" }
+      )
     end
 
     def notes_group
