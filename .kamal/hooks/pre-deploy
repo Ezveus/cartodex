@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Run database migrations before deploying
+set -e
+
+echo "Running database migrations..."
+kamal app exec --reuse 'bin/rails db:migrate'
