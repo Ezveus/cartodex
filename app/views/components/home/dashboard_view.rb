@@ -51,12 +51,9 @@ module Home
     end
 
     def scanner_modal
-      div(id: "scanner-modal", class: "modal", data: { collection_target: "scannerModal" }) do
-        div(class: "modal-content") do
-          h2 { "Scan Card" }
-          video(id: "scanner-video", data: { collection_target: "video" })
-          button(class: "btn btn-secondary", data: { action: "collection#closeScanner" }) { "Close" }
-        end
+      render Ui::Modal.new(id: "scanner-modal", title: "Scan Card", collection_target: "scannerModal") do
+        video(id: "scanner-video", data: { collection_target: "video" })
+        button(class: "btn btn-secondary", data: { action: "collection#closeScanner" }) { "Close" }
       end
     end
   end

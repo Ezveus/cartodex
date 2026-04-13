@@ -22,13 +22,7 @@ module Admin
                 td { card_set.block_name }
                 td { card_set.release_date&.strftime("%Y-%m-%d") }
                 td { card_set.cards.size.to_s }
-                td do
-                  link_to "Edit", helpers.edit_admin_card_set_path(card_set), class: "btn btn-secondary btn-sm"
-                  plain " "
-                  link_to "Delete", helpers.admin_card_set_path(card_set),
-                    data: { turbo_method: :delete, turbo_confirm: "Delete #{card_set.name}?" },
-                    class: "btn-danger"
-                end
+                td { render Ui::AdminActions.new(edit_path: helpers.edit_admin_card_set_path(card_set), delete_path: helpers.admin_card_set_path(card_set), confirm_message: "Delete #{card_set.name}?") }
               end
             end
           end

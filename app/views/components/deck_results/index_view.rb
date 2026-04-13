@@ -22,13 +22,7 @@ module DeckResults
                 td { result_badge(r.result) }
                 td { r.archetype&.name || "\u2014" }
                 td { r.notes.present? ? r.notes.truncate(40) : "\u2014" }
-                td do
-                  link_to "Edit", helpers.edit_deck_deck_result_path(@deck, r), class: "btn btn-secondary btn-sm"
-                  plain " "
-                  link_to "Delete", helpers.deck_deck_result_path(@deck, r),
-                    data: { turbo_method: :delete, turbo_confirm: "Delete this result?" },
-                    class: "btn-danger btn-sm"
-                end
+                td { render Ui::AdminActions.new(edit_path: helpers.edit_deck_deck_result_path(@deck, r), delete_path: helpers.deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
               end
             end
           end
@@ -41,13 +35,7 @@ module DeckResults
     private
 
     def result_badge(result)
-      css = case result
-      when "win" then "badge badge-success"
-      when "loss" then "badge badge-danger"
-      when "draw" then "badge"
-      when "timeout" then "badge badge-warning"
-      end
-      span(class: css) { result.capitalize }
+      render Ui::StatusBadge.new(status: result, label: result.capitalize)
     end
   end
 end

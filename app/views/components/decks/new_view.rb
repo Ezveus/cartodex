@@ -10,12 +10,12 @@ module Decks
         form_with(model: @deck, class: "deck-form") do |f|
           render Ui::FormErrors.new(resource: @deck)
 
-          div(class: "form-group") do
+          render Ui::FormGroup.new do
             f.label :name, class: "form-label"
             f.text_field :name, class: "form-input", autofocus: true, placeholder: "My Deck"
           end
 
-          div(class: "form-group") do
+          render Ui::FormGroup.new do
             f.label :description, class: "form-label"
             f.text_area :description, class: "form-input", rows: 3, placeholder: "Optional description\u2026"
           end

@@ -33,8 +33,7 @@ module Decks
     end
 
     def archetype_search_group
-      div(class: "form-group") do
-        label(class: "form-label") { "Opponent archetype" }
+      render Ui::FormGroup.new(label: "Opponent archetype") do
         input(
           type: "text",
           class: "form-input",
@@ -55,8 +54,7 @@ module Decks
     end
 
     def pokemon_search_group(label_text:, target:)
-      div(class: "form-group") do
-        label(class: "form-label") { label_text }
+      render Ui::FormGroup.new(label: label_text) do
         input(type: "hidden", data: { result_modal_target: "#{target}Id" })
         input(
           type: "text",
@@ -69,8 +67,7 @@ module Decks
     end
 
     def notes_group
-      div(class: "form-group") do
-        label(class: "form-label") { "Notes (optional)" }
+      render Ui::FormGroup.new(label: "Notes (optional)") do
         textarea(class: "form-input", rows: "2", data: { result_modal_target: "notesInput" })
       end
     end

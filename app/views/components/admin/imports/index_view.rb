@@ -28,12 +28,7 @@ module Admin
       private
 
       def status_badge(imp)
-        css = case imp.status
-        when "pending" then "badge badge-warning"
-        when "completed" then "badge badge-success"
-        when "failed" then "badge badge-danger"
-        end
-        span(class: css) { imp.status }
+        render Ui::StatusBadge.new(status: imp.status)
       end
 
       def error_cell(imp)

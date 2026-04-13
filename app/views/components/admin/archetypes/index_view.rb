@@ -19,13 +19,7 @@ module Admin
                 td { arch.secondary_pokemon&.name || "\u2014" }
                 td { arch.parent ? link_to(arch.parent.name, helpers.admin_archetype_path(arch.parent)) : "\u2014" }
                 td { arch.children.size.to_s }
-                td do
-                  link_to "Edit", helpers.edit_admin_archetype_path(arch), class: "btn btn-secondary btn-sm"
-                  plain " "
-                  link_to "Delete", helpers.admin_archetype_path(arch),
-                    data: { turbo_method: :delete, turbo_confirm: "Delete #{arch.name}?" },
-                    class: "btn-danger btn-sm"
-                end
+                td { render Ui::AdminActions.new(edit_path: helpers.edit_admin_archetype_path(arch), delete_path: helpers.admin_archetype_path(arch), confirm_message: "Delete #{arch.name}?") }
               end
             end
           end
