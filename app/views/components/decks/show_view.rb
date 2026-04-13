@@ -42,18 +42,14 @@ module Decks
     end
 
     def stats_section
-      results = @deck.deck_results
-      wins = results.count { |r| r.result == "win" }
-      losses = results.count { |r| r.result == "loss" }
-      draws = results.count { |r| r.result == "draw" }
-      timeouts = results.count { |r| r.result == "timeout" }
+      counts = @deck.result_counts
 
       div(class: "deck-show-stats") do
         stat(@deck.deck_cards.sum(&:quantity), "cards", data: { deck_totals_target: "total" })
-        stat(wins, "wins")
-        stat(losses, "losses")
-        stat(draws, "draws")
-        stat(timeouts, "timeouts")
+        stat(counts["win"], "wins")
+        stat(counts["loss"], "losses")
+        stat(counts["draw"], "draws")
+        stat(counts["timeout"], "timeouts")
       end
     end
 

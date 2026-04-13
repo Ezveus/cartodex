@@ -19,15 +19,15 @@ module Decks
     private
 
     def overall_stats
-      wins = count_by("win")
+      counts = @deck.result_counts(@results)
       total = @results.size
-      win_rate = total > 0 ? (wins.to_f / total * 100).round(0) : 0
+      win_rate = total > 0 ? (counts["win"].to_f / total * 100).round(0) : 0
 
       div(class: "deck-show-stats") do
-        stat(wins, "wins")
-        stat(count_by("loss"), "losses")
-        stat(count_by("draw"), "draws")
-        stat(count_by("timeout"), "timeouts")
+        stat(counts["win"], "wins")
+        stat(counts["loss"], "losses")
+        stat(counts["draw"], "draws")
+        stat(counts["timeout"], "timeouts")
         stat(total, "total")
         stat("#{win_rate}%", "win rate")
       end
@@ -111,10 +111,6 @@ module Decks
 
     def merge_counts!(target, source)
       source.each { |k, v| target[k] += v }
-    end
-
-    def count_by(result)
-      @results.count { |r| r.result == result }
     end
   end
 end
