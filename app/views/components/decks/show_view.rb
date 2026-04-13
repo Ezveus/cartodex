@@ -16,7 +16,7 @@ module Decks
           main_section
           preview_section
         end
-        result_dialog
+        render Decks::ResultModal.new
       end
     end
 
@@ -81,31 +81,10 @@ module Decks
       div(class: "deck-section") do
         h2 { "#{type} (#{group.sum(&:quantity)})" }
         ul(class: "deck-card-list") do
-          group.sort_by { |dc| dc.card.name }.each { |dc| deck_card_item(dc) }
+          group.sort_by { |dc| dc.card.name }.each do |dc|
+            render Decks::DeckCardItem.new(deck_card: dc, deck_id: @deck.id)
+          end
         end
-      end
-    end
-
-    def deck_card_item(dc)
-      li(
-        class: "deck-card-item",
-        data: {
-          card_preview_url: dc.card.image_url,
-          card_preview_card_id: dc.card.id,
-          action: "mouseenter->card-preview#show",
-          controller: "deck-card-quantity",
-          deck_card_quantity_deck_id_value: @deck.id,
-          deck_card_quantity_card_id_value: dc.card.id,
-          deck_card_quantity_quantity_value: dc.quantity
-        }
-      ) do
-        div(class: "deck-card-qty-controls") do
-          button(class: "qty-btn", data: { action: "deck-card-quantity#decrement" }) { "-" }
-          span(class: "deck-card-qty") { dc.quantity.to_s }
-          button(class: "qty-btn", data: { action: "deck-card-quantity#increment" }) { "+" }
-        end
-        span(class: "deck-card-name") { dc.card.name }
-        span(class: "deck-card-set") { "#{dc.card.set_name} #{dc.card.set_number}" }
       end
     end
 
@@ -113,80 +92,6 @@ module Decks
       div(class: "deck-show-preview") do
         image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
         link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
-      end
-    end
-
-    def result_dialog
-      dialog(class: "result-modal", data: { result_modal_target: "dialog" }) do
-        div(class: "result-modal-content") do
-          h2 { "Log Result" }
-          input(type: "hidden", data: { result_modal_target: "resultInput" })
-          input(type: "hidden", data: { result_modal_target: "archetypeId" })
-
-          div(class: "result-type-buttons") do
-            %w[win loss draw timeout].each do |r|
-              button(
-                type: "button",
-                class: "result-type-btn result-#{r}",
-                data: { result: r, action: "result-modal#selectResult", result_modal_target: "resultBtn" }
-              ) { r.capitalize }
-            end
-          end
-
-          div(class: "form-group") do
-            label(class: "form-label") { "Opponent archetype" }
-            input(
-              type: "text",
-              class: "form-input",
-              placeholder: "Search archetype...",
-              data: { result_modal_target: "archetypeInput", action: "input->result-modal#searchArchetypes" }
-            )
-            div(class: "archetype-search-results", data: { result_modal_target: "archetypeResults" })
-          end
-
-          create_archetype_section
-
-          div(class: "form-group") do
-            label(class: "form-label") { "Notes (optional)" }
-            textarea(class: "form-input", rows: "2", data: { result_modal_target: "notesInput" })
-          end
-
-          div(class: "form-actions result-modal-actions") do
-            button(class: "btn btn-primary", data: { action: "result-modal#submit" }) { "Save" }
-            button(class: "btn btn-secondary", type: "button", data: { action: "result-modal#close" }) { "Cancel" }
-          end
-        end
-      end
-    end
-    def create_archetype_section
-      div(class: "create-archetype-section", style: "display: none;", data: { result_modal_target: "createSection" }) do
-        p(class: "form-label", style: "font-weight: 600; margin-bottom: 0.5rem;") { "New archetype" }
-
-        div(class: "form-group") do
-          label(class: "form-label") { "Primary Pokémon" }
-          input(type: "hidden", data: { result_modal_target: "primaryId" })
-          input(
-            type: "text",
-            class: "form-input",
-            placeholder: "Search Pokémon...",
-            data: { result_modal_target: "primaryInput", action: "input->result-modal#searchPrimary" }
-          )
-          div(class: "archetype-search-results", data: { result_modal_target: "primaryResults" })
-        end
-
-        div(class: "form-group") do
-          label(class: "form-label") { "Secondary Pokémon (optional)" }
-          input(type: "hidden", data: { result_modal_target: "secondaryId" })
-          input(
-            type: "text",
-            class: "form-input",
-            placeholder: "Search Pokémon...",
-            data: { result_modal_target: "secondaryInput", action: "input->result-modal#searchSecondary" }
-          )
-          div(class: "archetype-search-results", data: { result_modal_target: "secondaryResults" })
-        end
-
-        button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "result-modal#cancelCreate" }) { "Cancel new archetype" }
       end
     end
   end
