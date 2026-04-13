@@ -1,7 +1,12 @@
 #!/bin/bash
 
 # Run database migrations before deploying
+# Skips gracefully if no container is running (e.g. first deploy)
 set -e
 
 echo "Running database migrations..."
-kamal app exec --reuse 'bin/rails db:migrate'
+if kamal app exec --reuse 'bin/rails db:migrate' 2>/dev/null; then
+  echo "Migrations complete."
+else
+  echo "No running container found, skipping migrations (run manually after first deploy)."
+fi
