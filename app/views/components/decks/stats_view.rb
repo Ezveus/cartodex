@@ -19,12 +19,17 @@ module Decks
     private
 
     def overall_stats
+      wins = count_by("win")
+      total = @results.size
+      win_rate = total > 0 ? (wins.to_f / total * 100).round(0) : 0
+
       div(class: "deck-show-stats") do
-        stat(count_by("win"), "wins")
+        stat(wins, "wins")
         stat(count_by("loss"), "losses")
         stat(count_by("draw"), "draws")
         stat(count_by("timeout"), "timeouts")
-        stat(@results.size, "total")
+        stat(total, "total")
+        stat("#{win_rate}%", "win rate")
       end
     end
 
