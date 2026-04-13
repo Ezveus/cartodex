@@ -66,15 +66,16 @@ module Decks
     end
 
     def card_search
-      div(class: "deck-card-search", data: { controller: "card-search", card_search_deck_id_value: @deck.id }) do
-        input(
-          type: "text",
-          placeholder: "Search cards to add...",
-          data: { card_search_target: "input", action: "input->card-search#search" },
-          class: "form-input card-search-input"
-        )
-        div(data: { card_search_target: "results" }, class: "card-search-results")
-      end
+      render Ui::SearchInput.new(
+        placeholder: "Search cards to add...",
+        input_class: "form-input card-search-input",
+        wrapper_class: "deck-card-search",
+        controller: "card-search",
+        card_search_deck_id_value: @deck.id,
+        input_target: :card_search_target,
+        input_action: "input->card-search#search",
+        results_target: :card_search_target
+      )
     end
 
     def card_type_section(type, group)

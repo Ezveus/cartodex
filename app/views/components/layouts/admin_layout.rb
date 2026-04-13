@@ -14,8 +14,7 @@ module Layouts
           javascript_importmap_tags
         end
         body do
-          render Ui::Navbar.new(
-            variant: :admin,
+          render Ui::AdminNavbar.new(
             current_user: helpers.current_user,
             active_controller: helpers.controller_name
           )

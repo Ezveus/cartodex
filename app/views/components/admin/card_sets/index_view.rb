@@ -48,17 +48,11 @@ module Admin
             )
           end
 
-          div(class: "importing-section", style: (@pending_set_imports.any? ? nil : "display: none;"), data: { controller: "importing-list" }) do
-            h3 { "Importing..." }
-            ul(data: { set_import_target: "list", importing_list_target: "list" }, class: "importing-list") do
-              @pending_set_imports.each do |imp|
-                li(id: "importing-set-#{imp.id}", class: "importing-item") do
-                  span(class: "importing-spinner")
-                  plain " #{imp.label}"
-                end
-              end
-            end
-          end
+          render Ui::ImportingList.new(
+            pending_imports: @pending_set_imports,
+            item_id_prefix: "importing-set",
+            extra_data: { set_import_target: "list" }
+          )
         end
       end
     end

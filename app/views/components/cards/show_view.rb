@@ -80,10 +80,7 @@ module Cards
       div(class: "card-info-section") do
         h2 { "Abilities" }
         @card.abilities.each do |ability|
-          div(class: "card-move") do
-            strong { ability.name }
-            p { ability.effect } if ability.effect.present?
-          end
+          render Cards::AbilityItem.new(ability:)
         end
       end
     end
@@ -93,14 +90,7 @@ module Cards
       div(class: "card-info-section") do
         h2 { "Attacks" }
         @card.attacks.each do |attack|
-          div(class: "card-move") do
-            div(class: "card-move-header") do
-              strong { attack.name }
-              span(class: "card-move-cost") { attack.cost } if attack.cost.present?
-              span(class: "card-move-damage") { attack.damage } if attack.damage.present?
-            end
-            p { attack.effect } if attack.effect.present?
-          end
+          render Cards::AttackItem.new(attack:)
         end
       end
     end
