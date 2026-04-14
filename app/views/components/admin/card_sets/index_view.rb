@@ -14,15 +14,15 @@ module Admin
 
           import_section
 
-          render Ui::AdminTable.new(columns: [ "Code", "Name", "Block", "Release Date", "Cards", "Actions" ]) do
+          render Ui::DataTable.new(columns: [ "Code", "Name", "Block", "Release Date", "Cards", "Actions" ]) do |t|
             @card_sets.each do |card_set|
-              tr do
-                td { card_set.code }
-                td { link_to card_set.name, helpers.admin_card_set_path(card_set) }
-                td { card_set.block_name }
-                td { card_set.release_date&.strftime("%Y-%m-%d") }
-                td { card_set.cards.size.to_s }
-                td { render Ui::AdminActions.new(edit_path: helpers.edit_admin_card_set_path(card_set), delete_path: helpers.admin_card_set_path(card_set), confirm_message: "Delete #{card_set.name}?") }
+              t.row do
+                t.cell { card_set.code }
+                t.cell { link_to card_set.name, helpers.admin_card_set_path(card_set) }
+                t.cell { card_set.block_name }
+                t.cell { card_set.release_date&.strftime("%Y-%m-%d") }
+                t.cell { card_set.cards.size.to_s }
+                t.cell { render Ui::AdminActions.new(edit_path: helpers.edit_admin_card_set_path(card_set), delete_path: helpers.admin_card_set_path(card_set), confirm_message: "Delete #{card_set.name}?") }
               end
             end
           end

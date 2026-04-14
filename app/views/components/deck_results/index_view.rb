@@ -15,14 +15,14 @@ module DeckResults
         end
 
         if @results.any?
-          render Ui::AdminTable.new(columns: %w[Date Result Archetype Notes Actions]) do
+          render Ui::DataTable.new(columns: %w[Date Result Archetype Notes Actions]) do |t|
             @results.each do |r|
-              tr do
-                td { r.played_at&.strftime("%Y-%m-%d %H:%M") || "\u2014" }
-                td { result_badge(r.result) }
-                td { r.archetype&.name || "\u2014" }
-                td { r.notes.present? ? r.notes.truncate(40) : "\u2014" }
-                td { render Ui::AdminActions.new(edit_path: helpers.edit_deck_deck_result_path(@deck, r), delete_path: helpers.deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
+              t.row do
+                t.cell { r.played_at&.strftime("%Y-%m-%d %H:%M") || "\u2014" }
+                t.cell { result_badge(r.result) }
+                t.cell { r.archetype&.name || "\u2014" }
+                t.cell { r.notes.present? ? r.notes.truncate(40) : "\u2014" }
+                t.cell { render Ui::AdminActions.new(edit_path: helpers.edit_deck_deck_result_path(@deck, r), delete_path: helpers.deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
               end
             end
           end

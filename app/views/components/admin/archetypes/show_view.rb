@@ -13,10 +13,11 @@ module Admin
               link_to "Delete", helpers.admin_archetype_path(@archetype),
                 data: { turbo_method: :delete, turbo_confirm: "Delete #{@archetype.name}?" },
                 class: "btn-danger"
+              link_to "Back", helpers.admin_archetypes_path, class: "btn btn-secondary"
             end
           end
 
-          table(class: "admin-table") do
+          table(class: "detail-table") do
             tbody do
               info_row("Primary Pokémon", @archetype.primary_pokemon.name)
               info_row("Secondary Pokémon", @archetype.secondary_pokemon&.name || "\u2014")
@@ -27,12 +28,12 @@ module Admin
 
           if @archetype.children.any?
             h2 { "Sub-archetypes" }
-            render Ui::AdminTable.new(columns: %w[Name Primary Secondary]) do
+            render Ui::DataTable.new(columns: %w[Name Primary Secondary]) do |t|
               @archetype.children.includes(:primary_pokemon, :secondary_pokemon).each do |child|
-                tr do
-                  td { link_to child.name, helpers.admin_archetype_path(child) }
-                  td { child.primary_pokemon.name }
-                  td { child.secondary_pokemon&.name || "\u2014" }
+                t.row do
+                  t.cell { link_to child.name, helpers.admin_archetype_path(child) }
+                  t.cell { child.primary_pokemon.name }
+                  t.cell { child.secondary_pokemon&.name || "\u2014" }
                 end
               end
             end

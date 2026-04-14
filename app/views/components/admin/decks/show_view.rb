@@ -26,12 +26,12 @@ module Admin
             next unless group.present?
 
             h2 { "#{type} (#{group.sum(&:quantity)})" }
-            render Ui::AdminTable.new(columns: %w[Qty Name Set]) do
+            render Ui::DataTable.new(columns: %w[Qty Name Set]) do |t|
               group.sort_by { |dc| dc.card.name }.each do |dc|
-                tr do
-                  td { dc.quantity.to_s }
-                  td { link_to dc.card.name, helpers.admin_card_path(dc.card) }
-                  td { "#{dc.card.set_name} #{dc.card.set_number}" }
+                t.row do
+                  t.cell { dc.quantity.to_s }
+                  t.cell { link_to dc.card.name, helpers.admin_card_path(dc.card) }
+                  t.cell { "#{dc.card.set_name} #{dc.card.set_number}" }
                 end
               end
             end

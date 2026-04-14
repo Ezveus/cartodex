@@ -38,28 +38,28 @@ module Decks
 
       h2 { "By Archetype" }
 
-      render Ui::AdminTable.new(columns: %w[Archetype W L D T Total Win%]) do
+      render Ui::DataTable.new(columns: %w[Archetype W L D T Total Win%]) do |t|
         @deck.archetype_breakdown(@results).each do |entry|
-          archetype_row(entry[:name], entry[:counts], false)
+          archetype_row(t, entry[:name], entry[:counts], false)
           entry[:children].each do |child|
-            archetype_row(child[:name], child[:counts], true)
+            archetype_row(t, child[:name], child[:counts], true)
           end
         end
       end
     end
 
-    def archetype_row(name, counts, indent)
+    def archetype_row(t, name, counts, indent)
       total = counts.values.sum
       win_pct = total > 0 ? (counts["win"].to_f / total * 100).round(0) : 0
 
-      tr do
-        td { indent ? span(style: "padding-left: 1.5rem; color: #666;") { "\u2514 #{name}" } : plain(name) }
-        td { counts["win"].to_s }
-        td { counts["loss"].to_s }
-        td { counts["draw"].to_s }
-        td { counts["timeout"].to_s }
-        td { strong { total.to_s } }
-        td { "#{win_pct}%" }
+      t.row do
+        t.cell { indent ? span(style: "padding-left: 1.5rem; color: #666;") { "\u2514 #{name}" } : plain(name) }
+        t.cell { counts["win"].to_s }
+        t.cell { counts["loss"].to_s }
+        t.cell { counts["draw"].to_s }
+        t.cell { counts["timeout"].to_s }
+        t.cell { strong { total.to_s } }
+        t.cell { "#{win_pct}%" }
       end
     end
   end

@@ -94,6 +94,23 @@ module Decks
         image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
         link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
       end
+      card_preview_modal
+    end
+
+    def card_preview_modal
+      dialog(
+        class: "card-preview-modal",
+        data: {
+          card_preview_target: "modal",
+          action: "click->card-preview#backdropClose"
+        }
+      ) do
+        div(class: "card-preview-modal-content") do
+          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
+          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
+          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
+        end
+      end
     end
   end
 end

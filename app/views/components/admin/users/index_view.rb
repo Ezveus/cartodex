@@ -10,14 +10,14 @@ module Admin
         div(class: "admin-container") do
           h1 { "Users" }
 
-          render Ui::AdminTable.new(columns: %w[Email Admin Decks Joined Actions]) do
+          render Ui::DataTable.new(columns: %w[Email Admin Decks Joined Actions]) do |t|
             @users.each do |user|
-              tr do
-                td { user.email }
-                td { user.admin? ? "Yes" : "No" }
-                td { user.decks.size.to_s }
-                td { user.created_at.strftime("%Y-%m-%d") }
-                td do
+              t.row do
+                t.cell { user.email }
+                t.cell { user.admin? ? "Yes" : "No" }
+                t.cell { user.decks.size.to_s }
+                t.cell { user.created_at.strftime("%Y-%m-%d") }
+                t.cell do
                   if user != @current_user
                     link_to(
                       user.admin? ? "Remove admin" : "Make admin",

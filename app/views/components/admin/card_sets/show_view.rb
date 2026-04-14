@@ -22,14 +22,14 @@ module Admin
           end
 
           h2 { "Cards (#{@cards.size})" }
-          render Ui::AdminTable.new(columns: %w[# Name Type HP Rarity]) do
+          render Ui::DataTable.new(columns: %w[# Name Type HP Rarity]) do |t|
             @cards.each do |card|
-              tr do
-                td { card.set_number }
-                td { link_to card.name, helpers.admin_card_path(card) }
-                td { card.card_type }
-                td { card.hp.to_s }
-                td { card.rarity }
+              t.row do
+                t.cell { card.set_number }
+                t.cell { link_to card.name, helpers.admin_card_path(card) }
+                t.cell { card.card_type }
+                t.cell { card.hp.to_s }
+                t.cell { card.rarity }
               end
             end
           end

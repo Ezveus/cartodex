@@ -15,15 +15,15 @@ module Admin
             input(type: "submit", value: "Search", class: "btn btn-secondary btn-sm")
           end
 
-          render Ui::AdminTable.new(columns: %w[Name Set Type HP Rarity Actions]) do
+          render Ui::DataTable.new(columns: %w[Name Set Type HP Rarity Actions]) do |t|
             @cards.each do |card|
-              tr do
-                td { link_to card.name, helpers.admin_card_path(card) }
-                td { "#{card.set_name} #{card.set_number}" }
-                td { card.card_type }
-                td { card.hp.to_s }
-                td { card.rarity }
-                td { link_to "Edit", helpers.edit_admin_card_path(card), class: "btn btn-secondary btn-sm" }
+              t.row do
+                t.cell { link_to card.name, helpers.admin_card_path(card) }
+                t.cell { "#{card.set_name} #{card.set_number}" }
+                t.cell { card.card_type }
+                t.cell { card.hp.to_s }
+                t.cell { card.rarity }
+                t.cell { link_to "Edit", helpers.edit_admin_card_path(card), class: "btn btn-secondary btn-sm" }
               end
             end
           end

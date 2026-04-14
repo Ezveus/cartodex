@@ -35,12 +35,12 @@ module Admin
       def recent_users_table
         div do
           h2 { "Recent Users" }
-          render Ui::AdminTable.new(columns: %w[Email Admin Joined]) do
+          render Ui::DataTable.new(columns: %w[Email Admin Joined]) do |t|
             @recent_users.each do |user|
-              tr do
-                td { user.email }
-                td { user.admin? ? "Yes" : "No" }
-                td { user.created_at.strftime("%Y-%m-%d") }
+              t.row do
+                t.cell { user.email }
+                t.cell { user.admin? ? "Yes" : "No" }
+                t.cell { user.created_at.strftime("%Y-%m-%d") }
               end
             end
           end
@@ -50,12 +50,12 @@ module Admin
       def recent_decks_table
         div do
           h2 { "Recent Decks" }
-          render Ui::AdminTable.new(columns: %w[Name Owner Created]) do
+          render Ui::DataTable.new(columns: %w[Name Owner Created]) do |t|
             @recent_decks.each do |deck|
-              tr do
-                td { link_to deck.name, helpers.admin_deck_path(deck) }
-                td { deck.user.email }
-                td { deck.created_at.strftime("%Y-%m-%d") }
+              t.row do
+                t.cell { link_to deck.name, helpers.admin_deck_path(deck) }
+                t.cell { deck.user.email }
+                t.cell { deck.created_at.strftime("%Y-%m-%d") }
               end
             end
           end

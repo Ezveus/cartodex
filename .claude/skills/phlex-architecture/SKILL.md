@@ -49,7 +49,7 @@ Under `app/views/components/ui/`. Use these to avoid duplication:
 | `Ui::Navbar` | App and admin navbars (parameterized via `variant:`) |
 | `Ui::StatCard` | Value + label card (admin dashboard, deck stats) |
 | `Ui::PageHeader` | Title + optional action buttons |
-| `Ui::AdminTable` | Table with column headers, yields rows block |
+| `Ui::DataTable` | Table with column headers, yields rows block |
 | `Ui::DeckImport` | Deck import modal + importing section (shared by dashboard and decks index) |
 | `Ui::Card` | Generic card wrapper |
 | `Ui::Button` | Button/link with variant support |

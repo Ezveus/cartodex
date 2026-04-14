@@ -11,15 +11,15 @@ module Admin
             link_to "New Archetype", helpers.new_admin_archetype_path, class: "btn btn-primary"
           end
 
-          render Ui::AdminTable.new(columns: %w[Name Primary Secondary Parent Children Actions]) do
+          render Ui::DataTable.new(columns: %w[Name Primary Secondary Parent Children Actions]) do |t|
             @archetypes.each do |arch|
-              tr do
-                td { link_to arch.name, helpers.admin_archetype_path(arch) }
-                td { arch.primary_pokemon.name }
-                td { arch.secondary_pokemon&.name || "\u2014" }
-                td { arch.parent ? link_to(arch.parent.name, helpers.admin_archetype_path(arch.parent)) : "\u2014" }
-                td { arch.children.size.to_s }
-                td { render Ui::AdminActions.new(edit_path: helpers.edit_admin_archetype_path(arch), delete_path: helpers.admin_archetype_path(arch), confirm_message: "Delete #{arch.name}?") }
+              t.row do
+                t.cell { link_to arch.name, helpers.admin_archetype_path(arch) }
+                t.cell { arch.primary_pokemon.name }
+                t.cell { arch.secondary_pokemon&.name || "\u2014" }
+                t.cell { arch.parent ? link_to(arch.parent.name, helpers.admin_archetype_path(arch.parent)) : "\u2014" }
+                t.cell { arch.children.size.to_s }
+                t.cell { render Ui::AdminActions.new(edit_path: helpers.edit_admin_archetype_path(arch), delete_path: helpers.admin_archetype_path(arch), confirm_message: "Delete #{arch.name}?") }
               end
             end
           end

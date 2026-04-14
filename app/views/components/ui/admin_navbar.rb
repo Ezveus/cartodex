@@ -8,11 +8,14 @@ module Ui
     end
 
     def view_template
-      nav(class: "navbar admin-navbar") do
+      nav(class: "navbar admin-navbar", data: { controller: "navbar" }) do
         div(class: "navbar-inner") do
           brand
-          nav_links
-          right_section
+          hamburger_button
+          div(class: "navbar-menu", data: { navbar_target: "menu" }) do
+            nav_links
+            right_section
+          end
         end
       end
     end
@@ -21,6 +24,16 @@ module Ui
 
     def brand
       link_to "Cartodex Admin", helpers.admin_root_path, class: "navbar-brand"
+    end
+
+    def hamburger_button
+      button(
+        class: "navbar-toggle",
+        data: { action: "navbar#toggle" },
+        aria: { label: "Menu", expanded: "false" }
+      ) do
+        span(class: "navbar-toggle-icon")
+      end
     end
 
     def nav_links

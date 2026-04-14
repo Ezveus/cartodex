@@ -23,7 +23,7 @@ module Admin
               end
             end
             div do
-              table(class: "admin-table") do
+              table(class: "detail-table") do
                 tbody do
                   info_row("Type", @card.card_type)
                   info_row("HP", @card.hp)

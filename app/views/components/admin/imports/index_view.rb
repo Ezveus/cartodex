@@ -9,16 +9,16 @@ module Admin
         div(class: "admin-container") do
           h1 { "Imports" }
 
-          render Ui::AdminTable.new(columns: %w[ID Kind Label User Status Error Actions]) do
+          render Ui::DataTable.new(columns: %w[ID Kind Label User Status Error Actions]) do |t|
             @imports.each do |imp|
-              tr do
-                td { imp.id.to_s }
-                td { imp.kind }
-                td { imp.label }
-                td { imp.user.email }
-                td { status_badge(imp) }
-                td { error_cell(imp) }
-                td { actions_cell(imp) }
+              t.row do
+                t.cell { imp.id.to_s }
+                t.cell { imp.kind }
+                t.cell { imp.label }
+                t.cell { imp.user.email }
+                t.cell { status_badge(imp) }
+                t.cell { error_cell(imp) }
+                t.cell { actions_cell(imp) }
               end
             end
           end

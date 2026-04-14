@@ -11,7 +11,7 @@ module Decks
         data: {
           card_preview_url: card.image_url,
           card_preview_card_id: card.id,
-          action: "mouseenter->card-preview#show",
+          action: "mouseenter->card-preview#show click->card-preview#open",
           controller: "deck-card-quantity",
           deck_card_quantity_deck_id_value: @deck_id,
           deck_card_quantity_card_id_value: card.id,
