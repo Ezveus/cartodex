@@ -32,10 +32,15 @@ module Decks
       end
       nav(class: "deck-actions-bar") do
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
-        button(
-          class: "btn btn-secondary btn-sm",
-          data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
-        ) { "Export" }
+        div(class: "dropdown", data: { controller: "dropdown" }) do
+          button(class: "btn btn-secondary btn-sm", data: { action: "dropdown#toggle" }) { "Export ▾" }
+          div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
+            button(
+              class: "dropdown-item",
+              data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
+            ) { "Copy for TCG Live" }
+          end
+        end
         link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
       end
