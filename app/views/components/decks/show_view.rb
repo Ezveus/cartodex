@@ -39,6 +39,14 @@ module Decks
               class: "dropdown-item",
               data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
             ) { "Copy for TCG Live" }
+            button(
+              class: "dropdown-item",
+              data: { controller: "deck-image-export", action: "deck-image-export#copy" }
+            ) { "Copy as image" }
+            button(
+              class: "dropdown-item",
+              data: { controller: "deck-image-export", action: "deck-image-export#download" }
+            ) { "Download as image" }
           end
         end
         link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
