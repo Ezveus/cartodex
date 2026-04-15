@@ -120,8 +120,12 @@ jobs:
           ssh-keyscan builder.ezveus.eu >> ~/.ssh/known_hosts
           ssh-keyscan cartodex.ezveus.eu >> ~/.ssh/known_hosts
 
+      - name: Write Rails master key
+        env:
+          RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+        run: printf '%s' "$RAILS_MASTER_KEY" > config/master.key
+
       - name: Deploy with Kamal
         env:
           KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD }}
-          RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
         run: bin/kamal deploy
