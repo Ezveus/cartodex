@@ -17,27 +17,17 @@ module Decks
 
         render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
 
-        if @decks.any?
-          div(class: "decks-grid") do
-            @decks.each { |deck| deck_item(deck) }
-          end
-        else
-          p do
-            plain "No decks yet. "
-            link_to "Import one from the dashboard", helpers.dashboard_path
-            plain "."
+        div(class: "decks-grid", id: "decks-grid") do
+          if @decks.any?
+            @decks.each { |deck| render Decks::DeckCard.new(deck: deck) }
+          else
+            p(id: "decks-empty") do
+              plain "No decks yet. "
+              link_to "Import one from the dashboard", helpers.dashboard_path
+              plain "."
+            end
           end
         end
-      end
-    end
-
-    private
-
-    def deck_item(deck)
-      link_to helpers.deck_path(deck), class: "deck-item" do
-        h2 { deck.name }
-        p(class: "deck-description") { deck.description } if deck.description.present?
-        p(class: "deck-card-count") { "#{deck.deck_cards.sum(&:quantity)} cards" }
       end
     end
   end

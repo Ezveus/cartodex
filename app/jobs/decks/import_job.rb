@@ -24,6 +24,17 @@ class Decks::ImportJob < ApplicationJob
       target: "deck-count",
       html: %(<span id="deck-count" data-decks-target="count">#{deck_count}</span>)
     )
+
+    Turbo::StreamsChannel.broadcast_remove_to(
+      user, :notifications,
+      target: "decks-empty"
+    )
+
+    Turbo::StreamsChannel.broadcast_prepend_to(
+      user, :notifications,
+      target: "decks-grid",
+      html: Decks::DeckCard.new(deck: deck).call
+    )
   rescue => e
     import.update!(status: "failed", error_message: e.message)
 
