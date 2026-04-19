@@ -41,6 +41,10 @@ module Decks
             ) { "Copy for TCG Live" }
             button(
               class: "dropdown-item",
+              data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
+            ) { "Copy as Cardmarket wishlist" }
+            button(
+              class: "dropdown-item",
               data: { controller: "deck-image-export", action: "deck-image-export#copy" }
             ) { "Copy as image" }
             button(

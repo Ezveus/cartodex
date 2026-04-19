@@ -14,8 +14,9 @@ class DecksController < ApplicationController
   end
 
   def export
-    deck = current_user.decks.includes(deck_cards: :card).find(params[:id])
-    render json: { text: Decks::Exporter.call(deck) }
+    deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find(params[:id])
+    exporter = params[:style] == "cardmarket" ? Decks::CardmarketExporter : Decks::Exporter
+    render json: { text: exporter.call(deck) }
   end
 
   def new
