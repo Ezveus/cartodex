@@ -1,0 +1,17 @@
+ash:
+  user: one
+  player_name: Ash Ketchum
+  player_id: "1000001"
+  date_of_birth: 2014-05-22
+
+misty:
+  user: one
+  player_name: Misty
+  player_id: "1000002"
+  date_of_birth: 2012-03-15
+
+giovanni:
+  user: two
+  player_name: Giovanni
+  player_id: "1000003"
+  date_of_birth: 1985-10-02

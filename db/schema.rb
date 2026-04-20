@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_11_151349) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_20_103054) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -150,6 +150,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_11_151349) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "tournament_profiles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "date_of_birth", null: false
+    t.string "player_id", null: false
+    t.string "player_name", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["player_id"], name: "index_tournament_profiles_on_player_id", unique: true
+    t.index ["user_id"], name: "index_tournament_profiles_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
@@ -178,4 +189,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_11_151349) do
   add_foreign_key "deck_results", "decks"
   add_foreign_key "decks", "users"
   add_foreign_key "imports", "users"
+  add_foreign_key "tournament_profiles", "users"
 end

@@ -20,6 +20,7 @@ Rails.application.routes.draw do
       resources :deck_results, only: [ :index, :edit, :update, :destroy ]
     end
     resources :cards, only: [ :index, :show ]
+    resources :tournament_profiles, except: [ :show ]
 
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do

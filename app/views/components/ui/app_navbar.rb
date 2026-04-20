@@ -42,6 +42,7 @@ module Ui
         nav_link "Decks", helpers.decks_path, "decks"
         nav_link "Cards", helpers.cards_path, "cards"
         nav_link "Collection", "#", "collections"
+        nav_link "Profiles", helpers.tournament_profiles_path, "tournament_profiles"
       end
     end
 
