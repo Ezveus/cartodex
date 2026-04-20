@@ -1,13 +1,14 @@
 module Decks
   class ShowView < ApplicationComponent
-    def initialize(deck:, editing: false)
+    def initialize(deck:, editing: false, tournament_profiles: [])
       @deck = deck
       @editing = editing
+      @tournament_profiles = tournament_profiles
     end
 
     def view_template
       div(class: "deck-show-container", data: {
-        controller: "card-preview deck-totals result-modal",
+        controller: "card-preview deck-totals result-modal tournament-pdf",
         action: "deck-card-quantity:changed->deck-totals#updateTotals",
         result_modal_deck_id_value: @deck.id
       }) do
@@ -18,6 +19,7 @@ module Decks
           preview_section
         end
         render Decks::ResultModal.new
+        render Decks::TournamentPdfModal.new(deck: @deck, tournament_profiles: @tournament_profiles)
       end
     end
 
@@ -49,6 +51,10 @@ module Decks
               class: "dropdown-item",
               data: { controller: "deck-image-export", action: "deck-image-export#download" }
             ) { "Download as image" }
+            button(
+              class: "dropdown-item",
+              data: { action: "tournament-pdf#open" }
+            ) { "Download as tournament PDF" }
           end
         end
         link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"

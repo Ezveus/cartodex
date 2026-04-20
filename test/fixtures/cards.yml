@@ -31,3 +31,57 @@ trainer_card:
   set_name: PAL
   set_number: "172"
   rarity: Rare
+
+budew_pre:
+  name: Budew
+  card_type: "Pokémon"
+  set_name: PRE
+  set_number: "4"
+  regulation_mark: H
+  rarity: Common
+  hp: 30
+  stage: Basic
+  type_symbol: Grass
+  retreat_cost: 1
+
+budew_asc:
+  name: Budew
+  card_type: "Pokémon"
+  set_name: ASC
+  set_number: "16"
+  regulation_mark: I
+  rarity: Common
+  hp: 30
+  stage: Basic
+  type_symbol: Grass
+  retreat_cost: 1
+
+bosss_orders_meg:
+  name: Boss's Orders
+  card_type: Trainer
+  set_name: MEG
+  set_number: "114"
+  rarity: Uncommon
+
+basic_psychic_energy:
+  name: Psychic Energy
+  card_type: Energy
+  subtype: Basic Energy
+  set_name: SVE
+  set_number: "5"
+
+special_prism_energy_asc:
+  name: Prism Energy
+  card_type: Energy
+  subtype: Special Energy
+  set_name: ASC
+  set_number: "163"
+  rarity: Rare
+
+special_prism_energy_blk:
+  name: Prism Energy
+  card_type: Energy
+  subtype: Special Energy
+  set_name: BLK
+  set_number: "8"
+  rarity: Rare

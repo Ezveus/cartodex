@@ -6,6 +6,7 @@ class DecksController < ApplicationController
 
   def show
     @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
   end
 
@@ -16,8 +17,20 @@ class DecksController < ApplicationController
 
   def export
     deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find(params[:id])
-    exporter = params[:style] == "cardmarket" ? Decks::CardmarketExporter : Decks::Exporter
-    render json: { text: exporter.call(deck) }
+
+    case params[:style]
+    when "tournament_pdf"
+      profile = current_user.tournament_profiles.find(params[:profile_id])
+      pdf = Decks::TournamentPdfExporter.call(deck, profile)
+      send_data pdf,
+        type: "application/pdf",
+        disposition: "attachment",
+        filename: "#{deck.name.parameterize}-decklist.pdf"
+    when "cardmarket"
+      render json: { text: Decks::CardmarketExporter.call(deck) }
+    else
+      render json: { text: Decks::Exporter.call(deck) }
+    end
   end
 
   def new
@@ -36,6 +49,7 @@ class DecksController < ApplicationController
 
   def edit
     @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
     render :show
   end

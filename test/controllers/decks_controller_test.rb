@@ -84,4 +84,25 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  test "tournament_pdf export returns a PDF" do
+    profile = tournament_profiles(:ash)
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
+
+    get export_deck_path(@deck, style: "tournament_pdf", profile_id: profile.id)
+
+    assert_response :success
+    assert_equal "application/pdf", response.media_type
+    assert @deck.name.parameterize.present?
+    assert_match(/decklist\.pdf/, response.headers["Content-Disposition"])
+    assert response.body.start_with?("%PDF")
+  end
+
+  test "tournament_pdf export rejects another user's profile" do
+    other_profile = tournament_profiles(:giovanni)
+
+    get export_deck_path(@deck, style: "tournament_pdf", profile_id: other_profile.id)
+
+    assert_response :not_found
+  end
 end
