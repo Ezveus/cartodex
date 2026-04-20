@@ -8,7 +8,7 @@ export default class extends Controller {
   }
 
   decrement() {
-    if (this.quantityValue <= 1) return
+    if (this.quantityValue <= 0) return
     this.#updateQuantity(this.quantityValue - 1)
   }
 
@@ -22,9 +22,15 @@ export default class extends Controller {
       body: JSON.stringify({ deck_card: { quantity: newQuantity } })
     })
 
-    if (response.ok) {
-      const delta = newQuantity - this.quantityValue
-      this.quantityValue = newQuantity
+    if (!response.ok) return
+
+    const delta = newQuantity - this.quantityValue
+    this.quantityValue = newQuantity
+
+    if (newQuantity <= 0) {
+      this.dispatch("changed", { detail: { delta } })
+      this.element.remove()
+    } else {
       this.element.querySelector(".deck-card-qty").textContent = newQuantity
       this.dispatch("changed", { detail: { delta } })
     }
