@@ -1,7 +1,8 @@
 module Decks
   class ShowView < ApplicationComponent
-    def initialize(deck:)
+    def initialize(deck:, editing: false)
       @deck = deck
+      @editing = editing
     end
 
     def view_template
@@ -24,10 +25,7 @@ module Decks
 
     def header_section
       div(class: "deck-show-header") do
-        div do
-          h1 { @deck.name }
-          p(class: "deck-show-description") { @deck.description } if @deck.description.present?
-        end
+        render Decks::HeaderFrame.new(deck: @deck, editing: @editing)
         link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
       end
       nav(class: "deck-actions-bar") do
@@ -55,6 +53,7 @@ module Decks
         end
         link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID)
       end
     end
 

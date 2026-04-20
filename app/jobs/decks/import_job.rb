@@ -33,7 +33,7 @@ class Decks::ImportJob < ApplicationJob
     Turbo::StreamsChannel.broadcast_prepend_to(
       user, :notifications,
       target: "decks-grid",
-      html: Decks::DeckCard.new(deck: deck).call
+      html: Decks::DeckCard.new(deck: deck, with_actions: false).call
     )
   rescue => e
     import.update!(status: "failed", error_message: e.message)

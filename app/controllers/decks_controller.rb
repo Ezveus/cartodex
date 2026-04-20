@@ -6,6 +6,7 @@ class DecksController < ApplicationController
 
   def show
     @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @editing = false
   end
 
   def stats
@@ -31,6 +32,36 @@ class DecksController < ApplicationController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  def edit
+    @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @editing = true
+    render :show
+  end
+
+  def update
+    @deck = current_user.decks.find(params[:id])
+
+    if @deck.update(deck_params)
+      @editing = false
+      render :update, layout: false
+    else
+      @editing = true
+      render :update, layout: false, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    deck = current_user.decks.find(params[:id])
+    deck.destroy
+    redirect_to decks_path, notice: "Deck deleted."
+  end
+
+  def duplicate
+    source = current_user.decks.find(params[:id])
+    new_deck = Decks::Duplicator.call(source)
+    redirect_to new_deck, notice: "Deck duplicated."
   end
 
   private

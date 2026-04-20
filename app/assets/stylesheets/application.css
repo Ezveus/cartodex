@@ -558,12 +558,25 @@ textarea.form-input {
   padding: 1.5rem;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+  transition: box-shadow 0.2s;
+}
+
+.deck-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.deck-item-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
 
 .deck-item h2 {
   margin-top: 0;
   color: var(--primary-color);
   font-size: 1.2rem;
+  padding-right: 5rem;
 }
 
 .deck-description {
@@ -576,15 +589,10 @@ textarea.form-input {
   color: var(--secondary-color);
 }
 
-.deck-item {
-  text-decoration: none;
-  color: inherit;
-  display: block;
-  transition: box-shadow 0.2s;
-}
-
-.deck-item:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.deck-item-actions {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
 }
 
 /* Deck show */
@@ -1339,10 +1347,12 @@ textarea.form-input {
 .dropdown-item {
   display: block;
   width: 100%;
+  box-sizing: border-box;
   padding: 0.5rem 1rem;
   border: none;
   background: none;
   text-align: left;
+  text-decoration: none;
   font-size: 0.9rem;
   cursor: pointer;
   color: var(--text-color);
@@ -1350,6 +1360,41 @@ textarea.form-input {
 
 .dropdown-item:hover {
   background: var(--background-color);
+}
+
+.dropdown-item-form {
+  margin: 0;
+  padding: 0;
+}
+
+.dropdown-item-danger {
+  color: #c62f0c;
+}
+
+.deck-header-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 500px;
+}
+
+.deck-header-name-input {
+  font-size: 2rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+}
+
+.deck-header-description-input {
+  font-size: 0.95rem;
+  padding: 0.5rem;
+  min-height: auto;
+}
+
+.deck-header-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 /* Card preview modal (mobile) */

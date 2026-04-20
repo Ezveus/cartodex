@@ -13,9 +13,10 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
-    resources :decks, only: [ :index, :show, :new, :create ] do
+    resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
       get :export, on: :member
       get :stats, on: :member
+      post :duplicate, on: :member
       resources :deck_results, only: [ :index, :edit, :update, :destroy ]
     end
     resources :cards, only: [ :index, :show ]
