@@ -2,7 +2,7 @@ source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.1", ">= 8.1.3"
-gem "minitest", "~> 5.25"
+gem "minitest", "~> 6.0"
 gem "cgi"
 gem "tsort"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
