@@ -162,6 +162,18 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     assert_nil card.pokemon_subtype
   end
 
+  # --- Promo sets (no rarity listed) ---
+
+  test "assigns 'Promo' rarity when card-prints-current has no rarity segment" do
+    promo_html = @honedge_html.sub("#56 · Common", "#56")
+    stub_http("https://limitlesstcg.com/cards/SVP/56", promo_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/SVP/56")
+
+    assert_equal "Promo", card.rarity
+    assert card.persisted?
+  end
+
   # --- find_or_create behavior ---
 
   test "updates existing card instead of creating duplicate" do

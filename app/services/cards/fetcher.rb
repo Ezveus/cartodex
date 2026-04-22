@@ -58,7 +58,9 @@ class Cards::Fetcher < ApplicationService
     card.stage = parse_stage(type_line)
     card.evolves_from = parse_evolves_from(type_line)
     card.image_url = parse_image_url(doc)
-    card.rarity = parse_rarity(doc)
+    # Promo sets show no rarity on Limitless (e.g. SVP); assume "Promo" in that case.
+    # Basic energies also have no rarity, but the Card model skips rarity validation for them.
+    card.rarity = parse_rarity(doc) || ("Promo" unless card.subtype == "Basic Energy")
     card.set_full_name = parse_set_full_name(doc)
     card.regulation_mark = parse_regulation_mark(doc)
     card.price_usd = parse_price(doc, "usd")
