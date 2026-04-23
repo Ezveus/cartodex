@@ -25,7 +25,7 @@ module Admin
 
           div(class: "form-actions deck-form-actions") do
             f.submit class: "btn btn-primary"
-            link_to "Cancel", helpers.admin_archetypes_path, class: "btn btn-secondary"
+            link_to "Cancel", admin_archetypes_path, class: "btn btn-secondary"
           end
         end
       end

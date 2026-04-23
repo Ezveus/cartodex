@@ -54,7 +54,7 @@ module Decks
     def empty_state
       p { "You don't have any tournament profiles yet." }
       div(class: "form-actions result-modal-actions") do
-        link_to "Create a profile", helpers.new_tournament_profile_path, class: "btn btn-primary"
+        link_to "Create a profile", new_tournament_profile_path, class: "btn btn-primary"
         button(
           class: "btn btn-secondary",
           type: "button",

@@ -9,7 +9,7 @@ module Admin
       def view_template
         div(class: "admin-container") do
           render Ui::PageHeader.new(title: "Card Sets") do
-            link_to "New Set", helpers.new_admin_card_set_path, class: "btn btn-primary"
+            link_to "New Set", new_admin_card_set_path, class: "btn btn-primary"
           end
 
           import_section
@@ -18,11 +18,11 @@ module Admin
             @card_sets.each do |card_set|
               t.row do
                 t.cell { card_set.code }
-                t.cell { link_to card_set.name, helpers.admin_card_set_path(card_set) }
+                t.cell { link_to card_set.name, admin_card_set_path(card_set) }
                 t.cell { card_set.block_name }
                 t.cell { card_set.release_date&.strftime("%Y-%m-%d") }
                 t.cell { card_set.cards.size.to_s }
-                t.cell { render Ui::AdminActions.new(edit_path: helpers.edit_admin_card_set_path(card_set), delete_path: helpers.admin_card_set_path(card_set), confirm_message: "Delete #{card_set.name}?") }
+                t.cell { render Ui::AdminActions.new(edit_path: edit_admin_card_set_path(card_set), delete_path: admin_card_set_path(card_set), confirm_message: "Delete #{card_set.name}?") }
               end
             end
           end
@@ -33,7 +33,7 @@ module Admin
 
       def import_section
         div(data: { controller: "set-import" }) do
-          form_with(url: helpers.import_admin_card_sets_path, method: :post, class: "admin-search",
+          form_with(url: import_admin_card_sets_path, method: :post, class: "admin-search",
             data: { action: "submit->set-import#import" }) do |f|
             input(
               type: "text", name: "url",

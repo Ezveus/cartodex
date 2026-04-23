@@ -109,7 +109,7 @@ module Cards
         h2 { "Alternative Printings" }
         div(class: "alt-printings") do
           @alt_printings.each do |alt|
-            link_to helpers.card_path(alt), class: "alt-printing-item" do
+            link_to card_path(alt), class: "alt-printing-item" do
               image_tag alt.image_url, alt: alt.name, class: "alt-printing-image" if alt.image_url.present?
               span(class: "alt-printing-set") { "#{alt.set_full_name || alt.set_name} (#{alt.set_number})" }
             end

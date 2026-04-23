@@ -9,7 +9,7 @@ module DeckResults
       div(class: "admin-container") do
         h1 { "Edit Result" }
 
-        form_with(model: @result, url: helpers.deck_deck_result_path(@deck, @result), method: :patch, class: "deck-form") do |f|
+        form_with(model: @result, url: deck_deck_result_path(@deck, @result), method: :patch, class: "deck-form") do |f|
           render Ui::FormErrors.new(resource: @result)
 
           render Ui::FormGroup.new do
@@ -35,7 +35,7 @@ module DeckResults
 
           div(class: "form-actions deck-form-actions") do
             f.submit "Update Result", class: "btn btn-primary"
-            link_to "Cancel", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary"
+            link_to "Cancel", deck_deck_results_path(@deck), class: "btn btn-secondary"
           end
         end
       end

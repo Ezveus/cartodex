@@ -36,7 +36,7 @@ module Admin
             end
             div(class: "form-actions deck-form-actions") do
               f.submit "Update Card", class: "btn btn-primary"
-              link_to "Cancel", helpers.admin_card_path(@card), class: "btn btn-secondary"
+              link_to "Cancel", admin_card_path(@card), class: "btn btn-secondary"
             end
           end
         end

@@ -17,7 +17,7 @@ module Admin
                 strong { @deck.deck_cards.sum(&:quantity).to_s }
               end
             end
-            link_to "Back", helpers.admin_decks_path, class: "btn btn-secondary"
+            link_to "Back", admin_decks_path, class: "btn btn-secondary"
           end
 
           card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type }
@@ -30,7 +30,7 @@ module Admin
               group.sort_by { |dc| dc.card.name }.each do |dc|
                 t.row do
                   t.cell { dc.quantity.to_s }
-                  t.cell { link_to dc.card.name, helpers.admin_card_path(dc.card) }
+                  t.cell { link_to dc.card.name, admin_card_path(dc.card) }
                   t.cell { "#{dc.card.set_name} #{dc.card.set_number}" }
                 end
               end

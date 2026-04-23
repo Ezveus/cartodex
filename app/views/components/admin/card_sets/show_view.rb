@@ -18,7 +18,7 @@ module Admin
                 strong { @card_set.release_date&.strftime("%Y-%m-%d") || "N/A" }
               end
             end
-            link_to "Edit", helpers.edit_admin_card_set_path(@card_set), class: "btn btn-secondary"
+            link_to "Edit", edit_admin_card_set_path(@card_set), class: "btn btn-secondary"
           end
 
           h2 { "Cards (#{@cards.size})" }
@@ -26,7 +26,7 @@ module Admin
             @cards.each do |card|
               t.row do
                 t.cell { card.set_number }
-                t.cell { link_to card.name, helpers.admin_card_path(card) }
+                t.cell { link_to card.name, admin_card_path(card) }
                 t.cell { card.card_type }
                 t.cell { card.hp.to_s }
                 t.cell { card.rarity }

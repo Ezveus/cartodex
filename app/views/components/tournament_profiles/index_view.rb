@@ -7,7 +7,7 @@ module TournamentProfiles
     def view_template
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "Tournament Profiles") do
-          link_to "New Profile", helpers.new_tournament_profile_path, class: "btn btn-primary"
+          link_to "New Profile", new_tournament_profile_path, class: "btn btn-primary"
         end
 
         if @profiles.any?
@@ -16,12 +16,12 @@ module TournamentProfiles
               t.row do
                 t.cell { profile.player_name }
                 t.cell { profile.player_id }
-                t.cell { helpers.l(profile.date_of_birth, format: :long) }
+                t.cell { localize(profile.date_of_birth, format: :long) }
                 t.cell { profile.division.to_s.capitalize }
                 t.cell do
                   render Ui::AdminActions.new(
-                    edit_path: helpers.edit_tournament_profile_path(profile),
-                    delete_path: helpers.tournament_profile_path(profile),
+                    edit_path: edit_tournament_profile_path(profile),
+                    delete_path: tournament_profile_path(profile),
                     confirm_message: "Delete #{profile.player_name}?"
                   )
                 end

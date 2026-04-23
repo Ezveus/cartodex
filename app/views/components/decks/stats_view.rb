@@ -8,7 +8,7 @@ module Decks
     def view_template
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "#{@deck.name} — Stats") do
-          link_to "Back to Deck", helpers.deck_path(@deck), class: "btn btn-secondary"
+          link_to "Back to Deck", deck_path(@deck), class: "btn btn-secondary"
         end
 
         overall_stats

@@ -9,8 +9,8 @@ module Admin
         div(class: "admin-container") do
           render Ui::PageHeader.new(title: "#{@card.name} — #{@card.set_name} #{@card.set_number}") do
             div(class: "admin-header-actions") do
-              link_to "Edit", helpers.edit_admin_card_path(@card), class: "btn btn-secondary"
-              link_to "Rescrape", helpers.rescrape_admin_card_path(@card),
+              link_to "Edit", edit_admin_card_path(@card), class: "btn btn-secondary"
+              link_to "Rescrape", rescrape_admin_card_path(@card),
                 data: { turbo_method: :post, turbo_confirm: "Rescrape #{@card.name} from Limitless?" },
                 class: "btn btn-primary"
             end
@@ -38,7 +38,7 @@ module Admin
                     td { strong { "Card Set" } }
                     td do
                       if @card.card_set
-                        link_to @card.card_set.name, helpers.admin_card_set_path(@card.card_set)
+                        link_to @card.card_set.name, admin_card_set_path(@card.card_set)
                       else
                         plain "\u2014"
                       end

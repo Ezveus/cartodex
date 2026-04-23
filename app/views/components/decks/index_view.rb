@@ -10,7 +10,7 @@ module Decks
         div(class: "decks-header") do
           h1 { "My Decks" }
           div(class: "decks-header-actions") do
-            link_to "New Deck", helpers.new_deck_path, class: "btn btn-primary"
+            link_to "New Deck", new_deck_path, class: "btn btn-primary"
             link_to "Import Deck", "#", class: "btn btn-secondary", data: { action: "decks#openImport" }
           end
         end
@@ -23,7 +23,7 @@ module Decks
           else
             p(id: "decks-empty") do
               plain "No decks yet. "
-              link_to "Import one from the dashboard", helpers.dashboard_path
+              link_to "Import one from the dashboard", dashboard_path
               plain "."
             end
           end

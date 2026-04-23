@@ -21,7 +21,7 @@ module Admin
                   if user != @current_user
                     link_to(
                       user.admin? ? "Remove admin" : "Make admin",
-                      helpers.toggle_admin_admin_user_path(user),
+                      toggle_admin_admin_user_path(user),
                       data: {
                         turbo_method: :patch,
                         turbo_confirm: "#{user.admin? ? 'Remove' : 'Grant'} admin for #{user.email}?"

@@ -9,11 +9,11 @@ module Admin
         div(class: "admin-container") do
           render Ui::PageHeader.new(title: @archetype.name) do
             div(class: "admin-header-actions") do
-              link_to "Edit", helpers.edit_admin_archetype_path(@archetype), class: "btn btn-secondary"
-              link_to "Delete", helpers.admin_archetype_path(@archetype),
+              link_to "Edit", edit_admin_archetype_path(@archetype), class: "btn btn-secondary"
+              link_to "Delete", admin_archetype_path(@archetype),
                 data: { turbo_method: :delete, turbo_confirm: "Delete #{@archetype.name}?" },
                 class: "btn-danger"
-              link_to "Back", helpers.admin_archetypes_path, class: "btn btn-secondary"
+              link_to "Back", admin_archetypes_path, class: "btn btn-secondary"
             end
           end
 
@@ -31,7 +31,7 @@ module Admin
             render Ui::DataTable.new(columns: %w[Name Primary Secondary]) do |t|
               @archetype.children.includes(:primary_pokemon, :secondary_pokemon).each do |child|
                 t.row do
-                  t.cell { link_to child.name, helpers.admin_archetype_path(child) }
+                  t.cell { link_to child.name, admin_archetype_path(child) }
                   t.cell { child.primary_pokemon.name }
                   t.cell { child.secondary_pokemon&.name || "\u2014" }
                 end

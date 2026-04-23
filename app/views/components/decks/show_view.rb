@@ -28,7 +28,7 @@ module Decks
     def header_section
       div(class: "deck-show-header") do
         render Decks::HeaderFrame.new(deck: @deck, editing: @editing)
-        link_to "Back to Decks", helpers.decks_path, class: "btn btn-secondary"
+        link_to "Back to Decks", decks_path, class: "btn btn-secondary"
       end
       nav(class: "deck-actions-bar") do
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
@@ -37,11 +37,11 @@ module Decks
           div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
             button(
               class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck), action: "clipboard#copy" }
+              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck), action: "clipboard#copy" }
             ) { "Copy for TCG Live" }
             button(
               class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: helpers.export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
+              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
             ) { "Copy as Cardmarket wishlist" }
             button(
               class: "dropdown-item",
@@ -57,8 +57,8 @@ module Decks
             ) { "Download as tournament PDF" }
           end
         end
-        link_to "Results", helpers.deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
-        link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
+        link_to "Stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
         render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID)
       end
     end

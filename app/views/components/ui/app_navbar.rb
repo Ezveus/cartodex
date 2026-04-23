@@ -23,7 +23,7 @@ module Ui
     private
 
     def brand
-      link_to "Cartodex", helpers.dashboard_path, class: "navbar-brand"
+      link_to "Cartodex", dashboard_path, class: "navbar-brand"
     end
 
     def hamburger_button
@@ -38,19 +38,19 @@ module Ui
 
     def nav_links
       div(class: "navbar-links") do
-        nav_link "Dashboard", helpers.dashboard_path, "home"
-        nav_link "Decks", helpers.decks_path, "decks"
-        nav_link "Cards", helpers.cards_path, "cards"
+        nav_link "Dashboard", dashboard_path, "home"
+        nav_link "Decks", decks_path, "decks"
+        nav_link "Cards", cards_path, "cards"
         nav_link "Collection", "#", "collections"
-        nav_link "Profiles", helpers.tournament_profiles_path, "tournament_profiles"
+        nav_link "Profiles", tournament_profiles_path, "tournament_profiles"
       end
     end
 
     def right_section
       div(class: "navbar-right") do
         span(class: "navbar-user") { @current_user.email }
-        link_to "Admin", helpers.admin_root_path, class: "navbar-link" if @current_user.admin?
-        link_to "Sign out", helpers.destroy_user_session_path, data: { turbo_method: :delete }, class: "navbar-link"
+        link_to "Admin", admin_root_path, class: "navbar-link" if @current_user.admin?
+        link_to "Sign out", destroy_user_session_path, data: { turbo_method: :delete }, class: "navbar-link"
       end
     end
 

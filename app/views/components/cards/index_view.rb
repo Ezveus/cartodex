@@ -26,7 +26,7 @@ module Cards
             ul(class: "sets-list") do
               sets.each do |card_set|
                 li(class: ("active" if @current_set == card_set)) do
-                  link_to helpers.cards_path(set: card_set.code) do
+                  link_to cards_path(set: card_set.code) do
                     span(class: "set-full-name") { card_set.name }
                     span(class: "set-code") { "#{card_set.code} (#{card_set.cards.size})" }
                   end
@@ -44,7 +44,7 @@ module Cards
           h2 { @current_set.name }
           div(class: "cards-grid") do
             @cards.each do |card|
-              link_to helpers.card_path(card), class: "card-grid-item" do
+              link_to card_path(card), class: "card-grid-item" do
                 if card.image_url.present?
                   image_tag card.image_url, alt: card.name, class: "card-grid-image", loading: "lazy"
                 end

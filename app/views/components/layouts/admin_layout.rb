@@ -6,7 +6,7 @@ module Layouts
       doctype
       html do
         head do
-          title { helpers.content_for(:title) || "Cartodex Admin" }
+          title { content_for(:title) || "Cartodex Admin" }
           meta(name: "viewport", content: "width=device-width,initial-scale=1")
           csrf_meta_tags
           csp_meta_tag
@@ -15,10 +15,10 @@ module Layouts
         end
         body do
           render Ui::AdminNavbar.new(
-            current_user: helpers.current_user,
-            active_controller: helpers.controller_name
+            current_user: current_user,
+            active_controller: controller_name
           )
-          turbo_stream_from(helpers.current_user, :notifications)
+          turbo_stream_from(current_user, :notifications)
           render Ui::FlashMessages.new
           yield
         end

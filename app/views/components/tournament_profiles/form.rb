@@ -25,7 +25,7 @@ module TournamentProfiles
 
         div(class: "form-actions deck-form-actions") do
           f.submit class: "btn btn-primary"
-          link_to "Cancel", helpers.tournament_profiles_path, class: "btn btn-secondary"
+          link_to "Cancel", tournament_profiles_path, class: "btn btn-secondary"
         end
       end
     end

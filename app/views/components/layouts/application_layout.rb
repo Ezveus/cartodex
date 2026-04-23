@@ -6,7 +6,7 @@ module Layouts
       doctype
       html do
         head do
-          title { helpers.content_for(:title) || "Cartodex" }
+          title { content_for(:title) || "Cartodex" }
           meta(name: "viewport", content: "width=device-width,initial-scale=1")
           meta(name: "apple-mobile-web-app-capable", content: "yes")
           meta(name: "mobile-web-app-capable", content: "yes")
@@ -20,11 +20,11 @@ module Layouts
           javascript_importmap_tags
         end
         body do
-          if helpers.user_signed_in?
-            turbo_stream_from(helpers.current_user, :notifications)
+          if user_signed_in?
+            turbo_stream_from(current_user, :notifications)
             render Ui::AppNavbar.new(
-              current_user: helpers.current_user,
-              active_controller: helpers.controller_name
+              current_user: current_user,
+              active_controller: controller_name
             )
           end
           render Ui::FlashMessages.new

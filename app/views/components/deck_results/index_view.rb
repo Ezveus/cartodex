@@ -9,8 +9,8 @@ module DeckResults
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "#{@deck.name} — Results") do
           div(class: "decks-header-actions") do
-            link_to "Stats", helpers.stats_deck_path(@deck), class: "btn btn-primary"
-            link_to "Back to Deck", helpers.deck_path(@deck), class: "btn btn-secondary"
+            link_to "Stats", stats_deck_path(@deck), class: "btn btn-primary"
+            link_to "Back to Deck", deck_path(@deck), class: "btn btn-secondary"
           end
         end
 
@@ -22,7 +22,7 @@ module DeckResults
                 t.cell { result_badge(r.result) }
                 t.cell { r.archetype&.name || "\u2014" }
                 t.cell { r.notes.present? ? r.notes.truncate(40) : "\u2014" }
-                t.cell { render Ui::AdminActions.new(edit_path: helpers.edit_deck_deck_result_path(@deck, r), delete_path: helpers.deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
+                t.cell { render Ui::AdminActions.new(edit_path: edit_deck_deck_result_path(@deck, r), delete_path: deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
               end
             end
           end

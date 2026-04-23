@@ -43,12 +43,12 @@ module Admin
 
       def actions_cell(imp)
         if imp.failed? || imp.pending?
-          link_to "Retry", helpers.retry_admin_import_path(imp),
+          link_to "Retry", retry_admin_import_path(imp),
             data: { turbo_method: :post, turbo_confirm: "Retry import #{imp.label}?" },
             class: "btn btn-primary btn-sm"
           plain " "
         end
-        link_to "Delete", helpers.admin_import_path(imp),
+        link_to "Delete", admin_import_path(imp),
           data: { turbo_method: :delete, turbo_confirm: "Delete import ##{imp.id}?" },
           class: "btn-danger btn-sm"
       end

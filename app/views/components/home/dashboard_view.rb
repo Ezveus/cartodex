@@ -43,8 +43,8 @@ module Home
           plain " decks"
         end
         div(class: "deck-actions") do
-          link_to "View Decks", helpers.decks_path, class: "btn btn-primary"
-          link_to "Create Deck", helpers.new_deck_path, class: "btn btn-secondary"
+          link_to "View Decks", decks_path, class: "btn btn-primary"
+          link_to "Create Deck", new_deck_path, class: "btn btn-secondary"
           link_to "Import Deck", "#", class: "btn btn-secondary", data: { action: "decks#openImport" }
         end
       end

@@ -37,7 +37,7 @@ module Decks
 
         div(class: "deck-header-form-actions") do
           f.submit "Save", class: "btn btn-primary btn-sm"
-          link_to "Cancel", helpers.deck_path(@deck), class: "btn btn-secondary btn-sm", data: { turbo_frame: FRAME_ID }
+          link_to "Cancel", deck_path(@deck), class: "btn btn-secondary btn-sm", data: { turbo_frame: FRAME_ID }
         end
       end
     end

@@ -22,7 +22,7 @@ module Decks
 
           div(class: "form-actions deck-form-actions") do
             f.submit "Create Deck", class: "btn btn-primary"
-            link_to "Cancel", helpers.decks_path, class: "btn btn-secondary"
+            link_to "Cancel", decks_path, class: "btn btn-secondary"
           end
         end
       end
