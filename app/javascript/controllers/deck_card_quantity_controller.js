@@ -28,11 +28,11 @@ export default class extends Controller {
     this.quantityValue = newQuantity
 
     if (newQuantity <= 0) {
-      this.dispatch("changed", { detail: { delta } })
+      this.dispatch("changed", { detail: { delta, removed: true } })
       this.element.remove()
     } else {
       this.element.querySelector(".deck-card-qty").textContent = newQuantity
-      this.dispatch("changed", { detail: { delta } })
+      this.dispatch("changed", { detail: { delta, removed: false } })
     }
   }
 }

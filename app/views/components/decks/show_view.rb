@@ -102,7 +102,13 @@ module Decks
 
     def card_type_section(type, group)
       div(class: "deck-section") do
-        h2 { "#{type} (#{group.sum(&:quantity)})" }
+        h2 do
+          plain "#{type} ("
+          span(data: { deck_totals_target: "sectionTotal" }) { group.sum(&:quantity).to_s }
+          plain " — "
+          span(data: { deck_totals_target: "sectionUnique" }) { group.size.to_s }
+          plain " unique)"
+        end
         ul(class: "deck-card-list") do
           group.sort_by { |dc| dc.card.name }.each do |dc|
             render Decks::DeckCardItem.new(deck_card: dc, deck_id: @deck.id)

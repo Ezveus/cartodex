@@ -1,20 +1,26 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["total", "sectionTotal"]
+  static targets = ["total", "sectionTotal", "sectionUnique"]
 
   updateTotals(event) {
-    const { delta } = event.detail
+    const { delta, removed } = event.detail
 
-    // Update global total
-    const totalEl = this.totalTarget
-    totalEl.textContent = parseInt(totalEl.textContent) + delta
+    this.totalTarget.textContent = parseInt(this.totalTarget.textContent) + delta
 
-    // Update section total (find the closest .deck-section h2)
     const section = event.target.closest(".deck-section")
-    if (section) {
-      const h2 = section.querySelector("h2")
-      h2.textContent = h2.textContent.replace(/\((\d+)\)/, (_, n) => `(${parseInt(n) + delta})`)
+    if (!section) return
+
+    const sectionTotal = section.querySelector('[data-deck-totals-target="sectionTotal"]')
+    if (sectionTotal) {
+      sectionTotal.textContent = parseInt(sectionTotal.textContent) + delta
+    }
+
+    if (removed) {
+      const sectionUnique = section.querySelector('[data-deck-totals-target="sectionUnique"]')
+      if (sectionUnique) {
+        sectionUnique.textContent = parseInt(sectionUnique.textContent) - 1
+      }
     }
   }
 }
