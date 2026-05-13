@@ -16,6 +16,8 @@ class ApplicationComponent < Phlex::HTML
   include Phlex::Rails::Helpers::StyleSheetLinkTag
   include Phlex::Rails::Helpers::JavaScriptImportmapTags
 
+  include Devise::Controllers::UrlHelpers
+
   extend Phlex::Rails::HelperMacros
 
   register_value_helper :current_user
