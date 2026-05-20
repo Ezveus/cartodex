@@ -1,0 +1,10 @@
+<%= render Collections::IndexView.new(
+      collections: @collections,
+      card_sets: @card_sets,
+      card_types: @card_types,
+      selected_set_code: @selected_set_code,
+      selected_type: @selected_type,
+      query: @query,
+      total_unique: @total_unique,
+      total_copies: @total_copies
+    ) %>

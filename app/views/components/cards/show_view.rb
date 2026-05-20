@@ -9,7 +9,18 @@ module Cards
       div(class: "card-show-container") do
         div(class: "card-show-header") do
           h1 { @card.name }
-          link_to "Back", :back, class: "btn btn-secondary"
+          div(class: "card-show-header-actions") do
+            button(
+              type: "button",
+              class: "btn btn-primary",
+              data: {
+                controller: "collection-add",
+                collection_add_card_id_value: @card.id,
+                action: "collection-add#add"
+              }
+            ) { "Add to collection" }
+            link_to "Back", :back, class: "btn btn-secondary"
+          end
         end
         div(class: "card-show-content") do
           card_image

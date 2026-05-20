@@ -29,7 +29,7 @@ module Home
           plain " cards"
         end
         div(class: "card-actions") do
-          link_to "View Collection", "#", class: "btn btn-primary", data: { action: "collection#view" }
+          link_to "View Collection", collections_path, class: "btn btn-primary"
           link_to "Scan Card", "#", class: "btn btn-secondary", data: { action: "collection#openScanner" }
         end
       end

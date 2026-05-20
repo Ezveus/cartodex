@@ -23,6 +23,7 @@ Rails.application.routes.draw do
     resources :cards, only: [ :index, :show ] do
       get :image, on: :member
     end
+    resources :collections, only: [ :index ]
     resources :tournament_profiles, except: [ :show ]
 
     # Admin
