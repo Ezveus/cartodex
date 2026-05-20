@@ -14,11 +14,19 @@ Scan real cards using webcam.
 
 ### Deck manager
 
-Keep track of which cards are used in a deck, of wins/losses by deck.
+Manage decks: create, edit, duplicate, delete.
 
-Print decklists.
+Import decklists from TCG Live text format (`QUANTITY NAME SET NUMBER`). Cards are scraped from Limitless TCG in the background, with progress streamed live.
 
-Deck builder.
+Track match results per deck (win, loss, draw, timeout) with optional archetype tagging, and view per-deck statistics.
+
+Export decks in several formats:
+- TCG Live text (copy to clipboard)
+- Cardmarket wishlist (copy to clipboard)
+- Image (copy or download)
+- Play! Pokémon tournament PDF, pre-filled from a saved tournament profile
+
+Deck builder: search cards and adjust quantities directly from the deck page.
 
 ## Card types
 
