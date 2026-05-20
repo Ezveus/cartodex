@@ -41,7 +41,7 @@ module Ui
         nav_link "Dashboard", dashboard_path, "home"
         nav_link "Decks", decks_path, "decks"
         nav_link "Cards", cards_path, "cards"
-        nav_link "Collection", "#", "collections"
+        nav_link "Collection", collections_path, "collections"
         nav_link "Profiles", tournament_profiles_path, "tournament_profiles"
       end
     end
