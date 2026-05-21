@@ -867,6 +867,11 @@ textarea.form-input {
   margin: 0;
 }
 
+.card-show-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .card-show-content {
   display: flex;
   gap: 2rem;
@@ -1843,4 +1848,125 @@ textarea.form-input {
     margin-right: 1rem;
     flex-shrink: 0;
   }
+}
+
+/* Collection */
+.collection-container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.collection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.collection-header h1 {
+  margin: 0;
+}
+
+.collection-stats {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.collection-filters {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.collection-filters .form-group {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.collection-filter-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.collection-filter-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.collection-tile {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.collection-tile-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-color);
+  transition: transform 0.2s;
+}
+
+.collection-tile-link:hover {
+  transform: scale(1.03);
+}
+
+.collection-tile-image {
+  width: 100%;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.collection-tile-name {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.collection-tile-meta {
+  font-size: 0.7rem;
+  color: #999;
+}
+
+.collection-tile-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  margin-top: auto;
+}
+
+.collection-tile-qty {
+  font-weight: 600;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.collection-empty {
+  color: #666;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 3rem 1rem;
 }
