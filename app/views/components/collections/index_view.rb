@@ -12,7 +12,13 @@ module Collections
     end
 
     def view_template
-      div(class: "collection-container") do
+      div(
+        class: "collection-container",
+        data: {
+          controller: "collection-list",
+          action: "collection-quantity:changed->collection-list#changed"
+        }
+      ) do
         header_section
         filters_section
         results_section
@@ -25,8 +31,8 @@ module Collections
       div(class: "collection-header") do
         h1 { "My Collection" }
         div(class: "collection-stats") do
-          render Ui::Stat.new(value: @total_unique, label: "unique")
-          render Ui::Stat.new(value: @total_copies, label: "copies")
+          render Ui::Stat.new(value: @total_unique, label: "unique", value_data: { collection_list_target: "unique" })
+          render Ui::Stat.new(value: @total_copies, label: "copies", value_data: { collection_list_target: "copies" })
         end
       end
     end
@@ -70,19 +76,14 @@ module Collections
     end
 
     def results_section
-      div(data: {
-        controller: "collection-list",
-        action: "collection-quantity:removed->collection-list#removed"
-      }) do
-        div(class: "collection-grid", data: { collection_list_target: "grid" }) do
-          @collections.each { |collection| collection_tile(collection) }
-        end
-        p(
-          class: "collection-empty",
-          data: { collection_list_target: "empty" },
-          style: ("display: none" if @collections.any?)
-        ) { empty_message }
+      div(class: "collection-grid", data: { collection_list_target: "grid" }) do
+        @collections.each { |collection| collection_tile(collection) }
       end
+      p(
+        class: "collection-empty",
+        data: { collection_list_target: "empty" },
+        style: ("display: none" if @collections.any?)
+      ) { empty_message }
     end
 
     def empty_message

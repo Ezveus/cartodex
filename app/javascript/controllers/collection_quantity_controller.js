@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["qty", "decrement", "increment", "remove", "counter", "addButton"]
+  static targets = ["qty", "counter", "addButton"]
   static values = {
     cardId: Number,
     quantity: Number,
@@ -22,13 +22,16 @@ export default class extends Controller {
     if (!response.ok) return
 
     const data = await response.json()
+    const previous = this.quantityValue
     this.quantityValue = data.quantity
     this.#refreshUi()
+    this.#dispatchChanged({ delta: data.quantity - previous, removed: false, added: previous === 0 })
     this.#maybeFlash(`Added to collection (${data.quantity} ${data.quantity === 1 ? "copy" : "copies"})`)
   }
 
   async decrement() {
-    if (this.quantityValue <= 1) return
+    if (this.quantityValue <= 1) return this.remove()
+
     const newQuantity = this.quantityValue - 1
     const response = await fetch(`/api/collections/${this.cardIdValue}`, {
       method: "PATCH",
@@ -40,9 +43,11 @@ export default class extends Controller {
 
     this.quantityValue = newQuantity
     this.#refreshUi()
+    this.#dispatchChanged({ delta: -1, removed: false, added: false })
   }
 
   async remove() {
+    const previous = this.quantityValue
     const response = await fetch(`/api/collections/${this.cardIdValue}`, {
       method: "DELETE",
       headers: this.#headers(),
@@ -50,13 +55,15 @@ export default class extends Controller {
     })
     if (!response.ok) return
 
+    const detail = { delta: -previous, removed: true, added: false }
     if (this.hasAddButtonTarget) {
       this.quantityValue = 0
       this.#refreshUi()
+      this.dispatch("changed", { detail, bubbles: true })
     } else {
       const parent = this.element.parentElement
       this.element.remove()
-      parent?.dispatchEvent(new CustomEvent("collection-quantity:removed", { bubbles: true }))
+      parent?.dispatchEvent(new CustomEvent("collection-quantity:changed", { bubbles: true, detail }))
     }
     this.#maybeFlash("Removed from collection")
   }
@@ -66,6 +73,10 @@ export default class extends Controller {
     const zero = this.quantityValue === 0
     if (this.hasCounterTarget) this.counterTarget.style.display = zero ? "none" : ""
     if (this.hasAddButtonTarget) this.addButtonTarget.style.display = zero ? "" : "none"
+  }
+
+  #dispatchChanged(detail) {
+    this.dispatch("changed", { detail, bubbles: true })
   }
 
   #headers() {
