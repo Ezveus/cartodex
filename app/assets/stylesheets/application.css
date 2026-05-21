@@ -870,6 +870,29 @@ textarea.form-input {
 .card-show-header-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.card-collection-counter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: white;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.card-collection-counter-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-right: 0.25rem;
+}
+
+.card-collection-counter-qty {
+  font-weight: 600;
+  min-width: 1.5rem;
+  text-align: center;
 }
 
 .card-show-content {

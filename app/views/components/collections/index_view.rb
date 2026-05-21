@@ -70,12 +70,18 @@ module Collections
     end
 
     def results_section
-      if @collections.empty?
-        p(class: "collection-empty") { empty_message }
-      else
-        div(class: "collection-grid") do
+      div(data: {
+        controller: "collection-list",
+        action: "collection-quantity:removed->collection-list#removed"
+      }) do
+        div(class: "collection-grid", data: { collection_list_target: "grid" }) do
           @collections.each { |collection| collection_tile(collection) }
         end
+        p(
+          class: "collection-empty",
+          data: { collection_list_target: "empty" },
+          style: ("display: none" if @collections.any?)
+        ) { empty_message }
       end
     end
 
