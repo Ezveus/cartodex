@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_20_103054) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_28_103412) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -59,6 +59,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_20_103054) do
     t.string "artist"
     t.integer "card_set_id"
     t.string "card_type"
+    t.string "cardmarket_url"
     t.datetime "created_at", null: false
     t.text "effect"
     t.string "evolves_from"

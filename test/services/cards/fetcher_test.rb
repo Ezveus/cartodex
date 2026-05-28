@@ -50,6 +50,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
       assert_equal BigDecimal("0.06"), card.price_usd
       assert_equal BigDecimal("0.06"), card.price_eur
       assert card.image_url.present?
+      assert_equal "https://www.cardmarket.com/en/Pokemon/Products/Singles/Perfect-Order/Honedge-POR056", card.cardmarket_url
     end
   end
 
