@@ -12,3 +12,10 @@ doublade_weaponized_swords:
   damage: "60×"
   effect: "Reveal any number of Honedge, Doublade, and Aegislash from your hand, and this attack does 60 damage for each card you revealed in this way."
   position: 0
+
+teal_mask_ogerpon_ex_myriad_leaf_shower:
+  card: teal_mask_ogerpon_ex
+  name: Myriad Leaf Shower
+  cost: GCC
+  damage: "120"
+  position: 0

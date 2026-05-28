@@ -62,6 +62,7 @@ bosss_orders_meg:
   set_name: MEG
   set_number: "114"
   rarity: Uncommon
+  cardmarket_url: https://www.cardmarket.com/en/Pokemon/Products/Singles/Mega-Evolution/Bosss-Orders-V2-MEG114
 
 basic_psychic_energy:
   name: Psychic Energy
@@ -69,6 +70,18 @@ basic_psychic_energy:
   subtype: Basic Energy
   set_name: SVE
   set_number: "5"
+
+teal_mask_ogerpon_ex:
+  name: Teal Mask Ogerpon ex
+  card_type: "Pokémon"
+  set_name: TWM
+  set_number: "25"
+  rarity: Double Rare
+  hp: 210
+  stage: Basic
+  type_symbol: Grass
+  retreat_cost: 2
+  weakness: Fire
 
 special_prism_energy_asc:
   name: Prism Energy

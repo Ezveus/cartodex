@@ -65,6 +65,7 @@ class Cards::Fetcher < ApplicationService
     card.regulation_mark = parse_regulation_mark(doc)
     card.price_usd = parse_price(doc, "usd")
     card.price_eur = parse_price(doc, "eur")
+    card.cardmarket_url = parse_cardmarket_url(doc)
     card.effect = parse_effect(card_text, card.card_type)
     card.pokemon_subtype = detect_pokemon_subtype(card) if card.card_type == "Pokémon"
 
@@ -203,6 +204,17 @@ class Cards::Fetcher < ApplicationService
     return nil unless price_el
 
     price_el.text.strip.gsub(/[$€]/, "").to_d
+  end
+
+  def parse_cardmarket_url(doc)
+    row = doc.at_css("tr.current")
+    return nil unless row
+
+    href = row.at_css(".card-price.eur")&.attr("href")
+    return nil unless href&.include?("cardmarket.com")
+
+    uri = URI.parse(href)
+    "#{uri.scheme}://#{uri.host}#{uri.path}"
   end
 
   def parse_subtype(type_line)
