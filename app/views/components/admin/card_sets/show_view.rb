@@ -18,7 +18,13 @@ module Admin
                 strong { @card_set.release_date&.strftime("%Y-%m-%d") || "N/A" }
               end
             end
-            link_to "Edit", edit_admin_card_set_path(@card_set), class: "btn btn-secondary"
+            div(class: "admin-header-actions") do
+              link_to "Edit", edit_admin_card_set_path(@card_set), class: "btn btn-secondary"
+              button_to "Rescrape", rescrape_admin_card_set_path(@card_set),
+                method: :post,
+                data: { turbo_confirm: "Rescrape every card in #{@card_set.name} from Limitless?" },
+                class: "btn btn-primary"
+            end
           end
 
           h2 { "Cards (#{@cards.size})" }

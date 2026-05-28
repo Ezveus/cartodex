@@ -198,6 +198,26 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     end
   end
 
+  # --- force option ---
+
+  test "skips HTTP fetch for fresh cards" do
+    cards(:honedge).touch
+    HttpFetcher.define_singleton_method(:call) { |_| raise "should not have been called" }
+
+    assert_nothing_raised do
+      Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
+    end
+  end
+
+  test "force: true bypasses the freshness check" do
+    cards(:honedge).touch
+    stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56", force: true)
+
+    assert_equal "https://www.cardmarket.com/en/Pokemon/Products/Singles/Perfect-Order/Honedge-POR056", card.cardmarket_url
+  end
+
   private
 
   def stub_http(url, body)

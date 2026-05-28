@@ -33,6 +33,7 @@ Rails.application.routes.draw do
       root "dashboard#index"
       resources :card_sets do
         post :import, on: :collection
+        post :rescrape, on: :member
       end
       resources :cards, only: [ :index, :show, :edit, :update ] do
         post :rescrape, on: :member

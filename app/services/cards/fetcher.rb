@@ -10,14 +10,15 @@ class Cards::Fetcher < ApplicationService
     "Y" => "Fairy", "N" => "Dragon", "C" => "Colorless"
   }.freeze
 
-  def initialize(url)
+  def initialize(url, force: false)
     @url = url
+    @force = force
     @set_name, @set_number = parse_url
   end
 
   def call
     card = Card.find_by(set_name: @set_name, set_number: @set_number)
-    return card if card && card.updated_at > 1.day.ago
+    return card if card && !@force && card.updated_at > 1.day.ago
 
     html = HttpFetcher.call(@url)
     doc = Nokogiri::HTML(html)
