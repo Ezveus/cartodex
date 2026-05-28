@@ -1,6 +1,6 @@
 module Admin
   class CardSetsController < BaseController
-    before_action :set_card_set, only: [ :show, :edit, :update, :destroy ]
+    before_action :set_card_set, only: [ :show, :edit, :update, :destroy, :rescrape ]
 
     def index
       @card_sets = CardSet.by_release.includes(:cards)
@@ -56,6 +56,11 @@ module Admin
     def destroy
       @card_set.destroy
       redirect_to admin_card_sets_path, notice: "Card set deleted."
+    end
+
+    def rescrape
+      ::CardSets::RescrapeJob.perform_later(@card_set.id)
+      redirect_to admin_card_set_path(@card_set), notice: "Rescrape of #{@card_set.cards.count} cards queued."
     end
 
     private

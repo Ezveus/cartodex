@@ -22,7 +22,7 @@ module Admin
 
     def rescrape
       url = "https://limitlesstcg.com/cards/#{@card.set_name}/#{@card.set_number}"
-      Cards::Fetcher.call(url)
+      ::Cards::Fetcher.call(url, force: true)
       redirect_to admin_card_path(@card), notice: "Card rescraped."
     rescue => e
       redirect_to admin_card_path(@card), alert: "Rescrape failed: #{e.message}"
