@@ -19,7 +19,9 @@ Rails.application.routes.draw do
       post :duplicate, on: :member
       resources :deck_results, only: [ :index, :edit, :update, :destroy ]
     end
-    resources :cards, only: [ :index, :show ]
+    resources :cards, only: [ :index, :show ] do
+      get :image, on: :member
+    end
     resources :tournament_profiles, except: [ :show ]
 
     # Admin

@@ -15,4 +15,30 @@ class CardsController < ApplicationController
                          .where.not(id: @card.id)
                          .order(:set_name)
   end
+
+  def image
+    card = Card.find(params[:id])
+    return head :not_found if card.image_url.blank?
+
+    begin
+      body = HttpFetcher.call(card.image_url)
+    rescue HttpFetcher::FetchError => e
+      Rails.logger.warn "Image proxy failed for card #{card.id}: #{e.message}"
+      return head :bad_gateway
+    end
+
+    expires_in 30.days, public: false
+    send_data body, type: image_content_type(card.image_url), disposition: "inline"
+  end
+
+  private
+
+  def image_content_type(url)
+    case File.extname(URI.parse(url).path).downcase
+    when ".jpg", ".jpeg" then "image/jpeg"
+    when ".webp" then "image/webp"
+    when ".gif" then "image/gif"
+    else "image/png"
+    end
+  end
 end

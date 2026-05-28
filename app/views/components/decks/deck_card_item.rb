@@ -9,7 +9,7 @@ module Decks
       li(
         class: "deck-card-item",
         data: {
-          card_preview_url: card.image_url,
+          card_preview_url: card.image_url.present? ? image_card_path(card) : nil,
           card_preview_card_id: card.id,
           action: "mouseenter->card-preview#show click->card-preview#open",
           controller: "deck-card-quantity",
