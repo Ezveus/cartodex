@@ -3,10 +3,11 @@ module Decks
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
 
-    def initialize(decks:, pending_deck_imports: [], filters: {})
+    def initialize(decks:, pending_deck_imports: [], filters: {}, archetype_options: [])
       @decks = decks
       @pending_deck_imports = pending_deck_imports
       @filters = filters || {}
+      @archetype_options = archetype_options || []
     end
 
     def view_template
@@ -16,6 +17,7 @@ module Decks
           div(class: "decks-header-actions") do
             link_to "New Deck", new_deck_path, class: "btn btn-primary"
             link_to "Import Deck", "#", class: "btn btn-secondary", data: { action: "decks#openImport" }
+            link_to "Matchups", matchups_decks_path, class: "btn btn-secondary"
           end
         end
 
@@ -42,6 +44,7 @@ module Decks
     def filter_bar
       form(action: decks_path, method: "get", class: "deck-filters") do
         filter_select(:format, format_options)
+        filter_select(:archetype, archetype_options) if @archetype_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
         button(type: "submit", class: "btn btn-secondary btn-sm") { "Filter" }
@@ -64,6 +67,10 @@ module Decks
 
     def format_options
       [ [ "All formats", "" ] ] + Deck::FORMAT_LABELS.map { |value, label| [ label, value ] }
+    end
+
+    def archetype_options
+      [ [ "All archetypes", "" ] ] + @archetype_options.map { |name, id| [ name, id.to_s ] }
     end
 
     def active_filters?

@@ -4,6 +4,7 @@ class Archetype < ApplicationRecord
   belongs_to :parent, class_name: "Archetype", optional: true
   has_many :children, class_name: "Archetype", foreign_key: :parent_id, dependent: :nullify
   has_many :deck_results, dependent: :nullify
+  has_many :decks, dependent: :nullify
 
   validates :name, presence: true
   validates :primary_pokemon_id, uniqueness: { scope: :secondary_pokemon_id }

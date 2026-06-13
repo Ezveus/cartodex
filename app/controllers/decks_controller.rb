@@ -1,19 +1,40 @@
 class DecksController < ApplicationController
   def index
-    @decks = filter_decks(current_user.decks.includes(:deck_cards))
+    @decks = filter_decks(current_user.decks.includes(:deck_cards, :archetype))
     @pending_deck_imports = current_user.imports.deck_imports.pending
     @filters = filter_params
+    @archetype_options = archetype_filter_options
   end
 
   def show
-    @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
   end
 
   def stats
-    @deck = current_user.decks.find(params[:id])
+    @deck = current_user.decks.includes(:archetype).find(params[:id])
     @results = @deck.deck_results.includes(archetype: [ :parent, :primary_pokemon, :secondary_pokemon ])
+  end
+
+  # Aggregated matchup breakdown grouped by the player's own deck archetype:
+  # for each archetype, all results across the user's decks of that archetype,
+  # split by the opposing archetype.
+  def matchups
+    decks = current_user.decks
+      .where.not(archetype_id: nil)
+      .includes(:archetype, deck_results: { archetype: [ :parent, :primary_pokemon, :secondary_pokemon ] })
+
+    @matchup_groups = decks.group_by(&:archetype).map { |archetype, group|
+      results = group.flat_map(&:deck_results)
+      sample = group.first
+      {
+        archetype: archetype,
+        deck_count: group.size,
+        counts: sample.result_counts(results),
+        breakdown: sample.archetype_breakdown(results)
+      }
+    }.sort_by { |g| -g[:counts].values.sum }
   end
 
   def export
@@ -49,7 +70,7 @@ class DecksController < ApplicationController
   end
 
   def edit
-    @deck = current_user.decks.includes(deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
     render :show
@@ -83,10 +104,16 @@ class DecksController < ApplicationController
 
   def filter_params
     {
-      format:  params[:format].presence,
-      support: params[:support].presence,
-      proxies: params[:proxies].presence
+      format:    params[:format].presence,
+      support:   params[:support].presence,
+      proxies:   params[:proxies].presence,
+      archetype: params[:archetype].presence
     }
+  end
+
+  # Archetypes actually used by the current user's decks, for the filter bar.
+  def archetype_filter_options
+    Archetype.where(id: current_user.decks.select(:archetype_id)).order(:name).pluck(:name, :id)
   end
 
   def filter_decks(scope)
@@ -104,10 +131,12 @@ class DecksController < ApplicationController
     when "without" then scope = scope.where(has_proxies: false)
     end
 
+    scope = scope.where(archetype_id: filters[:archetype]) if filters[:archetype]
+
     scope
   end
 
   def deck_params
-    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :has_proxies)
+    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :has_proxies, :archetype_id)
   end
 end

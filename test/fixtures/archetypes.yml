@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# NOTE: archetypes hold a foreign key to cards (primary/secondary Pokémon), so
+# only reference cards that are not destroyed by other tests (e.g. avoid honedge).
+
+ogerpon:
+  primary_pokemon: teal_mask_ogerpon_ex
+  name: "Teal Mask Ogerpon ex"
+
+budew_ogerpon:
+  primary_pokemon: budew_pre
+  secondary_pokemon: teal_mask_ogerpon_ex
+  name: "Budew / Teal Mask Ogerpon ex"

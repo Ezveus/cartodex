@@ -1,7 +1,7 @@
 module Api
   class DecksController < ApplicationController
     before_action :authenticate_user!
-    before_action :set_deck, only: [ :show, :update, :destroy ]
+    before_action :set_deck, only: [ :show, :update, :destroy, :suggested_archetype ]
 
     def index
       decks = current_user.decks.includes(:deck_cards, :cards)
@@ -36,6 +36,24 @@ module Api
       end
     end
 
+    # Infers the deck's archetype from its line-up: either an existing archetype
+    # to select, or candidate Pokémon to pre-fill the "create archetype" form.
+    def suggested_archetype
+      detection = Decks::ArchetypeDetector.call(@deck)
+
+      if detection.matched?
+        render json: { matched: true, archetype: archetype_json(detection.archetype) }
+      elsif detection.primary
+        render json: {
+          matched: false,
+          primary_pokemon: pokemon_json(detection.primary),
+          secondary_pokemon: pokemon_json(detection.secondary)
+        }
+      else
+        render json: { matched: false }
+      end
+    end
+
     def destroy
       @deck.destroy
       head :no_content
@@ -44,7 +62,22 @@ module Api
     private
 
     def set_deck
-      @deck = current_user.decks.find(params[:id])
+      @deck = current_user.decks.includes(deck_cards: { card: :pokemon_subtype }).find(params[:id])
+    end
+
+    def archetype_json(archetype)
+      {
+        id: archetype.id,
+        name: archetype.name,
+        primary_pokemon: archetype.primary_pokemon.name,
+        secondary_pokemon: archetype.secondary_pokemon&.name
+      }
+    end
+
+    def pokemon_json(card)
+      return nil if card.nil?
+
+      { id: card.id, name: card.name }
     end
 
     def deck_params

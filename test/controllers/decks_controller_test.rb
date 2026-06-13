@@ -99,6 +99,35 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "#deck-#{live.id}", false
   end
 
+  test "index filters decks by archetype" do
+    @deck.update!(archetype: archetypes(:ogerpon))
+    other = @user.decks.create!(name: "No archetype")
+
+    get decks_path(archetype: archetypes(:ogerpon).id)
+
+    assert_response :success
+    assert_select "#deck-#{@deck.id}"
+    assert_select "#deck-#{other.id}", false
+  end
+
+  test "update assigns an archetype to the deck" do
+    patch deck_path(@deck), params: { deck: { name: "Tagged", archetype_id: archetypes(:ogerpon).id } }
+
+    assert_response :success
+    assert_equal archetypes(:ogerpon), @deck.reload.archetype
+  end
+
+  test "matchups groups the user's decks by archetype" do
+    @deck.update!(archetype: archetypes(:ogerpon))
+    @deck.deck_results.destroy_all
+    @deck.deck_results.create!(result: "win", played_at: Time.current)
+
+    get matchups_decks_path
+
+    assert_response :success
+    assert_select "h2", text: archetypes(:ogerpon).name
+  end
+
   test "cannot edit another user's deck" do
     get edit_deck_path(decks(:two))
 

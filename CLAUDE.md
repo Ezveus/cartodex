@@ -31,7 +31,8 @@ CI runs four checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f gith
 Key services:
 - `Cards::Fetcher` — scrapes card data from limitlesstcg.com using Nokogiri, creates/updates Card records with associated Attacks, Abilities, and PokemonSubtypes
 - `CardSets::Importer` — scrapes card set data from Limitless TCG, used by `CardSets::ImportJob`
-- `Decks::Fetcher` — parses decklist text format (`QUANTITY NAME SET NUMBER`), creates Deck with DeckCards in a transaction, coordinates Cards::Fetcher for each card
+- `Decks::Fetcher` — parses decklist text format (`QUANTITY NAME SET NUMBER`), creates Deck with DeckCards in a transaction, coordinates Cards::Fetcher for each card, and auto-tags the deck with a matching existing archetype via `Decks::ArchetypeDetector`
+- `Decks::ArchetypeDetector` — infers a deck's archetype from its notable Pokémon (rule-box attackers first); returns either a matching existing Archetype or candidate Pokémon to pre-fill a new one
 - `Decks::Exporter` / `Decks::CardmarketExporter` / `Decks::TournamentPdfExporter` — deck export in JSON, Cardmarket wishlist, and tournament PDF formats (PTCG text export lives in `bin/export_deck_ptcg`)
 - `Decks::Duplicator` — duplicates a deck with all its DeckCards
 - `HttpFetcher` — Net::HTTP wrapper used by other services
@@ -40,7 +41,7 @@ Key services:
 - `CardSets::ImportJob` — wraps `CardSets::Importer`
 - `Decks::ImportJob` — wraps `Decks::Fetcher`, broadcasts progress via Turbo Streams, persists state via the `Import` model
 
-**Models**: User has_many Decks, Collections, Imports, and TournamentProfiles. Deck has_many Cards through DeckCards and has_many DeckResults (win/loss tracking with optional Archetype tagging). Archetype has primary/secondary Pokémon (Card refs), parent/children hierarchy, and has_many DeckResults. Import persists background import status (progress, errors) for reload-safe tracking and retry. TournamentProfile belongs_to User (Play! Pokémon division metadata). CardSet has_many Cards (code/name uniqueness, release_date, `by_release` scope). Card belongs_to CardSet (optional), has_many Attacks, Abilities, and optional PokemonSubtype. Card validations are conditional on `card_type` (Pokémon vs Trainer vs Energy). Card uses a `compute_fingerprint` callback for deduplication.
+**Models**: User has_many Decks, Collections, Imports, and TournamentProfiles. Deck belongs_to an optional Archetype (its own archetype), has_many Cards through DeckCards and has_many DeckResults (win/loss tracking with optional Archetype tagging for the opposing deck). Archetype has primary/secondary Pokémon (Card refs), parent/children hierarchy, and has_many DeckResults. Import persists background import status (progress, errors) for reload-safe tracking and retry. TournamentProfile belongs_to User (Play! Pokémon division metadata). CardSet has_many Cards (code/name uniqueness, release_date, `by_release` scope). Card belongs_to CardSet (optional), has_many Attacks, Abilities, and optional PokemonSubtype. Card validations are conditional on `card_type` (Pokémon vs Trainer vs Energy). Card uses a `compute_fingerprint` callback for deduplication.
 
 **Controllers**: API endpoints under `Api::` namespace serve JSON (archetypes, cards, collections, decks with nested deck_cards and deck_results). Admin panel under `Admin::` namespace covers dashboard, card sets (with import), cards (with rescrape), users (with toggle_admin), decks, archetypes (CRUD), and imports (list with error display, delete, retry). Top-level `tournament_profiles` and `deck_results` resources live alongside `decks`. All app routes (except root/health) require Devise authentication.
 

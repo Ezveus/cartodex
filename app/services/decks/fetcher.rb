@@ -24,11 +24,21 @@ class Decks::Fetcher < ApplicationService
         deck.deck_cards.create!(card: card, quantity: entry[:quantity])
       end
 
+      assign_detected_archetype(deck)
+
       deck
     end
   end
 
   private
+
+  # Tags the freshly imported deck with an existing archetype when its line-up
+  # clearly matches one. We never create a new archetype implicitly here.
+  def assign_detected_archetype(deck)
+    deck.reload
+    detection = Decks::ArchetypeDetector.call(deck)
+    deck.update!(archetype: detection.archetype) if detection.matched?
+  end
 
   def parse_card_lines
     @decklist.lines.filter_map { |line|

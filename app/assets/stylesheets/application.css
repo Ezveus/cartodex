@@ -440,6 +440,41 @@ textarea.form-input {
   color: #3b3f6b;
 }
 
+.badge-archetype {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+/* Archetype picker (deck form) */
+.deck-archetype-field {
+  position: relative;
+}
+
+.archetype-field-search {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.archetype-field-search .form-input {
+  flex: 1;
+}
+
+/* Stats / matchups */
+.deck-stats-archetype {
+  margin: 0 0 1rem;
+  color: #555;
+}
+
+.matchup-archetype-section {
+  margin-bottom: 2.5rem;
+}
+
+.matchup-deck-count {
+  color: #888;
+  margin: 0 0 0.75rem;
+}
+
 /* Deck classification */
 .deck-badges {
   display: flex;

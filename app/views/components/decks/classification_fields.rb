@@ -14,6 +14,7 @@ module Decks
         proxies_field
         format_group
         other_format_field
+        render Decks::ArchetypeField.new(form: @form, deck: @deck)
       end
     end
 
