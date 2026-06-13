@@ -24,6 +24,7 @@ module Decks
     def display
       div do
         h1 { @deck.name }
+        render Decks::ClassificationBadges.new(deck: @deck)
         p(class: "deck-show-description") { @deck.description } if @deck.description.present?
       end
     end
@@ -34,6 +35,8 @@ module Decks
 
         f.text_field :name, class: "form-input deck-header-name-input", autofocus: true, placeholder: "Deck name"
         f.text_area :description, class: "form-input deck-header-description-input", rows: 2, placeholder: "Description (optional)"
+
+        render Decks::ClassificationFields.new(form: f, deck: @deck)
 
         div(class: "deck-header-form-actions") do
           f.submit "Save", class: "btn btn-primary btn-sm"

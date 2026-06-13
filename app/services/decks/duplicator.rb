@@ -9,7 +9,12 @@ class Decks::Duplicator < ApplicationService
     ActiveRecord::Base.transaction do
       new_deck = @deck.user.decks.create!(
         name: "#{NAME_PREFIX}#{@deck.name}",
-        description: @deck.description
+        description: @deck.description,
+        physical: @deck.physical,
+        tcg_live: @deck.tcg_live,
+        format: @deck.format,
+        other_format_name: @deck.other_format_name,
+        has_proxies: @deck.has_proxies
       )
 
       @deck.deck_cards.find_each do |dc|

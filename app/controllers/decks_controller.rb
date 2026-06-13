@@ -1,7 +1,8 @@
 class DecksController < ApplicationController
   def index
-    @decks = current_user.decks.includes(:deck_cards)
+    @decks = filter_decks(current_user.decks.includes(:deck_cards))
     @pending_deck_imports = current_user.imports.deck_imports.pending
+    @filters = filter_params
   end
 
   def show
@@ -80,7 +81,33 @@ class DecksController < ApplicationController
 
   private
 
+  def filter_params
+    {
+      format:  params[:format].presence,
+      support: params[:support].presence,
+      proxies: params[:proxies].presence
+    }
+  end
+
+  def filter_decks(scope)
+    filters = filter_params
+
+    scope = scope.where(format: filters[:format]) if Deck.formats.key?(filters[:format])
+
+    case filters[:support]
+    when "physical" then scope = scope.where(physical: true)
+    when "tcg_live" then scope = scope.where(tcg_live: true)
+    end
+
+    case filters[:proxies]
+    when "with"    then scope = scope.where(has_proxies: true)
+    when "without" then scope = scope.where(has_proxies: false)
+    end
+
+    scope
+  end
+
   def deck_params
-    params.require(:deck).permit(:name, :description)
+    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :has_proxies)
   end
 end

@@ -63,6 +63,42 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Copy of Original", new_deck.name
   end
 
+  test "update persists the classification fields" do
+    patch deck_path(@deck), params: { deck: {
+      name: "Classified", physical: "1", tcg_live: "1",
+      format: "expanded", has_proxies: "1"
+    } }
+
+    assert_response :success
+    @deck.reload
+    assert @deck.physical?
+    assert @deck.tcg_live?
+    assert @deck.expanded?
+    assert @deck.has_proxies?
+  end
+
+  test "index filters decks by format" do
+    @deck.update!(format: "expanded")
+    other = @user.decks.create!(name: "Std deck", format: "standard")
+
+    get decks_path(format: "expanded")
+
+    assert_response :success
+    assert_select "#deck-#{@deck.id}"
+    assert_select "#deck-#{other.id}", false
+  end
+
+  test "index filters decks by support and proxies" do
+    @deck.update!(physical: true, has_proxies: true)
+    live = @user.decks.create!(name: "Live deck", tcg_live: true)
+
+    get decks_path(support: "physical", proxies: "with")
+
+    assert_response :success
+    assert_select "#deck-#{@deck.id}"
+    assert_select "#deck-#{live.id}", false
+  end
+
   test "cannot edit another user's deck" do
     get edit_deck_path(decks(:two))
 

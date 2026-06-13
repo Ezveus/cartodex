@@ -13,4 +13,58 @@ class DeckTest < ActiveSupport::TestCase
       deck.destroy
     end
   end
+
+  test "defaults to the standard format and no support flags" do
+    deck = Deck.new(user: users(:one), name: "Fresh")
+
+    assert deck.standard?
+    assert_not deck.physical?
+    assert_not deck.tcg_live?
+    assert_not deck.has_proxies?
+  end
+
+  test "rejects an unknown format" do
+    deck = Deck.new(user: users(:one), name: "Bad", format: "vintage")
+
+    assert_not deck.valid?
+    assert_includes deck.errors[:format], "is not included in the list"
+  end
+
+  test "requires a format name when format is other" do
+    deck = Deck.new(user: users(:one), name: "Other", format: "other")
+
+    assert_not deck.valid?
+    assert_includes deck.errors[:other_format_name], "can't be blank"
+
+    deck.other_format_name = "Pocket"
+    assert deck.valid?
+  end
+
+  test "clears the format name when leaving the other format" do
+    deck = Deck.create!(user: users(:one), name: "Other", format: "other", other_format_name: "Pocket")
+
+    deck.update!(format: "standard")
+
+    assert_nil deck.other_format_name
+  end
+
+  test "clears proxies when the deck is not physical" do
+    deck = Deck.create!(user: users(:one), name: "Live", physical: true, has_proxies: true)
+
+    deck.update!(physical: false)
+
+    assert_not deck.has_proxies?
+  end
+
+  test "format_label uses the custom name for the other format" do
+    deck = Deck.new(user: users(:one), name: "Other", format: "other", other_format_name: "Pocket")
+
+    assert_equal "Pocket", deck.format_label
+  end
+
+  test "format_label humanizes the known formats" do
+    deck = Deck.new(user: users(:one), name: "Std", format: "expanded")
+
+    assert_equal "Expanded", deck.format_label
+  end
 end
