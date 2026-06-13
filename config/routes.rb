@@ -14,6 +14,7 @@ Rails.application.routes.draw do
   authenticate :user do
     get "dashboard", to: "home#dashboard"
     resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
+      get :matchups, on: :collection
       get :export, on: :member
       get :stats, on: :member
       post :duplicate, on: :member
@@ -55,6 +56,7 @@ Rails.application.routes.draw do
       resources :collections, only: [ :index, :create, :update, :destroy ]
       resources :decks do
         post :import, on: :collection
+        get :suggested_archetype, on: :member
         resources :cards, only: [ :index, :create, :update, :destroy ], controller: "deck_cards"
         resources :results, only: [ :create ], controller: "deck_results"
       end

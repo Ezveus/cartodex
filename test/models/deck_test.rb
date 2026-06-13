@@ -6,6 +6,26 @@ class DeckTest < ActiveSupport::TestCase
     assert_respond_to deck, :deck_results
   end
 
+  test "belongs to an optional archetype" do
+    deck = decks(:one)
+
+    assert deck.valid?
+    assert_nil deck.archetype
+
+    deck.archetype = archetypes(:ogerpon)
+    assert deck.valid?
+    assert_equal archetypes(:ogerpon), deck.reload.archetype if deck.save
+  end
+
+  test "nullifies the deck archetype when the archetype is destroyed" do
+    deck = decks(:one)
+    deck.update!(archetype: archetypes(:ogerpon))
+
+    archetypes(:ogerpon).destroy
+
+    assert_nil deck.reload.archetype
+  end
+
   test "destroying deck destroys deck_results" do
     deck = decks(:one)
 
