@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_28_103412) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_13_103200) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -123,7 +123,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_28_103412) do
   create_table "decks", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
+    t.string "format", default: "standard", null: false
+    t.boolean "has_proxies", default: false, null: false
     t.string "name"
+    t.string "other_format_name"
+    t.boolean "physical", default: false, null: false
+    t.boolean "tcg_live", default: false, null: false
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["user_id"], name: "index_decks_on_user_id"

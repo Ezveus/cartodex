@@ -20,6 +20,8 @@ module Decks
             f.text_area :description, class: "form-input", rows: 3, placeholder: "Optional description\u2026"
           end
 
+          render Decks::ClassificationFields.new(form: f, deck: @deck)
+
           div(class: "form-actions deck-form-actions") do
             f.submit "Create Deck", class: "btn btn-primary"
             link_to "Cancel", decks_path, class: "btn btn-secondary"
