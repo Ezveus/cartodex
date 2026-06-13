@@ -163,7 +163,7 @@ module Cards
     def cards_grid
       div(class: "cards-grid") do
         @cards.each do |card|
-          link_to card_path(card), class: "card-grid-item" do
+          link_to card_path(card), class: "card-grid-item", data: { turbo_frame: "_top" } do
             if card.image_url.present?
               image_tag card.image_url, alt: card.name, class: "card-grid-image", loading: "lazy"
             end
