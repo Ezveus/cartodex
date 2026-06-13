@@ -4,7 +4,7 @@ module Cards
 
     FRAME_ID = "card_results".freeze
 
-    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, total: nil)
+    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, total: nil, page: 1, pages: nil)
       @blocks = blocks
       @current_set = current_set
       @cards = cards
@@ -17,6 +17,8 @@ module Cards
       @marks = marks
       @searching = searching
       @total = total
+      @page = page
+      @pages = pages
     end
 
     def view_template
@@ -116,15 +118,46 @@ module Cards
     def search_results
       if @cards.any?
         h2 { "Results" }
-        if @total && @total > @cards.size
-          p(class: "cards-search-count") { "Showing first #{@cards.size} of #{@total} matches — refine your search to narrow it down." }
-        else
-          p(class: "cards-search-count") { "#{@total || @cards.size} #{(@total || @cards.size) == 1 ? "match" : "matches"}" }
-        end
+        count = @total || @cards.size
+        p(class: "cards-search-count") { "#{count} #{count == 1 ? "match" : "matches"}" }
         cards_grid
+        pagination_controls
       else
         p(class: "cards-empty") { "No cards match your search." }
       end
+    end
+
+    def pagination_controls
+      return unless @pages && @pages > 1
+
+      div(class: "cards-pagination") do
+        if @page > 1
+          link_to cards_path(**search_query_params, page: @page - 1),
+                  class: "cards-pagination-link",
+                  data: { turbo_action: "replace" } do
+            "← Previous"
+          end
+        end
+        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
+        if @page < @pages
+          link_to cards_path(**search_query_params, page: @page + 1),
+                  class: "cards-pagination-link",
+                  data: { turbo_action: "replace" } do
+            "Next →"
+          end
+        end
+      end
+    end
+
+    def search_query_params
+      {
+        q: @query.presence,
+        type: @type,
+        energy: @energy,
+        rarity: @rarity,
+        mark: @mark,
+        set: @current_set&.code
+      }.compact
     end
 
     def cards_grid

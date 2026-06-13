@@ -1018,6 +1018,32 @@ textarea.form-input {
   color: #666;
 }
 
+.cards-pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.cards-pagination-link {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cards-pagination-link:hover {
+  background: #f5f5f5;
+}
+
+.cards-pagination-info {
+  font-size: 0.9rem;
+  color: #555;
+}
+
 .cards-layout {
   display: flex;
   gap: 2rem;
