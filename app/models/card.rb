@@ -9,12 +9,16 @@ class Card < ApplicationRecord
   has_many :deck_cards, dependent: :destroy
   has_many :decks, through: :deck_cards
 
+  # Allowed values
+  CARD_TYPES = %w[Pokémon Energy Trainer].freeze
+  ENERGY_TYPES = %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless].freeze
+
   # Callbacks
   before_save :compute_fingerprint
 
   # Validations
   validates :name, presence: true
-  validates :card_type, presence: true, inclusion: { in: %w[Pokémon Energy Trainer] }
+  validates :card_type, presence: true, inclusion: { in: CARD_TYPES }
   validates :set_name, presence: true
   validates :set_number, presence: true
   validates :rarity, presence: true, unless: -> { subtype == "Basic Energy" }
@@ -22,9 +26,7 @@ class Card < ApplicationRecord
   # Conditional validations for Pokémon cards
   with_options if: -> { card_type == "Pokémon" } do
     validates :hp, presence: true, numericality: { only_integer: true, greater_than: 0 }
-    validates :type_symbol, presence: true, inclusion: {
-      in: %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless]
-    }
+    validates :type_symbol, presence: true, inclusion: { in: ENERGY_TYPES }
     validates :retreat_cost, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   end
 
