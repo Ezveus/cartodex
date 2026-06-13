@@ -993,6 +993,31 @@ textarea.form-input {
   margin-bottom: 1.5rem;
 }
 
+.cards-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.cards-search-input {
+  flex: 1 1 280px;
+  min-width: 200px;
+}
+
+.cards-search-select {
+  flex: 0 0 auto;
+  width: auto;
+  cursor: pointer;
+}
+
+.cards-search-count {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
 .cards-layout {
   display: flex;
   gap: 2rem;

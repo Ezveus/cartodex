@@ -1,6 +1,7 @@
 honedge:
   name: Honedge
   card_type: "Pokémon"
+  card_set: por
   set_name: POR
   set_number: "56"
   rarity: Common
@@ -14,6 +15,7 @@ honedge:
 doublade:
   name: Doublade
   card_type: "Pokémon"
+  card_set: por
   set_name: POR
   set_number: "57"
   rarity: Common
@@ -47,6 +49,7 @@ budew_pre:
 budew_asc:
   name: Budew
   card_type: "Pokémon"
+  card_set: asc
   set_name: ASC
   set_number: "16"
   regulation_mark: I
