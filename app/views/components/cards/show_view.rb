@@ -1,15 +1,19 @@
 module Cards
   class ShowView < ApplicationComponent
-    def initialize(card:, alt_printings:)
+    def initialize(card:, alt_printings:, collection_quantity: 0)
       @card = card
       @alt_printings = alt_printings
+      @collection_quantity = collection_quantity
     end
 
     def view_template
       div(class: "card-show-container") do
         div(class: "card-show-header") do
           h1 { @card.name }
-          link_to "Back", :back, class: "btn btn-secondary"
+          div(class: "card-show-header-actions") do
+            collection_control
+            link_to "Back", :back, class: "btn btn-secondary"
+          end
         end
         div(class: "card-show-content") do
           card_image
@@ -25,6 +29,48 @@ module Cards
     end
 
     private
+
+    def collection_control
+      div(
+        class: "card-collection-control",
+        data: {
+          controller: "collection-quantity",
+          collection_quantity_card_id_value: @card.id,
+          collection_quantity_quantity_value: @collection_quantity,
+          collection_quantity_flash_on_change_value: true
+        }
+      ) do
+        button(
+          type: "button",
+          class: "btn btn-primary",
+          data: { collection_quantity_target: "addButton", action: "collection-quantity#increment" }
+        ) { "Add to collection" }
+        div(
+          class: "card-collection-counter",
+          data: { collection_quantity_target: "counter" }
+        ) do
+          span(class: "card-collection-counter-label") { "In collection:" }
+          button(
+            type: "button",
+            class: "btn btn-sm",
+            data: { action: "collection-quantity#decrement" },
+            aria_label: "Decrement"
+          ) { "−" }
+          span(class: "card-collection-counter-qty", data: { collection_quantity_target: "qty" }) { @collection_quantity.to_s }
+          button(
+            type: "button",
+            class: "btn btn-sm",
+            data: { action: "collection-quantity#increment" },
+            aria_label: "Increment"
+          ) { "+" }
+          button(
+            type: "button",
+            class: "btn btn-sm btn-danger",
+            data: { action: "collection-quantity#remove" }
+          ) { "Remove" }
+        end
+      end
+    end
 
     def card_image
       div(class: "card-show-image") do

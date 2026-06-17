@@ -17,10 +17,6 @@ export default class extends Controller {
     }
   }
 
-  async view() {
-    // Will be implemented with collection view
-  }
-
   async openScanner() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })

@@ -39,6 +39,7 @@ class CardsController < ApplicationController
     @alt_printings = Card.where(name: @card.name, fingerprint: @card.fingerprint)
                          .where.not(id: @card.id)
                          .order(:set_name)
+    @collection_quantity = current_user.collections.find_by(card_id: @card.id)&.quantity.to_i
   end
 
   def image
