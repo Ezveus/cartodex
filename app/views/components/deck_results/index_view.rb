@@ -15,11 +15,12 @@ module DeckResults
         end
 
         if @results.any?
-          render Ui::DataTable.new(columns: %w[Date Result Archetype Notes Actions]) do |t|
+          render Ui::DataTable.new(columns: %w[Date Result Match Archetype Notes Actions]) do |t|
             @results.each do |r|
               t.row do
                 t.cell { r.played_at&.strftime("%Y-%m-%d %H:%M") || "\u2014" }
                 t.cell { result_badge(r.result) }
+                t.cell { match_label(r) }
                 t.cell { r.archetype&.name || "\u2014" }
                 t.cell { r.notes.present? ? r.notes.truncate(40) : "\u2014" }
                 t.cell { render Ui::AdminActions.new(edit_path: edit_deck_deck_result_path(@deck, r), delete_path: deck_deck_result_path(@deck, r), confirm_message: "Delete this result?") }
@@ -36,6 +37,12 @@ module DeckResults
 
     def result_badge(result)
       render Ui::StatusBadge.new(status: result, label: result.capitalize)
+    end
+
+    def match_label(r)
+      label = r.match_format.upcase
+      label = "#{label} · #{r.score}" if r.score.present?
+      label
     end
   end
 end

@@ -1,15 +1,12 @@
 module Decks
   class ResultModal < ApplicationComponent
-    RESULT_TYPES = %w[win loss draw timeout].freeze
-
     def view_template
       dialog(class: "result-modal", data: { result_modal_target: "dialog" }) do
         div(class: "result-modal-content") do
           h2 { "Log Result" }
-          input(type: "hidden", data: { result_modal_target: "resultInput" })
           input(type: "hidden", data: { result_modal_target: "archetypeId" })
 
-          result_type_buttons
+          render DeckResults::ResultFields.new
           archetype_search_group
           create_archetype_section
           notes_group
@@ -19,18 +16,6 @@ module Decks
     end
 
     private
-
-    def result_type_buttons
-      div(class: "result-type-buttons") do
-        RESULT_TYPES.each do |r|
-          button(
-            type: "button",
-            class: "result-type-btn result-#{r}",
-            data: { result: r, action: "result-modal#selectResult", result_modal_target: "resultBtn" }
-          ) { r.capitalize }
-        end
-      end
-    end
 
     def archetype_search_group
       render Ui::FormGroup.new(label: "Opponent archetype") do

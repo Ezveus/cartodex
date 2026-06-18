@@ -12,10 +12,7 @@ module DeckResults
         form_with(model: @result, url: deck_deck_result_path(@deck, @result), method: :patch, class: "deck-form") do |f|
           render Ui::FormErrors.new(resource: @result)
 
-          render Ui::FormGroup.new do
-            f.label :result, class: "form-label"
-            f.select :result, DeckResult::RESULTS.map { |r| [ r.capitalize, r ] }, {}, class: "form-input"
-          end
+          render DeckResults::ResultFields.new(result: @result)
 
           render Ui::FormGroup.new do
             f.label :archetype_id, "Archetype", class: "form-label"

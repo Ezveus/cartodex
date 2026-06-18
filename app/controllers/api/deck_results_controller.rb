@@ -33,7 +33,7 @@ module Api
     end
 
     def deck_result_params
-      params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at)
+      params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at, :match_format, :score)
     end
   end
 end

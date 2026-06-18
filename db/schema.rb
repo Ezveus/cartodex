@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_13_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -112,9 +112,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_13_150000) do
     t.integer "archetype_id"
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
+    t.string "match_format", default: "bo1", null: false
     t.text "notes"
     t.datetime "played_at"
     t.string "result"
+    t.string "score"
     t.datetime "updated_at", null: false
     t.index ["archetype_id"], name: "index_deck_results_on_archetype_id"
     t.index ["deck_id"], name: "index_deck_results_on_deck_id"

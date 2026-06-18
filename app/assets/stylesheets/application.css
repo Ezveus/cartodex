@@ -565,6 +565,52 @@ textarea.form-input {
 .result-draw.active { background: #6c757d; border-color: #6c757d; }
 .result-timeout.active { background: #fd7e14; border-color: #fd7e14; }
 
+.result-type-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.result-type-btn.locked.active {
+  opacity: 1;
+}
+
+.match-format-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+/* Per-game BO3 score selector */
+.match-score-section {
+  margin-bottom: 1.5rem;
+}
+
+.match-score-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.match-score-game-label {
+  width: 4rem;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.match-game-btn {
+  padding: 0.35rem 0.5rem;
+}
+
+.match-game-btn.game-w.active { background: #28a745; border-color: #28a745; color: white; }
+.match-game-btn.game-l.active { background: #dc3545; border-color: #dc3545; color: white; }
+.match-game-btn.game-t.active { background: #fd7e14; border-color: #fd7e14; color: white; }
+.match-game-btn.game-d.active { background: #6c757d; border-color: #6c757d; color: white; }
+
+.match-score-clear {
+  margin-top: 0.25rem;
+}
+
 .archetype-search-results {
   position: relative;
 }

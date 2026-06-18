@@ -2,8 +2,8 @@ import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
   static targets = [
-    "dialog", "resultInput", "archetypeInput", "archetypeId", "archetypeResults",
-    "notesInput", "resultBtn", "createSection", "primaryInput", "primaryId",
+    "dialog", "archetypeInput", "archetypeId", "archetypeResults",
+    "notesInput", "createSection", "primaryInput", "primaryId",
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults"
   ]
   static values = { deckId: Number }
@@ -15,12 +15,6 @@ export default class extends Controller {
   close() {
     this.dialogTarget.close()
     this.#reset()
-  }
-
-  selectResult(event) {
-    this.resultBtnTargets.forEach(btn => btn.classList.remove("active"))
-    event.currentTarget.classList.add("active")
-    this.resultInputTarget.value = event.currentTarget.dataset.result
   }
 
   // --- Archetype search ---
@@ -81,7 +75,7 @@ export default class extends Controller {
   async submit(event) {
     event.preventDefault()
 
-    const result = this.resultInputTarget.value
+    const result = this.#fieldValue("result")
     if (!result) return
 
     let archetypeId = this.archetypeIdTarget.value
@@ -96,6 +90,8 @@ export default class extends Controller {
     const body = {
       deck_result: {
         result,
+        match_format: this.#fieldValue("match_format"),
+        score: this.#fieldValue("score") || null,
         archetype_id: archetypeId || null,
         notes: this.notesInputTarget.value,
         played_at: new Date().toISOString()
@@ -226,13 +222,25 @@ export default class extends Controller {
   }
 
   #reset() {
-    this.resultInputTarget.value = ""
     this.archetypeIdTarget.value = ""
     this.archetypeInputTarget.value = ""
     this.archetypeResultsTarget.innerHTML = ""
     this.notesInputTarget.value = ""
-    this.resultBtnTargets.forEach(btn => btn.classList.remove("active"))
+    this.#resetResultFields()
     this.#hideCreateSection()
+  }
+
+  // The result/format/score live in a nested match-result controller.
+  #fieldValue(name) {
+    const input = this.element.querySelector(`[name="deck_result[${name}]"]`)
+    return input ? input.value : ""
+  }
+
+  #resetResultFields() {
+    const el = this.element.querySelector('[data-controller~="match-result"]')
+    if (!el) return
+    const ctrl = this.application.getControllerForElementAndIdentifier(el, "match-result")
+    if (ctrl) ctrl.reset()
   }
 
   #escape(text) {
