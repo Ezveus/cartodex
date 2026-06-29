@@ -6,7 +6,15 @@ module Decks
     end
 
     def view_template
-      div(class: "deck-item", id: "deck-#{@deck.id}") do
+      hot = @deck.hot?
+      item_class = hot ? "deck-item is-foil" : "deck-item"
+
+      div(class: item_class, id: "deck-#{@deck.id}") do
+        type_stripe
+        if hot
+          div(class: "deck-foil-sheen", aria_hidden: "true")
+          span(class: "deck-hot-flag") { "★ #{(@deck.win_rate * 100).round}%" }
+        end
         input(
           type: "checkbox",
           class: "deck-compare-checkbox",
@@ -26,6 +34,18 @@ module Decks
           end
         end
       end
+    end
+
+    private
+
+    # A thin bar at the top edge of the card, coloured by the deck's energy
+    # type(s). Two types blend into a gradient; one fills solid.
+    def type_stripe
+      colors = @deck.energy_types.filter_map { |t| Card::TYPE_TOKENS[t] }.map { |token| "var(--#{token})" }
+      return if colors.empty?
+
+      background = colors.one? ? colors.first : "linear-gradient(90deg, #{colors.first}, #{colors.last})"
+      div(class: "deck-stripe", style: "background: #{background}")
     end
   end
 end

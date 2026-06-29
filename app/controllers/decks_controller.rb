@@ -1,6 +1,6 @@
 class DecksController < ApplicationController
   def index
-    @decks = filter_decks(current_user.decks.includes(:deck_cards, :archetype))
+    @decks = filter_decks(current_user.decks.includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
     @pending_deck_imports = current_user.imports.deck_imports.pending
     @filters = filter_params
     @primary_options = primary_filter_options

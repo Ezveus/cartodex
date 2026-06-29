@@ -20,6 +20,16 @@ class Archetype < ApplicationRecord
 
   attr_accessor :custom_name
 
+  # Energy type of the lead Pokémon, used to colour the archetype's badge.
+  def primary_energy_type
+    primary_pokemon&.type_symbol
+  end
+
+  # Distinct energy types of the archetype's notable Pokémon, primary first.
+  def energy_types
+    [ primary_pokemon, secondary_pokemon ].compact.map(&:type_symbol).compact.uniq
+  end
+
   private
 
   def custom_name?

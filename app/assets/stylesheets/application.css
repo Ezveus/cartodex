@@ -2331,3 +2331,98 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   Signature layer — energy-typed badges + holo treatment.
+   Archetype badges speak the game's own type colours; the holo
+   foil is reserved for proven ("hot") decks.
+   ============================================================ */
+
+/* — Energy-typed archetype badges — */
+.badge-energy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+.badge-energy .badge-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+.badge-grass     { background: var(--grass-bg);     color: #1F6E2B; }
+.badge-grass     .badge-pip { background: var(--grass); }
+.badge-fire      { background: var(--fire-bg);      color: #B32D10; }
+.badge-fire      .badge-pip { background: var(--fire); }
+.badge-water     { background: var(--water-bg);     color: var(--water-strong); }
+.badge-water     .badge-pip { background: var(--water); }
+.badge-lightning { background: var(--bolt-bg);      color: #8A6800; }
+.badge-lightning .badge-pip { background: var(--bolt); }
+.badge-fighting  { background: var(--fighting-bg);  color: #8C451C; }
+.badge-fighting  .badge-pip { background: var(--fighting); }
+.badge-psychic   { background: var(--psychic-bg);   color: #6F3A92; }
+.badge-psychic   .badge-pip { background: var(--psychic); }
+.badge-darkness  { background: var(--darkness-bg);  color: #2C333F; }
+.badge-darkness  .badge-pip { background: var(--darkness); }
+.badge-metal     { background: var(--metal-bg);     color: #525C6A; }
+.badge-metal     .badge-pip { background: var(--metal); }
+.badge-dragon    { background: var(--dragon-bg);    color: #8A6A18; }
+.badge-dragon    .badge-pip { background: var(--dragon); }
+.badge-fairy     { background: var(--fairy-bg);     color: #B04680; }
+.badge-fairy     .badge-pip { background: var(--fairy); }
+.badge-colorless { background: var(--metal-bg);     color: #525C6A; }
+.badge-colorless .badge-pip { background: var(--metal); }
+
+/* — Deck card: type identity stripe (rounds its own top corners so the
+   card needs no overflow:hidden, which would clip the actions dropdown) — */
+.deck-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 8px 8px 0 0;
+  pointer-events: none;
+}
+
+/* — Holo treatment, reserved for "hot" decks — */
+.deck-item.is-foil {
+  box-shadow: var(--e2), inset 0 0 0 1px rgba(184, 144, 42, 0.35);
+}
+.deck-foil-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 0.3s;
+  background: linear-gradient(115deg, transparent 30%, #36D1C4 42%, #8A7BFF 50%, #FFCF5C 58%, transparent 70%);
+  background-size: 300% 300%;
+}
+.deck-item.is-foil:hover .deck-foil-sheen {
+  opacity: 0.85;
+  animation: deck-foil 2.4s linear infinite;
+}
+@keyframes deck-foil {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.deck-hot-flag {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #8A6A18;
+  background: var(--dragon-bg);
+  padding: 0.2em 0.55em;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(184, 144, 42, 0.4);
+}

@@ -9,10 +9,28 @@ module Decks
     def view_template
       div(class: "deck-badges") do
         span(class: "badge badge-format") { @deck.format_label }
-        span(class: "badge badge-archetype") { @deck.archetype.name } if @deck.archetype
+        archetype_badge if @deck.archetype
         span(class: "badge") { "Physical" } if @deck.physical?
         span(class: "badge") { "TCG Live" } if @deck.tcg_live?
         span(class: "badge badge-warning") { "Proxies" } if @deck.has_proxies?
+      end
+    end
+
+    private
+
+    # The archetype badge is tinted by its lead Pokémon's energy type, with a
+    # colour pip. Falls back to the neutral archetype style when the type is
+    # unknown.
+    def archetype_badge
+      slug = @deck.archetype.primary_energy_type&.downcase
+
+      if slug
+        span(class: "badge badge-energy badge-#{slug}") do
+          span(class: "badge-pip")
+          plain @deck.archetype.name
+        end
+      else
+        span(class: "badge badge-archetype") { @deck.archetype.name }
       end
     end
   end

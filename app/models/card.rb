@@ -13,6 +13,14 @@ class Card < ApplicationRecord
   CARD_TYPES = %w[Pokémon Energy Trainer].freeze
   ENERGY_TYPES = %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless].freeze
 
+  # Maps each energy type to the design-system colour token that represents it.
+  # Lightning reads as the "bolt" token; Colorless borrows the neutral metal grey.
+  TYPE_TOKENS = {
+    "Grass" => "grass", "Fire" => "fire", "Water" => "water", "Lightning" => "bolt",
+    "Fighting" => "fighting", "Psychic" => "psychic", "Darkness" => "darkness",
+    "Metal" => "metal", "Fairy" => "fairy", "Dragon" => "dragon", "Colorless" => "metal"
+  }.freeze
+
   # Callbacks
   before_save :compute_fingerprint
 
@@ -28,6 +36,17 @@ class Card < ApplicationRecord
     validates :hp, presence: true, numericality: { only_integer: true, greater_than: 0 }
     validates :type_symbol, presence: true, inclusion: { in: ENERGY_TYPES }
     validates :retreat_cost, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  end
+
+  # CSS class slug for this card's energy type, e.g. "fire" or "lightning".
+  def type_slug
+    type_symbol&.downcase
+  end
+
+  # CSS colour reference for this card's energy type, e.g. "var(--fire)".
+  def type_color
+    token = TYPE_TOKENS[type_symbol]
+    "var(--#{token})" if token
   end
 
   def compute_fingerprint

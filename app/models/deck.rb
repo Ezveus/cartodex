@@ -27,6 +27,28 @@ class Deck < ApplicationRecord
     FORMAT_LABELS.fetch(format, format.to_s.humanize)
   end
 
+  # Energy types of the deck's archetype, used for the type stripe and badge.
+  def energy_types
+    archetype&.energy_types || []
+  end
+
+  # Win rate over decided games (wins + losses). Nil when nothing is decided yet.
+  def win_rate(results = deck_results)
+    counts = result_counts(results)
+    decided = counts["win"] + counts["loss"]
+    return if decided.zero?
+
+    counts["win"].to_f / decided
+  end
+
+  # A proven performer: enough decided games and a winning majority. Earns the
+  # holographic treatment in the deck list.
+  def hot?(results = deck_results)
+    counts = result_counts(results)
+    decided = counts["win"] + counts["loss"]
+    decided >= 5 && counts["win"].to_f / decided >= 0.6
+  end
+
   def result_counts(results = deck_results)
     counts = DeckResult::RESULTS.index_with(0)
     results.each { |r| counts[r.result] += 1 if counts.key?(r.result) }
