@@ -29,7 +29,7 @@ module Decks
       assert_equal [ 6, 4 ], result[:totals]
     end
 
-    test "merges different prints of the same card name into one row" do
+    test "merges prints that share a fingerprint into one row" do
       @deck_a.deck_cards.create!(card: cards(:budew_pre), quantity: 2)
       @deck_a.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
       @deck_b.deck_cards.create!(card: cards(:budew_pre), quantity: 3)
@@ -42,6 +42,35 @@ module Decks
       assert_equal 3, row[:quantities][@deck_a.id]
       assert_equal 3, row[:quantities][@deck_b.id]
       assert_not row[:differ]
+    end
+
+    test "keeps prints with different fingerprints in separate rows" do
+      @deck_a.deck_cards.create!(card: cards(:froakie_cri), quantity: 2)
+      @deck_b.deck_cards.create!(card: cards(:froakie_twm), quantity: 3)
+
+      result = Decks::Comparator.call([ @deck_a.reload, @deck_b.reload ])
+      pokemon = result[:groups].find { |g| g[:type] == "Pokémon" }
+
+      assert_equal 2, pokemon[:rows].size
+      assert_equal %w[Froakie Froakie], pokemon[:rows].map { |row| row[:name] }
+
+      cri_row = pokemon[:rows].find { |row| row[:card] == cards(:froakie_cri) }
+      twm_row = pokemon[:rows].find { |row| row[:card] == cards(:froakie_twm) }
+
+      assert_equal 2, cri_row[:quantities][@deck_a.id]
+      assert_equal 0, cri_row[:quantities][@deck_b.id]
+      assert_equal 3, twm_row[:quantities][@deck_b.id]
+    end
+
+    test "exposes a representative card on each row for linking" do
+      @deck_a.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+      @deck_b.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
+
+      result = Decks::Comparator.call([ @deck_a.reload, @deck_b.reload ])
+      row = result[:groups].find { |g| g[:type] == "Pokémon" }[:rows].first
+
+      assert_kind_of Card, row[:card]
+      assert_equal "Budew", row[:card].name
     end
   end
 end

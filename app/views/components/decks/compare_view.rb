@@ -7,19 +7,25 @@ module Decks
     end
 
     def view_template
-      div(class: "deck-compare-container") do
+      div(class: "deck-compare-container", data: { controller: "card-preview" }) do
         div(class: "deck-compare-header") do
           h1 { "Compare Decks" }
           link_to "Back to Decks", decks_path, class: "btn btn-secondary"
         end
 
-        div(class: "deck-compare-table-wrap") do
-          table(class: "deck-compare-table") do
-            head
-            @groups.each { |group| group_body(group) }
-            foot
+        div(class: "deck-compare-content") do
+          div(class: "deck-compare-table-wrap") do
+            table(class: "deck-compare-table") do
+              head
+              @groups.each { |group| group_body(group) }
+              foot
+            end
           end
+
+          preview_section
         end
+
+        card_preview_modal
       end
     end
 
@@ -52,8 +58,21 @@ module Decks
     end
 
     def card_row(row)
-      tr(class: row[:differ] ? "is-diff" : nil) do
-        td(class: "deck-compare-card-col") { row[:name] }
+      card = row[:card]
+      tr(
+        class: [ "deck-compare-card-row", ("is-diff" if row[:differ]) ].compact,
+        data: {
+          card_preview_url: card.image_url.present? ? image_card_path(card) : nil,
+          card_preview_card_id: card.id,
+          action: "mouseenter->card-preview#show click->card-preview#open"
+        }
+      ) do
+        td(class: "deck-compare-card-col") do
+          link_to(card_path(card), class: "deck-compare-card-link") do
+            span(class: "deck-compare-card-name") { card.name }
+            span(class: "deck-compare-card-set") { "#{card.set_name} #{card.set_number}" }
+          end
+        end
         @decks.each { |deck| quantity_cell(row[:quantities][deck.id]) }
       end
     end
@@ -71,6 +90,29 @@ module Decks
         tr(class: "deck-compare-total") do
           td { "Total" }
           @totals.each { |value| td { value.to_s } }
+        end
+      end
+    end
+
+    def preview_section
+      div(class: "deck-compare-preview") do
+        image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
+        link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
+      end
+    end
+
+    def card_preview_modal
+      dialog(
+        class: "card-preview-modal",
+        data: {
+          card_preview_target: "modal",
+          action: "click->card-preview#backdropClose"
+        }
+      ) do
+        div(class: "card-preview-modal-content") do
+          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
+          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
+          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
         end
       end
     end

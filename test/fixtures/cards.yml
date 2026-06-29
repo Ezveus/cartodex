@@ -45,6 +45,7 @@ budew_pre:
   stage: Basic
   type_symbol: Grass
   retreat_cost: 1
+  fingerprint: budew_shared
 
 budew_asc:
   name: Budew
@@ -58,6 +59,31 @@ budew_asc:
   stage: Basic
   type_symbol: Grass
   retreat_cost: 1
+  fingerprint: budew_shared
+
+froakie_cri:
+  name: Froakie
+  card_type: "Pokémon"
+  set_name: CRI
+  set_number: "20"
+  rarity: Common
+  hp: 70
+  stage: Basic
+  type_symbol: Water
+  retreat_cost: 1
+  fingerprint: froakie_cri_fp
+
+froakie_twm:
+  name: Froakie
+  card_type: "Pokémon"
+  set_name: TWM
+  set_number: "56"
+  rarity: Common
+  hp: 60
+  stage: Basic
+  type_symbol: Water
+  retreat_cost: 1
+  fingerprint: froakie_twm_fp
 
 bosss_orders_meg:
   name: Boss's Orders

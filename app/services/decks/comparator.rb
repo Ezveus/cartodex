@@ -1,8 +1,9 @@
 module Decks
   # Builds a side-by-side comparison of 2 to 4 decks: a unified, type-grouped
   # card table with one quantity column per deck, per-type subtotals (the type
-  # breakdown) and grand totals. Cards are matched by name within a type, so
-  # different prints of the same card are merged into a single row.
+  # breakdown) and grand totals. Cards are matched by fingerprint within a type,
+  # so functionally identical prints merge into one row while genuinely different
+  # cards that happen to share a name (e.g. Froakie CRI 20 vs TWM 56) stay apart.
   class Comparator < ApplicationService
     TYPE_ORDER = %w[Pokémon Trainer Energy].freeze
 
@@ -33,7 +34,8 @@ module Decks
       end
     end
 
-    # One row per distinct card name within the type, sorted alphabetically.
+    # One row per distinct fingerprint within the type, sorted by name then
+    # print. Each row keeps a representative card so the view can link to it.
     def build_rows(type)
       rows = {}
 
@@ -42,12 +44,14 @@ module Decks
           card = deck_card.card
           next unless card.card_type == type
 
-          row = rows[card.name] ||= { name: card.name, quantities: Hash.new(0) }
+          row = rows[card.fingerprint] ||= { card: card, name: card.name, quantities: Hash.new(0) }
           row[:quantities][deck.id] += deck_card.quantity
         end
       end
 
-      rows.values.sort_by { |row| row[:name] }.each do |row|
+      rows.values
+          .sort_by { |row| [ row[:name], row[:card].set_name.to_s, row[:card].set_number.to_s ] }
+          .each do |row|
         row[:differ] = @decks.map { |deck| row[:quantities][deck.id] }.uniq.size > 1
       end
     end

@@ -860,8 +860,31 @@ textarea.form-input {
   margin: 0;
 }
 
+.deck-compare-content {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
 .deck-compare-table-wrap {
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
+}
+
+.deck-compare-preview {
+  width: 300px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 2rem;
+}
+
+.deck-compare-card-row {
+  cursor: pointer;
+}
+
+.deck-compare-table .deck-compare-card-row:hover td {
+  background-color: var(--water-bg);
 }
 
 .deck-compare-table {
@@ -896,6 +919,28 @@ textarea.form-input {
 
 .deck-compare-card-col {
   text-align: left;
+}
+
+.deck-compare-card-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.deck-compare-card-link:hover .deck-compare-card-name {
+  text-decoration: underline;
+}
+
+.deck-compare-card-name {
+  flex: 1;
+}
+
+.deck-compare-card-set {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-300);
 }
 
 .deck-compare-group-header th {
@@ -2025,8 +2070,13 @@ textarea.form-input {
     flex-direction: column;
   }
 
-  .deck-show-preview {
+  .deck-show-preview,
+  .deck-compare-preview {
     display: none;
+  }
+
+  .deck-compare-content {
+    flex-direction: column;
   }
 
   /* Card search dropdown */
