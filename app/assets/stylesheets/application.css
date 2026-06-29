@@ -1,24 +1,113 @@
-/* Base styles */
+/* ============================================================
+   Cartodex — Design System
+   Tokens, self-hosted fonts, base typography.
+   Energy-type palette + holo signature live in the layer at the
+   bottom of this file. Legacy variable names are kept as aliases
+   so existing rules pick up the new palette automatically.
+   ============================================================ */
+
+/* — Fonts (self-hosted in app/assets/fonts, digested by Propshaft) — */
+@font-face {
+  font-family: "Archivo"; font-style: normal; font-weight: 600 800; font-display: swap;
+  src: url("archivo-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Archivo"; font-style: normal; font-weight: 600 800; font-display: swap;
+  src: url("archivo-latinext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("plexsans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("plexsans-latinext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("plexmono-400-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("plexmono-400-latinext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("plexmono-600-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("plexmono-600-latinext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-  --primary-color: #e3350d;
-  --secondary-color: #30a7d7;
-  --background-color: #f5f5f5;
-  --text-color: #333;
-  --border-color: #ddd;
+  /* — Neutrals (cool slate, not pure grey) — */
+  --ink-900: #0E1320;  --ink-800: #1A2233;  --ink-700: #28324A;
+  --ink-500: #5A6678;  --ink-300: #93A0B4;  --ink-200: #B6C0CD;
+  --line: #E5E9F0;     --paper: #F7F8FA;    --surface: #FFFFFF;
+
+  /* — Brand flare (refined poké-red), reserved for primary actions — */
+  --flare: #DD2C16;    --flare-ink: #B0210F;
+  --water-strong: #1D6AA5;
+
+  /* — Energy-type palette (the signature colour language) — */
+  --grass: #3FA34D;    --grass-bg: #E6F4E8;
+  --fire: #E4451E;     --fire-bg: #FCE9E2;
+  --water: #2B8FD8;    --water-bg: #E2F0FB;
+  --bolt: #E0A800;     --bolt-bg: #FBF1CF;
+  --psychic: #9B5BC4;  --psychic-bg: #F1E8F8;
+  --fighting: #C2632B; --fighting-bg: #F6E8DC;
+  --darkness: #3B4252; --darkness-bg: #E4E7EC;
+  --metal: #7E8CA0;    --metal-bg: #EAEDF1;
+  --dragon: #B8902A;   --dragon-bg: #F5ECD2;
+  --fairy: #DE6FA8;    --fairy-bg: #FBE7F1;
+
+  /* — Semantic result colours (separate from the accent) — */
+  --win: #2E9E5B;      --win-bg: #E5F4EC;
+  --loss: #DD3B3B;     --loss-bg: #FBE7E7;
+  --draw: #6B7686;     --draw-bg: #ECEFF3;
+  --timeout: #E08A1E;  --timeout-bg: #FBEFD9;
+
+  /* — Elevation — */
+  --e1: 0 1px 2px rgba(14, 19, 32, 0.06), 0 1px 3px rgba(14, 19, 32, 0.08);
+  --e2: 0 4px 12px rgba(14, 19, 32, 0.08), 0 2px 4px rgba(14, 19, 32, 0.06);
+  --e3: 0 12px 32px rgba(14, 19, 32, 0.14);
+
+  /* — Type roles — */
+  --font-display: "Archivo", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* — Legacy aliases (existing rules reference these) — */
+  --primary-color: var(--flare);
+  --secondary-color: var(--water);
+  --background-color: var(--paper);
+  --text-color: #1D2433;
+  --border-color: var(--line);
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   background-color: var(--background-color);
   color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Navbar */
 .navbar {
-  background: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  box-shadow: var(--e1);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -73,7 +162,7 @@ body {
 
 .navbar-user {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 /* Authentication pages */
@@ -82,9 +171,9 @@ body {
   margin: 100px auto;
   padding: 2rem;
   text-align: center;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .auth-buttons {
@@ -109,10 +198,10 @@ body {
 }
 
 .dashboard-card {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .dashboard-card h2 {
@@ -149,7 +238,7 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: white;
+  background: var(--surface);
   padding: 2rem;
   border-radius: 8px;
   max-width: 90%;
@@ -182,7 +271,7 @@ body {
   gap: 0.5rem;
   padding: 0.4rem 0;
   font-size: 0.9rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .importing-spinner {
@@ -243,7 +332,7 @@ textarea.form-input {
 }
 
 .btn-primary:hover {
-  background-color: #c62f0c;
+  background-color: var(--flare-ink);
 }
 
 .btn-secondary {
@@ -252,7 +341,7 @@ textarea.form-input {
 }
 
 .btn-secondary:hover {
-  background-color: #2891bc;
+  background-color: var(--water-strong);
 }
 
 /* Auth container */
@@ -260,9 +349,9 @@ textarea.form-input {
   max-width: 480px;
   margin: 60px auto;
   padding: 2rem;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .auth-container h1 {
@@ -305,7 +394,7 @@ textarea.form-input {
   display: block;
   font-size: 0.85rem;
   font-style: italic;
-  color: #888;
+  color: var(--ink-300);
   margin-top: 0.25rem;
 }
 
@@ -365,22 +454,22 @@ textarea.form-input {
 }
 
 .flash-notice {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
+  background-color: var(--win-bg);
+  color: #1E7544;
+  border: 1px solid var(--win-bg);
 }
 
 .flash-alert {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background-color: var(--loss-bg);
+  color: #B62A2A;
+  border: 1px solid var(--loss-bg);
 }
 
 /* Form errors block */
 .form-errors {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background-color: var(--loss-bg);
+  color: #B62A2A;
+  border: 1px solid var(--loss-bg);
   border-radius: 4px;
   padding: 1rem;
   margin-bottom: 1.25rem;
@@ -409,7 +498,7 @@ textarea.form-input {
 }
 
 .btn-danger:hover {
-  color: #c62f0c;
+  color: var(--flare-ink);
 }
 
 .badge {
@@ -421,18 +510,18 @@ textarea.form-input {
 }
 
 .badge-warning {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--bolt-bg);
+  color: #8A6800;
 }
 
 .badge-success {
-  background: #d4edda;
-  color: #155724;
+  background: var(--win-bg);
+  color: #1E7544;
 }
 
 .badge-danger {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--loss-bg);
+  color: #B62A2A;
 }
 
 .badge-format {
@@ -441,8 +530,8 @@ textarea.form-input {
 }
 
 .badge-archetype {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: var(--water-bg);
+  color: var(--water-strong);
 }
 
 /* Archetype picker (deck form) */
@@ -463,7 +552,7 @@ textarea.form-input {
 /* Stats / matchups */
 .deck-stats-archetype {
   margin: 0 0 1rem;
-  color: #555;
+  color: var(--ink-500);
 }
 
 .matchup-archetype-section {
@@ -471,7 +560,7 @@ textarea.form-input {
 }
 
 .matchup-deck-count {
-  color: #888;
+  color: var(--ink-300);
   margin: 0 0 0.75rem;
 }
 
@@ -528,7 +617,7 @@ textarea.form-input {
   padding: 2rem;
   max-width: 480px;
   width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--e3);
 }
 
 .result-modal::backdrop {
@@ -548,9 +637,9 @@ textarea.form-input {
 .result-type-btn {
   flex: 1;
   padding: 0.6rem;
-  border: 2px solid #ddd;
+  border: 2px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   cursor: pointer;
   font-weight: 500;
   transition: all 0.15s;
@@ -560,10 +649,10 @@ textarea.form-input {
   color: white;
 }
 
-.result-win.active { background: #28a745; border-color: #28a745; }
-.result-loss.active { background: #dc3545; border-color: #dc3545; }
-.result-draw.active { background: #6c757d; border-color: #6c757d; }
-.result-timeout.active { background: #fd7e14; border-color: #fd7e14; }
+.result-win.active { background: var(--win); border-color: var(--win); }
+.result-loss.active { background: var(--loss); border-color: var(--loss); }
+.result-draw.active { background: var(--draw); border-color: var(--draw); }
+.result-timeout.active { background: var(--timeout); border-color: var(--timeout); }
 
 .result-type-btn:disabled {
   cursor: not-allowed;
@@ -575,8 +664,8 @@ textarea.form-input {
 }
 
 .match-format-btn.active {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--water-strong);
+  border-color: var(--water-strong);
   color: white;
 }
 
@@ -595,17 +684,17 @@ textarea.form-input {
 .match-score-game-label {
   width: 4rem;
   font-size: 0.9em;
-  color: #555;
+  color: var(--ink-500);
 }
 
 .match-game-btn {
   padding: 0.35rem 0.5rem;
 }
 
-.match-game-btn.game-w.active { background: #28a745; border-color: #28a745; color: white; }
-.match-game-btn.game-l.active { background: #dc3545; border-color: #dc3545; color: white; }
-.match-game-btn.game-t.active { background: #fd7e14; border-color: #fd7e14; color: white; }
-.match-game-btn.game-d.active { background: #6c757d; border-color: #6c757d; color: white; }
+.match-game-btn.game-w.active { background: var(--win); border-color: var(--win); color: white; }
+.match-game-btn.game-l.active { background: var(--loss); border-color: var(--loss); color: white; }
+.match-game-btn.game-t.active { background: var(--timeout); border-color: var(--timeout); color: white; }
+.match-game-btn.game-d.active { background: var(--draw); border-color: var(--draw); color: white; }
 
 .match-score-clear {
   margin-top: 0.25rem;
@@ -618,18 +707,18 @@ textarea.form-input {
 .archetype-search-item {
   padding: 0.5rem;
   cursor: pointer;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .archetype-search-item:hover {
-  background: #f0f0f0;
+  background: var(--paper);
 }
 
 .archetype-search-pokemon {
-  color: #888;
+  color: var(--ink-300);
   font-size: 0.85em;
 }
 
@@ -645,12 +734,12 @@ textarea.form-input {
 }
 
 .archetype-create-item {
-  color: #2563eb;
-  border-top: 2px solid #eee;
+  color: var(--water-strong);
+  border-top: 2px solid var(--line);
 }
 
 .create-archetype-section {
-  background: #f8f9fa;
+  background: var(--paper);
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -686,16 +775,16 @@ textarea.form-input {
 }
 
 .deck-item {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   position: relative;
   transition: box-shadow 0.2s;
 }
 
 .deck-item:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--e2);
 }
 
 .deck-item-link {
@@ -737,9 +826,9 @@ textarea.form-input {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.25rem;
-  background: white;
+  background: var(--surface);
   border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--e3);
   transition: transform 0.2s ease;
   z-index: 50;
 }
@@ -778,8 +867,8 @@ textarea.form-input {
 .deck-compare-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  box-shadow: var(--e1);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -788,7 +877,7 @@ textarea.form-input {
 .deck-compare-table td {
   padding: 0.5rem 0.75rem;
   text-align: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .deck-compare-table thead th {
@@ -810,26 +899,26 @@ textarea.form-input {
 }
 
 .deck-compare-group-header th {
-  background: #f3f4f6;
+  background: var(--paper);
   text-align: left;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #555;
+  color: var(--ink-500);
 }
 
 .deck-compare-table tr.is-diff td {
-  background: #fff7e6;
+  background: var(--bolt-bg);
 }
 
 .deck-compare-table .is-absent {
-  color: #bbb;
+  color: var(--ink-300);
 }
 
 .deck-compare-subtotal td,
 .deck-compare-total td {
   font-weight: 600;
-  border-top: 2px solid #ddd;
+  border-top: 2px solid var(--line);
 }
 
 .deck-compare-total td {
@@ -837,7 +926,7 @@ textarea.form-input {
 }
 
 .deck-description {
-  color: #666;
+  color: var(--ink-500);
   font-size: 0.9rem;
 }
 
@@ -871,7 +960,7 @@ textarea.form-input {
 }
 
 .deck-show-description {
-  color: #666;
+  color: var(--ink-500);
   margin-top: 0.25rem;
 }
 
@@ -887,9 +976,9 @@ textarea.form-input {
   gap: 2rem;
   margin-bottom: 2rem;
   padding: 1rem 1.5rem;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .stat {
@@ -906,7 +995,7 @@ textarea.form-input {
 
 .stat-label {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .deck-section {
@@ -931,7 +1020,7 @@ textarea.form-input {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .deck-card-qty {
@@ -946,7 +1035,7 @@ textarea.form-input {
 
 .deck-card-set {
   font-size: 0.85rem;
-  color: #999;
+  color: var(--ink-300);
 }
 
 /* Deck show layout */
@@ -971,7 +1060,7 @@ textarea.form-input {
 .card-preview-image {
   width: 100%;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--e2);
 }
 
 .deck-card-item {
@@ -979,7 +1068,7 @@ textarea.form-input {
 }
 
 .deck-card-item:hover {
-  background-color: #f0f7ff;
+  background-color: var(--water-bg);
 }
 
 .deck-card-qty-controls {
@@ -994,7 +1083,7 @@ textarea.form-input {
   height: 22px;
   border-radius: 50%;
   border: 1px solid var(--border-color);
-  background: white;
+  background: var(--surface);
   font-size: 0.85rem;
   font-weight: bold;
   cursor: pointer;
@@ -1048,15 +1137,15 @@ textarea.form-input {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: white;
+  background: var(--surface);
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--e1);
 }
 
 .card-collection-counter-label {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
   margin-right: 0.25rem;
 }
 
@@ -1080,7 +1169,7 @@ textarea.form-input {
 .card-full-image {
   width: 100%;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--e2);
 }
 
 .card-show-details {
@@ -1089,10 +1178,10 @@ textarea.form-input {
 }
 
 .card-info-section {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   margin-bottom: 1.5rem;
 }
 
@@ -1114,7 +1203,7 @@ textarea.form-input {
 
 .card-info-list dt {
   font-weight: 600;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .card-info-list dd {
@@ -1123,7 +1212,7 @@ textarea.form-input {
 
 .card-move {
   padding: 0.75rem 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .card-move:last-child {
@@ -1138,7 +1227,7 @@ textarea.form-input {
 
 .card-move-cost {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .card-move-damage {
@@ -1169,13 +1258,13 @@ textarea.form-input {
 .alt-printing-image {
   width: 120px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .alt-printing-set {
   margin-top: 0.4rem;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--ink-500);
   text-align: center;
 }
 
@@ -1196,9 +1285,9 @@ textarea.form-input {
   width: 400px;
   max-height: 400px;
   overflow-y: auto;
-  background: white;
+  background: var(--surface);
   border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--e2);
   z-index: 50;
 }
 
@@ -1207,11 +1296,11 @@ textarea.form-input {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .card-search-result-item:hover {
-  background-color: #f0f7ff;
+  background-color: var(--water-bg);
 }
 
 .card-search-result-info {
@@ -1227,7 +1316,7 @@ textarea.form-input {
 
 .card-search-result-set {
   font-size: 0.8rem;
-  color: #999;
+  color: var(--ink-300);
 }
 
 .card-search-result-type {
@@ -1257,12 +1346,12 @@ textarea.form-input {
 }
 
 .card-search-add-btn:hover {
-  background: #c62f0c;
+  background: var(--flare-ink);
 }
 
 .card-search-empty {
   padding: 0.75rem;
-  color: #666;
+  color: var(--ink-500);
   font-size: 0.9rem;
 }
 
@@ -1300,7 +1389,7 @@ textarea.form-input {
 .cards-search-count {
   margin: 0 0 1rem;
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .cards-pagination {
@@ -1309,24 +1398,24 @@ textarea.form-input {
   gap: 1rem;
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--line);
 }
 
 .cards-pagination-link {
   padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 4px;
   text-decoration: none;
   color: inherit;
 }
 
 .cards-pagination-link:hover {
-  background: #f5f5f5;
+  background: var(--paper);
 }
 
 .cards-pagination-info {
   font-size: 0.9rem;
-  color: #555;
+  color: var(--ink-500);
 }
 
 .cards-layout {
@@ -1338,9 +1427,9 @@ textarea.form-input {
 .sets-sidebar {
   width: 250px;
   flex-shrink: 0;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   padding: 1rem;
   position: sticky;
   top: 72px;
@@ -1440,7 +1529,7 @@ textarea.form-input {
 .card-grid-image {
   width: 100%;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .card-grid-name {
@@ -1452,11 +1541,11 @@ textarea.form-input {
 
 .card-grid-number {
   font-size: 0.7rem;
-  color: #999;
+  color: var(--ink-300);
 }
 
 .cards-empty {
-  color: #666;
+  color: var(--ink-500);
   font-size: 1.1rem;
 }
 
@@ -1468,10 +1557,10 @@ textarea.form-input {
 }
 
 .deck-form {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   margin-top: 1.5rem;
 }
 
@@ -1487,19 +1576,19 @@ textarea.form-input {
 
 /* Admin */
 .admin-navbar {
-  background: #2d3748;
+  background: var(--ink-900);
 }
 
 .admin-navbar .navbar-brand {
-  color: #e2e8f0;
+  color: #EAF0F8;
 }
 
 .admin-navbar .navbar-link {
-  color: #cbd5e0;
+  color: var(--ink-200);
 }
 
 .admin-navbar .navbar-link:hover {
-  background: #4a5568;
+  background: var(--ink-700);
 }
 
 .admin-navbar .navbar-link.active {
@@ -1508,13 +1597,13 @@ textarea.form-input {
 }
 
 .admin-navbar .navbar-user {
-  color: #a0aec0;
+  color: var(--ink-300);
 }
 
 .admin-navbar .navbar-toggle-icon,
 .admin-navbar .navbar-toggle-icon::before,
 .admin-navbar .navbar-toggle-icon::after {
-  background: #e2e8f0;
+  background: #EAF0F8;
 }
 
 .admin-container {
@@ -1543,10 +1632,10 @@ textarea.form-input {
 }
 
 .admin-stat-card {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   text-align: center;
 }
 
@@ -1558,7 +1647,7 @@ textarea.form-input {
 
 .admin-stat-label {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .admin-grid-2col {
@@ -1570,9 +1659,9 @@ textarea.form-input {
 /* Div-based table: flex on desktop, cards on mobile */
 .data-table {
   width: 100%;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .data-table-header {
@@ -1587,12 +1676,12 @@ textarea.form-input {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #666;
+  color: var(--ink-500);
 }
 
 .data-table-row {
   display: flex;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .data-table-row:last-child {
@@ -1600,7 +1689,7 @@ textarea.form-input {
 }
 
 .data-table-row:hover {
-  background-color: #f8f9fa;
+  background-color: var(--paper);
 }
 
 .data-table-row .data-table-cell {
@@ -1621,15 +1710,15 @@ textarea.form-input {
 /* Detail table (key/value pairs in admin show views) */
 .detail-table {
   width: 100%;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   border-collapse: collapse;
 }
 
 .detail-table td {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--line);
 }
 
 .detail-table tr:last-child td {
@@ -1652,7 +1741,7 @@ textarea.form-input {
 }
 
 .text-muted {
-  color: #999;
+  color: var(--ink-300);
   font-size: 0.85rem;
 }
 
@@ -1669,9 +1758,9 @@ textarea.form-input {
   left: 0;
   margin-top: 0.25rem;
   min-width: 180px;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--e2);
   z-index: 50;
   padding: 0.25rem 0;
 }
@@ -1704,7 +1793,7 @@ textarea.form-input {
 }
 
 .dropdown-item-danger {
-  color: #c62f0c;
+  color: var(--flare-ink);
 }
 
 .deck-header-form {
@@ -1740,7 +1829,7 @@ textarea.form-input {
   padding: 1.5rem;
   max-width: 300px;
   width: 85%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--e3);
 }
 
 .card-preview-modal::backdrop {
@@ -1993,7 +2082,7 @@ textarea.form-input {
 
   /* Admin navbar mobile adjustments */
   .admin-navbar .navbar-right {
-    border-top-color: #4a5568;
+    border-top-color: var(--ink-700);
   }
 
   /* Admin header (used in stats/results) */
@@ -2014,8 +2103,8 @@ textarea.form-input {
     margin-bottom: 0.75rem;
     border-bottom: none;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    background: white;
+    box-shadow: var(--e1);
+    background: var(--surface);
     gap: 0.4rem;
   }
 
@@ -2036,7 +2125,7 @@ textarea.form-input {
     content: attr(data-label);
     font-weight: 600;
     font-size: 0.8rem;
-    color: #666;
+    color: var(--ink-500);
     text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-right: 1rem;
@@ -2074,10 +2163,10 @@ textarea.form-input {
   gap: 1rem;
   align-items: flex-end;
   flex-wrap: wrap;
-  background: white;
+  background: var(--surface);
   padding: 1rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   margin-bottom: 1.5rem;
 }
 
@@ -2104,9 +2193,9 @@ textarea.form-input {
 }
 
 .collection-tile {
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -2129,7 +2218,7 @@ textarea.form-input {
 .collection-tile-image {
   width: 100%;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--e1);
 }
 
 .collection-tile-name {
@@ -2141,7 +2230,7 @@ textarea.form-input {
 
 .collection-tile-meta {
   font-size: 0.7rem;
-  color: #999;
+  color: var(--ink-300);
 }
 
 .collection-tile-controls {
@@ -2159,8 +2248,86 @@ textarea.form-input {
 }
 
 .collection-empty {
-  color: #666;
+  color: var(--ink-500);
   font-size: 1.1rem;
   text-align: center;
   padding: 3rem 1rem;
+}
+
+
+/* ============================================================
+   Design System layer — overrides applied last (source order
+   wins on equal specificity). Typography, dark navbar rails,
+   semantic accents, focus & reduced-motion floor.
+   ============================================================ */
+
+/* — Typography roles — */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-wrap: balance;
+  color: var(--ink-900);
+}
+.navbar-brand { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.01em; }
+
+.stat-value, .admin-stat-value, .card-count, .deck-count {
+  font-family: var(--font-display);
+  color: var(--ink-900);
+}
+.stat-value, .admin-stat-value, .card-count, .deck-count, .deck-card-count,
+.card-collection-counter-qty, .collection-tile-qty, .deck-card-qty {
+  font-variant-numeric: tabular-nums;
+}
+.set-code, .card-grid-number, .deck-card-set, .card-search-result-set,
+.collection-tile-meta, .alt-printing-set, .cards-search-count, .cards-pagination-info {
+  font-family: var(--font-mono);
+}
+.deck-card-qty { color: var(--ink-700); }
+
+/* — Section heading accents: ink instead of cartoon red — */
+.dashboard-card h2, .auth-container h1, .deck-item h2, .card-info-section h2,
+.deck-section h2 { color: var(--ink-900); }
+.card-info-section h2 { border-bottom-color: var(--line); }
+.deck-section h2 { border-bottom-color: var(--water); }
+.sets-block-name { color: var(--ink-500); border-bottom-color: var(--line); }
+
+/* — Buttons — */
+.btn { font-family: var(--font-body); font-weight: 600; border-radius: 5px; }
+.btn-primary { box-shadow: var(--e1); }
+
+/* — Dark navbar rails — */
+.navbar { background: var(--ink-900); box-shadow: var(--e2); }
+.navbar-brand { color: #fff; }
+.navbar-link { color: var(--ink-200); }
+.navbar-link:hover { background: rgba(255, 255, 255, 0.08); }
+.navbar-link.active { color: #fff; font-weight: 600; }
+.navbar-user { color: var(--ink-300); font-family: var(--font-mono); font-size: 0.78rem; }
+.navbar-toggle-icon,
+.navbar-toggle-icon::before,
+.navbar-toggle-icon::after { background: #fff; }
+
+/* — Dark table headers instead of red — */
+.deck-compare-table thead th { background: var(--ink-900); }
+.deck-compare-total td { border-top-color: var(--flare); }
+
+/* — Focus visibility floor — */
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--water);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .navbar-right { border-top-color: rgba(255, 255, 255, 0.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
