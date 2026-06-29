@@ -15,6 +15,7 @@ Rails.application.routes.draw do
     get "dashboard", to: "home#dashboard"
     resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
       get :matchups, on: :collection
+      get :compare, on: :collection
       get :export, on: :member
       get :stats, on: :member
       post :duplicate, on: :member

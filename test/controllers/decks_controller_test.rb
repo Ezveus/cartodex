@@ -121,6 +121,30 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "#deck-#{other.id}", false
   end
 
+  test "compare renders a comparison of the selected decks" do
+    other = @user.decks.create!(name: "Other")
+    @deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
+    other.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1)
+
+    get compare_decks_path(ids: [ @deck.id, other.id ])
+
+    assert_response :success
+    assert_select ".deck-compare-table"
+    assert_select ".deck-compare-table thead th", text: "Original"
+  end
+
+  test "compare redirects when fewer than two decks are selected" do
+    get compare_decks_path(ids: [ @deck.id ])
+
+    assert_redirected_to decks_path
+  end
+
+  test "compare ignores decks belonging to other users" do
+    get compare_decks_path(ids: [ @deck.id, decks(:two).id ])
+
+    assert_redirected_to decks_path
+  end
+
   test "update assigns an archetype to the deck" do
     patch deck_path(@deck), params: { deck: { name: "Tagged", archetype_id: archetypes(:ogerpon).id } }
 

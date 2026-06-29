@@ -7,6 +7,13 @@ module Decks
 
     def view_template
       div(class: "deck-item", id: "deck-#{@deck.id}") do
+        input(
+          type: "checkbox",
+          class: "deck-compare-checkbox",
+          value: @deck.id,
+          aria_label: "Select #{@deck.name} to compare",
+          data: { deck_compare_target: "checkbox", action: "deck-compare#toggle" }
+        )
         a(href: Rails.application.routes.url_helpers.deck_path(@deck), class: "deck-item-link") do
           h2 { @deck.name }
           render Decks::ClassificationBadges.new(deck: @deck)

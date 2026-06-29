@@ -12,7 +12,7 @@ module Decks
     end
 
     def view_template
-      div(class: "decks-container", data: { controller: "decks" }) do
+      div(class: "decks-container", data: { controller: "decks deck-compare", deck_compare_compare_url_value: compare_decks_path }) do
         div(class: "decks-header") do
           h1 { "My Decks" }
           div(class: "decks-header-actions") do
@@ -37,10 +37,31 @@ module Decks
             end
           end
         end
+
+        compare_bar
       end
     end
 
     private
+
+    def compare_bar
+      div(class: "deck-compare-bar", data: { deck_compare_target: "bar" }) do
+        span(class: "deck-compare-bar-label") do
+          span(data: { deck_compare_target: "count" }) { "0" }
+          plain " selected (pick 2–4)"
+        end
+        button(
+          type: "button",
+          class: "btn btn-primary btn-sm",
+          data: { deck_compare_target: "button", action: "deck-compare#compare" }
+        ) { "Compare" }
+        button(
+          type: "button",
+          class: "btn btn-secondary btn-sm",
+          data: { action: "deck-compare#clear" }
+        ) { "Clear" }
+      end
+    end
 
     def filter_bar
       form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do

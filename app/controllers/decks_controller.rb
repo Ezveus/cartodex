@@ -38,6 +38,18 @@ class DecksController < ApplicationController
     }.sort_by { |g| -g[:counts].values.sum }
   end
 
+  def compare
+    ids = Array(params[:ids]).map(&:to_i).uniq
+    decks = current_user.decks.where(id: ids).includes(deck_cards: :card)
+    decks = decks.sort_by { |deck| ids.index(deck.id) }
+
+    if decks.size < 2 || decks.size > 4
+      redirect_to decks_path, alert: "Select 2 to 4 decks to compare." and return
+    end
+
+    @comparison = Decks::Comparator.call(decks)
+  end
+
   def export
     deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find(params[:id])
 

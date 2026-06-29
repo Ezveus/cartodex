@@ -709,6 +709,131 @@ textarea.form-input {
   color: var(--primary-color);
   font-size: 1.2rem;
   padding-right: 5rem;
+  padding-left: 1.75rem;
+}
+
+.deck-compare-checkbox {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.deck-compare-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Floating compare action bar on the decks index */
+.deck-compare-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translate(-50%, 150%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: white;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+  z-index: 50;
+}
+
+.deck-compare-bar.is-visible {
+  transform: translate(-50%, 0);
+}
+
+.deck-compare-bar-label {
+  font-weight: 600;
+  color: var(--secondary-color);
+}
+
+/* Deck compare page */
+.deck-compare-container {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.deck-compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.deck-compare-header h1 {
+  margin: 0;
+}
+
+.deck-compare-table-wrap {
+  overflow-x: auto;
+}
+
+.deck-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.deck-compare-table th,
+.deck-compare-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}
+
+.deck-compare-table thead th {
+  background: var(--primary-color);
+  color: white;
+}
+
+.deck-compare-table thead th a {
+  color: white;
+  text-decoration: none;
+}
+
+.deck-compare-table thead th a:hover {
+  text-decoration: underline;
+}
+
+.deck-compare-card-col {
+  text-align: left;
+}
+
+.deck-compare-group-header th {
+  background: #f3f4f6;
+  text-align: left;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+
+.deck-compare-table tr.is-diff td {
+  background: #fff7e6;
+}
+
+.deck-compare-table .is-absent {
+  color: #bbb;
+}
+
+.deck-compare-subtotal td,
+.deck-compare-total td {
+  font-weight: 600;
+  border-top: 2px solid #ddd;
+}
+
+.deck-compare-total td {
+  border-top: 2px solid var(--primary-color);
 }
 
 .deck-description {
