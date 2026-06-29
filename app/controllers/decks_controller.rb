@@ -3,7 +3,8 @@ class DecksController < ApplicationController
     @decks = filter_decks(current_user.decks.includes(:deck_cards, :archetype))
     @pending_deck_imports = current_user.imports.deck_imports.pending
     @filters = filter_params
-    @archetype_options = archetype_filter_options
+    @primary_options = primary_filter_options
+    @secondary_options = secondary_filter_options
   end
 
   def show
@@ -107,13 +108,25 @@ class DecksController < ApplicationController
       format:    params[:format].presence,
       support:   params[:support].presence,
       proxies:   params[:proxies].presence,
-      archetype: params[:archetype].presence
+      primary:   params[:primary].presence,
+      secondary: params[:secondary].presence
     }
   end
 
-  # Archetypes actually used by the current user's decks, for the filter bar.
-  def archetype_filter_options
-    Archetype.where(id: current_user.decks.select(:archetype_id)).order(:name).pluck(:name, :id)
+  # Primary Pokémon of the archetypes used by the current user's decks, for the filter bar.
+  def primary_filter_options
+    pokemon_filter_options(:primary_pokemon_id)
+  end
+
+  # Secondary Pokémon of the archetypes used by the current user's decks, for the filter bar.
+  def secondary_filter_options
+    pokemon_filter_options(:secondary_pokemon_id)
+  end
+
+  def pokemon_filter_options(column)
+    archetype_ids = current_user.decks.where.not(archetype_id: nil).select(:archetype_id)
+    card_ids = Archetype.where(id: archetype_ids).select(column)
+    Card.where(id: card_ids).order(:name).pluck(:name, :id)
   end
 
   def filter_decks(scope)
@@ -131,7 +144,11 @@ class DecksController < ApplicationController
     when "without" then scope = scope.where(has_proxies: false)
     end
 
-    scope = scope.where(archetype_id: filters[:archetype]) if filters[:archetype]
+    if filters[:primary] || filters[:secondary]
+      scope = scope.joins(:archetype)
+      scope = scope.where(archetypes: { primary_pokemon_id: filters[:primary] }) if filters[:primary]
+      scope = scope.where(archetypes: { secondary_pokemon_id: filters[:secondary] }) if filters[:secondary]
+    end
 
     scope
   end

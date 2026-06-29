@@ -3,11 +3,12 @@ module Decks
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
 
-    def initialize(decks:, pending_deck_imports: [], filters: {}, archetype_options: [])
+    def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [])
       @decks = decks
       @pending_deck_imports = pending_deck_imports
       @filters = filters || {}
-      @archetype_options = archetype_options || []
+      @primary_options = primary_options || []
+      @secondary_options = secondary_options || []
     end
 
     def view_template
@@ -44,7 +45,8 @@ module Decks
     def filter_bar
       form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
         filter_select(:format, format_options)
-        filter_select(:archetype, archetype_options) if @archetype_options.any?
+        filter_select(:primary, primary_options) if @primary_options.any?
+        filter_select(:secondary, secondary_options) if @secondary_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
         link_to "Clear", decks_path, class: "btn btn-secondary btn-sm" if active_filters?
@@ -68,8 +70,12 @@ module Decks
       [ [ "All formats", "" ] ] + Deck::FORMAT_LABELS.map { |value, label| [ label, value ] }
     end
 
-    def archetype_options
-      [ [ "All archetypes", "" ] ] + @archetype_options.map { |name, id| [ name, id.to_s ] }
+    def primary_options
+      [ [ "Any primary", "" ] ] + @primary_options.map { |name, id| [ name, id.to_s ] }
+    end
+
+    def secondary_options
+      [ [ "Any secondary", "" ] ] + @secondary_options.map { |name, id| [ name, id.to_s ] }
     end
 
     def active_filters?

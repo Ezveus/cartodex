@@ -99,11 +99,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "#deck-#{live.id}", false
   end
 
-  test "index filters decks by archetype" do
-    @deck.update!(archetype: archetypes(:ogerpon))
+  test "index filters decks by primary Pokémon" do
+    @deck.update!(archetype: archetypes(:budew_ogerpon))
     other = @user.decks.create!(name: "No archetype")
 
-    get decks_path(archetype: archetypes(:ogerpon).id)
+    get decks_path(primary: cards(:budew_pre).id)
+
+    assert_response :success
+    assert_select "#deck-#{@deck.id}"
+    assert_select "#deck-#{other.id}", false
+  end
+
+  test "index filters decks by secondary Pokémon" do
+    @deck.update!(archetype: archetypes(:budew_ogerpon))
+    other = @user.decks.create!(name: "Primary only", archetype: archetypes(:ogerpon))
+
+    get decks_path(secondary: cards(:teal_mask_ogerpon_ex).id)
 
     assert_response :success
     assert_select "#deck-#{@deck.id}"
