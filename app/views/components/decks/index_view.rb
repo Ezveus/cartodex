@@ -42,19 +42,18 @@ module Decks
     private
 
     def filter_bar
-      form(action: decks_path, method: "get", class: "deck-filters") do
+      form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
         filter_select(:format, format_options)
         filter_select(:archetype, archetype_options) if @archetype_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
-        button(type: "submit", class: "btn btn-secondary btn-sm") { "Filter" }
         link_to "Clear", decks_path, class: "btn btn-secondary btn-sm" if active_filters?
       end
     end
 
     def filter_select(name, options)
       selected = @filters[name].to_s
-      select(name: name, class: "form-input deck-filter-select") do
+      select(name: name, class: "form-input deck-filter-select", data: { action: "change->card-filter#submit" }) do
         options.each do |label, value|
           if value.to_s == selected
             option(value: value, selected: true) { label }
