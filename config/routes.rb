@@ -13,6 +13,9 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
+
+    # Living design-system reference. Not exposed in production.
+    get "styleguide", to: "styleguide#show" unless Rails.env.production?
     resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
       get :matchups, on: :collection
       get :compare, on: :collection

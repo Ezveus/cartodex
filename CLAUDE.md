@@ -47,6 +47,8 @@ Key services:
 
 **Frontend**: Hotwire (Turbo + Stimulus), Propshaft asset pipeline, importmap for JS. **All views use Phlex components** — see the `phlex-architecture` skill for conventions and patterns. Always use Phlex, never write view logic in ERB.
 
+**Design system**: A single CSS-custom-property token system lives at the top of `app/assets/stylesheets/application.css` (neutrals, brand `--flare`, a per-energy-type palette, semantic result colours, elevation, and `--font-*` roles), with two override layers at the bottom of the file (base typography/dark navbar; energy-typed badges + holo treatment). Self-hosted fonts (Archivo / IBM Plex Sans / IBM Plex Mono) are in `app/assets/fonts`. `Card::TYPE_TOKENS` maps each energy type to its colour token — use it (not literal hexes) when colouring by type. A living reference renders the real tokens and components at **`/styleguide`** (`Styleguide::PageView`, non-production only); update it when adding components or tokens.
+
 ## Bin Scripts
 
 - `bin/import_deck DECK_NAME [FILE]` — import decklist from file or stdin, fetches card data from web

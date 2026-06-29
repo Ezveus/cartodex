@@ -2426,3 +2426,61 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px rgba(184, 144, 42, 0.4);
 }
+
+/* ============================================================
+   Styleguide — living documentation page (/styleguide, non-prod).
+   ============================================================ */
+.sg { max-width: 1100px; margin: 2rem auto 4rem; padding: 0 1rem; }
+.sg-hero h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+.sg-lead { color: var(--ink-500); max-width: 64ch; font-size: 1.05rem; margin: 0; }
+.sg-tag {
+  display: inline-block; margin-bottom: 1rem;
+  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-300);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0.2em 0.7em;
+}
+.sg-section { padding: 1.75rem 0; border-top: 1px solid var(--line); }
+.sg-section > h2 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+.sg-section > p { color: var(--ink-500); margin: 0; max-width: 64ch; }
+.sg-eyebrow {
+  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-300); margin: 0 0 0.5rem;
+}
+.sg-grid {
+  display: grid; gap: 1rem; margin-top: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.sg-swatch { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); }
+.sg-swatch .chip { height: 56px; }
+.sg-swatch .meta { padding: 0.55rem 0.7rem; }
+.sg-swatch .name { font-size: 0.85rem; font-weight: 600; }
+.sg-swatch .val { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-500); }
+.sg-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+.sg-stack { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; max-width: 420px; }
+.sg-type-row { display: flex; align-items: baseline; gap: 1.5rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.sg-type-row .tag { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-300); width: 160px; flex: none; }
+.sg-ts-3xl { font-family: var(--font-display); font-weight: 800; font-size: 2.5rem; letter-spacing: -0.03em; }
+.sg-ts-2xl { font-family: var(--font-display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.02em; }
+.sg-ts-xl  { font-family: var(--font-display); font-weight: 700; font-size: 1.375rem; }
+.sg-ts-base { font-size: 1rem; }
+.sg-ts-sm { font-size: 0.875rem; color: var(--ink-500); }
+.sg-ts-mono { font-family: var(--font-mono); font-size: 0.85rem; }
+.sg-deckdemo {
+  display: grid; gap: 1.5rem; margin-top: 1rem; max-width: 600px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+.sg-tokens {
+  display: grid; grid-template-columns: auto auto 1fr; gap: 0.75rem 1.25rem;
+  align-items: center; margin-top: 1rem; font-size: 0.88rem;
+}
+.sg-tokens code {
+  font-family: var(--font-mono); font-size: 0.78rem; background: var(--paper);
+  border: 1px solid var(--line); padding: 0.1em 0.4em; border-radius: 4px; justify-self: start;
+}
+.sg-tokens .box { width: 36px; height: 24px; border-radius: 6px; border: 1px solid var(--line); }
+
+@media (max-width: 768px) {
+  .sg-deckdemo { grid-template-columns: 1fr; }
+  .sg-type-row { flex-direction: column; gap: 0.1rem; }
+  .sg-type-row .tag { width: auto; }
+}
