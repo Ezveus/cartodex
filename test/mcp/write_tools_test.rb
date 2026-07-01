@@ -53,4 +53,10 @@ class WriteToolsTest < ActiveSupport::TestCase
 
     assert_match(/Error/i, response_text(response))
   end
+
+  test "AddCardToCollectionTool returns a clean error for an invalid quantity" do
+    # honedge collection qty is 1; subtracting via a negative add drives it below 0, tripping Collection's quantity >= 0 validation
+    response = AddCardToCollectionTool.call(card_id: @card.id, quantity: -5, server_context: @context)
+    assert_match(/Error/i, response_text(response))
+  end
 end

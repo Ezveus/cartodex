@@ -3,7 +3,7 @@ class AddCardToCollectionTool < McpTool
   input_schema(
     properties: {
       card_id: { type: "integer", description: "ID of the card to add" },
-      quantity: { type: "integer", description: "How many copies to add (default 1)" }
+      quantity: { type: "integer", minimum: 1, description: "How many copies to add (default 1)" }
     },
     required: [ "card_id" ]
   )
@@ -15,5 +15,7 @@ class AddCardToCollectionTool < McpTool
     text("Added #{quantity}× #{card.name} to your collection (now #{collection.quantity}).")
   rescue ActiveRecord::RecordNotFound
     text("Error: no card with id #{card_id}.")
+  rescue ActiveRecord::RecordInvalid => e
+    text("Error: #{e.message}")
   end
 end

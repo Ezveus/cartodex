@@ -4,7 +4,7 @@ class AddCardToDeckTool < McpTool
     properties: {
       deck_id: { type: "integer", description: "ID of the user's deck" },
       card_id: { type: "integer", description: "ID of the card to add" },
-      quantity: { type: "integer", description: "How many copies to add (default 1)" }
+      quantity: { type: "integer", minimum: 1, description: "How many copies to add (default 1)" }
     },
     required: [ "deck_id", "card_id" ]
   )
@@ -17,5 +17,7 @@ class AddCardToDeckTool < McpTool
     text("Added #{quantity}× #{card.name} to deck “#{deck.name}” (now #{deck_card.quantity}).")
   rescue ActiveRecord::RecordNotFound
     text("Error: unknown deck id #{deck_id} or card id #{card_id} (deck must belong to you).")
+  rescue ActiveRecord::RecordInvalid => e
+    text("Error: #{e.message}")
   end
 end
