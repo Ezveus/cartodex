@@ -8,7 +8,7 @@ class McpTool < MCP::Tool
     # should omit the "_tool" suffix (e.g. "add_card_to_collection"). Strip it
     # here so every subclass gets the client-facing name for free.
     def name_value
-      super&.delete_suffix("_tool")
+      @name_value || super.delete_suffix("_tool")
     end
 
     private
