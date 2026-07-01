@@ -25,6 +25,13 @@ module Decks
 
     private
 
+    TRAINER_SUBTYPE_LABELS = {
+      "Supporter" => "Supporter",
+      "Item" => "Item",
+      "Pokémon Tool" => "Tool",
+      "Stadium" => "Stadium"
+    }.freeze
+
     def header_section
       div(class: "deck-show-header") do
         render Decks::HeaderFrame.new(deck: @deck, editing: @editing)
@@ -79,10 +86,15 @@ module Decks
       div(class: "deck-show-main") do
         card_search
         card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type }
-        %w[Pokémon Trainer Energy].each do |type|
-          group = card_groups[type]
-          next unless group.present?
-          card_type_section(type, group)
+
+        if (group = card_groups["Pokémon"]).present?
+          card_type_section("Pokémon", group)
+        end
+        if (group = card_groups["Trainer"]).present?
+          trainer_section(group)
+        end
+        if (group = card_groups["Energy"]).present?
+          card_type_section("Energy", group)
         end
       end
     end
@@ -102,17 +114,47 @@ module Decks
 
     def card_type_section(type, group)
       div(class: "deck-section") do
-        h2 do
-          plain "#{type} ("
-          span(data: { deck_totals_target: "sectionTotal" }) { group.sum(&:quantity).to_s }
-          plain " — "
-          span(data: { deck_totals_target: "sectionUnique" }) { group.size.to_s }
-          plain " unique)"
+        section_heading(:h2, type, group)
+        card_list(group)
+      end
+    end
+
+    def trainer_section(group)
+      div(class: "deck-section-group") do
+        h2 { "Trainer" }
+        subtype_groups = group.group_by { |dc| dc.card.subtype }
+
+        TRAINER_SUBTYPE_LABELS.each do |subtype, label|
+          subgroup = subtype_groups.delete(subtype)
+          trainer_subtype_section(label, subgroup) if subgroup.present?
         end
-        ul(class: "deck-card-list") do
-          group.sort_by { |dc| dc.card.name }.each do |dc|
-            render Decks::DeckCardItem.new(deck_card: dc, deck_id: @deck.id)
-          end
+
+        other_group = subtype_groups.values.flatten
+        trainer_subtype_section("Other", other_group) if other_group.present?
+      end
+    end
+
+    def trainer_subtype_section(label, group)
+      div(class: "deck-section deck-subsection") do
+        section_heading(:h3, label, group)
+        card_list(group)
+      end
+    end
+
+    def section_heading(tag, label, group)
+      send(tag) do
+        plain "#{label} ("
+        span(data: { deck_totals_target: "sectionTotal" }) { group.sum(&:quantity).to_s }
+        plain " — "
+        span(data: { deck_totals_target: "sectionUnique" }) { group.size.to_s }
+        plain " unique)"
+      end
+    end
+
+    def card_list(group)
+      ul(class: "deck-card-list") do
+        group.sort_by { |dc| dc.card.name }.each do |dc|
+          render Decks::DeckCardItem.new(deck_card: dc, deck_id: @deck.id)
         end
       end
     end

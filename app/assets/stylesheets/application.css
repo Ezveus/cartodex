@@ -1054,6 +1054,29 @@ textarea.form-input {
   padding-bottom: 0.5rem;
 }
 
+.deck-section-group {
+  margin-bottom: 1.5rem;
+}
+
+.deck-section-group h2 {
+  font-size: 1.1rem;
+  color: var(--secondary-color);
+  border-bottom: 2px solid var(--secondary-color);
+  padding-bottom: 0.5rem;
+}
+
+.deck-subsection {
+  margin-left: 1rem;
+  margin-bottom: 1rem;
+}
+
+.deck-subsection h3 {
+  font-size: 0.95rem;
+  color: var(--secondary-color);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.35rem;
+}
+
 .deck-card-list {
   list-style: none;
   margin: 0;
@@ -2338,9 +2361,9 @@ h1, h2, h3, h4 {
 
 /* — Section heading accents: ink instead of cartoon red — */
 .dashboard-card h2, .auth-container h1, .deck-item h2, .card-info-section h2,
-.deck-section h2 { color: var(--ink-900); }
+.deck-section h2, .deck-section-group h2, .deck-subsection h3 { color: var(--ink-900); }
 .card-info-section h2 { border-bottom-color: var(--line); }
-.deck-section h2 { border-bottom-color: var(--water); }
+.deck-section h2, .deck-section-group h2, .deck-subsection h3 { border-bottom-color: var(--water); }
 .sets-block-name { color: var(--ink-500); border-bottom-color: var(--line); }
 
 /* — Buttons — */
