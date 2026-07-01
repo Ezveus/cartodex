@@ -45,4 +45,39 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     assert_match(/Error/i, response.content.first[:text])
   end
+
+  test "SearchCardsTool finds a card when set_code is given in lowercase" do
+    response = SearchCardsTool.call(query: "honed", set_code: "por", server_context: @context)
+    names = payload(response).map { |c| c["name"] }
+
+    assert_includes names, "Honedge"
+  end
+
+  test "SearchCardsTool finds a card when set_code is given in uppercase" do
+    response = SearchCardsTool.call(query: "honed", set_code: "POR", server_context: @context)
+    names = payload(response).map { |c| c["name"] }
+
+    assert_includes names, "Honedge"
+  end
+
+  test "SearchCardsTool clamps a limit of 0 up to at least 1 result" do
+    response = SearchCardsTool.call(query: "honed", limit: 0, server_context: @context)
+    results = payload(response)
+
+    assert_operator results.size, :>=, 1
+    assert_operator results.size, :<=, 1
+  end
+
+  test "ListCollectionTool with a matching query returns that entry" do
+    response = ListCollectionTool.call(query: "honed", server_context: @context)
+    card_ids = payload(response).map { |c| c["card_id"] }
+
+    assert_includes card_ids, cards(:honedge).id
+  end
+
+  test "ListCollectionTool with a non-matching query returns an empty array" do
+    response = ListCollectionTool.call(query: "zzz_no_such_card", server_context: @context)
+
+    assert_equal [], payload(response)
+  end
 end

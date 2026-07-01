@@ -12,8 +12,8 @@ class SearchCardsTool < McpTool
   )
 
   def self.call(query:, server_context:, set_code: nil, limit: 20)
-    scope = Card.where("name LIKE ?", "%#{query}%")
-    scope = scope.joins(:card_set).where(card_sets: { code: set_code }) if set_code.present?
+    scope = Card.where("cards.name LIKE ?", "%#{query}%")
+    scope = scope.joins(:card_set).where("LOWER(card_sets.code) = ?", set_code.downcase) if set_code.present?
     cards = scope.limit(limit.to_i.clamp(1, MAX_LIMIT)).map do |card|
       { id: card.id, name: card.name, set_name: card.set_name, set_number: card.set_number, card_type: card.card_type }
     end
