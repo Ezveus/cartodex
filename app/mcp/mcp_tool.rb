@@ -3,6 +3,14 @@
 # and building text responses.
 class McpTool < MCP::Tool
   class << self
+    # MCP::Tool::name_value defaults to the full snake_cased class name (e.g.
+    # "add_card_to_collection_tool"), but the wire protocol name clients call
+    # should omit the "_tool" suffix (e.g. "add_card_to_collection"). Strip it
+    # here so every subclass gets the client-facing name for free.
+    def name_value
+      super&.delete_suffix("_tool")
+    end
+
     private
 
     def current_user(server_context)
