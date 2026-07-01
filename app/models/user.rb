@@ -4,6 +4,8 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable,
          :recoverable, :rememberable, :validatable
 
+  has_secure_token :api_token
+
   has_many :collections, dependent: :destroy
   has_many :cards, through: :collections
   has_many :decks, dependent: :destroy
