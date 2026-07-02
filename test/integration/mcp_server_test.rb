@@ -42,13 +42,7 @@ class McpServerTest < ActionDispatch::IntegrationTest
   end
 
   test "throttles requests past the configured rate limit" do
-    # The test environment's cache store is :null_store (config/environments/test.rb),
-    # which makes `rate_limit` a no-op. Swap in a real store for the duration of
-    # this test so the limiter's `store.increment` calls actually count requests.
-    original_cache = Rails.cache
-    Rails.cache = ActiveSupport::Cache::MemoryStore.new
-
-    begin
+    with_real_rate_limit_store do
       limit = Mcp::ServerController::RATE_LIMIT_TO
 
       limit.times do
@@ -59,8 +53,44 @@ class McpServerTest < ActionDispatch::IntegrationTest
       post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
 
       assert_response :too_many_requests
-    ensure
-      Rails.cache = original_cache
     end
+  end
+
+  test "throttles unauthenticated requests before authentication rejects them" do
+    with_real_rate_limit_store do
+      limit = Mcp::ServerController::RATE_LIMIT_TO
+
+      limit.times do
+        post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+        assert_response :unauthorized
+      end
+
+      post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+
+      # If this returns :unauthorized instead of :too_many_requests, the rate
+      # limiter is being skipped for unauthenticated requests (i.e. it runs
+      # after authenticate_token! halts the callback chain), which means
+      # invalid-token spam is never throttled.
+      assert_response :too_many_requests
+    end
+  end
+
+  private
+
+  # The test environment's cache store is :null_store (config/environments/test.rb),
+  # which makes `rate_limit` a no-op. Swap in a real store for the duration of
+  # the block so the limiter's `store.increment` calls actually count requests.
+  #
+  # Safe only because tests run in separate forked processes
+  # (parallelize(workers: :number_of_processors) in test_helper.rb) rather than
+  # threads within one process; a thread-based test runner would need each
+  # thread isolated (e.g. a store keyed per-thread) to avoid cross-test bleed.
+  def with_real_rate_limit_store
+    original_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+
+    yield
+  ensure
+    Rails.cache = original_cache
   end
 end
