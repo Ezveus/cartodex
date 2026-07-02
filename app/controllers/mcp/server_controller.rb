@@ -11,7 +11,20 @@ module Mcp
       ListDeckCardsTool
     ].freeze
 
+    # Proxies to Rails.cache at call-time (rather than capturing it once at
+    # class-load, as the `rate_limit` macro's `cache_store` default would),
+    # so tests can swap Rails.cache for a real store and exercise throttling.
+    RATE_LIMIT_STORE = Module.new do
+      def self.increment(...)
+        Rails.cache.increment(...)
+      end
+    end
+
+    RATE_LIMIT_TO = 30
+    RATE_LIMIT_WITHIN = 1.minute
+
     before_action :authenticate_token!
+    rate_limit to: RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN, store: RATE_LIMIT_STORE, only: :handle
 
     def handle
       server = MCP::Server.new(
@@ -31,7 +44,7 @@ module Mcp
 
     def authenticate_token!
       token = request.headers["Authorization"].to_s.delete_prefix("Bearer ").strip
-      @current_user = User.find_by(api_token: token) if token.present?
+      @current_user = User.authenticate_api_token(token)
       head :unauthorized unless @current_user
     end
   end
