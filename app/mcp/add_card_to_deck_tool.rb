@@ -10,6 +10,8 @@ class AddCardToDeckTool < McpTool
   )
 
   def self.call(deck_id:, card_id:, server_context:, quantity: 1)
+    return quantity_error(quantity) unless positive_quantity?(quantity)
+
     user = current_user(server_context)
     deck = find_deck!(user, deck_id)
     card = find_card!(card_id)

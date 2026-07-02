@@ -54,9 +54,19 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_match(/Error/i, response_text(response))
   end
 
-  test "AddCardToCollectionTool returns a clean error for an invalid quantity" do
-    # honedge collection qty is 1; subtracting via a negative add drives it below 0, tripping Collection's quantity >= 0 validation
-    response = AddCardToCollectionTool.call(card_id: @card.id, quantity: -5, server_context: @context)
-    assert_match(/Error/i, response_text(response))
+  test "AddCardToCollectionTool rejects a non-positive quantity without decrementing" do
+    # A direct call bypasses the JSON-schema minimum, so the tool guards explicitly:
+    # a negative quantity must error rather than silently decrement the collection.
+    response = AddCardToCollectionTool.call(card_id: @card.id, quantity: -1, server_context: @context)
+
+    assert_match(/positive integer/i, response_text(response))
+    assert_equal 1, @user.collections.find_by(card: @card).quantity # unchanged
+  end
+
+  test "AddCardToDeckTool rejects a non-positive quantity without touching the deck" do
+    response = AddCardToDeckTool.call(deck_id: @deck.id, card_id: @card.id, quantity: 0, server_context: @context)
+
+    assert_match(/positive integer/i, response_text(response))
+    assert_equal 1, @deck.deck_cards.find_by(card: @card).quantity # unchanged
   end
 end

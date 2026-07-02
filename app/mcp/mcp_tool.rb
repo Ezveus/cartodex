@@ -28,5 +28,16 @@ class McpTool < MCP::Tool
     def text(string)
       MCP::Tool::Response.new([ { type: "text", text: string } ])
     end
+
+    # Guard for write tools: the JSON schema already rejects quantity < 1 on
+    # real MCP calls, but a direct in-process call bypasses that, so tools that
+    # only add copies validate explicitly before touching the database.
+    def positive_quantity?(quantity)
+      quantity.is_a?(Integer) && quantity.positive?
+    end
+
+    def quantity_error(quantity)
+      text("Error: quantity must be a positive integer (got #{quantity.inspect}).")
+    end
   end
 end

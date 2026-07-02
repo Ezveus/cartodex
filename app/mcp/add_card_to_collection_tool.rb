@@ -9,6 +9,8 @@ class AddCardToCollectionTool < McpTool
   )
 
   def self.call(card_id:, server_context:, quantity: 1)
+    return quantity_error(quantity) unless positive_quantity?(quantity)
+
     user = current_user(server_context)
     card = find_card!(card_id)
     collection = Collections::CardAdder.call(user: user, card: card, quantity: quantity)
