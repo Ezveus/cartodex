@@ -7,11 +7,13 @@ module Decks
     end
 
     def call
-      deck_card = @deck.deck_cards.find_or_initialize_by(card: @card)
-      deck_card.quantity = deck_card.quantity.to_i + @quantity
-      deck_card.owned_copies = target_owned_copies(deck_card) if @deck.physical?
-      deck_card.save!
-      deck_card
+      serialized_transaction do
+        deck_card = @deck.deck_cards.find_or_initialize_by(card: @card)
+        deck_card.quantity = deck_card.quantity.to_i + @quantity
+        deck_card.owned_copies = target_owned_copies(deck_card) if @deck.physical?
+        deck_card.save!
+        deck_card
+      end
     end
 
     private

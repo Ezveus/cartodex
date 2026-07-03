@@ -163,18 +163,30 @@ you lack the exact one you asked for.
 Implementation note: querying equivalents is a `collections` → `cards` join filtered by the target
 card's `fingerprint`; ensure `cards.fingerprint` is indexed (add the index if absent).
 
-## Concurrency (accepted limitation)
+## Concurrency
 
 The mutating services (`Decks::CardAdder`, `Decks::OwnedCopiesSetter`,
-`Decks::OwnedCopiesReallocator`) compute availability (a read) and then write, without
-pessimistic row locking. Two concurrent requests could each read the same availability snapshot
-and both write, jointly pushing `committed(X)` above `owned(X)` without a collection decrease.
-This is accepted for now: the app is single-tenant, runs on SQLite (single-writer, serialized
-writes), and the MCP endpoint is rate-limited — so the interleaving is very unlikely in practice,
-and any resulting over-allocation is the same tolerated-and-surfaced state a collection decrease
-produces (visible via `list_over_allocations`). If the app ever becomes multi-tenant or moves off
-SQLite, wrap these services in a transaction that locks the relevant `collections` / `deck_cards`
-rows before the availability read.
+`Decks::OwnedCopiesReallocator`) each run their availability read + bounds check + write inside
+`ApplicationService#serialized_transaction`. On SQLite, `lock!`/row locks are a no-op (SQLite has
+no `SELECT ... FOR UPDATE`), so the serialization instead comes from `BEGIN IMMEDIATE`
+(`ActiveRecord::Base.transaction(isolation: :immediate)`): it takes SQLite's single writer lock
+up front, before the availability read runs, so a concurrent call blocks until the first
+transaction commits and always sees the post-write state. This closes the race described above —
+two concurrent calls can no longer read the same free pool and jointly over-commit.
+
+**Caveat:** `isolation: :immediate` raises `ActiveRecord::TransactionIsolationError` if a
+transaction is already open, which is exactly what happens under the test suite's transactional
+fixtures (and any caller that wraps the service in its own transaction). `serialized_transaction`
+detects this (`ActiveRecord::Base.connection.transaction_open?`) and falls back to a nested
+savepoint (`transaction(requires_new: true)`) in that case — correct single-threaded/in-test
+behavior, but without the extra write-lock serialization. True concurrent serialization therefore
+can't be exercised by the (transactional) test suite; it only takes effect for real outside a test
+transaction.
+
+**Future note:** if the app moves off SQLite (e.g. to Postgres or MySQL), `isolation: :immediate`
+is a SQLite-specific mechanism and should be revisited — the equivalent there is pessimistic row
+locking (`SELECT ... FOR UPDATE` via `lock!`) on the relevant `collections` / `deck_cards` rows
+before the availability read, rather than an upfront whole-database write lock.
 
 ## Out of scope
 
@@ -184,6 +196,15 @@ rows before the availability read.
 - Foil-aware allocation (`collections.foil` ignored; a card is identified by its printing / `card_id`).
 - Deck legality (e.g. max 4-of) enforcement.
 - API token expiry (tracked separately).
+
+## Known seams
+
+- **`Deck#has_proxies` vs. `owned_copies`.** `has_proxies` is a manually-set, UI-surfaced boolean
+  flag on `Deck` (predates this design), while proxy state is now also derivable per-card from
+  `deck_cards.owned_copies` (`proxies = quantity - owned_copies`). These are two independent
+  sources of truth that can diverge (e.g. a deck can have `has_proxies: false` while still holding
+  cards with `owned_copies < quantity`). Deriving `has_proxies` from `owned_copies` (and updating
+  the UI accordingly) is deferred to a future iteration.
 
 ## Testing
 

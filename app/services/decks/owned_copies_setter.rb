@@ -14,14 +14,16 @@ module Decks
     def call
       raise NotPhysicalError, "deck is not physical" unless @deck.physical?
 
-      deck_card = @deck.deck_cards.find_by!(card: @card)
-      max_owned = [ deck_card.quantity, availability.available ].min
-      unless @owned_copies.is_a?(Integer) && @owned_copies.between?(0, max_owned)
-        raise ArgumentError, "owned_copies must be between 0 and #{max_owned}"
-      end
+      serialized_transaction do
+        deck_card = @deck.deck_cards.find_by!(card: @card)
+        max_owned = [ deck_card.quantity, availability.available ].min
+        unless @owned_copies.is_a?(Integer) && @owned_copies.between?(0, max_owned)
+          raise ArgumentError, "owned_copies must be between 0 and #{max_owned}"
+        end
 
-      deck_card.update!(owned_copies: @owned_copies)
-      deck_card
+        deck_card.update!(owned_copies: @owned_copies)
+        deck_card
+      end
     end
 
     private
