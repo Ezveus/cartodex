@@ -88,4 +88,17 @@ class WriteToolsTest < ActiveSupport::TestCase
 
     assert_equal 1, physical.deck_cards.find_by(card: @card).owned_copies
   end
+
+  test "ReallocateOwnedCopiesTool moves reals between physical decks" do
+    @user.collections.find_by(card: @card).update!(quantity: 3)
+    a = @user.decks.create!(name: "A", physical: true)
+    b = @user.decks.create!(name: "B", physical: true)
+    a.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
+    b.deck_cards.create!(card: @card, quantity: 4, owned_copies: 0)
+
+    ReallocateOwnedCopiesTool.call(from_deck_id: a.id, to_deck_id: b.id, card_id: @card.id, quantity: 1, server_context: @context)
+
+    assert_equal 2, a.deck_cards.find_by(card: @card).owned_copies
+    assert_equal 1, b.deck_cards.find_by(card: @card).owned_copies
+  end
 end

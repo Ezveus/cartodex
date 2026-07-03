@@ -8,7 +8,8 @@ module Mcp
       ListDecksTool,
       ListCollectionTool,
       ListDeckCardsTool,
-      SetDeckCardOwnedCopiesTool
+      SetDeckCardOwnedCopiesTool,
+      ReallocateOwnedCopiesTool
     ].freeze
 
     # Proxies to Rails.cache at call-time (rather than capturing it once at
