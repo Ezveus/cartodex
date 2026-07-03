@@ -42,5 +42,12 @@ module Decks
         Decks::OwnedCopiesReallocator.call(from_deck: @deck_a, to_deck: live, card: @card, quantity: 1)
       end
     end
+
+    test "rejects reallocating a deck to itself" do
+      assert_raises(ArgumentError) do
+        Decks::OwnedCopiesReallocator.call(from_deck: @deck_a, to_deck: @deck_a, card: @card, quantity: 1)
+      end
+      assert_equal 3, @deck_a.deck_cards.find_by(card: @card).owned_copies # unchanged
+    end
   end
 end

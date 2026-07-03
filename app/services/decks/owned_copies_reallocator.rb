@@ -16,6 +16,7 @@ module Decks
     def call
       raise NotPhysicalError, "both decks must be physical" unless @from_deck.physical? && @to_deck.physical?
       raise ArgumentError, "quantity must be a positive integer" unless @quantity.is_a?(Integer) && @quantity.positive?
+      raise ArgumentError, "from_deck and to_deck must differ" if @from_deck.id == @to_deck.id
 
       ActiveRecord::Base.transaction do
         from = @from_deck.deck_cards.find_by!(card: @card)
