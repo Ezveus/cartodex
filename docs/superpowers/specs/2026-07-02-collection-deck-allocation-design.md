@@ -163,6 +163,19 @@ you lack the exact one you asked for.
 Implementation note: querying equivalents is a `collections` → `cards` join filtered by the target
 card's `fingerprint`; ensure `cards.fingerprint` is indexed (add the index if absent).
 
+## Concurrency (accepted limitation)
+
+The mutating services (`Decks::CardAdder`, `Decks::OwnedCopiesSetter`,
+`Decks::OwnedCopiesReallocator`) compute availability (a read) and then write, without
+pessimistic row locking. Two concurrent requests could each read the same availability snapshot
+and both write, jointly pushing `committed(X)` above `owned(X)` without a collection decrease.
+This is accepted for now: the app is single-tenant, runs on SQLite (single-writer, serialized
+writes), and the MCP endpoint is rate-limited — so the interleaving is very unlikely in practice,
+and any resulting over-allocation is the same tolerated-and-surfaced state a collection decrease
+produces (visible via `list_over_allocations`). If the app ever becomes multi-tenant or moves off
+SQLite, wrap these services in a transaction that locks the relevant `collections` / `deck_cards`
+rows before the availability read.
+
 ## Out of scope
 
 - Web UI and JSON API rework (must keep compiling/passing; the existing `Api::DeckCardsController`
