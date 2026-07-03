@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_02_134121) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_053406) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -83,6 +83,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_02_134121) do
     t.datetime "updated_at", null: false
     t.string "weakness"
     t.index ["card_set_id"], name: "index_cards_on_card_set_id"
+    t.index ["fingerprint"], name: "index_cards_on_fingerprint"
     t.index ["name", "fingerprint"], name: "index_cards_on_name_and_fingerprint"
     t.index ["pokemon_subtype_id"], name: "index_cards_on_pokemon_subtype_id"
   end
@@ -102,6 +103,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_02_134121) do
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
+    t.integer "owned_copies", default: 0, null: false
     t.integer "quantity"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_deck_cards_on_card_id"

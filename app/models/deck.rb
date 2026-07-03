@@ -18,6 +18,7 @@ class Deck < ApplicationRecord
   validates :other_format_name, presence: true, if: :other?
 
   before_validation :clear_inapplicable_classification
+  after_update :release_owned_copies_if_not_physical
 
   # Human-readable format label. For the "other" format the user-supplied
   # name takes precedence when present.
@@ -92,5 +93,13 @@ class Deck < ApplicationRecord
 
   def merge_counts!(target, source)
     source.each { |k, v| target[k] += v }
+  end
+
+  # When a deck stops being physical, its real (owned) copies are released back
+  # to the collection's available pool.
+  def release_owned_copies_if_not_physical
+    return unless saved_change_to_physical? && !physical?
+
+    deck_cards.update_all(owned_copies: 0)
   end
 end

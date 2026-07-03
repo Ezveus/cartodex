@@ -87,4 +87,13 @@ class DeckTest < ActiveSupport::TestCase
 
     assert_equal "Expanded", deck.format_label
   end
+
+  test "flipping physical to false releases owned copies" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+
+    deck.update!(physical: false)
+
+    assert_equal 0, deck.deck_cards.sum(:owned_copies)
+  end
 end
