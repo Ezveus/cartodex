@@ -67,4 +67,15 @@ class WriteToolsTest < ActiveSupport::TestCase
 
     assert_match(/must be/i, response_text(response))
   end
+
+  test "AddCardToDeckTool backs reals on a physical deck" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    @user.collections.find_by(card: @card).update!(quantity: 2) # honedge owned 2
+
+    AddCardToDeckTool.call(deck_id: physical.id, card_id: @card.id, quantity: 3, server_context: @context)
+
+    dc = physical.deck_cards.find_by(card: @card)
+    assert_equal 3, dc.quantity
+    assert_equal 2, dc.owned_copies
+  end
 end
