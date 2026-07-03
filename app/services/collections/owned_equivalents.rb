@@ -14,7 +14,7 @@ module Collections
       return [] if @card.fingerprint.blank?
 
       equivalent_ids = Card.where(fingerprint: @card.fingerprint).select(:id)
-      collections = @user.collections.where(card_id: equivalent_ids).includes(:card)
+      collections = @user.collections.with_cards.where(card_id: equivalent_ids).includes(:card)
 
       collections.filter_map do |collection|
         next if @excluding_card && collection.card_id == @card.id

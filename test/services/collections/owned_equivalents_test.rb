@@ -33,5 +33,16 @@ module Collections
       other_user = users(:two)
       assert_empty Collections::OwnedEquivalents.call(user: other_user, card: @asc)
     end
+
+    test "excludes printings owned at quantity zero" do
+      # Setup bumps budew_pre to quantity 2 for every test; reset it back to the
+      # fixture-defined 0 (matching budew_asc_one) to prove zero-quantity rows
+      # are excluded, not just unbumped ones.
+      @user.collections.find_by!(card: @pre).update!(quantity: 0)
+
+      result = Collections::OwnedEquivalents.call(user: @user, card: @asc)
+
+      assert_empty result
+    end
   end
 end
