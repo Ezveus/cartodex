@@ -32,20 +32,6 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_equal 1, @user.collections.find_by(card: @card).quantity
   end
 
-  test "MoveCardToDeckTool transfers from collection to deck" do
-    MoveCardToDeckTool.call(deck_id: @deck.id, card_id: @card.id, quantity: 1, server_context: @context)
-
-    assert_equal 0, @user.collections.find_by(card: @card).quantity
-    assert_equal 2, @deck.deck_cards.find_by(card: @card).quantity
-  end
-
-  test "MoveCardFromDeckTool transfers from deck back to collection" do
-    MoveCardFromDeckTool.call(deck_id: @deck.id, card_id: @card.id, quantity: 1, server_context: @context)
-
-    assert_equal 2, @user.collections.find_by(card: @card).quantity
-    assert_nil @deck.deck_cards.find_by(card: @card)
-  end
-
   test "deck tools reject a deck the user does not own" do
     other_deck = decks(:two) # user two
 

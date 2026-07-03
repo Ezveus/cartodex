@@ -3,8 +3,6 @@ module Mcp
     TOOLS = [
       AddCardToCollectionTool,
       AddCardToDeckTool,
-      MoveCardToDeckTool,
-      MoveCardFromDeckTool,
       SearchCardsTool,
       ListDecksTool,
       ListCollectionTool,
