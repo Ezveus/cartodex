@@ -1,7 +1,7 @@
 # Collection ↔ Deck Allocation (real copies vs proxies) — Design
 
 **Date:** 2026-07-02
-**Status:** Draft — awaiting user review
+**Status:** Approved
 **Supersedes:** the transfer semantics of `2026-07-01-collection-deck-mcp-design.md` (the `move_card_to_deck` / `move_card_from_deck` "transfer" model is replaced by the allocation model below).
 
 ## Goal
@@ -36,7 +36,7 @@ copies committed across all physical decks can never exceed what you own.
 6. **Move between decks = pure conversion.** Moving a real copy from deck A to deck B does not
    change either deck's size: in A the freed slot becomes a proxy, in B a proxy slot becomes real.
    The model therefore stores, per `deck_card`, a **total quantity** and a **number of real copies**.
-7. **`physical` alone drives allocation** (assumption — flagged; confirm on review). `physical=true`
+7. **`physical` alone drives allocation** (confirmed). `physical=true`
    ⇒ real/proxy backing and collection accounting apply, regardless of `tcg_live`. `physical=false`
    ⇒ no backing ever (`owned_copies` forced to 0), and you cannot pull from the collection. `tcg_live`
    is an orthogonal label with no effect on allocation. `physical` and `tcg_live` remain independent
