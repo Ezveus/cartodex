@@ -133,7 +133,35 @@ Business logic lives in `app/services/` (`ApplicationService.call`); MCP tools s
 **Read:** `search_cards` (kept), `list_decks` (kept; add `physical`/`tcg_live` to output),
 `list_collection` (extended → `{card_id, name, owned, committed, available}`),
 `list_deck_cards` (extended → per card `{quantity, owned_copies, proxies}`),
-`list_over_allocations` (new → cards where `committed > owned`, with the contributing decks).
+`list_over_allocations` (new → cards where `committed > owned`, with the contributing decks),
+`suggest_owned_equivalents` (new → owned printings equivalent to a given card; see below).
+
+## Card equivalence & substitution proposals (advisory)
+
+Two printings are **equivalent** (physically interchangeable in a deck slot) when they share the same
+`Card#fingerprint` — the functional identity already computed for dedup (name + hp + type + attacks +
+abilities for Pokémon; name for Trainer/Energy). So Budew ASC #16, PRE #4, and ASC #221 are all
+equivalent; set/number/rarity/illustration are irrelevant to equivalence.
+
+Equivalence is **purely advisory**. It does **not** change the allocation model: `owned_copies`,
+`committed`, `available`, and the invariant all remain **per exact printing (`card_id`)**. The system
+never silently substitutes one printing for another. It only *proposes* printings you already own when
+you lack the exact one you asked for.
+
+- **`suggest_owned_equivalents(card_id)`** (read tool) → every printing the user **owns** whose card
+  shares the given card's fingerprint, each as `{card_id, set_name, set_number, rarity, owned, available}`
+  where `available = owned(printing) − committed(printing)`. **All** owned equivalents are listed with
+  **no imposed order**, including those fully committed elsewhere (`available = 0`, flagged as such).
+  Empty when the user owns no equivalent.
+- **Inline in `add_card_to_deck`:** when adding a card to a **physical** deck leaves some copies as
+  proxies for lack of an owned copy of that exact printing, and the user owns one or more equivalents
+  (other printings, same fingerprint), the tool's text response appends a suggestion listing those
+  equivalents (same fields as above). The add itself is unchanged — proxies are still created; the
+  suggestion just tells you that adding an owned printing instead (or freeing an equivalent from
+  another deck) would let you back real copies.
+
+Implementation note: querying equivalents is a `collections` → `cards` join filtered by the target
+card's `fingerprint`; ensure `cards.fingerprint` is indexed (add the index if absent).
 
 ## Out of scope
 
@@ -160,6 +188,11 @@ Service/model level (Minitest, fixtures):
   state over-allocated (not blocked), and `list_over_allocations` reports it; a later
   `set_deck_card_owned_copies` clears it.
 - **Medium change:** flipping `physical` to false zeroes `owned_copies`.
+- **Equivalence (advisory):** `suggest_owned_equivalents` returns owned printings sharing the
+  fingerprint (e.g. Budew PRE #4, ASC #221 when querying ASC #16) with per-printing `owned`/`available`,
+  includes fully-committed ones flagged `available: 0`, excludes non-equivalent cards, and is empty when
+  none are owned; `add_card_to_deck` on a physical deck that creates proxies appends the suggestion when
+  equivalents are owned and appends nothing when none are.
 - **Cross-user isolation** for every tool.
 
 ## Worked example (the Kirlia SIT scenario)
