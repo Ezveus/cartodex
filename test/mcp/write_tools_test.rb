@@ -78,4 +78,14 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_equal 3, dc.quantity
     assert_equal 2, dc.owned_copies
   end
+
+  test "SetDeckCardOwnedCopiesTool adjusts the real/proxy split" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    @user.collections.find_by(card: @card).update!(quantity: 3)
+    physical.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
+
+    SetDeckCardOwnedCopiesTool.call(deck_id: physical.id, card_id: @card.id, owned_copies: 1, server_context: @context)
+
+    assert_equal 1, physical.deck_cards.find_by(card: @card).owned_copies
+  end
 end
