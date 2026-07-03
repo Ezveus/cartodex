@@ -11,7 +11,8 @@ module Mcp
       ListOverAllocationsTool,
       SetDeckCardOwnedCopiesTool,
       ReallocateOwnedCopiesTool,
-      SetDeckCardQuantityTool
+      SetDeckCardQuantityTool,
+      SuggestOwnedEquivalentsTool
     ].freeze
 
     # Proxies to Rails.cache at call-time (rather than capturing it once at

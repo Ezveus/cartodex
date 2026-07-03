@@ -119,4 +119,13 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     assert_includes card_ids, card.id
   end
+
+  test "SuggestOwnedEquivalentsTool lists owned equivalent printings" do
+    @user.collections.find_or_create_by!(card: cards(:budew_pre)).update!(quantity: 2)
+
+    response = SuggestOwnedEquivalentsTool.call(card_id: cards(:budew_asc).id, server_context: @context)
+    card_ids = payload(response).map { |e| e["card_id"] }
+
+    assert_includes card_ids, cards(:budew_pre).id
+  end
 end

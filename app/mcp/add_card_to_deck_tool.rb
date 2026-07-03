@@ -16,10 +16,20 @@ class AddCardToDeckTool < McpTool
     deck = find_deck!(user, deck_id)
     card = find_card!(card_id)
     deck_card = Decks::CardAdder.call(deck: deck, card: card, quantity: quantity)
-    text("Added #{quantity}× #{card.name} to deck “#{deck.name}” (now #{deck_card.quantity}).")
+    message = "Added #{quantity}× #{card.name} to deck “#{deck.name}” (now #{deck_card.quantity}: #{deck_card.owned_copies} real, #{deck_card.quantity - deck_card.owned_copies} proxy)."
+    message += equivalents_hint(user, card) if deck.physical? && deck_card.quantity > deck_card.owned_copies
+    text(message)
   rescue ActiveRecord::RecordNotFound
     text("Error: unknown deck id #{deck_id} or card id #{card_id} (deck must belong to you).")
   rescue ActiveRecord::RecordInvalid => e
     text("Error: #{e.message}")
   end
+
+  def self.equivalents_hint(user, card)
+    equivalents = Collections::OwnedEquivalents.call(user: user, card: card, excluding_card: true)
+    return "" if equivalents.empty?
+
+    " You own equivalent printings you could back real copies with instead: #{equivalents.to_json}"
+  end
+  private_class_method :equivalents_hint
 end

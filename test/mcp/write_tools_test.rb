@@ -110,4 +110,15 @@ class WriteToolsTest < ActiveSupport::TestCase
 
     assert_nil physical.deck_cards.find_by(card: @card)
   end
+
+  test "AddCardToDeckTool suggests owned equivalents when a physical add makes proxies" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    # own an equivalent printing (budew_pre) but not the exact one (budew_asc)
+    @user.collections.find_or_create_by!(card: cards(:budew_pre)).update!(quantity: 2)
+
+    response = AddCardToDeckTool.call(deck_id: physical.id, card_id: cards(:budew_asc).id, quantity: 2, server_context: @context)
+
+    assert_match(/equivalent/i, response_text(response))
+    assert_match(/Budew/, response_text(response))
+  end
 end
