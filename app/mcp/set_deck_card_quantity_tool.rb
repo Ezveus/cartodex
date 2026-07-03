@@ -23,5 +23,7 @@ class SetDeckCardQuantityTool < McpTool
     text("Error: unknown deck id #{deck_id} or card id #{card_id} (deck must belong to you).")
   rescue ActiveRecord::RecordInvalid => e
     text("Error: #{e.message}")
+  rescue ArgumentError => e
+    text("Error: #{e.message}")
   end
 end

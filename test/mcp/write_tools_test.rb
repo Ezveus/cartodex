@@ -111,6 +111,16 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_nil physical.deck_cards.find_by(card: @card)
   end
 
+  test "SetDeckCardQuantityTool returns a clean error for non-integer quantity" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical.deck_cards.create!(card: @card, quantity: 2)
+
+    response = SetDeckCardQuantityTool.call(deck_id: physical.id, card_id: @card.id, quantity: "abc", server_context: @context)
+
+    assert_match(/must be an integer/i, response_text(response))
+    assert_equal 2, physical.deck_cards.find_by(card: @card).quantity # not destroyed
+  end
+
   test "AddCardToDeckTool suggests owned equivalents when a physical add makes proxies" do
     physical = @user.decks.create!(name: "Phys", physical: true)
     # own an equivalent printing (budew_pre) but not the exact one (budew_asc)

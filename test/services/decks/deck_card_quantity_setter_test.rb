@@ -27,5 +27,12 @@ module Decks
       assert_equal 6, dc.quantity
       assert_equal 3, dc.owned_copies # unchanged, no greedy backing
     end
+
+    test "rejects non-integer quantity without destroying the deck_card" do
+      assert_raises(ArgumentError) do
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, quantity: "abc")
+      end
+      assert_equal 4, @deck.deck_cards.find_by(card: @card).quantity # unchanged, not destroyed
+    end
   end
 end

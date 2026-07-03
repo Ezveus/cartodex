@@ -10,9 +10,11 @@ module Decks
     end
 
     def call
+      raise ArgumentError, "quantity must be an integer" unless @quantity.is_a?(Integer)
+
       deck_card = @deck.deck_cards.find_by(card: @card)
 
-      if @quantity.to_i <= 0
+      if @quantity <= 0
         deck_card&.destroy!
         return nil
       end
