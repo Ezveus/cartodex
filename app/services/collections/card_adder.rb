@@ -7,10 +7,12 @@ module Collections
     end
 
     def call
-      collection = @user.collections.find_or_initialize_by(card: @card)
-      collection.quantity = collection.quantity.to_i + @quantity
-      collection.save!
-      collection
+      serialized_transaction do
+        collection = @user.collections.find_or_initialize_by(card: @card)
+        collection.quantity = collection.quantity.to_i + @quantity
+        collection.save!
+        collection
+      end
     end
   end
 end

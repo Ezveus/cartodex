@@ -21,5 +21,13 @@ module Collections
 
       assert_equal 4, collection.quantity
     end
+
+    test "sequential adds accumulate the owned quantity" do
+      user = users(:two)
+      card = cards(:trainer_card)
+      Collections::CardAdder.call(user: user, card: card, quantity: 2)
+      collection = Collections::CardAdder.call(user: user, card: card, quantity: 3)
+      assert_equal 5, collection.quantity
+    end
   end
 end
