@@ -101,4 +101,13 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_equal 2, a.deck_cards.find_by(card: @card).owned_copies
     assert_equal 1, b.deck_cards.find_by(card: @card).owned_copies
   end
+
+  test "SetDeckCardQuantityTool removes the card when quantity is 0" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical.deck_cards.create!(card: @card, quantity: 2)
+
+    SetDeckCardQuantityTool.call(deck_id: physical.id, card_id: @card.id, quantity: 0, server_context: @context)
+
+    assert_nil physical.deck_cards.find_by(card: @card)
+  end
 end
