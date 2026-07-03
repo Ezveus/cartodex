@@ -20,7 +20,7 @@ bin/brakeman --no-pager                      # Security scan
 bin/importmap audit                          # JS dependency audit
 ```
 
-CI runs four checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f github`, `bin/rails db:test:prepare test test:system`) then deploys master to production via Kamal when they pass. Kamal config lives in `config/deploy.yml` and `.kamal/`; `bin/kamal` is the deploy CLI. `bin/jobs` runs the Solid Queue worker locally.
+CI runs four checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f github`, `bin/rails db:test:prepare test test:system`) on every push and PR. Production deploy via Kamal is **manual**: trigger the workflow with `workflow_dispatch` (Actions → CI → Run workflow, or `gh workflow run ci.yml`), which re-runs the checks and deploys only if they pass. Kamal config lives in `config/deploy.yml` and `.kamal/`; `bin/kamal` is the deploy CLI. `bin/jobs` runs the Solid Queue worker locally.
 
 ## Architecture
 

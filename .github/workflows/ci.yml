@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   scan_ruby:
@@ -91,7 +92,7 @@ jobs:
 
   deploy:
     needs: [ scan_ruby, scan_js, lint, test ]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-production
