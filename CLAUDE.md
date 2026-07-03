@@ -26,7 +26,7 @@ CI runs four checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f gith
 
 **Database**: SQLite3 in every environment. Multi-database setup: `primary` plus `queue` (Solid Queue), `cable` (Solid Cable, dev/prod), and `cache` (Solid Cache, prod). Schema in `db/schema.rb`; secondary schemas in `db/queue_schema.rb`, `db/cable_schema.rb`, `db/cache_schema.rb`.
 
-**Service pattern**: Business logic lives in `app/services/`. Services inherit from `ApplicationService` which provides a `.call(...)` class method that delegates to `new(...).call`. Custom error classes (`ParseError`, `FetchError`) for error handling.
+**Service pattern**: Business logic lives in `app/services/`. Services inherit from `ApplicationService` which provides a `.call(...)` class method that delegates to `new(...).call`, plus a `serialized_transaction` helper (SQLite `BEGIN IMMEDIATE` when no transaction is open, else a savepoint) used by the allocation services to serialize read-then-write under concurrent MCP calls. Custom error classes (`ParseError`, `FetchError`) for error handling.
 
 Key services:
 - `Cards::Fetcher` — scrapes card data from limitlesstcg.com using Nokogiri, creates/updates Card records with associated Attacks, Abilities, and PokemonSubtypes
@@ -36,14 +36,19 @@ Key services:
 - `Decks::Exporter` / `Decks::CardmarketExporter` / `Decks::TournamentPdfExporter` — deck export in JSON, Cardmarket wishlist, and tournament PDF formats (PTCG text export lives in `bin/export_deck_ptcg`)
 - `Decks::Duplicator` — duplicates a deck with all its DeckCards
 - `HttpFetcher` — Net::HTTP wrapper used by other services
+- **Collection↔deck allocation** (real copies vs proxies): `Allocations::Availability` computes owned/committed/available per exact printing; `Allocations::OverAllocations` lists over-committed cards. `Collections::CardAdder`/`QuantitySetter`/`OwnedEquivalents` and `Decks::CardAdder` (greedy real-backing on physical decks)/`OwnedCopiesSetter`/`OwnedCopiesReallocator` (pure conversion between decks)/`DeckCardQuantitySetter` are the write operations, each wrapped in `serialized_transaction`. See the design spec at `docs/superpowers/specs/2026-07-02-collection-deck-allocation-design.md`.
 
 **Jobs** (`app/jobs/`):
 - `CardSets::ImportJob` — wraps `CardSets::Importer`
 - `Decks::ImportJob` — wraps `Decks::Fetcher`, broadcasts progress via Turbo Streams, persists state via the `Import` model
 
-**Models**: User has_many Decks, Collections, Imports, and TournamentProfiles. Deck belongs_to an optional Archetype (its own archetype), has_many Cards through DeckCards and has_many DeckResults (win/loss tracking with optional Archetype tagging for the opposing deck). Archetype has primary/secondary Pokémon (Card refs), parent/children hierarchy, and has_many DeckResults. Import persists background import status (progress, errors) for reload-safe tracking and retry. TournamentProfile belongs_to User (Play! Pokémon division metadata). CardSet has_many Cards (code/name uniqueness, release_date, `by_release` scope). Card belongs_to CardSet (optional), has_many Attacks, Abilities, and optional PokemonSubtype. Card validations are conditional on `card_type` (Pokémon vs Trainer vs Energy). Card uses a `compute_fingerprint` callback for deduplication.
+**Models**: User has_many Decks, Collections, Imports, and TournamentProfiles. Deck belongs_to an optional Archetype (its own archetype), has_many Cards through DeckCards and has_many DeckResults (win/loss tracking with optional Archetype tagging for the opposing deck). Archetype has primary/secondary Pokémon (Card refs), parent/children hierarchy, and has_many DeckResults. Import persists background import status (progress, errors) for reload-safe tracking and retry. TournamentProfile belongs_to User (Play! Pokémon division metadata). CardSet has_many Cards (code/name uniqueness, release_date, `by_release` scope). Card belongs_to CardSet (optional), has_many Attacks, Abilities, and optional PokemonSubtype. Card validations are conditional on `card_type` (Pokémon vs Trainer vs Energy). Card uses a `compute_fingerprint` callback for deduplication (also the equivalence key for suggesting interchangeable printings).
+
+**Allocation model** (collection as physically-owned inventory): `Collection.quantity` is the number of copies **owned** (source of truth; unique per user+card). `DeckCard.owned_copies` is how many of its copies are **real** (backed by owned cards); `quantity` is the total, `proxies = quantity − owned_copies` (unique per deck+card). Only decks with `physical == true` consume the collection. Invariant: `Σ owned_copies(card) over physical decks ≤ owned(card)` — exceeded only by a collection decrease, which is allowed and leaves a tolerated, surfaced over-allocation (never auto-corrected). User has an `api_token_digest` (SHA-256 of a per-user MCP bearer token — see `User.authenticate_api_token` / `regenerate_api_token`).
 
 **Controllers**: API endpoints under `Api::` namespace serve JSON (archetypes, cards, collections, decks with nested deck_cards and deck_results). Admin panel under `Admin::` namespace covers dashboard, card sets (with import), cards (with rescrape), users (with toggle_admin), decks, archetypes (CRUD), and imports (list with error display, delete, retry). Top-level `tournament_profiles` and `deck_results` resources live alongside `decks`. All app routes (except root/health) require Devise authentication.
+
+**MCP server**: An MCP (Model Context Protocol) endpoint is mounted at `POST /mcp` (`Mcp::ServerController`, top-level route **outside** the Devise `authenticate` block), using the `mcp` gem's `StreamableHTTPTransport` (stateless). Auth is a per-user bearer token (`Authorization: Bearer <token>`) matched against `api_token_digest`; the endpoint is rate-limited per-IP, declared **before** the auth `before_action` so invalid-token traffic is throttled too. Tool classes live in `app/mcp/` — an autoloaded root, so they are **top-level constants** (e.g. `AddCardToDeckTool`, not namespaced), subclassing `McpTool` (shared helpers `current_user`/`find_deck!`/`find_card!`/`text`/`positive_quantity?`). Read tools return JSON text, write tools return a summary string; both delegate to services and never hold business logic. Register a new tool by adding it to `Mcp::ServerController::TOOLS`. Tool names drop the `_tool` suffix of the class name. The eight+ tools cover collection/deck reads plus `add_card_to_collection`, `set_collection_quantity`, `add_card_to_deck`, `set_deck_card_owned_copies`, `reallocate_owned_copies`, `set_deck_card_quantity`, `list_over_allocations`, `suggest_owned_equivalents`.
 
 **Frontend**: Hotwire (Turbo + Stimulus), Propshaft asset pipeline, importmap for JS. **All views use Phlex components** — see the `phlex-architecture` skill for conventions and patterns. Always use Phlex, never write view logic in ERB.
 
@@ -54,6 +59,7 @@ Key services:
 - `bin/import_deck DECK_NAME [FILE]` — import decklist from file or stdin, fetches card data from web
 - `bin/export_decks` — interactive JSON deck export
 - `bin/export_deck_ptcg` — export deck in PTCG text format
+- `bin/rails 'mcp:token[email@example.com]'` — rotate and print a user's MCP bearer token (shown once; only the digest is stored)
 
 ## Test Setup
 
