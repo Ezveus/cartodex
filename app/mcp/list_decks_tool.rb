@@ -5,7 +5,7 @@ class ListDecksTool < McpTool
   def self.call(server_context:)
     user = current_user(server_context)
     decks = user.decks.map do |deck|
-      { id: deck.id, name: deck.name, format: deck.format }
+      { id: deck.id, name: deck.name, format: deck.format, physical: deck.physical, tcg_live: deck.tcg_live }
     end
     text(decks.to_json)
   end

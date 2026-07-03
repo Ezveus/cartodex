@@ -13,7 +13,14 @@ class ListCollectionTool < McpTool
     entries = scope.filter_map do |collection|
       next if query.present? && !collection.card.name.downcase.include?(query.downcase)
 
-      { card_id: collection.card_id, name: collection.card.name, quantity: collection.quantity }
+      availability = Allocations::Availability.call(user: user, card: collection.card)
+      {
+        card_id: collection.card_id,
+        name: collection.card.name,
+        owned: availability.owned,
+        committed: availability.committed,
+        available: availability.available
+      }
     end
     text(entries.to_json)
   end

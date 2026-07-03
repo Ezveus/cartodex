@@ -8,6 +8,7 @@ module Mcp
       ListDecksTool,
       ListCollectionTool,
       ListDeckCardsTool,
+      ListOverAllocationsTool,
       SetDeckCardOwnedCopiesTool,
       ReallocateOwnedCopiesTool,
       SetDeckCardQuantityTool

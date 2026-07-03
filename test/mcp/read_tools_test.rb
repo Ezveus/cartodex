@@ -80,4 +80,43 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     assert_equal [], payload(response)
   end
+
+  test "ListDeckCardsTool exposes owned_copies and proxies" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)
+    physical.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
+
+    response = ListDeckCardsTool.call(deck_id: physical.id, server_context: @context)
+    entry = payload(response).find { |c| c["card_id"] == cards(:honedge).id }
+
+    assert_equal 3, entry["quantity"]
+    assert_equal 1, entry["owned_copies"]
+    assert_equal 2, entry["proxies"]
+  end
+
+  test "ListCollectionTool exposes owned, committed and available" do
+    card = cards(:honedge)
+    @user.collections.find_or_create_by!(card: card).update!(quantity: 3)
+    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
+
+    response = ListCollectionTool.call(server_context: @context)
+    entry = payload(response).find { |c| c["card_id"] == card.id }
+
+    assert_equal 3, entry["owned"]
+    assert_equal 2, entry["committed"]
+    assert_equal 1, entry["available"]
+  end
+
+  test "ListOverAllocationsTool reports over-committed cards" do
+    card = cards(:honedge)
+    @user.collections.find_or_create_by!(card: card).update!(quantity: 1)
+    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
+
+    response = ListOverAllocationsTool.call(server_context: @context)
+    card_ids = payload(response).map { |e| e["card_id"] }
+
+    assert_includes card_ids, card.id
+  end
 end
