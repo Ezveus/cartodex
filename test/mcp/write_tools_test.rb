@@ -55,4 +55,16 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_match(/positive integer/i, response_text(response))
     assert_equal 1, @deck.deck_cards.find_by(card: @card).quantity # unchanged
   end
+
+  test "SetCollectionQuantityTool sets the owned quantity" do
+    SetCollectionQuantityTool.call(card_id: @card.id, quantity: 7, server_context: @context)
+
+    assert_equal 7, @user.collections.find_by(card: @card).quantity
+  end
+
+  test "SetCollectionQuantityTool rejects a negative quantity with a clean error" do
+    response = SetCollectionQuantityTool.call(card_id: @card.id, quantity: -1, server_context: @context)
+
+    assert_match(/must be/i, response_text(response))
+  end
 end
