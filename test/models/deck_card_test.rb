@@ -26,4 +26,13 @@ class DeckCardTest < ActiveSupport::TestCase
     dc = deck.deck_cards.new(card: cards(:honedge), quantity: 2, owned_copies: 2)
     assert dc.valid?
   end
+
+  test "is unique per deck and card" do
+    deck = decks(:one)
+    card = cards(:trainer_card)
+    deck.deck_cards.create!(card: card, quantity: 1)
+    dup = deck.deck_cards.build(card: card, quantity: 1)
+    assert_not dup.valid?
+    assert_includes dup.errors[:card_id], "has already been taken"
+  end
 end

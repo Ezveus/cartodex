@@ -187,7 +187,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "tournament_pdf export returns a PDF" do
     profile = tournament_profiles(:ash)
-    @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 1)
 
     get export_deck_path(@deck, style: "tournament_pdf", profile_id: profile.id)
 

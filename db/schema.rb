@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_053406) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_082959) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -96,6 +96,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_053406) do
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["card_id"], name: "index_collections_on_card_id"
+    t.index ["user_id", "card_id"], name: "index_collections_on_user_id_and_card_id", unique: true
     t.index ["user_id"], name: "index_collections_on_user_id"
   end
 
@@ -107,6 +108,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_053406) do
     t.integer "quantity"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_deck_cards_on_card_id"
+    t.index ["deck_id", "card_id"], name: "index_deck_cards_on_deck_id_and_card_id", unique: true
     t.index ["deck_id"], name: "index_deck_cards_on_deck_id"
   end
 

@@ -4,6 +4,7 @@ class DeckCard < ApplicationRecord
 
   validates :quantity, presence: true, numericality: { only_integer: true, greater_than: 0 }
   validates :owned_copies, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :card_id, uniqueness: { scope: :deck_id }
   validate :owned_copies_within_quantity
   validate :owned_copies_zero_unless_physical
 
