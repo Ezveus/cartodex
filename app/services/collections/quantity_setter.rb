@@ -10,9 +10,11 @@ module Collections
     end
 
     def call
-      collection = @user.collections.find_or_initialize_by(card: @card)
-      collection.update!(quantity: @quantity)
-      collection
+      serialized_transaction do
+        collection = @user.collections.find_or_initialize_by(card: @card)
+        collection.update!(quantity: @quantity)
+        collection
+      end
     end
   end
 end

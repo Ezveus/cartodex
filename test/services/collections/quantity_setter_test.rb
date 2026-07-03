@@ -28,5 +28,13 @@ module Collections
         Collections::QuantitySetter.call(user: users(:one), card: cards(:honedge), quantity: -1)
       end
     end
+
+    test "setting quantity twice ends at the last value" do
+      user = users(:two)
+      card = cards(:trainer_card)
+      Collections::QuantitySetter.call(user: user, card: card, quantity: 4)
+      collection = Collections::QuantitySetter.call(user: user, card: card, quantity: 2)
+      assert_equal 2, collection.quantity
+    end
   end
 end
