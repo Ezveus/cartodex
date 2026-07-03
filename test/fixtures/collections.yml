@@ -9,3 +9,15 @@ two:
   card: doublade
   quantity: 1
   foil: false
+
+budew_pre_one:
+  user: one
+  card: budew_pre
+  quantity: 0
+  foil: false
+
+budew_asc_one:
+  user: one
+  card: budew_asc
+  quantity: 0
+  foil: false

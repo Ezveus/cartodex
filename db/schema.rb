@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_082959) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -83,6 +83,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
     t.datetime "updated_at", null: false
     t.string "weakness"
     t.index ["card_set_id"], name: "index_cards_on_card_set_id"
+    t.index ["fingerprint"], name: "index_cards_on_fingerprint"
     t.index ["name", "fingerprint"], name: "index_cards_on_name_and_fingerprint"
     t.index ["pokemon_subtype_id"], name: "index_cards_on_pokemon_subtype_id"
   end
@@ -95,6 +96,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["card_id"], name: "index_collections_on_card_id"
+    t.index ["user_id", "card_id"], name: "index_collections_on_user_id_and_card_id", unique: true
     t.index ["user_id"], name: "index_collections_on_user_id"
   end
 
@@ -102,9 +104,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
+    t.integer "owned_copies", default: 0, null: false
     t.integer "quantity"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_deck_cards_on_card_id"
+    t.index ["deck_id", "card_id"], name: "index_deck_cards_on_deck_id_and_card_id", unique: true
     t.index ["deck_id"], name: "index_deck_cards_on_deck_id"
   end
 
@@ -173,6 +177,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
 
   create_table "users", force: :cascade do |t|
     t.boolean "admin", default: false, null: false
+    t.string "api_token_digest"
     t.datetime "created_at", null: false
     t.string "email", default: "", null: false
     t.string "encrypted_password", default: "", null: false
@@ -180,6 +185,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_17_000000) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.datetime "updated_at", null: false
+    t.index ["api_token_digest"], name: "index_users_on_api_token_digest", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
