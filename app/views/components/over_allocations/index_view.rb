@@ -1,8 +1,9 @@
 module OverAllocations
   class IndexView < ApplicationComponent
-    def initialize(over_allocations:, cards_by_id:)
+    def initialize(over_allocations:, cards_by_id:, targets_by_card: {})
       @over_allocations = over_allocations
       @cards_by_id = cards_by_id
+      @targets_by_card = targets_by_card
     end
 
     def view_template
@@ -31,6 +32,21 @@ module OverAllocations
             link_to d[:name], deck_path(d[:id]), class: "over-allocation-deck-link"
           end
         end
+        reallocation_form(over)
+      end
+    end
+
+    def reallocation_form(over)
+      sources = over[:decks]
+      targets = @targets_by_card[over[:card_id]] || []
+      return if sources.empty? || targets.empty?
+
+      form_with url: reallocate_over_allocations_path, method: :post, class: "over-allocation-reallocate" do
+        input(type: "hidden", name: "card_id", value: over[:card_id])
+        select(name: "from_deck_id") { sources.each { |d| option(value: d[:id]) { d[:name] } } }
+        select(name: "to_deck_id") { targets.each { |id, name| option(value: id) { name } } }
+        input(type: "number", name: "quantity", value: "1", min: "1")
+        button(type: "submit") { "Reallocate" }
       end
     end
   end
