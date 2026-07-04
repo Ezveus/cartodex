@@ -63,4 +63,18 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  test "deck_json includes physical, tcg_live and per-card allocation" do
+    deck = @user.decks.create!(name: "Phys", physical: true, tcg_live: false)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 2)
+
+    get api_deck_path(deck)
+
+    json = JSON.parse(response.body)
+    assert_equal true, json["physical"]
+    assert_equal false, json["tcg_live"]
+    card_row = json["cards"].first
+    assert_equal 2, card_row["owned_copies"]
+    assert_equal 1, card_row["proxies"]
+  end
 end
