@@ -10,6 +10,16 @@ class Decks::TournamentPdfExporter < ApplicationService
   MIN_ROW_PADDING = 2
   MAX_ROW_PADDING = 6
 
+  # Prawn's built-in AFM fonts only encode Windows-1252, which chokes on the
+  # UTF-8 glyphs Limitless card names carry (Prism Star ♢, Nidoran♀/♂, …).
+  # DejaVu Sans is a bundled TTF with broad Unicode coverage — see vendor/fonts.
+  FONT_DIR = Rails.root.join("vendor", "fonts")
+  FONT_NAME = "DejaVu Sans"
+  FONT_FILES = {
+    normal: FONT_DIR.join("DejaVuSans.ttf").to_s,
+    bold: FONT_DIR.join("DejaVuSans-Bold.ttf").to_s
+  }.freeze
+
   def initialize(deck, profile)
     @deck = deck
     @profile = profile
@@ -36,6 +46,8 @@ class Decks::TournamentPdfExporter < ApplicationService
   def build_pdf(row_padding)
     @row_padding = row_padding
     pdf = Prawn::Document.new(page_size: "A4", margin: 30)
+    pdf.font_families.update(FONT_NAME => FONT_FILES)
+    pdf.font FONT_NAME
 
     render_profile(pdf)
     pdf.move_down 14

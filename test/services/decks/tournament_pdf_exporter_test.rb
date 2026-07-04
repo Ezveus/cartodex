@@ -15,6 +15,19 @@ class Decks::TournamentPdfExporterTest < ActiveSupport::TestCase
     assert pdf.start_with?("%PDF")
   end
 
+  test "renders card text with characters outside Windows-1252 (Prism Star, gender symbols)" do
+    # Real Limitless names carry glyphs the built-in AFM fonts can't encode:
+    # the Prism Star ♢ (U+2662) and the gender marks that distinguish
+    # Nidoran♀ (U+2640) from Nidoran♂ (U+2642).
+    card = cards(:honedge)
+    card.update!(name: "Nidoran♀ ♢")
+    @deck.deck_cards.create!(card: card, quantity: 1)
+
+    pdf = Decks::TournamentPdfExporter.call(@deck, @profile)
+
+    assert pdf.start_with?("%PDF")
+  end
+
   test "fits a realistic 60-card decklist on a single page" do
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
     @deck.deck_cards.create!(card: cards(:doublade), quantity: 2)
