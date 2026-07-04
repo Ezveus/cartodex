@@ -8,6 +8,11 @@ class DeckCard < ApplicationRecord
   validate :owned_copies_within_quantity
   validate :owned_copies_zero_unless_physical
 
+  # Copies in this deck not backed by an owned card. Derived, never stored.
+  def proxies
+    quantity.to_i - owned_copies.to_i
+  end
+
   private
 
   def owned_copies_within_quantity
