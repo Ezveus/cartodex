@@ -31,4 +31,17 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
 
     assert_select ".deck-card-warning"
   end
+
+  test "collection tile shows owned/committed/available" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 4)
+    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    get collections_path
+
+    assert_response :success
+    assert_select ".collection-tile-alloc", /owned 4/
+    assert_select ".collection-tile-alloc", /committed 2/
+    assert_select ".collection-tile-alloc", /available 2/
+  end
 end

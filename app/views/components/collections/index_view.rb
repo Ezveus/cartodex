@@ -1,6 +1,6 @@
 module Collections
   class IndexView < ApplicationComponent
-    def initialize(collections:, card_sets:, card_types:, selected_set_code:, selected_type:, query:, total_unique:, total_copies:)
+    def initialize(collections:, card_sets:, card_types:, selected_set_code:, selected_type:, query:, total_unique:, total_copies:, availability: {})
       @collections = collections
       @card_sets = card_sets
       @card_types = card_types
@@ -9,6 +9,7 @@ module Collections
       @query = query
       @total_unique = total_unique
       @total_copies = total_copies
+      @availability = availability
     end
 
     def view_template
@@ -114,6 +115,10 @@ module Collections
           end
           span(class: "collection-tile-name") { card.name }
           span(class: "collection-tile-meta") { "#{card.set_name} ##{card.set_number}" }
+        end
+
+        if (a = @availability[card.id])
+          span(class: "collection-tile-alloc") { "owned #{a.owned} · committed #{a.committed} · available #{a.available}" }
         end
 
         div(class: "collection-tile-controls") do
