@@ -13,24 +13,19 @@ module Api
     end
 
     def create
-      collection = current_user.collections.find_or_initialize_by(card_id: collection_params[:card_id])
-      collection.quantity = collection.quantity.to_i + collection_params[:quantity].to_i
-
-      if collection.save
-        render json: collection_json(collection), status: :created
-      else
-        render json: { errors: collection.errors.full_messages }, status: :unprocessable_entity
-      end
+      card = Card.find(collection_params[:card_id])
+      collection = Collections::CardAdder.call(user: current_user, card: card, quantity: collection_params[:quantity].to_i)
+      render json: collection_json(collection), status: :created
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
     end
 
     def update
-      collection = current_user.collections.find_by!(card_id: params[:id])
-
-      if collection.update(collection_params)
-        render json: collection_json(collection)
-      else
-        render json: { errors: collection.errors.full_messages }, status: :unprocessable_entity
-      end
+      card = Card.find(params[:id])
+      collection = Collections::QuantitySetter.call(user: current_user, card: card, quantity: collection_params[:quantity].to_i)
+      render json: collection_json(collection)
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
     end
 
     def destroy
@@ -47,10 +42,14 @@ module Api
     end
 
     def collection_json(collection)
+      availability = Allocations::Availability.call(user: current_user, card: collection.card)
       {
         id: collection.id,
         card_id: collection.card_id,
         quantity: collection.quantity,
+        owned: availability.owned,
+        committed: availability.committed,
+        available: availability.available,
         card: {
           name: collection.card.name,
           card_type: collection.card.card_type,
