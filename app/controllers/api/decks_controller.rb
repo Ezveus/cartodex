@@ -89,6 +89,8 @@ module Api
         id: deck.id,
         name: deck.name,
         description: deck.description,
+        physical: deck.physical,
+        tcg_live: deck.tcg_live,
         cards: deck.deck_cards.map { |dc| deck_card_json(dc) }
       }
     end
@@ -97,6 +99,8 @@ module Api
       {
         id: deck_card.id,
         quantity: deck_card.quantity,
+        owned_copies: deck_card.owned_copies,
+        proxies: deck_card.proxies,
         card: {
           id: deck_card.card.id,
           name: deck_card.card.name,
