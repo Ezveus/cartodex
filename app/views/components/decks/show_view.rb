@@ -1,9 +1,11 @@
 module Decks
   class ShowView < ApplicationComponent
-    def initialize(deck:, editing: false, tournament_profiles: [])
+    def initialize(deck:, editing: false, tournament_profiles: [], availability: {}, over_allocated_card_ids: [])
       @deck = deck
       @editing = editing
       @tournament_profiles = tournament_profiles
+      @availability = availability
+      @over_allocated_card_ids = over_allocated_card_ids.to_set
     end
 
     def view_template
@@ -154,7 +156,15 @@ module Decks
     def card_list(group)
       ul(class: "deck-card-list") do
         group.sort_by { |dc| dc.card.name }.each do |dc|
-          render Decks::DeckCardItem.new(deck_card: dc, deck_id: @deck.id)
+          availability = @availability[dc.card_id]
+          max_owned = availability ? [ dc.quantity, availability.available ].min : 0
+          render Decks::DeckCardItem.new(
+            deck_card: dc,
+            deck_id: @deck.id,
+            physical: @deck.physical?,
+            max_owned: max_owned,
+            over_allocated: @over_allocated_card_ids.include?(dc.card_id)
+          )
         end
       end
     end

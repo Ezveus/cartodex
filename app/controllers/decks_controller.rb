@@ -11,6 +11,16 @@ class DecksController < ApplicationController
     @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
+
+    if @deck.physical?
+      @availability = @deck.deck_cards.to_h do |dc|
+        [ dc.card_id, Allocations::Availability.call(user: current_user, card: dc.card, excluding_deck: @deck) ]
+      end
+      @over_allocated_card_ids = Allocations::OverAllocations.call(user: current_user).map { |o| o[:card_id] }.to_set
+    else
+      @availability = {}
+      @over_allocated_card_ids = Set.new
+    end
   end
 
   def stats
