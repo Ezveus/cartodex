@@ -35,4 +35,16 @@ class DeckCardTest < ActiveSupport::TestCase
     assert_not dup.valid?
     assert_includes dup.errors[:card_id], "has already been taken"
   end
+
+  test "proxies is quantity minus owned_copies" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    dc = deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
+    assert_equal 2, dc.proxies
+  end
+
+  test "proxies is zero when fully backed" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    dc = deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+    assert_equal 0, dc.proxies
+  end
 end
