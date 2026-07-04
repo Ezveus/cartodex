@@ -1,8 +1,9 @@
 module Decks
   class DeckCard < ApplicationComponent
-    def initialize(deck:, with_actions: true)
+    def initialize(deck:, with_actions: true, over_allocated: false)
       @deck = deck
       @with_actions = with_actions
+      @over_allocated = over_allocated
     end
 
     def view_template
@@ -24,7 +25,7 @@ module Decks
         )
         a(href: Rails.application.routes.url_helpers.deck_path(@deck), class: "deck-item-link") do
           h2 { @deck.name }
-          render Decks::ClassificationBadges.new(deck: @deck)
+          render Decks::ClassificationBadges.new(deck: @deck, over_allocated: @over_allocated)
           p(class: "deck-description") { @deck.description } if @deck.description.present?
           p(class: "deck-card-count") { "#{@deck.deck_cards.sum(&:quantity)} cards" }
         end

@@ -1,6 +1,6 @@
 module Collections
   class IndexView < ApplicationComponent
-    def initialize(collections:, card_sets:, card_types:, selected_set_code:, selected_type:, query:, total_unique:, total_copies:, availability: {})
+    def initialize(collections:, card_sets:, card_types:, selected_set_code:, selected_type:, query:, total_unique:, total_copies:, availability: {}, over_allocation_count: 0)
       @collections = collections
       @card_sets = card_sets
       @card_types = card_types
@@ -10,6 +10,7 @@ module Collections
       @total_unique = total_unique
       @total_copies = total_copies
       @availability = availability
+      @over_allocation_count = over_allocation_count
     end
 
     def view_template
@@ -20,6 +21,7 @@ module Collections
           action: "collection-quantity:changed->collection-list#changed"
         }
       ) do
+        render Allocations::OverAllocationBanner.new(count: @over_allocation_count)
         header_section
         filters_section
         results_section

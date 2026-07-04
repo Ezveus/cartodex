@@ -57,4 +57,36 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
     assert_select ".over-allocation-row", /#{@card.name}/
     assert_select ".over-allocation-row", /Contrib/
   end
+
+  test "deck list shows a to-review badge and banner when over-allocated" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    deck = @user.decks.create!(name: "Contrib", physical: true)
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    get decks_path
+
+    assert_response :success
+    assert_select ".badge-warning", /To review/
+    assert_select ".over-allocation-banner"
+  end
+
+  test "collections page shows the banner when over-allocated" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    deck = @user.decks.create!(name: "Contrib", physical: true)
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    get collections_path
+
+    assert_select ".over-allocation-banner"
+  end
+
+  test "no banner when nothing is over-allocated" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 4)
+    deck = @user.decks.create!(name: "OK", physical: true)
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    get decks_path
+
+    assert_select ".over-allocation-banner", false
+  end
 end
