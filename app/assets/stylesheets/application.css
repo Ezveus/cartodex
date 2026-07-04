@@ -2563,3 +2563,6 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .deck-card-warning { margin-left: 0.25rem; }
 
 .collection-tile-alloc { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-500); margin: 0.25rem 0; }
+
+.over-allocation-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+.over-allocation-decks { display: inline-flex; gap: 0.5rem; }

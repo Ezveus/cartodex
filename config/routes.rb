@@ -32,6 +32,7 @@ Rails.application.routes.draw do
       get :image, on: :member
     end
     resources :collections, only: [ :index ]
+    resources :over_allocations, only: [ :index ]
     resources :tournament_profiles, except: [ :show ]
 
     # Admin

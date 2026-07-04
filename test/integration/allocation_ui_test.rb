@@ -44,4 +44,17 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
     assert_select ".collection-tile-alloc", /committed 2/
     assert_select ".collection-tile-alloc", /available 2/
   end
+
+  test "over_allocations page lists over-allocated cards and contributing decks" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    deck = @user.decks.create!(name: "Contrib", physical: true)
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    get over_allocations_path
+
+    assert_response :success
+    assert_select ".over-allocation-row", 1
+    assert_select ".over-allocation-row", /#{@card.name}/
+    assert_select ".over-allocation-row", /Contrib/
+  end
 end
