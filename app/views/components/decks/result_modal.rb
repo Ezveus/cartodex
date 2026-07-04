@@ -1,5 +1,9 @@
 module Decks
   class ResultModal < ApplicationComponent
+    def initialize(deck:)
+      @deck = deck
+    end
+
     def view_template
       dialog(class: "result-modal", data: { result_modal_target: "dialog" }) do
         div(class: "result-modal-content") do
@@ -9,6 +13,7 @@ module Decks
           render DeckResults::ResultFields.new
           archetype_search_group
           create_archetype_section
+          tournament_group
           notes_group
           actions
         end
@@ -16,6 +21,19 @@ module Decks
     end
 
     private
+
+    def tournament_group
+      return if @deck.tournaments.empty?
+
+      render Ui::FormGroup.new(label: "Tournament (optional)") do
+        select(class: "form-input", data: { result_modal_target: "tournamentSelect" }) do
+          option(value: "") { "— None —" }
+          @deck.tournaments.order(date: :desc).each do |tournament|
+            option(value: tournament.id) { "#{tournament.name} (#{localize(tournament.date)})" }
+          end
+        end
+      end
+    end
 
     def archetype_search_group
       render Ui::FormGroup.new(label: "Opponent archetype") do

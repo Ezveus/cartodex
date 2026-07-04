@@ -18,7 +18,7 @@ module Decks
           main_section
           preview_section
         end
-        render Decks::ResultModal.new
+        render Decks::ResultModal.new(deck: @deck)
         render Decks::TournamentPdfModal.new(deck: @deck, tournament_profiles: @tournament_profiles)
       end
     end
