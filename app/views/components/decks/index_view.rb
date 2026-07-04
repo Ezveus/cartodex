@@ -3,16 +3,19 @@ module Decks
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
 
-    def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [])
+    def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [], over_allocated_deck_ids: [], over_allocation_count: 0)
       @decks = decks
       @pending_deck_imports = pending_deck_imports
       @filters = filters || {}
       @primary_options = primary_options || []
       @secondary_options = secondary_options || []
+      @over_allocated_deck_ids = over_allocated_deck_ids.to_set
+      @over_allocation_count = over_allocation_count
     end
 
     def view_template
       div(class: "decks-container", data: { controller: "decks deck-compare", deck_compare_compare_url_value: compare_decks_path }) do
+        render Allocations::OverAllocationBanner.new(count: @over_allocation_count)
         div(class: "decks-header") do
           h1 { "My Decks" }
           div(class: "decks-header-actions") do
@@ -28,7 +31,7 @@ module Decks
 
         div(class: "decks-grid", id: "decks-grid") do
           if @decks.any?
-            @decks.each { |deck| render Decks::DeckCard.new(deck: deck) }
+            @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
           else
             p(id: "decks-empty") do
               plain "No decks match these filters. "

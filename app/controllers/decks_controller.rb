@@ -5,6 +5,10 @@ class DecksController < ApplicationController
     @filters = filter_params
     @primary_options = primary_filter_options
     @secondary_options = secondary_filter_options
+
+    over_allocations = Allocations::OverAllocations.call(user: current_user)
+    @over_allocation_count = over_allocations.size
+    @over_allocated_deck_ids = over_allocations.flat_map { |o| o[:decks].map { |d| d[:id] } }.to_set
   end
 
   def show

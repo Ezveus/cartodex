@@ -20,5 +20,6 @@ class CollectionsController < ApplicationController
     @availability = @collections.to_h do |c|
       [ c.card_id, Allocations::Availability.call(user: current_user, card: c.card) ]
     end
+    @over_allocation_count = Allocations::OverAllocations.call(user: current_user).size
   end
 end

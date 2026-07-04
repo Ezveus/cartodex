@@ -1,1 +1,9 @@
-<%= render Decks::IndexView.new(decks: @decks, pending_deck_imports: @pending_deck_imports, filters: @filters, primary_options: @primary_options, secondary_options: @secondary_options) %>
+<%= render Decks::IndexView.new(
+  decks: @decks,
+  pending_deck_imports: @pending_deck_imports,
+  filters: @filters,
+  primary_options: @primary_options,
+  secondary_options: @secondary_options,
+  over_allocated_deck_ids: @over_allocated_deck_ids,
+  over_allocation_count: @over_allocation_count
+) %>
