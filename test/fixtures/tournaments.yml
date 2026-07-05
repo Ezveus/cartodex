@@ -1,0 +1,22 @@
+one:
+  user: one
+  deck: one
+  tournament_profile: ash
+  name: Regional Championship
+  date: 2026-03-14
+  format: standard
+  tier: regional
+  participant_count: 512
+  placement: 33
+  championship_points: 120
+
+two:
+  user: two
+  deck: two
+  name: Local League Cup
+  date: 2026-02-01
+  format: standard
+  tier: league_cup
+  participant_count: 12
+  placement: 1
+  championship_points: 50

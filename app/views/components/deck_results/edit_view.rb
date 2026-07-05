@@ -26,6 +26,12 @@ module DeckResults
           end
 
           render Ui::FormGroup.new do
+            f.label :tournament_id, "Tournament", class: "form-label"
+            f.collection_select :tournament_id, @deck.tournaments.order(date: :desc), :id, :name,
+              { include_blank: "— None —" }, class: "form-input"
+          end
+
+          render Ui::FormGroup.new do
             f.label :notes, class: "form-label"
             f.text_area :notes, class: "form-input", rows: 3
           end

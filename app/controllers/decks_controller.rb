@@ -8,7 +8,7 @@ class DecksController < ApplicationController
   end
 
   def show
-    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
   end
@@ -83,7 +83,7 @@ class DecksController < ApplicationController
   end
 
   def edit
-    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
     render :show

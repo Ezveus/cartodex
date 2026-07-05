@@ -1,6 +1,7 @@
 class DeckResult < ApplicationRecord
   belongs_to :deck
   belongs_to :archetype, optional: true
+  belongs_to :tournament, optional: true
 
   RESULTS       = %w[win loss draw timeout].freeze
   MATCH_FORMATS = %w[bo1 bo3].freeze
@@ -13,6 +14,7 @@ class DeckResult < ApplicationRecord
   validates :match_format, presence: true, inclusion: { in: MATCH_FORMATS }
   validates :score, format: { with: /\A[WLTD]{1,3}\z/ }, allow_blank: true
   validate :score_only_for_bo3
+  validate :tournament_belongs_to_same_deck
 
   # Maps a per-game score string (e.g. "WW", "WLT") to the overall match result,
   # or nil when the score does not yet determine a winner.
@@ -40,5 +42,11 @@ class DeckResult < ApplicationRecord
 
   def score_only_for_bo3
     errors.add(:score, "is only valid for best-of-three matches") if score.present? && match_format != "bo3"
+  end
+
+  def tournament_belongs_to_same_deck
+    return if tournament.nil? || deck.nil?
+
+    errors.add(:tournament, "must belong to the same deck") if tournament.deck_id != deck_id
   end
 end

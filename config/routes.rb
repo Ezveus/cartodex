@@ -33,6 +33,12 @@ Rails.application.routes.draw do
     end
     resources :collections, only: [ :index ]
     resources :tournament_profiles, except: [ :show ]
+    resources :tournaments do
+      resources :deck_results, only: [], controller: "tournaments/deck_results" do
+        post :attach, on: :collection
+        delete :detach, on: :member
+      end
+    end
 
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do

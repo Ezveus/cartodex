@@ -4,7 +4,8 @@ export default class extends Controller {
   static targets = [
     "dialog", "archetypeInput", "archetypeId", "archetypeResults",
     "notesInput", "createSection", "primaryInput", "primaryId",
-    "primaryResults", "secondaryInput", "secondaryId", "secondaryResults"
+    "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
+    "tournamentSelect"
   ]
   static values = { deckId: Number }
 
@@ -93,6 +94,7 @@ export default class extends Controller {
         match_format: this.#fieldValue("match_format"),
         score: this.#fieldValue("score") || null,
         archetype_id: archetypeId || null,
+        tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
         notes: this.notesInputTarget.value,
         played_at: new Date().toISOString()
       }
@@ -226,6 +228,7 @@ export default class extends Controller {
     this.archetypeInputTarget.value = ""
     this.archetypeResultsTarget.innerHTML = ""
     this.notesInputTarget.value = ""
+    if (this.hasTournamentSelectTarget) this.tournamentSelectTarget.value = ""
     this.#resetResultFields()
     this.#hideCreateSection()
   }

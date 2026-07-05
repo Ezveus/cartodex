@@ -9,6 +9,7 @@ class User < ApplicationRecord
   has_many :decks, dependent: :destroy
   has_many :imports, dependent: :destroy
   has_many :tournament_profiles, dependent: :destroy
+  has_many :tournaments, dependent: :destroy
 
   def self.generate_api_token
     SecureRandom.base58(24)

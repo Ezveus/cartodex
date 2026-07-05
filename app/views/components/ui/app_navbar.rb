@@ -40,6 +40,7 @@ module Ui
       div(class: "navbar-links") do
         nav_link "Dashboard", dashboard_path, "home"
         nav_link "Decks", decks_path, "decks"
+        nav_link "Tournaments", tournaments_path, "tournaments"
         nav_link "Cards", cards_path, "cards"
         nav_link "Collection", collections_path, "collections"
         nav_link "Profiles", tournament_profiles_path, "tournament_profiles"
