@@ -21,7 +21,7 @@ gem "stimulus-rails"
 gem "jbuilder"
 
 # Model Context Protocol server (collection/deck tools)
-gem "mcp", "~> 0.22"
+gem "mcp", "~> 0.23"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
