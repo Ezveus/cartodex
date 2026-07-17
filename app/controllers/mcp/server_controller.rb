@@ -27,6 +27,12 @@ module Mcp
     RATE_LIMIT_TO = 30
     RATE_LIMIT_WITHIN = 1.minute
 
+    # Hostnames legitimately serving this app, checked by the mcp gem's DNS
+    # rebinding protection (added in 0.23) against the request's Host header.
+    # "www.example.com" is Rails' ActionDispatch::Integration::Session default
+    # test host; loopback hosts are allowed by the gem itself.
+    ALLOWED_HOSTS = [ "cartodex.ezveus.eu", "www.example.com" ].freeze
+
     # `rate_limit` registers its own before_action at the point it's declared,
     # and before_actions run in declaration order. It must be declared before
     # authenticate_token! so invalid/missing-token requests are throttled too
@@ -42,7 +48,9 @@ module Mcp
         tools: TOOLS,
         server_context: { user: @current_user }
       )
-      transport = MCP::Server::Transports::StreamableHTTPTransport.new(server, stateless: true)
+      transport = MCP::Server::Transports::StreamableHTTPTransport.new(
+        server, stateless: true, allowed_hosts: ALLOWED_HOSTS
+      )
       status, headers, body = transport.handle_request(request)
 
       content_type = headers&.fetch("Content-Type", nil) || "application/json"
