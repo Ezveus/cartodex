@@ -15,7 +15,7 @@ module Admin
           end
           render Ui::FormGroup.new do
             f.label :card_type, class: "form-label"
-            f.select :card_type, %w[Pokémon Trainer Energy], {}, class: "form-input"
+            f.select :card_type, Card::CARD_TYPES, { include_blank: true }, class: "form-input"
           end
           render Ui::FormGroup.new do
             f.label :hp, class: "form-label"
@@ -27,7 +27,21 @@ module Admin
           end
           render Ui::FormGroup.new do
             f.label :type_symbol, "Energy Type", class: "form-label"
-            f.text_field :type_symbol, class: "form-input"
+            f.select :type_symbol, Card::ENERGY_TYPES, { include_blank: true }, class: "form-input"
+          end
+          # Pokémon-only, but presence-validated: without this field a card switched
+          # to "Pokémon" could never be saved from here.
+          render Ui::FormGroup.new do
+            f.label :retreat_cost, class: "form-label"
+            f.number_field :retreat_cost, min: 0, class: "form-input"
+          end
+          render Ui::FormGroup.new do
+            f.label :set_name, "Set Code", class: "form-label"
+            f.text_field :set_name, class: "form-input"
+          end
+          render Ui::FormGroup.new do
+            f.label :set_number, class: "form-label"
+            f.text_field :set_number, class: "form-input"
           end
           render Ui::FormGroup.new do
             f.label :card_set_id, "Card Set", class: "form-label"

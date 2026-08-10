@@ -35,7 +35,7 @@ module Admin
     end
 
     def card_params
-      params.require(:card).permit(:name, :card_type, :hp, :rarity, :type_symbol, :set_name, :set_number, :card_set_id)
+      params.require(:card).permit(:name, :card_type, :hp, :rarity, :type_symbol, :retreat_cost, :set_name, :set_number, :card_set_id)
     end
   end
 end
