@@ -72,4 +72,21 @@ class CollectionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".collection-tile-name", { text: "Honedge", count: 0 }, "% must not act as a wildcard"
   end
+
+  # The page rendered one Availability lookup per tile, so its cost grew with
+  # the user's collection. It must now be flat.
+  test "index issues a constant number of queries regardless of collection size" do
+    get collections_path # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get collections_path }
+
+    [ :doublade, :trainer_card, :froakie_cri, :basic_psychic_energy ].each do |name|
+      @user.collections.find_or_create_by!(card: cards(name)) { |c| c.quantity = 0 }.update!(quantity: 2)
+    end
+
+    large = count_queries { get collections_path }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the collection: #{small} -> #{large}"
+  end
 end

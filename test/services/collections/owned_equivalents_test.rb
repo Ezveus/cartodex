@@ -44,5 +44,32 @@ module Collections
 
       assert_empty result
     end
+
+    # One Availability lookup per equivalent printing — an N+1 over however many
+    # printings of the card the user owns.
+    test "issues a constant number of queries regardless of how many printings are owned" do
+      one = count_queries { Collections::OwnedEquivalents.call(user: @user, card: @pre) }
+
+      # Equivalence is Card#fingerprint. The fixtures carry a literal value
+      # ("budew_shared") because fixtures bypass the before_save callback that
+      # normally computes it, so a created reprint gets a real digest instead and
+      # would not match. Force it: this test is about query counts, not about how
+      # fingerprints are derived.
+      3.times do |i|
+        reprint = Card.create!(
+          name: @pre.name, card_type: "Pokémon", hp: @pre.hp, type_symbol: @pre.type_symbol,
+          retreat_cost: @pre.retreat_cost, stage: @pre.stage,
+          set_name: "RPR", set_number: "#{100 + i}", rarity: "Common"
+        )
+        reprint.update_column(:fingerprint, @pre.fingerprint)
+        @user.collections.create!(card: reprint, quantity: 1)
+      end
+
+      many = count_queries { Collections::OwnedEquivalents.call(user: @user, card: @pre) }
+
+      assert_equal 4, Collections::OwnedEquivalents.call(user: @user, card: @pre).size,
+        "sanity: the service must now see four owned printings"
+      assert_equal one, many, "query count grew with the number of owned printings: #{one} -> #{many}"
+    end
   end
 end

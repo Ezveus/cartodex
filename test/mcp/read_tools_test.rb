@@ -96,6 +96,49 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_equal [], payload(response)
   end
 
+  # The filter moved from Ruby into SQL, which means it now goes through
+  # Card.name_matching and inherits its metacharacter escaping.
+  test "ListCollectionTool treats LIKE metacharacters in the query as literals" do
+    @user.collections.find_or_create_by!(card: cards(:budew_pre)) { |c| c.quantity = 0 }.update!(quantity: 1)
+
+    assert_includes payload(ListCollectionTool.call(query: "budew", server_context: @context)).map { |c| c["name"] },
+      "Budew", "sanity: the unescaped spelling must match"
+
+    assert_equal [], payload(ListCollectionTool.call(query: "b_dew", server_context: @context)),
+      "_ must not act as a wildcard"
+    assert_equal [], payload(ListCollectionTool.call(query: "bud%w", server_context: @context)),
+      "% must not act as a wildcard"
+  end
+
+  test "ListCollectionTool filters in SQL rather than loading every row" do
+    @user.collections.find_or_create_by!(card: cards(:budew_pre)) { |c| c.quantity = 0 }.update!(quantity: 1)
+
+    row_queries = []
+    ActiveSupport::Notifications.subscribed(
+      # The row-loading query, whatever column list Rails picks — as opposed to
+      # the grouped aggregates the availability lookup issues.
+      ->(_n, _s, _f, _i, payload) { row_queries << payload[:sql] if payload[:sql].include?('FROM "collections"') && !payload[:sql].include?("SUM(") },
+      "sql.active_record"
+    ) { ListCollectionTool.call(query: "honed", server_context: @context) }
+
+    assert_predicate row_queries, :any?, "expected a query loading collection rows"
+    assert row_queries.all? { |sql| sql.include?("LIKE") },
+      "the name filter must be part of the row query, not applied in Ruby afterwards: #{row_queries.inspect}"
+  end
+
+  # The point of batching: one collection entry or many must cost the same.
+  test "ListCollectionTool issues a constant number of queries regardless of collection size" do
+    one = count_queries { ListCollectionTool.call(server_context: @context) }
+
+    [ :doublade, :trainer_card, :froakie_cri, :basic_psychic_energy ].each do |name|
+      @user.collections.find_or_create_by!(card: cards(name)) { |c| c.quantity = 0 }.update!(quantity: 2)
+    end
+
+    many = count_queries { ListCollectionTool.call(server_context: @context) }
+
+    assert_equal one, many, "query count grew with the collection: #{one} -> #{many}"
+  end
+
   test "ListDeckCardsTool exposes owned_copies and proxies" do
     physical = @user.decks.create!(name: "Phys", physical: true)
     @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)

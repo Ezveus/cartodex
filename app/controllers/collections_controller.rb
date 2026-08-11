@@ -17,9 +17,7 @@ class CollectionsController < ApplicationController
     @collections = scope.order("cards.name").to_a
     @total_unique = @collections.size
     @total_copies = @collections.sum(&:quantity)
-    @availability = @collections.to_h do |c|
-      [ c.card_id, Allocations::Availability.call(user: current_user, card: c.card) ]
-    end
+    @availability = Allocations::Availability.for_cards(user: current_user, cards: @collections.map(&:card))
     @over_allocation_count = Allocations::OverAllocations.call(user: current_user).size
   end
 end
