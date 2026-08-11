@@ -53,11 +53,21 @@ module Mcp
       )
       status, headers, body = transport.handle_request(request)
 
-      content_type = headers&.fetch("Content-Type", nil) || "application/json"
-      render body: Array(body).join, content_type: content_type, status: status
+      render body: Array(body).join, content_type: content_type_of(headers), status: status
     end
 
     private
+
+    # The transport hands back a Rack-style header hash whose key casing is not
+    # part of its contract: it was "Content-Type" up to mcp 0.24 and became
+    # "content-type" in 0.25. Match either, so a stream never gets mislabelled
+    # as JSON. Today every reachable response is JSON anyway — `stateless: true`
+    # answers GET with 405, so the transport's text/event-stream headers are out
+    # of reach — but the route already accepts GET, so dropping stateless mode
+    # would make the casing matter.
+    def content_type_of(headers)
+      headers&.find { |name, _| name.to_s.casecmp?("content-type") }&.last || "application/json"
+    end
 
     def authenticate_token!
       token = request.headers["Authorization"].to_s.delete_prefix("Bearer ").strip
