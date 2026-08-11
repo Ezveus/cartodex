@@ -69,7 +69,7 @@ Cards::IndexView, Cards::ShowView
 Decks::IndexView, Decks::ShowView, Decks::NewView
 Admin::Dashboard::IndexView
 Admin::CardSets::IndexView, ShowView, NewView, EditView, Form
-Admin::Cards::IndexView, ShowView, EditView
+Admin::Cards::IndexView, ShowView, EditView, Form
 Admin::Users::IndexView
 Admin::Decks::IndexView, ShowView
 Devise::Sessions::NewView, etc.
