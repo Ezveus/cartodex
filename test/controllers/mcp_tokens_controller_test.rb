@@ -54,19 +54,26 @@ class McpTokensControllerTest < ActionDispatch::IntegrationTest
   end
 
   # The design decision this locks in: the raw token is rendered into the
-  # response body and nowhere else. Routing it through flash would serialise it
-  # into the session cookie, i.e. onto the browser's disk in clear text.
-  test "the raw token never reaches a cookie and never survives a reload" do
+  # response body and nowhere else.
+  #
+  # Assert on flash and session, not only on Set-Cookie. Rails encrypts the
+  # session cookie, so a token stashed in flash never appears as plaintext in a
+  # header — a header-only assertion would pass against the very regression it
+  # claims to prevent. The Set-Cookie assertion stays because it catches a
+  # different mistake: writing the token to an unencrypted cookie directly.
+  test "the raw token never reaches flash, session or a cookie, and never survives a reload" do
     post mcp_token_path, as: :turbo_stream
     token = revealed_token
 
+    assert_not_includes flash.to_hash.values.join(" "), token
+    assert_not_includes session.to_hash.values.map(&:to_s).join(" "), token
     assert_no_match(/#{Regexp.escape(token)}/, response.headers.to_h.to_s)
 
     get settings_path
 
     assert_response :success
     assert_no_match(/#{Regexp.escape(token)}/, response.body)
-    assert_no_match(/#{Regexp.escape(token)}/, response.headers.to_h.to_s)
+    assert_not_includes flash.to_hash.values.join(" "), token
   end
 
   test "create requires authentication" do
