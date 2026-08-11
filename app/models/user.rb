@@ -18,6 +18,12 @@ class User < ApplicationRecord
   TOKEN_LIFETIMES = { "30d" => 30.days, "90d" => 90.days, "1y" => 1.year, "never" => nil }.freeze
   DEFAULT_LIFETIME_KEY = "90d"
 
+  # How coarsely api_token_last_used_at is recorded. The MCP auth path runs on
+  # every tool call, and SQLite serialises writes, so the stamp is throttled to
+  # one write per user per interval. "Last used" can therefore lag reality by up
+  # to this much, which is expected — the UI must not imply finer precision.
+  USAGE_TOUCH_INTERVAL = 1.hour
+
   def self.generate_api_token
     SecureRandom.base58(24)
   end
@@ -37,6 +43,7 @@ class User < ApplicationRecord
     user = find_by(api_token_digest: digest_api_token(raw))
     return if user.nil? || user.api_token_expired?
 
+    user.touch_api_token_usage
     user
   end
 
@@ -71,5 +78,13 @@ class User < ApplicationRecord
 
   def api_token_expired?
     api_token_expires_at.present? && api_token_expires_at.past?
+  end
+
+  # Single-column UPDATE, no validations and no callbacks, so it never
+  # interacts with ApplicationService#serialized_transaction.
+  def touch_api_token_usage
+    return if api_token_last_used_at.present? && api_token_last_used_at > USAGE_TOUCH_INTERVAL.ago
+
+    update_column(:api_token_last_used_at, Time.current)
   end
 end

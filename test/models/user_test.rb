@@ -100,4 +100,53 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 90.days, User::TOKEN_LIFETIMES.fetch(User::DEFAULT_LIFETIME_KEY)
     assert_nil User::TOKEN_LIFETIMES.fetch("never")
   end
+
+  test "authenticate_api_token records the first use" do
+    user = User.create!(email: "usage-first@example.com", password: "password123")
+    raw = user.regenerate_api_token
+
+    assert_nil user.api_token_last_used_at
+
+    User.authenticate_api_token(raw)
+
+    assert_not_nil user.reload.api_token_last_used_at
+  end
+
+  test "authenticate_api_token does not write again within the throttle interval" do
+    user = User.create!(email: "usage-throttled@example.com", password: "password123")
+    raw = user.regenerate_api_token
+
+    User.authenticate_api_token(raw)
+    first = user.reload.api_token_last_used_at
+
+    travel 30.minutes do
+      User.authenticate_api_token(raw)
+    end
+
+    assert_equal first.to_i, user.reload.api_token_last_used_at.to_i
+  end
+
+  test "authenticate_api_token writes again once the throttle interval has passed" do
+    user = User.create!(email: "usage-refreshed@example.com", password: "password123")
+    raw = user.regenerate_api_token
+
+    User.authenticate_api_token(raw)
+    first = user.reload.api_token_last_used_at
+
+    travel 2.hours do
+      User.authenticate_api_token(raw)
+    end
+
+    assert_operator user.reload.api_token_last_used_at, :>, first
+  end
+
+  test "an expired token records no usage" do
+    user = User.create!(email: "usage-expired@example.com", password: "password123")
+    raw = user.regenerate_api_token
+    user.update_column(:api_token_expires_at, 1.day.ago)
+
+    User.authenticate_api_token(raw)
+
+    assert_nil user.reload.api_token_last_used_at
+  end
 end
