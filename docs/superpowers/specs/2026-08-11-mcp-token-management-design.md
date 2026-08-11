@@ -138,8 +138,11 @@ The label reads **Generate** with no token and **Rotate** when one exists — in
 which still exists and still shows its metadata, flagged as expired. Rotating warns that the existing
 token stops working immediately.
 
-Because the usage stamp is throttled, "last used" can lag reality by up to an hour. That is expected
-and the copy should not imply second-level precision.
+Because the usage stamp is throttled, "last used" can lag reality by up to an hour. That is expected,
+and the copy must not imply finer precision than the throttle: anything inside the window reads as
+"Used within the last hour" rather than a minute count, because a value stamped twelve minutes ago may
+describe a request from an hour and twelve minutes ago. Above the window, a relative phrasing is
+already hour-granular and is used as-is.
 
 A `Settings` entry joins the navbar's `right_section` in `Ui::AppNavbar`, alongside Admin and
 Sign out. Existing `Ui::*` components are reused; any genuinely new primitive gets registered in
