@@ -2322,6 +2322,10 @@ textarea.form-input {
   .settings-meta-row dt {
     flex-basis: auto;
   }
+
+  .settings-meta-row dd {
+    flex-basis: auto;
+  }
 }
 
 /* Collection */

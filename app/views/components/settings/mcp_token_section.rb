@@ -26,7 +26,13 @@ module Settings
     # Shown exactly once, right after generation: the value is not recoverable
     # from the digest, so this is the user's only chance to copy it.
     def reveal
-      div(class: "settings-reveal") do
+      # turbo_temporary: Turbo Drive caches this element in the page snapshot
+      # it takes before navigating away. Without this, pressing Back restores
+      # the snapshot with the raw token still visible — in-memory only, not a
+      # persistence leak, but it breaks the "shown once" guarantee on Back/
+      # Forward. Turbo removes temporary elements from the snapshot before
+      # caching it.
+      div(class: "settings-reveal", data: { turbo_temporary: true }) do
         p(class: "settings-reveal-warning") do
           strong { "Copy this now." }
           plain " It will not be shown again — only rotated."

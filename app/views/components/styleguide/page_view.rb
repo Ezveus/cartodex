@@ -213,10 +213,22 @@ module Styleguide
               "Panneau de /settings : callout de révélation à fort contraste, paires libellé/valeur, " \
               "et wrap forcé sur le jeton et l'extrait de configuration.") do
         div(class: "sg-stack", style: "max-width: 640px; gap: 1.5rem") do
-          render Settings::McpTokenSection.new(user: sg_settings_user_without_token)
-          render Settings::McpTokenSection.new(user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN)
+          # Both panels below point their forms at the real mcp_token_path.
+          # Without this wrapper, clicking "Generate"/"Rotate"/"Revoke" here
+          # would mutate the signed-in developer's actual MCP token. `disabled`
+          # kills form submission and `inert` kills all pointer/keyboard
+          # interaction (including the Copy button), while the markup still
+          # renders exactly as it does on /settings.
+          settings_panel { render Settings::McpTokenSection.new(user: sg_settings_user_without_token) }
+          settings_panel do
+            render Settings::McpTokenSection.new(user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN)
+          end
         end
       end
+    end
+
+    def settings_panel(&block)
+      fieldset(disabled: true, inert: true, style: "border: 0; margin: 0; padding: 0; min-width: 0", &block)
     end
 
     # Plain in-memory users (never persisted) so this page never touches the

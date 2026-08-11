@@ -26,6 +26,15 @@ class McpServerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
+  test "rejects a request with an expired token" do
+    @user.update_column(:api_token_expires_at, 1.day.ago)
+
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
+
+    assert_response :unauthorized
+    assert_nil @user.reload.api_token_last_used_at
+  end
+
   test "rejects a request with no Authorization header" do
     post "/mcp", params: rpc("list_decks", {}), headers: { "Content-Type" => "application/json" }
 
