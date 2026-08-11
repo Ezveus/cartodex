@@ -546,30 +546,34 @@ module Settings
     def metadata
       if @user.api_token?
         dl(class: "settings-meta") do
-          meta_row "Created", format_time(@user.api_token_created_at)
-          meta_row "Expires", expiry_text
-          meta_row "Last used", last_used_text
+          meta_row("Created") { plain format_time(@user.api_token_created_at) }
+          meta_row("Expires") { expiry_value }
+          meta_row("Last used") { plain last_used_text }
         end
       else
         p(class: "settings-empty") { "No token. Generate one to connect an MCP client." }
       end
     end
 
-    def meta_row(label_text, value)
+    # Takes a block rather than a value: the expiry cell emits an element (the
+    # Expired badge), and a method that emits writes to the buffer where it is
+    # *called*, not where its return value lands — so passing a value would
+    # render the badge outside the <dd>.
+    def meta_row(label_text, &block)
       div(class: "settings-meta-row") do
         dt { label_text }
-        dd { value }
+        dd(&block)
       end
     end
 
-    def expiry_text
-      return "Never" if @user.api_token_expires_at.nil?
-
-      if @user.api_token_expired?
+    def expiry_value
+      if @user.api_token_expires_at.nil?
+        plain "Never"
+      elsif @user.api_token_expired?
         span(class: "badge badge-danger") { "Expired" }
         plain " #{format_time(@user.api_token_expires_at)}"
       else
-        "#{format_time(@user.api_token_expires_at)} (in #{distance_of_time_in_words_to_now(@user.api_token_expires_at)})"
+        plain "#{format_time(@user.api_token_expires_at)} (in #{distance_of_time_in_words_to_now(@user.api_token_expires_at)})"
       end
     end
 
