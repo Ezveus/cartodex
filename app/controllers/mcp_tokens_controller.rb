@@ -14,6 +14,12 @@ class McpTokensController < ApplicationController
     )
   end
 
+  # Idempotent: revoking with no token in place is not an error.
+  def destroy
+    current_user.revoke_api_token!
+    redirect_to settings_path, notice: "MCP token revoked."
+  end
+
   private
 
   # The lifetime arrives from a form, so it is untrusted: resolve it through

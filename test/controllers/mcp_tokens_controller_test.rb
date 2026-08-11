@@ -83,4 +83,23 @@ class McpTokensControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to new_user_session_path
   end
+
+  test "destroy revokes the token" do
+    raw = @user.regenerate_api_token
+
+    delete mcp_token_path
+
+    assert_redirected_to settings_path
+    assert_nil User.authenticate_api_token(raw)
+    assert_not @user.reload.api_token?
+  end
+
+  test "destroy is idempotent when there is no token" do
+    @user.revoke_api_token!
+
+    delete mcp_token_path
+
+    assert_redirected_to settings_path
+    assert_not @user.reload.api_token?
+  end
 end
