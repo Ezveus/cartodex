@@ -45,7 +45,22 @@ gem "kamal", require: false
 gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem "image_processing", "~> 2.0"
+#
+# Commented out: nothing in this app attaches or transforms a blob, and neither
+# ruby-vips nor mini_magick was ever added, so variant processing has never been
+# functional. Keeping the gem is not merely dead weight — it breaks the boot as
+# of Rails 8.1.3.1. That release eagerly requires "image_processing/vips" from
+# ActiveStorage::Transformers::Vips (reached because `load_defaults 8.1` sets
+# variant_processor = :vips). Without ruby-vips, image_processing raises
+# "ImageProcessing::Vips requires the ruby-vips gem", whose CamelCase wording
+# matches neither /libvips/ nor /image_processing/ in the rescue filter of
+# ActiveStorage's engine.rb, so it re-raises instead of warning. With the gem
+# absent the require fails as "cannot load such file -- image_processing/vips",
+# which does match, and Rails degrades gracefully.
+#
+# Uncommenting requires adding ruby-vips (plus the libvips native library in CI
+# and the Dockerfile) or setting config.active_storage.variant_processor.
+# gem "image_processing", "~> 2.0"
 
 # Authentication
 gem "devise"
