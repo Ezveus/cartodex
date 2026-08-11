@@ -1,12 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static values = { url: String }
+  static values = { url: String, text: String }
 
   async copy() {
     try {
-      const response = await fetch(this.urlValue, { credentials: "same-origin" })
-      const { text } = await response.json()
+      const text = this.hasTextValue
+        ? this.textValue
+        : (await (await fetch(this.urlValue, { credentials: "same-origin" })).json()).text
       await navigator.clipboard.writeText(text)
 
       const original = this.element.textContent

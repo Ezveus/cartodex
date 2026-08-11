@@ -14,7 +14,7 @@ module Settings
         p(class: "settings-section-lead") do
           plain "A bearer token lets an MCP client manage your collection and decks on your behalf."
         end
-
+        reveal if @raw_token
         metadata
         generate_form
         revoke_button if @user.api_token?
@@ -22,6 +22,36 @@ module Settings
     end
 
     private
+
+    # Shown exactly once, right after generation: the value is not recoverable
+    # from the digest, so this is the user's only chance to copy it.
+    def reveal
+      div(class: "settings-reveal") do
+        p(class: "settings-reveal-warning") do
+          strong { "Copy this now." }
+          plain " It will not be shown again — only rotated."
+        end
+        code(id: "mcp-token-value", class: "settings-reveal-value") { @raw_token }
+        button(
+          type: "button",
+          class: "btn btn-secondary btn-sm",
+          data: {
+            controller: "clipboard",
+            clipboard_text_value: @raw_token,
+            action: "clipboard#copy"
+          }
+        ) { "Copy" }
+        h3 { "Client configuration" }
+        pre(class: "settings-reveal-snippet") { client_config_snippet }
+      end
+    end
+
+    def client_config_snippet
+      <<~SNIPPET
+        Endpoint:      #{mcp_url}
+        Authorization: Bearer #{@raw_token}
+      SNIPPET
+    end
 
     def metadata
       if @user.api_token?
