@@ -73,4 +73,16 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "turbo-frame#card_results h2", text: card_sets(:por).name
   end
+
+  test "index treats LIKE metacharacters in the query as literals" do
+    get cards_path(q: "b_dew")
+
+    assert_response :success
+    assert_select ".card-grid-name", { text: "Budew", count: 0 }, "_ must not act as a wildcard"
+
+    get cards_path(q: "bud%w")
+
+    assert_response :success
+    assert_select ".card-grid-name", { text: "Budew", count: 0 }, "% must not act as a wildcard"
+  end
 end

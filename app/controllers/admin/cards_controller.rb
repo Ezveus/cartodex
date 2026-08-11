@@ -4,7 +4,7 @@ module Admin
 
     def index
       @cards = Card.includes(:card_set).order(:name)
-      @cards = @cards.where("name LIKE ?", "%#{params[:q]}%") if params[:q].present?
+      @cards = @cards.name_matching(params[:q]) if params[:q].present?
       @cards = @cards.limit(50)
     end
 
