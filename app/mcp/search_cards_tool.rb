@@ -12,7 +12,10 @@ class SearchCardsTool < McpTool
   )
 
   def self.call(query:, server_context:, set_code: nil, limit: 20)
-    scope = Card.where("cards.name LIKE ?", "%#{query}%")
+    # ESCAPE is required, not decorative: sanitize_sql_like escapes with a
+    # backslash, but SQLite's LIKE has no default escape character, so without
+    # the clause the backslash would be matched literally.
+    scope = Card.where("cards.name LIKE ? ESCAPE '\\'", "%#{Card.sanitize_sql_like(query)}%")
     scope = scope.joins(:card_set).where("LOWER(card_sets.code) = ?", set_code.downcase) if set_code.present?
     cards = scope.limit(limit.to_i.clamp(1, MAX_LIMIT)).map do |card|
       { id: card.id, name: card.name, set_name: card.set_name, set_number: card.set_number, card_type: card.card_type }
