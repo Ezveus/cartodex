@@ -18,6 +18,21 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_includes names, "Honedge"
   end
 
+  test "SearchCardsTool treats an underscore in the query as a literal, not a wildcard" do
+    assert_includes payload(SearchCardsTool.call(query: "budew", server_context: @context)).map { |c| c["name"] },
+      "Budew", "sanity: the unescaped spelling must match"
+
+    response = SearchCardsTool.call(query: "b_dew", server_context: @context)
+
+    assert_empty payload(response)
+  end
+
+  test "SearchCardsTool treats a percent sign in the query as a literal, not a wildcard" do
+    response = SearchCardsTool.call(query: "bud%w", server_context: @context)
+
+    assert_empty payload(response)
+  end
+
   test "ListDecksTool returns only the user's decks" do
     response = ListDecksTool.call(server_context: @context)
     ids = payload(response).map { |d| d["id"] }

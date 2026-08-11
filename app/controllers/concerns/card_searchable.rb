@@ -9,7 +9,7 @@ module CardSearchable
     code   = tokens.pop if tokens.length > 1 && card_set_code?(tokens.last)
     name   = tokens.join(" ")
 
-    scope = scope.where("cards.name LIKE ?", "%#{name}%") if name.present?
+    scope = scope.merge(Card.name_matching(name)) if name.present?
     scope = scope.where("UPPER(cards.set_name) = ?", code.upcase) if code
     scope = scope.where(set_number: number) if number
     scope

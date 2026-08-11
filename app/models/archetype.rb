@@ -12,9 +12,17 @@ class Archetype < ApplicationRecord
   before_validation :auto_generate_name, unless: :custom_name?
 
   scope :roots, -> { where(parent_id: nil) }
+  # Matches the archetype's own name or either member Pokémon's. The query's
+  # LIKE metacharacters are escaped, and every LIKE needs its own ESCAPE clause
+  # — see Card.name_matching for why the clause is required rather than
+  # decorative. Spans three columns, so it can't delegate to that scope.
   scope :search, ->(q) {
+    like = "LIKE :q ESCAPE '\\'"
     left_joins(:primary_pokemon, :secondary_pokemon)
-      .where("archetypes.name LIKE :q OR cards.name LIKE :q OR secondary_pokemons_archetypes.name LIKE :q", q: "%#{q}%")
+      .where(
+        "archetypes.name #{like} OR cards.name #{like} OR secondary_pokemons_archetypes.name #{like}",
+        q: "%#{sanitize_sql_like(q)}%"
+      )
       .distinct
   }
 

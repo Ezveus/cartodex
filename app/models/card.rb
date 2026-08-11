@@ -21,6 +21,16 @@ class Card < ApplicationRecord
     "Metal" => "metal", "Fairy" => "fairy", "Dragon" => "dragon", "Colorless" => "metal"
   }.freeze
 
+  # Case-insensitive name substring match, with the query's LIKE metacharacters
+  # escaped so a `%` or `_` typed by a user matches literally instead of acting
+  # as a wildcard. ESCAPE is required, not decorative: sanitize_sql_like escapes
+  # with a backslash, but SQLite's LIKE has no default escape character, so
+  # without the clause the backslash itself would be matched. ESCAPE is standard
+  # SQL, so this survives the move to PostgreSQL contemplated in #62.
+  scope :name_matching, ->(query) {
+    where("cards.name LIKE ? ESCAPE '\\'", "%#{sanitize_sql_like(query)}%")
+  }
+
   # Callbacks
   before_save :compute_fingerprint
 

@@ -58,6 +58,20 @@ class Admin::CardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Trainer", @card.reload.card_type
   end
 
+  test "index treats LIKE metacharacters in the search as literals" do
+    get admin_cards_path(q: "budew")
+
+    assert_select ".data-table-cell a", { text: "Budew", minimum: 1 }, "sanity: the unescaped spelling must match"
+
+    get admin_cards_path(q: "b_dew")
+
+    assert_select ".data-table-cell a", { text: "Budew", count: 0 }, "_ must not act as a wildcard"
+
+    get admin_cards_path(q: "bud%w")
+
+    assert_select ".data-table-cell a", { text: "Budew", count: 0 }, "% must not act as a wildcard"
+  end
+
   test "non-admin users cannot reach the edit form" do
     sign_in users(:two)
 

@@ -58,4 +58,18 @@ class CollectionsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".collection-tile-name", text: @collection.card.name
     assert_select ".collection-tile-name", text: other.card.name, count: 0
   end
+
+  test "search treats LIKE metacharacters as literals" do
+    assert_equal "Honedge", @collection.card.name, "sanity: the patterns below target this fixture"
+
+    get collections_path(q: "h_nedge")
+
+    assert_response :success
+    assert_select ".collection-tile-name", { text: "Honedge", count: 0 }, "_ must not act as a wildcard"
+
+    get collections_path(q: "hon%ge")
+
+    assert_response :success
+    assert_select ".collection-tile-name", { text: "Honedge", count: 0 }, "% must not act as a wildcard"
+  end
 end
