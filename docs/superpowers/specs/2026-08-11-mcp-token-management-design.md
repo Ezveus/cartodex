@@ -158,9 +158,14 @@ authentications within the hour produce one write, a third after the hour produc
 `destroy` revokes; an unknown or missing lifetime falls back to 90 days; unauthenticated access
 redirects.
 
-**The test that locks the design in:** the raw token must appear in **no** `Set-Cookie` header —
-neither in the `create` response nor on the following `GET`. This is what stops someone from later
-"simplifying" the reveal back through the flash.
+**The test that locks the design in** asserts the raw token appears in neither `flash` nor `session`
+after the generate request, and not in the response body of the following `GET`.
+
+Asserting only on `Set-Cookie` would be theatre: Rails encrypts the session cookie, so a token stashed
+in `flash` never appears as plaintext in a header, and a header-only assertion would pass against
+exactly the regression it claims to prevent. The `flash` and `session` assertions are what actually
+guard the decision. A `Set-Cookie` assertion is still worth keeping alongside them, since it catches a
+different mistake — writing the token to an unencrypted cookie directly.
 
 ## Out of scope
 
