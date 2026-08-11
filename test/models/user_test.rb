@@ -84,6 +84,7 @@ class UserTest < ActiveSupport::TestCase
   test "revoke_api_token! leaves the user with no token at all" do
     user = User.create!(email: "revoke@example.com", password: "password123")
     raw = user.regenerate_api_token
+    user.update_column(:api_token_last_used_at, Time.current)
 
     user.revoke_api_token!
 
@@ -92,6 +93,7 @@ class UserTest < ActiveSupport::TestCase
     assert_nil user.api_token_digest
     assert_nil user.api_token_created_at
     assert_nil user.api_token_expires_at
+    assert_nil user.api_token_last_used_at
   end
 
   test "TOKEN_LIFETIMES is the single source of the default lifetime" do
