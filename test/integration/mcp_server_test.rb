@@ -38,6 +38,7 @@ class McpServerTest < ActionDispatch::IntegrationTest
     post "/mcp", params: rpc("add_card_to_collection", { card_id: @card.id, quantity: 2 }), headers: auth_headers
 
     assert_response :success
+    assert_equal "application/json", response.media_type
     assert_equal 2, @user.collections.find_by(card: @card).quantity
   end
 
