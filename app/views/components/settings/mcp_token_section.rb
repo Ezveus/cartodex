@@ -57,9 +57,16 @@ module Settings
       end
     end
 
-    # Throttled to the hour, so deliberately phrased without finer precision.
+    # The stamp is throttled to one write per hour, so the copy must never claim
+    # finer precision than that. distance_of_time_in_words_to_now returns
+    # minute-granular strings under 45 minutes ("12 minutes"), which would read
+    # as fresher than the data can possibly be — a value stamped 12 minutes ago
+    # may describe a request from an hour and 12 minutes ago. Anything inside the
+    # throttle window therefore collapses to one bucket; above it, the helper is
+    # already hour-granular and can be used as-is.
     def last_used_text
       return "Never used" if @user.api_token_last_used_at.nil?
+      return "Used within the last hour" if @user.api_token_last_used_at > User::USAGE_TOUCH_INTERVAL.ago
 
       "About #{distance_of_time_in_words_to_now(@user.api_token_last_used_at)} ago"
     end

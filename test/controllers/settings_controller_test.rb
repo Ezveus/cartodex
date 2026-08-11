@@ -58,4 +58,34 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#mcp-token-value", count: 0
   end
+
+  test "last used inside the throttle window never claims minute precision" do
+    @user.regenerate_api_token
+    @user.update_column(:api_token_last_used_at, 12.minutes.ago)
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token", text: /Used within the last hour/
+    assert_no_match(/minutes ago/, response.body)
+  end
+
+  test "last used outside the throttle window reads with hour granularity" do
+    @user.regenerate_api_token
+    @user.update_column(:api_token_last_used_at, 5.hours.ago)
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token", text: /hours ago/
+  end
+
+  test "last used absent reads as never used" do
+    @user.regenerate_api_token
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token", text: /Never used/
+  end
 end
