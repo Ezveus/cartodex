@@ -80,11 +80,24 @@ class User < ApplicationRecord
     api_token_expires_at.present? && api_token_expires_at.past?
   end
 
-  # Single-column UPDATE, no validations and no callbacks, so it never
-  # interacts with ApplicationService#serialized_transaction.
+  def api_token_used_recently?
+    api_token_last_used_at.present? && api_token_last_used_at > USAGE_TOUCH_INTERVAL.ago
+  end
+
+  # This runs in a before_action, ahead of any service opening a
+  # BEGIN IMMEDIATE transaction — it is that ordering, not the absence of
+  # validations or callbacks, that keeps a single-column update_column clear
+  # of ApplicationService#serialized_transaction.
+  #
+  # Best-effort: this is a telemetry write, not part of the request's
+  # business outcome. If another writer holds SQLite's write lock past the
+  # busy_timeout, the update raises rather than blocking forever — that must
+  # not fail an otherwise-valid MCP call just to record when it happened.
   def touch_api_token_usage
-    return if api_token_last_used_at.present? && api_token_last_used_at > USAGE_TOUCH_INTERVAL.ago
+    return if api_token_used_recently?
 
     update_column(:api_token_last_used_at, Time.current)
+  rescue ActiveRecord::StatementTimeout
+    nil
   end
 end

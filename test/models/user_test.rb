@@ -98,6 +98,8 @@ class UserTest < ActiveSupport::TestCase
 
   test "TOKEN_LIFETIMES is the single source of the default lifetime" do
     assert_equal 90.days, User::TOKEN_LIFETIMES.fetch(User::DEFAULT_LIFETIME_KEY)
+    assert_equal 30.days, User::TOKEN_LIFETIMES.fetch("30d")
+    assert_equal 1.year, User::TOKEN_LIFETIMES.fetch("1y")
     assert_nil User::TOKEN_LIFETIMES.fetch("never")
   end
 
@@ -138,6 +140,14 @@ class UserTest < ActiveSupport::TestCase
     end
 
     assert_operator user.reload.api_token_last_used_at, :>, first
+  end
+
+  test "touch_api_token_usage swallows a write-lock timeout rather than failing the caller" do
+    user = User.create!(email: "usage-timeout@example.com", password: "password123")
+    user.regenerate_api_token
+    user.define_singleton_method(:update_column) { |*| raise ActiveRecord::StatementTimeout, "database is locked" }
+
+    assert_nothing_raised { user.touch_api_token_usage }
   end
 
   test "an expired token records no usage" do

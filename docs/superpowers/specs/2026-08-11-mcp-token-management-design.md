@@ -64,8 +64,9 @@ rather than honouring an arbitrary value or raising.
 
 `regenerate_api_token(expires_in: 90.days)` now takes a duration (`nil` for never). It stamps
 `api_token_created_at`, computes `api_token_expires_at`, and resets `api_token_last_used_at` to
-`NULL`. The `mcp:token` rake task keeps its current behaviour through the default, and may accept an
-optional lifetime as a second argument.
+`NULL`. The `mcp:token` rake task's single-argument form previously produced a token that never
+expired; it now defaults to the same 90-day lifetime as everywhere else, and accepts an optional
+lifetime as a second argument — pass `,never` to reproduce the old un-expiring result.
 
 `revoke_api_token!` sets `api_token_digest` and the three columns above back to `NULL`, leaving the
 user with no token at all rather than an unusable one.

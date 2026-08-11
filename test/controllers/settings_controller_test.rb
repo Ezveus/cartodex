@@ -89,4 +89,23 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#mcp-token", text: /Never used/
   end
+
+  test "a legacy token with no created_at renders an em dash" do
+    @user.regenerate_api_token
+    @user.update_column(:api_token_created_at, nil)
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token dd", text: "—"
+  end
+
+  test "a never-expiring token shows Never as the expiry" do
+    @user.regenerate_api_token(expires_in: nil)
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token dd", text: "Never"
+  end
 end

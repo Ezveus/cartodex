@@ -102,7 +102,7 @@ module Settings
     # already hour-granular and can be used as-is.
     def last_used_text
       return "Never used" if @user.api_token_last_used_at.nil?
-      return "Used within the last hour" if @user.api_token_last_used_at > User::USAGE_TOUCH_INTERVAL.ago
+      return "Used within the last hour" if @user.api_token_used_recently?
 
       "#{distance_of_time_in_words_to_now(@user.api_token_last_used_at).capitalize} ago"
     end
@@ -113,7 +113,7 @@ module Settings
 
     def generate_form
       form_with url: mcp_token_path, method: :post, class: "settings-form" do |f|
-        render Ui::FormGroup.new(label: "Expires", field_name: "lifetime") do
+        render Ui::FormGroup.new(label: "Expires in", field_name: "lifetime") do
           f.select :lifetime,
             [ [ "30 days", "30d" ], [ "90 days", "90d" ], [ "1 year", "1y" ], [ "Never", "never" ] ],
             { selected: User::DEFAULT_LIFETIME_KEY },
@@ -130,7 +130,7 @@ module Settings
       form_with url: mcp_token_path, method: :delete, id: "mcp-token-revoke", class: "settings-form" do
         render Ui::Button.new(
           label: "Revoke token",
-          variant: :secondary,
+          variant: :danger,
           data: { turbo_confirm: "Revoke the token? Any MCP client using it stops working." }
         )
       end
