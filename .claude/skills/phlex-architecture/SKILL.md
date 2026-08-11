@@ -72,6 +72,7 @@ Admin::CardSets::IndexView, ShowView, NewView, EditView, Form
 Admin::Cards::IndexView, ShowView, EditView, Form
 Admin::Users::IndexView
 Admin::Decks::IndexView, ShowView
+Settings::ShowView, McpTokenSection
 Devise::Sessions::NewView, etc.
 ```
 
