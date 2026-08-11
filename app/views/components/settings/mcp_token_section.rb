@@ -98,7 +98,7 @@ module Settings
       return "Never used" if @user.api_token_last_used_at.nil?
       return "Used within the last hour" if @user.api_token_last_used_at > User::USAGE_TOUCH_INTERVAL.ago
 
-      "About #{distance_of_time_in_words_to_now(@user.api_token_last_used_at)} ago"
+      "#{distance_of_time_in_words_to_now(@user.api_token_last_used_at).capitalize} ago"
     end
 
     def format_time(time)

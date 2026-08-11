@@ -47,6 +47,7 @@ module Styleguide
         stats_section
         form_section
         deck_card_section
+        settings_section
         tokens_section
       end
     end
@@ -200,6 +201,37 @@ module Styleguide
           p(class: "deck-card-count") { "60 cards" }
         end
       end
+    end
+
+    # A 24-char placeholder in the shape of the real token (base58, no
+    # spaces) — long enough to exercise the wrap/scroll behaviour without
+    # ever being a value that could authenticate anything.
+    PLACEHOLDER_TOKEN = "K7mQ2xVdN9wZaB4tRc6jHfLp".freeze
+
+    def settings_section
+      sg_section("Composants", "Jeton MCP",
+              "Panneau de /settings : callout de révélation à fort contraste, paires libellé/valeur, " \
+              "et wrap forcé sur le jeton et l'extrait de configuration.") do
+        div(class: "sg-stack", style: "max-width: 640px; gap: 1.5rem") do
+          render Settings::McpTokenSection.new(user: sg_settings_user_without_token)
+          render Settings::McpTokenSection.new(user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN)
+        end
+      end
+    end
+
+    # Plain in-memory users (never persisted) so this page never touches the
+    # database and can never leak a real token.
+    def sg_settings_user_without_token
+      User.new
+    end
+
+    def sg_settings_user_with_token
+      User.new(
+        api_token_digest: "placeholder-digest",
+        api_token_created_at: 45.days.ago,
+        api_token_expires_at: 45.days.from_now,
+        api_token_last_used_at: 3.hours.ago
+      )
     end
 
     def tokens_section

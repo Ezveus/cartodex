@@ -1813,6 +1813,114 @@ textarea.form-input {
   font-size: 0.85rem;
 }
 
+/* Settings — MCP token panel */
+.settings-section {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: var(--e1);
+  padding: 1.5rem;
+}
+
+.settings-section-lead {
+  color: var(--ink-500);
+  max-width: 64ch;
+  margin: 0.25rem 0 1.5rem;
+}
+
+.settings-empty {
+  color: var(--ink-500);
+  font-style: italic;
+  margin: 0 0 1.5rem;
+}
+
+.settings-meta {
+  margin: 0 0 1.5rem;
+}
+
+.settings-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-meta-row:last-child {
+  border-bottom: none;
+}
+
+.settings-meta-row dt {
+  flex: 0 0 140px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.settings-meta-row dd {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-form {
+  max-width: 420px;
+  margin-top: 1.5rem;
+}
+
+.settings-form + .settings-form {
+  margin-top: 0.75rem;
+}
+
+/* The reveal block is the only moment the raw token is ever visible again —
+   weighted as a callout (elevated, amber-ringed) rather than a neutral box. */
+.settings-reveal {
+  background: var(--surface);
+  border: 2px solid var(--bolt);
+  border-radius: 8px;
+  box-shadow: var(--e2);
+  padding: 1.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.settings-reveal h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.settings-reveal-warning {
+  background: var(--bolt-bg);
+  border-radius: 4px;
+  padding: 0.6rem 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.settings-reveal-value {
+  display: block;
+  font-family: var(--font-mono);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.settings-reveal-snippet {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
 /* Dropdown */
 .dropdown {
   position: relative;
@@ -2203,6 +2311,16 @@ textarea.form-input {
     letter-spacing: 0.03em;
     margin-right: 1rem;
     flex-shrink: 0;
+  }
+
+  /* Settings: stack the label/value pair instead of relying on wrap */
+  .settings-meta-row {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .settings-meta-row dt {
+    flex-basis: auto;
   }
 }
 

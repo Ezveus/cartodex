@@ -78,6 +78,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "#mcp-token", text: /hours ago/
+    assert_no_match(/[Aa]bout about/, response.body)
   end
 
   test "last used absent reads as never used" do
