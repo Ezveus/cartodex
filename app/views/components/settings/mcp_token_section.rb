@@ -1,0 +1,96 @@
+module Settings
+  # The MCP token panel. Rendered on page load with raw_token nil, and
+  # re-rendered by McpTokensController#create with the freshly generated token
+  # so it can be shown exactly once. The root id is the Turbo Stream target.
+  class McpTokenSection < ApplicationComponent
+    def initialize(user:, raw_token: nil)
+      @user = user
+      @raw_token = raw_token
+    end
+
+    def view_template
+      section(id: "mcp-token", class: "settings-section") do
+        h2 { "MCP token" }
+        p(class: "settings-section-lead") do
+          plain "A bearer token lets an MCP client manage your collection and decks on your behalf."
+        end
+
+        metadata
+        generate_form
+        revoke_button if @user.api_token?
+      end
+    end
+
+    private
+
+    def metadata
+      if @user.api_token?
+        dl(class: "settings-meta") do
+          meta_row("Created") { plain format_time(@user.api_token_created_at) }
+          meta_row("Expires") { expiry_value }
+          meta_row("Last used") { plain last_used_text }
+        end
+      else
+        p(class: "settings-empty") { "No token. Generate one to connect an MCP client." }
+      end
+    end
+
+    # Takes a block rather than a value: the expiry cell emits an element (the
+    # Expired badge), and a method that emits writes to the buffer where it is
+    # *called*, not where its return value lands — so passing a value would
+    # render the badge outside the <dd>.
+    def meta_row(label_text, &block)
+      div(class: "settings-meta-row") do
+        dt { label_text }
+        dd(&block)
+      end
+    end
+
+    def expiry_value
+      if @user.api_token_expires_at.nil?
+        plain "Never"
+      elsif @user.api_token_expired?
+        span(class: "badge badge-danger") { "Expired" }
+        plain " #{format_time(@user.api_token_expires_at)}"
+      else
+        plain "#{format_time(@user.api_token_expires_at)} (in #{distance_of_time_in_words_to_now(@user.api_token_expires_at)})"
+      end
+    end
+
+    # Throttled to the hour, so deliberately phrased without finer precision.
+    def last_used_text
+      return "Never used" if @user.api_token_last_used_at.nil?
+
+      "About #{distance_of_time_in_words_to_now(@user.api_token_last_used_at)} ago"
+    end
+
+    def format_time(time)
+      time.nil? ? "—" : time.to_date.to_s
+    end
+
+    def generate_form
+      form_with url: mcp_token_path, method: :post, class: "settings-form" do |f|
+        render Ui::FormGroup.new(label: "Expires", field_name: "lifetime") do
+          f.select :lifetime,
+            [ [ "30 days", "30d" ], [ "90 days", "90d" ], [ "1 year", "1y" ], [ "Never", "never" ] ],
+            { selected: User::DEFAULT_LIFETIME_KEY },
+            class: "form-input", name: "lifetime"
+        end
+        render Ui::Button.new(label: @user.api_token? ? "Rotate token" : "Generate token")
+        if @user.api_token?
+          em(class: "form-hint") { "Rotating makes the current token stop working immediately." }
+        end
+      end
+    end
+
+    def revoke_button
+      form_with url: mcp_token_path, method: :delete, id: "mcp-token-revoke", class: "settings-form" do
+        render Ui::Button.new(
+          label: "Revoke token",
+          variant: :secondary,
+          data: { turbo_confirm: "Revoke the token? Any MCP client using it stops working." }
+        )
+      end
+    end
+  end
+end

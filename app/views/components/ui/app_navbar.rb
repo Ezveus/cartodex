@@ -50,6 +50,7 @@ module Ui
     def right_section
       div(class: "navbar-right") do
         span(class: "navbar-user") { @current_user.email }
+        link_to "Settings", settings_path, class: "navbar-link"
         link_to "Admin", admin_root_path, class: "navbar-link" if @current_user.admin?
         link_to "Sign out", destroy_user_session_path, data: { turbo_method: :delete }, class: "navbar-link"
       end

@@ -11,6 +11,7 @@ class ApplicationComponent < Phlex::HTML
   include Phlex::Rails::Helpers::CollectionSelect
   include Phlex::Rails::Helpers::ControllerName
   include Phlex::Rails::Helpers::Localize
+  include Phlex::Rails::Helpers::DistanceOfTimeInWordsToNow
   include Phlex::Rails::Helpers::CSRFMetaTags
   include Phlex::Rails::Helpers::CSPMetaTag
   include Phlex::Rails::Helpers::StyleSheetLinkTag
