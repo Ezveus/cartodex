@@ -8,4 +8,7 @@ class Collection < ApplicationRecord
 
   # Scopes
   scope :with_cards, -> { where("quantity > 0") }
+  # Held once so the collection page and the MCP tool cannot drift apart on what
+  # "filtered by card name" means; see Card.name_matching for the matching rules.
+  scope :card_name_matching, ->(query) { joins(:card).merge(Card.name_matching(query)) }
 end

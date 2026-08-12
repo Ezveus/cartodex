@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_194127) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_12_093000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -67,6 +67,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_194127) do
     t.integer "hp"
     t.string "image_url"
     t.string "name"
+    t.string "name_normalized"
     t.integer "pokemon_subtype_id"
     t.decimal "price_eur", precision: 8, scale: 2
     t.decimal "price_usd", precision: 8, scale: 2

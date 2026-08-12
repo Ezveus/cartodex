@@ -5,9 +5,12 @@ module Api
     def index
       collections = current_user.collections.includes(:card).load
       total_cards = collections.sum(&:quantity)
+      # Batched: collection_json used to compute availability per row, an N+1
+      # that grew with the user's collection.
+      availability = Allocations::Availability.for_cards(user: current_user, cards: collections.map(&:card))
 
       render json: {
-        collections: collections.map { |c| collection_json(c) },
+        collections: collections.map { |c| collection_json(c, availability[c.card_id]) },
         total_cards: total_cards
       }
     end
@@ -41,8 +44,10 @@ module Api
       params.require(:collection).permit(:card_id, :quantity)
     end
 
-    def collection_json(collection)
-      availability = Allocations::Availability.call(user: current_user, card: collection.card)
+    # `availability` is passed in so a caller rendering many rows can resolve it
+    # in one batch; single-record actions let it default.
+    def collection_json(collection, availability = nil)
+      availability ||= Allocations::Availability.call(user: current_user, card: collection.card)
       {
         id: collection.id,
         card_id: collection.card_id,

@@ -1,5 +1,9 @@
+# name_normalized mirrors name, Unicode-downcased. Card#normalize_name keeps it
+# in step on save, but fixtures are inserted without callbacks, so it is spelled
+# out here — CardTest asserts the two never drift.
 honedge:
   name: Honedge
+  name_normalized: honedge
   card_type: "Pokémon"
   card_set: por
   set_name: POR
@@ -14,6 +18,7 @@ honedge:
 
 doublade:
   name: Doublade
+  name_normalized: doublade
   card_type: "Pokémon"
   card_set: por
   set_name: POR
@@ -29,6 +34,7 @@ doublade:
 
 trainer_card:
   name: Boss's Orders
+  name_normalized: boss's orders
   card_type: Trainer
   set_name: PAL
   set_number: "172"
@@ -36,6 +42,7 @@ trainer_card:
 
 budew_pre:
   name: Budew
+  name_normalized: budew
   card_type: "Pokémon"
   set_name: PRE
   set_number: "4"
@@ -49,6 +56,7 @@ budew_pre:
 
 budew_asc:
   name: Budew
+  name_normalized: budew
   card_type: "Pokémon"
   card_set: asc
   set_name: ASC
@@ -63,6 +71,7 @@ budew_asc:
 
 froakie_cri:
   name: Froakie
+  name_normalized: froakie
   card_type: "Pokémon"
   set_name: CRI
   set_number: "20"
@@ -75,6 +84,7 @@ froakie_cri:
 
 froakie_twm:
   name: Froakie
+  name_normalized: froakie
   card_type: "Pokémon"
   set_name: TWM
   set_number: "56"
@@ -87,6 +97,7 @@ froakie_twm:
 
 bosss_orders_meg:
   name: Boss's Orders
+  name_normalized: boss's orders
   card_type: Trainer
   set_name: MEG
   set_number: "114"
@@ -95,6 +106,7 @@ bosss_orders_meg:
 
 basic_psychic_energy:
   name: Psychic Energy
+  name_normalized: psychic energy
   card_type: Energy
   subtype: Basic Energy
   set_name: SVE
@@ -102,6 +114,7 @@ basic_psychic_energy:
 
 teal_mask_ogerpon_ex:
   name: Teal Mask Ogerpon ex
+  name_normalized: teal mask ogerpon ex
   card_type: "Pokémon"
   set_name: TWM
   set_number: "25"
@@ -114,6 +127,7 @@ teal_mask_ogerpon_ex:
 
 special_prism_energy_asc:
   name: Prism Energy
+  name_normalized: prism energy
   card_type: Energy
   subtype: Special Energy
   set_name: ASC
@@ -122,6 +136,7 @@ special_prism_energy_asc:
 
 special_prism_energy_blk:
   name: Prism Energy
+  name_normalized: prism energy
   card_type: Energy
   subtype: Special Energy
   set_name: BLK

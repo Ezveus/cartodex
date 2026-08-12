@@ -42,4 +42,29 @@ class Api::CollectionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal 2, JSON.parse(response.body)["quantity"]
   end
+
+  test "index issues a constant number of queries regardless of collection size" do
+    get api_collections_path # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get api_collections_path }
+
+    grow_collection(@user)
+
+    large = count_queries { get api_collections_path }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the collection: #{small} -> #{large}"
+  end
+
+  test "index still reports owned, committed and available per row" do
+    card = cards(:honedge)
+    @user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: 3)
+    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
+
+    get api_collections_path
+    row = JSON.parse(response.body)["collections"].find { |c| c["card_id"] == card.id }
+
+    assert_equal [ 3, 2, 1 ], [ row["owned"], row["committed"], row["available"] ]
+  end
 end

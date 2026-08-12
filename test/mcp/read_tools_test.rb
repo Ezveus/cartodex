@@ -96,6 +96,44 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_equal [], payload(response)
   end
 
+  # The filter moved from Ruby into SQL, which means it now goes through
+  # Card.name_matching and inherits its metacharacter escaping.
+  test "ListCollectionTool treats LIKE metacharacters in the query as literals" do
+    @user.collections.find_or_create_by!(card: cards(:budew_pre)) { |c| c.quantity = 0 }.update!(quantity: 1)
+
+    assert_includes payload(ListCollectionTool.call(query: "budew", server_context: @context)).map { |c| c["name"] },
+      "Budew", "sanity: the unescaped spelling must match"
+
+    assert_equal [], payload(ListCollectionTool.call(query: "b_dew", server_context: @context)),
+      "_ must not act as a wildcard"
+    assert_equal [], payload(ListCollectionTool.call(query: "bud%w", server_context: @context)),
+      "% must not act as a wildcard"
+  end
+
+  # The tool promises a case-insensitive substring, and filtering in SQL must not
+  # quietly narrow that to ASCII: SQLite's LIKE folds only A–Z, so matching on
+  # `name` would miss an accented letter typed in the other case.
+  test "ListCollectionTool matches an accented name whatever the case typed" do
+    cards(:honedge).update!(name: "Flabébé")
+
+    %w[Flabébé FLABÉBÉ flabébé BÉBÉ].each do |query|
+      names = payload(ListCollectionTool.call(query: query, server_context: @context)).map { |c| c["name"] }
+
+      assert_includes names, "Flabébé", "#{query.inspect} must match"
+    end
+  end
+
+  # The point of batching: one collection entry or many must cost the same.
+  test "ListCollectionTool issues a constant number of queries regardless of collection size" do
+    one = count_queries { ListCollectionTool.call(server_context: @context) }
+
+    grow_collection(@user)
+
+    many = count_queries { ListCollectionTool.call(server_context: @context) }
+
+    assert_equal one, many, "query count grew with the collection: #{one} -> #{many}"
+  end
+
   test "ListDeckCardsTool exposes owned_copies and proxies" do
     physical = @user.decks.create!(name: "Phys", physical: true)
     @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)

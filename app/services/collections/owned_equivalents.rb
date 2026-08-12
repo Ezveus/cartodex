@@ -14,12 +14,16 @@ module Collections
       return [] if @card.fingerprint.blank?
 
       equivalent_ids = Card.where(fingerprint: @card.fingerprint).select(:id)
-      collections = @user.collections.with_cards.where(card_id: equivalent_ids).includes(:card)
+      collections = @user.collections.with_cards.where(card_id: equivalent_ids).includes(:card).to_a
+
+      # Batched: this was one Availability call per printing, so the cost grew
+      # with however many printings of the card the user owns.
+      availability = Allocations::Availability.for_cards(user: @user, cards: collections.map(&:card))
 
       collections.filter_map do |collection|
         next if @excluding_card && collection.card_id == @card.id
 
-        available = Allocations::Availability.call(user: @user, card: collection.card).available
+        available = availability[collection.card_id].available
         {
           card_id: collection.card_id,
           set_name: collection.card.set_name,

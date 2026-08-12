@@ -205,4 +205,24 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  # The deck show page ran one Availability lookup per deck card, with
+  # excluding_deck set, so its cost grew with the decklist.
+  test "show issues a constant number of queries regardless of decklist size" do
+    deck = @user.decks.create!(name: "Physical", physical: true)
+    @user.collections.find_or_create_by!(card: cards(:honedge)) { |c| c.quantity = 0 }.update!(quantity: 4)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+    force_over_allocation(@user) # pins the OverAllocations branch across both measurements
+
+    get deck_path(deck) # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get deck_path(deck) }
+
+    grow_collection(@user).each { |card| deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 1) }
+
+    large = count_queries { get deck_path(deck) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
+  end
 end

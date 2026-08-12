@@ -17,9 +17,9 @@ class DecksController < ApplicationController
     @editing = false
 
     if @deck.physical?
-      @availability = @deck.deck_cards.to_h do |dc|
-        [ dc.card_id, Allocations::Availability.call(user: current_user, card: dc.card, excluding_deck: @deck) ]
-      end
+      @availability = Allocations::Availability.for_cards(
+        user: current_user, cards: @deck.deck_cards.map(&:card), excluding_deck: @deck
+      )
       @over_allocated_card_ids = Allocations::OverAllocations.call(user: current_user).map { |o| o[:card_id] }.to_set
     else
       @availability = {}
