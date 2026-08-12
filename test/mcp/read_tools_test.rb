@@ -110,29 +110,24 @@ class ReadToolsTest < ActiveSupport::TestCase
       "% must not act as a wildcard"
   end
 
-  test "ListCollectionTool filters in SQL rather than loading every row" do
-    @user.collections.find_or_create_by!(card: cards(:budew_pre)) { |c| c.quantity = 0 }.update!(quantity: 1)
+  # The tool promises a case-insensitive substring, and filtering in SQL must not
+  # quietly narrow that to ASCII: SQLite's LIKE folds only A–Z, so matching on
+  # `name` would miss an accented letter typed in the other case.
+  test "ListCollectionTool matches an accented name whatever the case typed" do
+    cards(:honedge).update!(name: "Flabébé")
 
-    row_queries = []
-    ActiveSupport::Notifications.subscribed(
-      # The row-loading query, whatever column list Rails picks — as opposed to
-      # the grouped aggregates the availability lookup issues.
-      ->(_n, _s, _f, _i, payload) { row_queries << payload[:sql] if payload[:sql].include?('FROM "collections"') && !payload[:sql].include?("SUM(") },
-      "sql.active_record"
-    ) { ListCollectionTool.call(query: "honed", server_context: @context) }
+    %w[Flabébé FLABÉBÉ flabébé BÉBÉ].each do |query|
+      names = payload(ListCollectionTool.call(query: query, server_context: @context)).map { |c| c["name"] }
 
-    assert_predicate row_queries, :any?, "expected a query loading collection rows"
-    assert row_queries.all? { |sql| sql.include?("LIKE") },
-      "the name filter must be part of the row query, not applied in Ruby afterwards: #{row_queries.inspect}"
+      assert_includes names, "Flabébé", "#{query.inspect} must match"
+    end
   end
 
   # The point of batching: one collection entry or many must cost the same.
   test "ListCollectionTool issues a constant number of queries regardless of collection size" do
     one = count_queries { ListCollectionTool.call(server_context: @context) }
 
-    [ :doublade, :trainer_card, :froakie_cri, :basic_psychic_energy ].each do |name|
-      @user.collections.find_or_create_by!(card: cards(name)) { |c| c.quantity = 0 }.update!(quantity: 2)
-    end
+    grow_collection(@user)
 
     many = count_queries { ListCollectionTool.call(server_context: @context) }
 

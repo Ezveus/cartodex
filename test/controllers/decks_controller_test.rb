@@ -212,15 +212,13 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     deck = @user.decks.create!(name: "Physical", physical: true)
     @user.collections.find_or_create_by!(card: cards(:honedge)) { |c| c.quantity = 0 }.update!(quantity: 4)
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+    force_over_allocation(@user) # pins the OverAllocations branch across both measurements
 
     get deck_path(deck) # warm the session: the first request of a test also loads the Devise user
 
     small = count_queries { get deck_path(deck) }
 
-    [ :doublade, :trainer_card, :froakie_cri, :basic_psychic_energy ].each do |name|
-      @user.collections.find_or_create_by!(card: cards(name)) { |c| c.quantity = 0 }.update!(quantity: 2)
-      deck.deck_cards.create!(card: cards(name), quantity: 2, owned_copies: 1)
-    end
+    grow_collection(@user).each { |card| deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 1) }
 
     large = count_queries { get deck_path(deck) }
 

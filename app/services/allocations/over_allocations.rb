@@ -22,7 +22,7 @@ module Allocations
       over_allocated = committed_by_card.select { |card_id, committed| committed > owned_by_card.fetch(card_id, 0) }
       return [] if over_allocated.empty?
 
-      decks_by_card = decks_holding_real_copies(over_allocated.keys)
+      decks_by_card = PhysicalDecksByCard.call(user: @user, card_ids: over_allocated.keys, holding: :holding_real_copies)
 
       over_allocated.map do |card_id, committed|
         {
@@ -31,23 +31,6 @@ module Allocations
           committed: committed,
           decks: decks_by_card.fetch(card_id, [])
         }
-      end
-    end
-
-    private
-
-    # Which physical decks hold at least one real copy of each given card, in one
-    # query. SQL cannot return the nested shape, so the rows are grouped in Ruby.
-    def decks_holding_real_copies(card_ids)
-      rows = @user.decks.where(physical: true)
-                  .joins(:deck_cards)
-                  .where(deck_cards: { card_id: card_ids })
-                  .where("deck_cards.owned_copies > 0")
-                  .distinct
-                  .pluck("deck_cards.card_id", "decks.id", "decks.name")
-
-      rows.group_by(&:first).transform_values do |group|
-        group.map { |(_card_id, deck_id, deck_name)| { id: deck_id, name: deck_name } }
       end
     end
   end

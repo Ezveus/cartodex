@@ -47,32 +47,13 @@ module Allocations
       @excluding_deck = excluding_deck
     end
 
+    # Delegates to for_cards rather than re-deriving the same three numbers: one
+    # card is just the smallest batch, and it costs the same two grouped queries
+    # (three when a deck is excluded). Keeping a second implementation here meant
+    # the owned/committed/available rule was written twice, so a change to it
+    # could leave the per-card and the batched answers disagreeing.
     def call
-      Result.new(owned: owned, committed: committed, available: [ owned - committed_excluding, 0 ].max)
-    end
-
-    private
-
-    # Memoised because each of these is asked for more than once while building
-    # the Result. Rails' query cache already absorbs the duplicates, so this
-    # saves cache lookups rather than round trips — cheap, and it keeps the
-    # reader from assuming a second query happens.
-    def owned
-      @owned ||= @user.collections.where(card: @card).sum(:quantity)
-    end
-
-    def committed
-      @committed ||= physical_deck_cards.sum(:owned_copies)
-    end
-
-    def committed_excluding
-      return committed unless @excluding_deck
-
-      @committed_excluding ||= physical_deck_cards.where.not(deck_id: @excluding_deck.id).sum(:owned_copies)
-    end
-
-    def physical_deck_cards
-      DeckCard.where(card: @card, deck_id: @user.decks.where(physical: true).select(:id))
+      self.class.for_cards(user: @user, cards: [ @card ], excluding_deck: @excluding_deck).fetch(@card.id)
     end
   end
 end

@@ -75,4 +75,37 @@ class CardTest < ActiveSupport::TestCase
       card.destroy
     end
   end
+
+  test "saving normalizes the name with full Unicode case folding" do
+    card = cards(:honedge)
+    card.update!(name: "Flabébé")
+
+    assert_equal "flabébé", card.reload.name_normalized
+  end
+
+  # name_matching is the one filter behind the collection page, the admin card
+  # list and two MCP tools, and it promises case-insensitivity. Matching on `name`
+  # would have delivered that for ASCII only, since SQLite's LIKE folds A–Z and
+  # nothing else.
+  test "name_matching ignores case on accented letters" do
+    cards(:honedge).update!(name: "Flabébé")
+
+    %w[Flabébé FLABÉBÉ flabébé BÉBÉ bébé].each do |query|
+      assert_includes Card.name_matching(query).pluck(:name), "Flabébé", "#{query.inspect} must match"
+    end
+  end
+
+  test "name_matching treats LIKE metacharacters in the query as literals" do
+    assert_includes Card.name_matching("honedge").pluck(:name), "Honedge", "sanity: the plain spelling matches"
+    assert_empty Card.name_matching("h_nedge"), "_ must not act as a wildcard"
+    assert_empty Card.name_matching("hon%ge"), "% must not act as a wildcard"
+  end
+
+  # Fixtures are inserted without callbacks, so cards.yml spells name_normalized
+  # out by hand; this is what stops the two from drifting when a name is edited.
+  test "every card fixture carries the normalization its name implies" do
+    Card.find_each do |card|
+      assert_equal card.name.downcase, card.name_normalized, "#{card.name.inspect} fixture is out of step"
+    end
+  end
 end

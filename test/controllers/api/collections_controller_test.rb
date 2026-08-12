@@ -48,9 +48,7 @@ class Api::CollectionsControllerTest < ActionDispatch::IntegrationTest
 
     small = count_queries { get api_collections_path }
 
-    [ :doublade, :trainer_card, :froakie_cri, :basic_psychic_energy ].each do |name|
-      @user.collections.find_or_create_by!(card: cards(name)) { |c| c.quantity = 0 }.update!(quantity: 2)
-    end
+    grow_collection(@user)
 
     large = count_queries { get api_collections_path }
 

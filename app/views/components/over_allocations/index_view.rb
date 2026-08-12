@@ -44,7 +44,7 @@ module OverAllocations
       form_with url: reallocate_over_allocations_path, method: :post, class: "over-allocation-reallocate" do
         input(type: "hidden", name: "card_id", value: over[:card_id])
         select(name: "from_deck_id") { sources.each { |d| option(value: d[:id]) { d[:name] } } }
-        select(name: "to_deck_id") { targets.each { |id, name| option(value: id) { name } } }
+        select(name: "to_deck_id") { targets.each { |d| option(value: d[:id]) { d[:name] } } }
         input(type: "number", name: "quantity", value: "1", min: "1")
         button(type: "submit") { "Reallocate" }
       end

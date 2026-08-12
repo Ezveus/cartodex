@@ -9,11 +9,11 @@ class ListCollectionTool < McpTool
 
   def self.call(server_context:, query: nil)
     user = current_user(server_context)
-    scope = user.collections.with_cards.joins(:card).includes(:card)
-    # Filtered in SQL rather than in Ruby after loading every row, and through
-    # Card.name_matching so a `%` or `_` in the query matches literally — the
-    # same escaping SearchCardsTool uses.
-    scope = scope.merge(Card.name_matching(query)) if query.present?
+    scope = user.collections.with_cards.includes(:card)
+    # Filtered in SQL rather than in Ruby after loading every row, through the
+    # same Collection scope the collection page uses: case-insensitive even on
+    # accented letters, with a `%` or `_` in the query matched literally.
+    scope = scope.card_name_matching(query) if query.present?
     collections = scope.to_a
 
     # One batched lookup instead of one Availability call per row, which was an
