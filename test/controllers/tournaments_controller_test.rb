@@ -107,4 +107,28 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  test "index filters tournaments by name" do
+    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "lyon")
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+    assert_select ".data-table-row", text: /League Cup Lyon/
+  end
+
+  test "index ignores a blank q" do
+    get tournaments_path(q: "   ")
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+  end
+
+  test "index keeps the query in the search field" do
+    get tournaments_path(q: "lyon")
+
+    assert_select "form.tournaments-search input[name=q][value=lyon]"
+  end
 end

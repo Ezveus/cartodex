@@ -1,9 +1,13 @@
 class TournamentsController < ApplicationController
+  include Searchable
+
   before_action :set_tournament, only: %i[show edit update destroy]
   before_action :set_form_collections, only: %i[new create edit update]
 
   def index
+    @query = search_query
     @tournaments = current_user.tournaments.includes(:deck, :tournament_profile).order(date: :desc)
+    @tournaments = @tournaments.name_matching(@query) if @query.present?
   end
 
   def show

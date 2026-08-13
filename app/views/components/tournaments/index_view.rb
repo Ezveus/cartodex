@@ -1,7 +1,8 @@
 module Tournaments
   class IndexView < ApplicationComponent
-    def initialize(tournaments:)
+    def initialize(tournaments:, query: "")
       @tournaments = tournaments
+      @query = query
     end
 
     def view_template
@@ -9,6 +10,8 @@ module Tournaments
         render Ui::PageHeader.new(title: "Tournaments") do
           link_to "New Tournament", new_tournament_path, class: "btn btn-primary"
         end
+
+        search_form
 
         if @tournaments.any?
           render Ui::DataTable.new(columns: %w[Name Date Tier Deck Placement CP Actions]) do |t|
@@ -31,12 +34,27 @@ module Tournaments
             end
           end
         else
-          p { "No tournaments yet." }
+          p { @query.present? ? "No tournaments match this search." : "No tournaments yet." }
         end
       end
     end
 
     private
+
+    def search_form
+      form(action: tournaments_path, method: "get", class: "tournaments-search", data: { controller: "card-filter" }) do
+        input(
+          type: "search",
+          name: "q",
+          value: @query,
+          placeholder: "Tournament name…",
+          class: "form-input",
+          autocomplete: "off",
+          aria_label: "Search tournaments",
+          data: { action: "input->card-filter#debounce" }
+        )
+      end
+    end
 
     def placement_label(tournament)
       return "—" if tournament.placement.blank?
