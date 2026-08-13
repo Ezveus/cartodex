@@ -76,6 +76,41 @@ class McpTokensControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes flash.to_hash.values.join(" "), token
   end
 
+  # Turbo can be absent — JS blocked, or the importmap asset failing to load —
+  # and the browser then submits the form natively. Answering that with a
+  # turbo-stream body made the browser download the response, writing the raw
+  # token to the user's disk in cleartext.
+  test "create answers a non-Turbo submission with a renderable HTML page" do
+    post mcp_token_path, params: { lifetime: "30d" }
+
+    assert_response :success
+    assert_equal "text/html", response.media_type
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
+    assert_equal @user, User.authenticate_api_token(revealed_token), "the token must still be revealed once"
+  end
+
+  test "create keeps the requested lifetime selected in the re-rendered form" do
+    post mcp_token_path, params: { lifetime: "1y" }, as: :turbo_stream
+
+    assert_response :success
+    assert_select "option[value=?][selected]", "1y"
+    assert_select "option[value=?][selected]", "90d", count: 0
+  end
+
+  test "create with the never lifetime keeps Never selected" do
+    post mcp_token_path, params: { lifetime: "never" }, as: :turbo_stream
+
+    assert_response :success
+    assert_select "option[value=?][selected]", "never"
+  end
+
+  test "the reveal opts out of both the Turbo snapshot and the browser bfcache" do
+    post mcp_token_path, as: :turbo_stream
+
+    assert_response :success
+    assert_select ".settings-reveal[data-turbo-temporary][data-controller=?]", "ephemeral-secret"
+  end
+
   test "create requires authentication" do
     sign_out @user
 

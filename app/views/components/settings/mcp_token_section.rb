@@ -2,14 +2,20 @@ module Settings
   # The MCP token panel. Rendered on page load with raw_token nil, and
   # re-rendered by McpTokensController#create with the freshly generated token
   # so it can be shown exactly once. The root id is the Turbo Stream target.
+  #
+  # dom_id is a parameter because /styleguide renders two of these on one page:
+  # with the id hardcoded, both panels answered to `mcp-token` and to the same
+  # `lifetime` field id, so the second panel's label focused the first panel's
+  # select and a Turbo Stream replace could only ever find the first.
   class McpTokenSection < ApplicationComponent
-    def initialize(user:, raw_token: nil)
+    def initialize(user:, raw_token: nil, dom_id: "mcp-token")
       @user = user
       @raw_token = raw_token
+      @dom_id = dom_id
     end
 
     def view_template
-      section(id: "mcp-token", class: "settings-section") do
+      section(id: @dom_id, class: "settings-section") do
         h2 { "MCP token" }
         p(class: "settings-section-lead") do
           plain "A bearer token lets an MCP client manage your collection and decks on your behalf."
@@ -26,18 +32,27 @@ module Settings
     # Shown exactly once, right after generation: the value is not recoverable
     # from the digest, so this is the user's only chance to copy it.
     def reveal
-      # turbo_temporary: Turbo Drive caches this element in the page snapshot
-      # it takes before navigating away. Without this, pressing Back restores
-      # the snapshot with the raw token still visible — in-memory only, not a
-      # persistence leak, but it breaks the "shown once" guarantee on Back/
-      # Forward. Turbo removes temporary elements from the snapshot before
-      # caching it.
-      div(class: "settings-reveal", data: { turbo_temporary: true }) do
+      # Two caches can put this element back on screen after the user has left
+      # the page, and each needs its own answer:
+      #
+      # turbo_temporary — Turbo Drive caches this element in the page snapshot it
+      # takes before navigating away. Turbo drops temporary elements from the
+      # snapshot before caching it, so Back through Turbo restores the panel
+      # without the reveal.
+      #
+      # ephemeral-secret — a real unload (a cross-origin link, a data-turbo=
+      # "false" navigation) puts the live DOM in the browser's back/forward
+      # cache, which Turbo never sees and which Rails' default Cache-Control
+      # does not opt out of. The controller removes this element on pagehide, so
+      # a bfcache restore has nothing left to show.
+      #
+      # Neither is a persistence leak; both would break the "shown once" promise.
+      div(class: "settings-reveal", data: { turbo_temporary: true, controller: "ephemeral-secret" }) do
         p(class: "settings-reveal-warning") do
           strong { "Copy this now." }
           plain " It will not be shown again — only rotated."
         end
-        code(id: "mcp-token-value", class: "settings-reveal-value") { @raw_token }
+        code(id: "#{@dom_id}-value", class: "settings-reveal-value") { @raw_token }
         button(
           type: "button",
           class: "btn btn-secondary btn-sm",
@@ -113,17 +128,40 @@ module Settings
 
     def generate_form
       form_with url: mcp_token_path, method: :post, class: "settings-form" do |f|
-        render Ui::FormGroup.new(label: "Expires in", field_name: "lifetime") do
+        render Ui::FormGroup.new(label: "Expires in", field_name: lifetime_field_id) do
+          # Selected from the token in place, not from the default: after a
+          # rotation this panel is re-rendered, and a select that snapped back to
+          # "90 days" would contradict the expiry shown right above it — and hand
+          # a 90-day token to anyone who submitted the form a second time.
           f.select :lifetime,
             [ [ "30 days", "30d" ], [ "90 days", "90d" ], [ "1 year", "1y" ], [ "Never", "never" ] ],
-            { selected: User::DEFAULT_LIFETIME_KEY },
-            class: "form-input", name: "lifetime"
+            { selected: @user.api_token_lifetime_key },
+            class: "form-input", name: "lifetime", id: lifetime_field_id
         end
-        render Ui::Button.new(label: @user.api_token? ? "Rotate token" : "Generate token")
+        render Ui::Button.new(label: rotate_label, **rotate_confirmation)
         if @user.api_token?
           em(class: "form-hint") { "Rotating makes the current token stop working immediately." }
         end
       end
+    end
+
+    def lifetime_field_id
+      "#{@dom_id}-lifetime"
+    end
+
+    def rotate_label
+      @user.api_token? ? "Rotate token" : "Generate token"
+    end
+
+    # Rotation is irreversible — only the digest was ever stored, so the token a
+    # running MCP client is holding cannot be given back — and this is the form's
+    # primary submit, reachable by Enter from the select. Revoking, which is
+    # strictly less destructive, already asks; rotation must too. Generating the
+    # first token destroys nothing, so it does not.
+    def rotate_confirmation
+      return {} unless @user.api_token?
+
+      { data: { turbo_confirm: "Rotate the token? The current one stops working immediately and cannot be recovered." } }
     end
 
     def revoke_button

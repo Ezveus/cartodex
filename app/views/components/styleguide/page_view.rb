@@ -219,9 +219,16 @@ module Styleguide
           # kills form submission and `inert` kills all pointer/keyboard
           # interaction (including the Copy button), while the markup still
           # renders exactly as it does on /settings.
-          settings_panel { render Settings::McpTokenSection.new(user: sg_settings_user_without_token) }
+          # Distinct dom_ids: two panels on one page would otherwise share the
+          # `mcp-token` root id and the `lifetime` field id, so the second
+          # panel's label would focus the first panel's select.
           settings_panel do
-            render Settings::McpTokenSection.new(user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN)
+            render Settings::McpTokenSection.new(user: sg_settings_user_without_token, dom_id: "sg-mcp-token-empty")
+          end
+          settings_panel do
+            render Settings::McpTokenSection.new(
+              user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN, dom_id: "sg-mcp-token-revealed"
+            )
           end
         end
       end

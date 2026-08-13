@@ -40,6 +40,34 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "#mcp-token", text: /Expires/
   end
 
+  # Rotation cannot be undone: only the digest is stored, so the token a running
+  # MCP client holds is gone the moment this submits. Revoking already confirms.
+  test "rotating confirms first, generating a first token does not" do
+    @user.regenerate_api_token
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token button[data-turbo-confirm][type=submit]", text: "Rotate token"
+
+    @user.revoke_api_token!
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token button", text: "Generate token"
+    assert_select "#mcp-token button[data-turbo-confirm]", count: 0
+  end
+
+  test "the lifetime select shows the lifetime the current token was issued with" do
+    @user.regenerate_api_token(expires_in: 1.year)
+
+    get settings_path
+
+    assert_response :success
+    assert_select "#mcp-token option[value=?][selected]", "1y"
+    assert_select "#mcp-token option[value=?][selected]", "90d", count: 0
+  end
+
   test "flags an expired token" do
     @user.regenerate_api_token
     @user.update_column(:api_token_expires_at, 1.day.ago)

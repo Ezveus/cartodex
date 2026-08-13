@@ -150,6 +150,85 @@ class UserTest < ActiveSupport::TestCase
     assert_nothing_raised { user.touch_api_token_usage }
   end
 
+  # StatementTimeout is only the busy case. A full disk and a read-only mount
+  # reach the app as bare StatementInvalid, and the MCP auth path is otherwise
+  # read-only: a tool call that only needed to read must not 500 because the
+  # telemetry stamp could not be written.
+  test "touch_api_token_usage swallows every write failure, not just the busy one" do
+    user = User.create!(email: "usage-unwritable@example.com", password: "password123")
+    user.regenerate_api_token
+
+    [ "database or disk is full", "attempt to write a readonly database" ].each do |message|
+      user.define_singleton_method(:update_column) { |*| raise ActiveRecord::StatementInvalid, message }
+
+      assert_nothing_raised { user.touch_api_token_usage }
+    end
+  end
+
+  test "touch_api_token_usage leaves the connection's busy_timeout as it found it" do
+    user = User.create!(email: "usage-pragma@example.com", password: "password123")
+    user.regenerate_api_token
+    before = ActiveRecord::Base.connection.query_value("PRAGMA busy_timeout")
+
+    user.touch_api_token_usage
+
+    assert_not_nil user.reload.api_token_last_used_at, "sanity: the stamp must have been written"
+    assert_equal before, ActiveRecord::Base.connection.query_value("PRAGMA busy_timeout")
+  end
+
+  test "touch_api_token_usage restores busy_timeout even when the write fails" do
+    user = User.create!(email: "usage-pragma-failure@example.com", password: "password123")
+    user.regenerate_api_token
+    user.define_singleton_method(:update_column) { |*| raise ActiveRecord::StatementInvalid, "database is locked" }
+    before = ActiveRecord::Base.connection.query_value("PRAGMA busy_timeout")
+
+    user.touch_api_token_usage
+
+    assert_equal before, ActiveRecord::Base.connection.query_value("PRAGMA busy_timeout")
+  end
+
+  test "lifetime_for resolves known keys and falls back to the default" do
+    assert_equal 30.days, User.lifetime_for("30d")
+    assert_equal 1.year, User.lifetime_for("1y")
+    assert_nil User.lifetime_for("never"), "never is a known key whose value is nil, not a miss"
+    assert_equal 90.days, User.lifetime_for("bogus")
+    assert_equal 90.days, User.lifetime_for(nil)
+  end
+
+  test "lifetime_key? tells a known key from an unknown one" do
+    assert User.lifetime_key?("30d")
+    assert User.lifetime_key?("never")
+    assert_not User.lifetime_key?("bogus")
+    assert_not User.lifetime_key?(nil)
+  end
+
+  test "api_token_lifetime_key reports the lifetime the token was issued with" do
+    user = User.create!(email: "lifetime-key@example.com", password: "password123")
+
+    assert_equal User::DEFAULT_LIFETIME_KEY, user.api_token_lifetime_key, "no token yet"
+
+    { "30d" => 30.days, "90d" => 90.days, "1y" => 1.year, "never" => nil }.each do |key, duration|
+      user.regenerate_api_token(expires_in: duration)
+
+      assert_equal key, user.api_token_lifetime_key
+    end
+  end
+
+  test "api_token_lifetime_key falls back to the default for a span matching no option" do
+    user = User.create!(email: "lifetime-key-odd@example.com", password: "password123")
+    user.regenerate_api_token(expires_in: 7.days)
+
+    assert_equal User::DEFAULT_LIFETIME_KEY, user.api_token_lifetime_key
+  end
+
+  test "api_token_lifetime_key falls back to the default for a legacy token with no created_at" do
+    user = User.create!(email: "lifetime-key-legacy@example.com", password: "password123")
+    user.regenerate_api_token(expires_in: 30.days)
+    user.update_column(:api_token_created_at, nil)
+
+    assert_equal User::DEFAULT_LIFETIME_KEY, user.reload.api_token_lifetime_key
+  end
+
   test "an expired token records no usage" do
     user = User.create!(email: "usage-expired@example.com", password: "password123")
     raw = user.regenerate_api_token
