@@ -125,4 +125,52 @@ class DeckTest < ActiveSupport::TestCase
       assert_equal deck.name.downcase, deck.name_normalized, "#{deck.name.inspect} fixture is out of step"
     end
   end
+
+  test "search matches the deck's own name" do
+    deck = decks(:one)
+    deck.update!(name: "Ogerpon Toolbox")
+
+    assert_includes Deck.search("ogerpon"), deck
+  end
+
+  # A deck tagged "Teal Mask Ogerpon ex" must surface for "Ogerpon" even when its own name says
+  # nothing about it — that's the whole point of composing Archetype.search in.
+  test "search matches through the deck's archetype" do
+    deck = decks(:one)
+    deck.update!(name: "Tuesday List", archetype: archetypes(:ogerpon))
+
+    assert_includes Deck.search("ogerpon"), deck
+  end
+
+  test "search matches through the archetype's member Pokémon" do
+    deck = decks(:one)
+    deck.update!(name: "Tuesday List", archetype: archetypes(:budew_ogerpon))
+
+    assert_includes Deck.search("budew"), deck
+  end
+
+  # The archetype side is a subquery, not a join, so a deck matching on both sides is still one row.
+  test "search returns each deck once when name and archetype both match" do
+    deck = decks(:one)
+    deck.update!(name: "Ogerpon Toolbox", archetype: archetypes(:ogerpon))
+
+    assert_equal [ deck.id ], Deck.search("ogerpon").pluck(:id)
+  end
+
+  test "search treats LIKE metacharacters in the query as literals" do
+    decks(:one).update!(name: "Ogerpon Toolbox", archetype: archetypes(:ogerpon))
+
+    assert_empty Deck.search("og_rpon"), "_ must not act as a wildcard"
+    assert_empty Deck.search("oger%on"), "% must not act as a wildcard"
+  end
+
+  test "search chains off a user's decks" do
+    decks(:one).update!(name: "Ogerpon Toolbox", user: users(:one))
+    decks(:two).update!(name: "Ogerpon Toolbox", user: users(:two))
+
+    results = users(:one).decks.search("ogerpon")
+
+    assert_includes results, decks(:one)
+    assert_not_includes results, decks(:two)
+  end
 end
