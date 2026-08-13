@@ -27,6 +27,10 @@ combobox and the frame; one Stimulus controller handles debounce and keyboard na
 - **Never call `raw()`** in a Phlex component; use markup methods.
 - **Every `LIKE` needs its own `ESCAPE '\'` clause** and its query run through `sanitize_sql_like`.
   SQLite has no default escape character, so without the clause the backslash matches itself.
+- **A test for accent folding must store an uppercase accented name** (`"FLABÉBÉ"`, not
+  `"Flabébé"`) and query it in lowercase. With the accent already lowercase in the stored value,
+  SQLite's ASCII fold alone makes the query match, and the test passes even when the scope stops
+  reading `name_normalized` — proving nothing. This bit the first draft of Tasks 2 and 3.
 - **Comments and code in English.** Documents committed to the repo are in English.
 - **CSS uses design-system tokens only** (`var(--surface)`, `var(--flare)`, `var(--e2)`, …) — no
   literal hex colours. Tokens live at the top of `app/assets/stylesheets/application.css`.
@@ -219,13 +223,14 @@ git commit -m "refactor: extract NameNormalizable from Card"
 Append to `test/models/deck_test.rb`, inside the class:
 
 ```ruby
-  # Deck names are user-typed, so they carry accents. SQLite's LIKE folds ASCII only, which is
-  # why matching goes through name_normalized — see NameNormalizable.
+  # The stored name carries an uppercase accented letter on purpose: SQLite's LIKE folds F/f but
+  # not É/é, so a lowercase query can only match through name_normalized. Were the scope to
+  # compare `name` again, this test would go red — that's the regression it exists to catch.
   test "name_matching ignores case on accented letters" do
     deck = decks(:one)
-    deck.update!(name: "Flabébé Toolbox")
+    deck.update!(name: "FLABÉBÉ Toolbox")
 
-    %w[Flabébé FLABÉBÉ flabébé BÉBÉ bébé].each do |query|
+    %w[FLABÉBÉ Flabébé flabébé BÉBÉ bébé].each do |query|
       assert_includes Deck.name_matching(query), deck, "#{query.inspect} must match"
     end
   end
@@ -251,11 +256,13 @@ Append to `test/models/deck_test.rb`, inside the class:
 Append to `test/models/tournament_test.rb`, inside the class:
 
 ```ruby
+  # Uppercase accented letter in the stored name on purpose — see the note in DeckTest: only
+  # name_normalized can match a lowercase query against it.
   test "name_matching ignores case on accented letters" do
     tournament = tournaments(:one)
-    tournament.update!(name: "Régionale de Lyon")
+    tournament.update!(name: "RÉGIONALE de Lyon")
 
-    %w[Régionale RÉGIONALE régionale].each do |query|
+    %w[RÉGIONALE Régionale régionale].each do |query|
       assert_includes Tournament.name_matching(query), tournament, "#{query.inspect} must match"
     end
   end
@@ -449,21 +456,22 @@ git commit -m "feat: Unicode-safe name matching on decks and tournaments"
 Append to `test/models/archetype_test.rb`, inside the class:
 
 ```ruby
-  # The archetype name is auto-generated from the member Pokémon, so an accented Pokémon puts an
-  # accent in both columns this scope reads.
+  # The stored name carries an uppercase accented letter on purpose: SQLite's LIKE folds F/f but
+  # not É/é, so a lowercase query can only match through name_normalized. Were this scope to read
+  # the plain `name` columns again, these two tests would go red — that's what they exist for.
   test "search ignores case on accented letters in the archetype name" do
     archetype = archetypes(:ogerpon)
-    archetype.update!(name: "Flabébé Box", custom_name: "1")
+    archetype.update!(name: "FLABÉBÉ Box", custom_name: "1")
 
-    %w[Flabébé FLABÉBÉ flabébé].each do |query|
+    %w[FLABÉBÉ Flabébé flabébé].each do |query|
       assert_includes Archetype.search(query), archetype, "#{query.inspect} must match"
     end
   end
 
   test "search ignores case on accented letters in a member Pokémon's name" do
-    cards(:budew_pre).update!(name: "Flabébé")
+    cards(:budew_pre).update!(name: "FLABÉBÉ")
 
-    %w[Flabébé FLABÉBÉ flabébé].each do |query|
+    %w[FLABÉBÉ Flabébé flabébé].each do |query|
       assert_includes Archetype.search(query), archetypes(:budew_ogerpon), "#{query.inspect} must match"
     end
   end
