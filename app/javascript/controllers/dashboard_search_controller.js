@@ -40,7 +40,10 @@ export default class extends Controller {
     if (this.options.length === 0) return
 
     event.preventDefault()
-    this.#activate((this.activeIndex - 1 + this.options.length) % this.options.length)
+    // From the initial state (activeIndex -1), ↑ must land on the LAST option, so -1 is treated as
+    // one past the end. Plain (activeIndex - 1 + length) % length would land two short of it.
+    const from = this.activeIndex < 0 ? this.options.length : this.activeIndex
+    this.#activate((from - 1 + this.options.length) % this.options.length)
   }
 
   // Enter opens the highlighted option. With nothing highlighted it falls through, so the form
@@ -82,6 +85,8 @@ export default class extends Controller {
   #frameLoaded = () => {
     this.options = Array.from(this.panelTarget.querySelectorAll("[role=option]"))
     this.activeIndex = -1
+    // The frame swap replaced the options, so any previously referenced id is gone from the DOM.
+    this.inputTarget.removeAttribute("aria-activedescendant")
     this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
   }
 
@@ -103,6 +108,9 @@ export default class extends Controller {
   }
 
   #collapse() {
+    // Cancels a debounce still in flight: without this, a dismissed panel reopens when the
+    // pending request lands and #frameLoaded sees content.
+    clearTimeout(this.timeout)
     this.options = []
     this.activeIndex = -1
     this.#setExpanded(false)
