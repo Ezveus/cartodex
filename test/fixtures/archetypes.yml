@@ -2,12 +2,17 @@
 #
 # NOTE: archetypes hold a foreign key to cards (primary/secondary Pokémon), so
 # only reference cards that are not destroyed by other tests (e.g. avoid honedge).
+#
+# Fixtures skip callbacks, so name_normalized is spelled out by hand; ArchetypeTest asserts it
+# stays in step with name.
 
 ogerpon:
   primary_pokemon: teal_mask_ogerpon_ex
   name: "Teal Mask Ogerpon ex"
+  name_normalized: "teal mask ogerpon ex"
 
 budew_ogerpon:
   primary_pokemon: budew_pre
   secondary_pokemon: teal_mask_ogerpon_ex
   name: "Budew / Teal Mask Ogerpon ex"
+  name_normalized: "budew / teal mask ogerpon ex"

@@ -1,4 +1,6 @@
 class Archetype < ApplicationRecord
+  include NameNormalizable
+
   belongs_to :primary_pokemon, class_name: "Card"
   belongs_to :secondary_pokemon, class_name: "Card", optional: true
   belongs_to :parent, class_name: "Archetype", optional: true
@@ -12,16 +14,16 @@ class Archetype < ApplicationRecord
   before_validation :auto_generate_name, unless: :custom_name?
 
   scope :roots, -> { where(parent_id: nil) }
-  # Matches the archetype's own name or either member Pokémon's. The query's
-  # LIKE metacharacters are escaped, and every LIKE needs its own ESCAPE clause
-  # — see Card.name_matching for why the clause is required rather than
-  # decorative. Spans three columns, so it can't delegate to that scope.
+  # Matches the archetype's own name or either member Pokémon's, all three through their
+  # normalized mirrors (see NameNormalizable). Every LIKE needs its own ESCAPE clause. Spans
+  # three columns, so it can't delegate to the concern's single-column scope.
   scope :search, ->(q) {
     like = "LIKE :q ESCAPE '\\'"
     left_joins(:primary_pokemon, :secondary_pokemon)
       .where(
-        "archetypes.name #{like} OR cards.name #{like} OR secondary_pokemons_archetypes.name #{like}",
-        q: "%#{sanitize_sql_like(q)}%"
+        "archetypes.name_normalized #{like} OR cards.name_normalized #{like} " \
+        "OR secondary_pokemons_archetypes.name_normalized #{like}",
+        q: "%#{normalize_for_match(q)}%"
       )
       .distinct
   }
