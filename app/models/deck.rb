@@ -1,4 +1,6 @@
 class Deck < ApplicationRecord
+  include NameNormalizable
+
   belongs_to :user
   belongs_to :archetype, optional: true
   has_many :deck_cards, dependent: :destroy

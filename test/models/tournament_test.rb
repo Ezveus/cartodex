@@ -69,6 +69,28 @@ class TournamentTest < ActiveSupport::TestCase
     assert_nil build_tournament(participant_count: nil).standard_top_cut
   end
 
+  test "name_matching ignores case on accented letters" do
+    tournament = tournaments(:one)
+    tournament.update!(name: "Régionale de Lyon")
+
+    %w[Régionale RÉGIONALE régionale].each do |query|
+      assert_includes Tournament.name_matching(query), tournament, "#{query.inspect} must match"
+    end
+  end
+
+  test "name_matching treats LIKE metacharacters in the query as literals" do
+    assert_includes Tournament.name_matching("regional"), tournaments(:one), "sanity: the plain spelling matches"
+    assert_empty Tournament.name_matching("reg_onal"), "_ must not act as a wildcard"
+    assert_empty Tournament.name_matching("regi%nal"), "% must not act as a wildcard"
+  end
+
+  test "every tournament fixture carries the normalization its name implies" do
+    Tournament.find_each do |tournament|
+      assert_equal tournament.name.downcase, tournament.name_normalized,
+        "#{tournament.name.inspect} fixture is out of step"
+    end
+  end
+
   private
 
   def build_tournament(attrs = {})

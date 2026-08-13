@@ -1,4 +1,6 @@
 class Tournament < ApplicationRecord
+  include NameNormalizable
+
   belongs_to :user
   belongs_to :deck
   belongs_to :tournament_profile, optional: true

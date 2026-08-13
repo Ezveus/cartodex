@@ -96,4 +96,32 @@ class DeckTest < ActiveSupport::TestCase
 
     assert_equal 0, deck.deck_cards.sum(:owned_copies)
   end
+
+  # Deck names are user-typed, so they carry accents. SQLite's LIKE folds ASCII only, which is
+  # why matching goes through name_normalized — see NameNormalizable.
+  test "name_matching ignores case on accented letters" do
+    deck = decks(:one)
+    deck.update!(name: "Flabébé Toolbox")
+
+    %w[Flabébé FLABÉBÉ flabébé BÉBÉ bébé].each do |query|
+      assert_includes Deck.name_matching(query), deck, "#{query.inspect} must match"
+    end
+  end
+
+  test "name_matching treats LIKE metacharacters in the query as literals" do
+    deck = decks(:one)
+    deck.update!(name: "Ogerpon Toolbox")
+
+    assert_includes Deck.name_matching("ogerpon"), deck, "sanity: the plain spelling matches"
+    assert_empty Deck.name_matching("og_rpon"), "_ must not act as a wildcard"
+    assert_empty Deck.name_matching("oger%on"), "% must not act as a wildcard"
+  end
+
+  # Fixtures are inserted without callbacks, so decks.yml spells name_normalized out by hand;
+  # this is what stops the two from drifting when a fixture name is edited.
+  test "every deck fixture carries the normalization its name implies" do
+    Deck.find_each do |deck|
+      assert_equal deck.name.downcase, deck.name_normalized, "#{deck.name.inspect} fixture is out of step"
+    end
+  end
 end
