@@ -17,6 +17,8 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
+    resource :settings, only: [ :show ]
+    resource :mcp_token, only: [ :create, :destroy ]
 
     # Living design-system reference. Not exposed in production.
     get "styleguide", to: "styleguide#show" unless Rails.env.production?

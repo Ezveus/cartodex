@@ -47,6 +47,7 @@ module Styleguide
         stats_section
         form_section
         deck_card_section
+        settings_section
         tokens_section
       end
     end
@@ -200,6 +201,56 @@ module Styleguide
           p(class: "deck-card-count") { "60 cards" }
         end
       end
+    end
+
+    # A 24-char placeholder in the shape of the real token (base58, no
+    # spaces) — long enough to exercise the wrap/scroll behaviour without
+    # ever being a value that could authenticate anything.
+    PLACEHOLDER_TOKEN = "K7mQ2xVdN9wZaB4tRc6jHfLp".freeze
+
+    def settings_section
+      sg_section("Composants", "Jeton MCP",
+              "Panneau de /settings : callout de révélation à fort contraste, paires libellé/valeur, " \
+              "et wrap forcé sur le jeton et l'extrait de configuration.") do
+        div(class: "sg-stack", style: "max-width: 640px; gap: 1.5rem") do
+          # Both panels below point their forms at the real mcp_token_path.
+          # Without this wrapper, clicking "Generate"/"Rotate"/"Revoke" here
+          # would mutate the signed-in developer's actual MCP token. `disabled`
+          # kills form submission and `inert` kills all pointer/keyboard
+          # interaction (including the Copy button), while the markup still
+          # renders exactly as it does on /settings.
+          # Distinct dom_ids: two panels on one page would otherwise share the
+          # `mcp-token` root id and the `lifetime` field id, so the second
+          # panel's label would focus the first panel's select.
+          settings_panel do
+            render Settings::McpTokenSection.new(user: sg_settings_user_without_token, dom_id: "sg-mcp-token-empty")
+          end
+          settings_panel do
+            render Settings::McpTokenSection.new(
+              user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN, dom_id: "sg-mcp-token-revealed"
+            )
+          end
+        end
+      end
+    end
+
+    def settings_panel(&block)
+      fieldset(disabled: true, inert: true, style: "border: 0; margin: 0; padding: 0; min-width: 0", &block)
+    end
+
+    # Plain in-memory users (never persisted) so this page never touches the
+    # database and can never leak a real token.
+    def sg_settings_user_without_token
+      User.new
+    end
+
+    def sg_settings_user_with_token
+      User.new(
+        api_token_digest: "placeholder-digest",
+        api_token_created_at: 45.days.ago,
+        api_token_expires_at: 45.days.from_now,
+        api_token_last_used_at: 3.hours.ago
+      )
     end
 
     def tokens_section
