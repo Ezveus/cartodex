@@ -2702,3 +2702,8 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .tournaments-search .form-input {
   max-width: 22rem;
 }
+
+.sg-spotlight-demo {
+  position: relative;
+  min-height: 4rem;
+}

@@ -33,4 +33,16 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
     assert_equal field_ids.sort, css_select("label[for^=sg-mcp-token]").map { |l| l["for"] }.sort,
       "each label must point at its own panel's select"
   end
+
+  # The page renders the spotlight input and, separately, an open results panel. Rendering
+  # ResultsView for the demo would have put a second turbo-frame#search_results on the page.
+  test "the spotlight demo does not duplicate the results frame" do
+    get styleguide_path
+
+    assert_response :success
+    assert_select "turbo-frame#search_results", count: 1
+    ids = css_select("[role=option]").map { |option| option["id"] }
+
+    assert_equal ids.uniq, ids, "duplicate option ids: #{ids.inspect}"
+  end
 end
