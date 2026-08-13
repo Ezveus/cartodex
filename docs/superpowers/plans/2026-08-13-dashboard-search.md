@@ -1046,6 +1046,11 @@ git commit -m "feat: filter the tournaments index by name"
 - Create: `app/services/search/global.rb`
 - Create: `test/services/search/global_test.rb`
 - Modify: `app/controllers/concerns/searchable.rb` (add `search_results`)
+- Modify: `test/fixtures/card_sets.yml` — add a `twm` set whose `code` is `TWM`. Found during
+  implementation: `CardSearchable#card_set_code?` only treats a token as a set code when a matching
+  `CardSet` row exists, so the "set code and number" test below cannot pass without it. The fixture
+  is safe to add — no card fixture carries a `card_set` association, so the cards-index sidebar
+  counts are unaffected.
 
 **Interfaces:**
 - Consumes: `Deck.search` (Task 4), `Tournament.name_matching` (Task 2),
