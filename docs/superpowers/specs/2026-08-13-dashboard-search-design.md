@@ -158,9 +158,9 @@ Per group:
 
 | Group | Scope | Order | Eager-loaded |
 |---|---|---|---|
-| Decks | `user.decks.search(q)` | `name` | `archetype: :primary_pokemon` |
-| Cards | `apply_card_name_filter(Card.all, q)` | `name`, `set_name` | `card_set` |
-| Tournaments | `user.tournaments.name_matching(q)` | `date DESC` | `deck` |
+| Decks | `user.decks.search(q)` | `name` | `:archetype` (the row prints its name) |
+| Cards | `apply_card_name_filter(Card.all, q)` | `name`, `set_name` | — (`set_name`/`set_number` are card columns) |
+| Tournaments | `user.tournaments.name_matching(q)` | `date DESC` | — (the row prints name, date, tier) |
 
 Decks and tournaments are scoped to the user (both are user-owned); **cards search the whole
 catalog**, not just the user's collection.
