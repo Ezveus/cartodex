@@ -610,6 +610,11 @@ textarea.form-input {
   padding: 0.4rem 0.6rem;
 }
 
+.deck-filter-search {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+}
+
 /* Result modal */
 .result-modal {
   border: none;

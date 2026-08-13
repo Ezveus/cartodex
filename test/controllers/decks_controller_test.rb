@@ -206,6 +206,42 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "index filters decks by name" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Ogerpon Toolbox/
+    assert_select "#decks-grid", text: /Charizard Pidgeot/, count: 0
+    assert_not_nil other
+  end
+
+  test "index finds a deck through its archetype" do
+    @deck.update!(name: "Tuesday List", archetype: archetypes(:ogerpon))
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Tuesday List/
+  end
+
+  test "index ignores a blank q" do
+    @deck.update!(name: "Ogerpon Toolbox")
+
+    get decks_path(q: "   ")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Ogerpon Toolbox/
+  end
+
+  test "index keeps the query in the search field" do
+    get decks_path(q: "ogerpon")
+
+    assert_select "form.deck-filters input[name=q][value=ogerpon]"
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do

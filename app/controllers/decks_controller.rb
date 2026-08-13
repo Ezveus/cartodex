@@ -1,4 +1,6 @@
 class DecksController < ApplicationController
+  include Searchable
+
   def index
     @decks = filter_decks(current_user.decks.includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
     @pending_deck_imports = current_user.imports.deck_imports.pending
@@ -131,6 +133,7 @@ class DecksController < ApplicationController
 
   def filter_params
     {
+      q:         search_query.presence,
       format:    params[:format].presence,
       support:   params[:support].presence,
       proxies:   params[:proxies].presence,
@@ -157,6 +160,10 @@ class DecksController < ApplicationController
 
   def filter_decks(scope)
     filters = filter_params
+
+    # Same scope as the dashboard spotlight, so its "See all N decks" link lands on a page
+    # showing exactly N decks.
+    scope = scope.merge(Deck.search(filters[:q])) if filters[:q]
 
     scope = scope.where(format: filters[:format]) if Deck.formats.key?(filters[:format])
 

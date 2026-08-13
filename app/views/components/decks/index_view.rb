@@ -68,6 +68,7 @@ module Decks
 
     def filter_bar
       form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
+        search_input
         filter_select(:format, format_options)
         filter_select(:primary, primary_options) if @primary_options.any?
         filter_select(:secondary, secondary_options) if @secondary_options.any?
@@ -75,6 +76,19 @@ module Decks
         filter_select(:proxies, PROXY_OPTIONS)
         link_to "Clear", decks_path, class: "btn btn-secondary btn-sm" if active_filters?
       end
+    end
+
+    def search_input
+      input(
+        type: "search",
+        name: "q",
+        value: @filters[:q],
+        placeholder: "Deck or archetype name…",
+        class: "form-input deck-filter-search",
+        autocomplete: "off",
+        aria_label: "Search decks",
+        data: { action: "input->card-filter#debounce" }
+      )
     end
 
     def filter_select(name, options)
