@@ -1802,12 +1802,26 @@ components; the frame is not live here):
       end
     end
 
+    # Plain in-memory records (never persisted), like sg_settings_user_with_token above: this page
+    # never touches the database. The ids are what the path helpers need; nothing is saved.
     def sg_spotlight_results
       Search::Global::Result.new(
         query: "ogerpon",
-        decks: Deck.limit(2).to_a, deck_total: 4,
-        cards: Card.limit(2).to_a, card_total: 9,
-        tournaments: Tournament.limit(1).to_a, tournament_total: 1
+        decks: [
+          Deck.new(id: 1, name: "Ogerpon Toolbox", format: "standard",
+                   archetype: Archetype.new(name: "Teal Mask Ogerpon ex")),
+          Deck.new(id: 2, name: "Tuesday List", format: "glc")
+        ],
+        deck_total: 4,
+        cards: [
+          Card.new(id: 1, name: "Teal Mask Ogerpon ex", set_name: "TWM", set_number: "25"),
+          Card.new(id: 2, name: "Ogerpon", set_name: "SVI", set_number: "211")
+        ],
+        card_total: 9,
+        tournaments: [
+          Tournament.new(id: 1, name: "Ogerpon Open", date: Date.new(2026, 4, 12), tier: "league_cup")
+        ],
+        tournament_total: 1
       )
     end
 ```
@@ -1846,8 +1860,8 @@ twice (the component's own empty frame, and the demo panel). Append to
   end
 ```
 
-An empty development or test database is fine: `Deck.limit(2).to_a` returning `[]` makes that group
-render nothing, and the section still shows the field.
+The demo records are in-memory, so the section renders identically whatever the database holds —
+and, as with the MCP panels above, `/styleguide` still never reads it.
 
 - [ ] **Step 8: Lint and commit**
 
