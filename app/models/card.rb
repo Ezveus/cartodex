@@ -1,4 +1,6 @@
 class Card < ApplicationRecord
+  include NameNormalizable
+
   # Relationships
   belongs_to :card_set, optional: true
   belongs_to :pokemon_subtype, optional: true
@@ -21,27 +23,8 @@ class Card < ApplicationRecord
     "Metal" => "metal", "Fairy" => "fairy", "Dragon" => "dragon", "Colorless" => "metal"
   }.freeze
 
-  # Case-insensitive name substring match.
-  #
-  # Matched against `name_normalized` (see #normalize_name) rather than against
-  # `name`, because SQLite's LIKE only folds ASCII A–Z: `name LIKE '%POKÉMON%'`
-  # never matches "Pokémon", so an accented query in the wrong case silently
-  # returned nothing. Normalising both sides in Ruby makes the fold Unicode-aware
-  # and keeps the comparison a plain LIKE the database can run.
-  #
-  # The query's LIKE metacharacters are escaped so a `%` or `_` typed by a user
-  # matches literally instead of acting as a wildcard. ESCAPE is required, not
-  # decorative: sanitize_sql_like escapes with a backslash, but SQLite's LIKE has
-  # no default escape character, so without the clause the backslash itself would
-  # be matched. ESCAPE is standard SQL, so this survives the move to PostgreSQL
-  # contemplated in #62.
-  scope :name_matching, ->(query) {
-    where("cards.name_normalized LIKE ? ESCAPE '\\'", "%#{sanitize_sql_like(query.to_s.downcase)}%")
-  }
-
   # Callbacks
   before_save :compute_fingerprint
-  before_save :normalize_name
 
   # Validations
   validates :name, presence: true
@@ -66,14 +49,6 @@ class Card < ApplicationRecord
   def type_color
     token = TYPE_TOKENS[type_symbol]
     "var(--#{token})" if token
-  end
-
-  # Mirror of `name`, Unicode-downcased, so name_matching can search with a plain
-  # LIKE instead of depending on the database's own case folding. Fixtures insert
-  # rows without callbacks, so cards.yml carries the column explicitly — a
-  # CardTest case keeps the two spellings in step.
-  def normalize_name
-    self.name_normalized = name&.downcase
   end
 
   def compute_fingerprint
