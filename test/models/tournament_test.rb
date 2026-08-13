@@ -69,11 +69,13 @@ class TournamentTest < ActiveSupport::TestCase
     assert_nil build_tournament(participant_count: nil).standard_top_cut
   end
 
+  # Uppercase accented letter in the stored name on purpose — see the note in DeckTest: only
+  # name_normalized can match a lowercase query against it.
   test "name_matching ignores case on accented letters" do
     tournament = tournaments(:one)
-    tournament.update!(name: "Régionale de Lyon")
+    tournament.update!(name: "RÉGIONALE de Lyon")
 
-    %w[Régionale RÉGIONALE régionale].each do |query|
+    %w[RÉGIONALE Régionale régionale].each do |query|
       assert_includes Tournament.name_matching(query), tournament, "#{query.inspect} must match"
     end
   end

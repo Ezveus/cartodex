@@ -97,13 +97,14 @@ class DeckTest < ActiveSupport::TestCase
     assert_equal 0, deck.deck_cards.sum(:owned_copies)
   end
 
-  # Deck names are user-typed, so they carry accents. SQLite's LIKE folds ASCII only, which is
-  # why matching goes through name_normalized — see NameNormalizable.
+  # The stored name carries an uppercase accented letter on purpose: SQLite's LIKE folds F/f but
+  # not É/é, so a lowercase query can only match through name_normalized. Were the scope to
+  # compare `name` again, this test would go red — that's the regression it exists to catch.
   test "name_matching ignores case on accented letters" do
     deck = decks(:one)
-    deck.update!(name: "Flabébé Toolbox")
+    deck.update!(name: "FLABÉBÉ Toolbox")
 
-    %w[Flabébé FLABÉBÉ flabébé BÉBÉ bébé].each do |query|
+    %w[FLABÉBÉ Flabébé flabébé BÉBÉ bébé].each do |query|
       assert_includes Deck.name_matching(query), deck, "#{query.inspect} must match"
     end
   end

@@ -83,15 +83,15 @@ class CardTest < ActiveSupport::TestCase
     assert_equal "flabébé", card.reload.name_normalized
   end
 
-  # name_matching is the one filter behind the collection page, the admin card
-  # list and two MCP tools, and it promises case-insensitivity. Matching on `name`
-  # would have delivered that for ASCII only, since SQLite's LIKE folds A–Z and
-  # nothing else.
+  # name_matching is the one filter behind the collection page, the admin card list and two MCP
+  # tools, and it promises case-insensitivity. Matching on `name` would have delivered that for
+  # ASCII only, since SQLite's LIKE folds A–Z and nothing else — hence the uppercase accented
+  # letter in the stored name: a lowercase query reaches it only through name_normalized.
   test "name_matching ignores case on accented letters" do
-    cards(:honedge).update!(name: "Flabébé")
+    cards(:honedge).update!(name: "FLABÉBÉ")
 
-    %w[Flabébé FLABÉBÉ flabébé BÉBÉ bébé].each do |query|
-      assert_includes Card.name_matching(query).pluck(:name), "Flabébé", "#{query.inspect} must match"
+    %w[FLABÉBÉ Flabébé flabébé BÉBÉ bébé].each do |query|
+      assert_includes Card.name_matching(query).pluck(:name), "FLABÉBÉ", "#{query.inspect} must match"
     end
   end
 
