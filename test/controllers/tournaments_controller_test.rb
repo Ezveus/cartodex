@@ -142,6 +142,20 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "form.tournaments-search[data-turbo-frame=tournament_results][data-turbo-action=replace]"
   end
 
+  # The spotlight renders "See all N tournaments" from Search::Global; this page must then show N.
+  test "index shows exactly as many tournaments as the spotlight's total promises" do
+    @user.tournaments.create!(deck: @deck, name: "Ogerpon Cup", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+    @user.tournaments.create!(deck: @deck, name: "Ogerpon League", date: Date.new(2026, 5, 2),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "ogerpon")
+
+    assert_response :success
+    assert_equal Search::Global.call(user: @user, query: "ogerpon").tournament_total,
+      css_select(".data-table-row").size
+  end
+
   test "a q request renders the matching tournaments inside the turbo frame" do
     @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
                               format: "standard", tier: "league_cup")

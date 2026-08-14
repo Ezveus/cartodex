@@ -59,6 +59,12 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     assert_select "a.spotlight-see-all[href=?]", cards_path(q: "ogerpon")
   end
 
+  test "the see-all label is grammatically singular for exactly one match" do
+    get search_path(q: "ogerpon")
+
+    assert_select "a.spotlight-see-all[href=?]", decks_path(q: "ogerpon"), text: "See all 1 deck"
+  end
+
   test "the group header reports the total when the cap truncated it" do
     7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}") }
 

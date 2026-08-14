@@ -29,7 +29,7 @@ module Search
     def deck_group
       render ResultGroup.new(
         key: "decks", label: "DECKS", records: @results.decks, total: @results.deck_total,
-        index_path: decks_path(q: query), see_all_label: "See all #{@results.deck_total} decks"
+        index_path: decks_path(q: query), see_all_label: see_all_label(@results.deck_total, "deck")
       ) do |deck|
         option_row(
           dom_id: "spotlight-option-deck-#{deck.id}",
@@ -43,7 +43,7 @@ module Search
     def card_group
       render ResultGroup.new(
         key: "cards", label: "CARDS", records: @results.cards, total: @results.card_total,
-        index_path: cards_path(q: query), see_all_label: "See all #{@results.card_total} cards"
+        index_path: cards_path(q: query), see_all_label: see_all_label(@results.card_total, "card")
       ) do |card|
         option_row(
           dom_id: "spotlight-option-card-#{card.id}",
@@ -58,15 +58,20 @@ module Search
       render ResultGroup.new(
         key: "tournaments", label: "TOURNAMENTS", records: @results.tournaments,
         total: @results.tournament_total, index_path: tournaments_path(q: query),
-        see_all_label: "See all #{@results.tournament_total} tournaments"
+        see_all_label: see_all_label(@results.tournament_total, "tournament")
       ) do |tournament|
         option_row(
           dom_id: "spotlight-option-tournament-#{tournament.id}",
           path: tournament_path(tournament),
           name: tournament.name,
-          meta: "#{tournament.date} · #{tournament.tier_label}"
+          meta: "#{localize(tournament.date, format: :long)} · #{tournament.tier_label}"
         )
       end
+    end
+
+    # "See all 1 deck" / "See all 3 decks" — pluralize keeps the count grammatical at N=1.
+    def see_all_label(count, noun)
+      "See all #{count} #{noun.pluralize(count)}"
     end
 
     # data-turbo-frame="_top" so picking a result navigates the whole page instead of replacing

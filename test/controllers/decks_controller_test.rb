@@ -252,6 +252,18 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "form.deck-filters[data-turbo-frame=deck_results][data-turbo-action=replace]"
   end
 
+  # The spotlight renders "See all N decks" from Search::Global; this page must then show N.
+  test "index shows exactly as many decks as the spotlight's total promises" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    @user.decks.create!(name: "Ogerpon Build")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_equal Search::Global.call(user: @user, query: "ogerpon").deck_total,
+      css_select("#decks-grid .deck-item").size
+  end
+
   test "a q request renders the matching decks inside the turbo frame" do
     @deck.update!(name: "Ogerpon Toolbox")
     other = @user.decks.create!(name: "Charizard Pidgeot")

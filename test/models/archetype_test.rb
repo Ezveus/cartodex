@@ -26,6 +26,25 @@ class ArchetypeTest < ActiveSupport::TestCase
     end
   end
 
+  # Drift protection for the third column of the scope: name_normalized is read off
+  # secondary_pokemons_archetypes (the join alias), not primary_pokemons_archetypes or
+  # archetypes itself. Both the archetype's own name and the primary Pokémon's name are renamed
+  # away from the query so a match can only come through the secondary Pokémon's column. The
+  # secondary is swapped to a card no other archetype fixture references (teal_mask_ogerpon_ex is
+  # also archetypes(:ogerpon)'s primary — renaming it would make that fixture match too).
+  test "search matches on the secondary Pokémon's name" do
+    archetype = archetypes(:budew_ogerpon)
+    secondary = cards(:froakie_cri)
+    archetype.update!(secondary_pokemon: secondary, name: "Mystery Box", custom_name: "1")
+    secondary.update!(name: "Flittle")
+
+    assert_includes Archetype.search("Flittle"), archetype
+
+    archetype.update!(secondary_pokemon: nil, custom_name: "1")
+    assert_empty Archetype.search("Flittle"),
+      "must not match without the secondary Pokémon: the archetype's own name and the primary's are both unrelated to the query"
+  end
+
   test "search ignores case on accented letters in a member Pokémon's name" do
     cards(:budew_pre).update!(name: "FLABÉBÉ")
 
