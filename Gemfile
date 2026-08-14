@@ -23,6 +23,10 @@ gem "jbuilder"
 # Model Context Protocol server (collection/deck tools)
 gem "mcp", "~> 1.1"
 
+# OAuth 2.1 authorization server, so MCP clients that cannot send a static
+# bearer header (Claude web connectors) can authenticate.
+gem "doorkeeper", "~> 5.9"
+
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
 

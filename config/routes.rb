@@ -10,6 +10,17 @@ Rails.application.routes.draw do
   # so it lives outside the Devise session-authenticated block.
   match "mcp", to: "mcp/server#handle", via: %i[get post delete]
 
+  # OAuth 2.1 authorization server. Outside the Devise `authenticate` block:
+  # Doorkeeper redirects to sign-in itself through resource_owner_authenticator,
+  # and wrapping it would break the return path.
+  #
+  # The applications and authorized_applications controllers are skipped: clients
+  # are created by dynamic registration (Oauth::RegistrationsController), and the
+  # user-facing list of connected apps is a Phlex section of /settings.
+  use_doorkeeper do
+    skip_controllers :applications, :authorized_applications
+  end
+
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in Layouts::ApplicationLayout)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
