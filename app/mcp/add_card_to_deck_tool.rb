@@ -1,5 +1,6 @@
 class AddCardToDeckTool < McpTool
   description "Add (link) a quantity of a card to one of the user's decks, without changing the collection."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       deck_id: { type: "integer", description: "ID of the user's deck" },

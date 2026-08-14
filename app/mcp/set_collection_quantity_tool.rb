@@ -1,5 +1,6 @@
 class SetCollectionQuantityTool < McpTool
   description "Set the exact owned quantity of a card in the authenticated user's collection (e.g. to record a sale). May leave physical decks over-allocated; never blocked."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       card_id: { type: "integer", description: "ID of the card" },

@@ -1,5 +1,6 @@
 class SetDeckCardOwnedCopiesTool < McpTool
   description "Set how many copies of a card in a physical deck are backed by owned cards (the rest are proxies). Bounded by the deck total and by availability; cannot create over-allocation."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       deck_id: { type: "integer", description: "ID of the user's physical deck" },

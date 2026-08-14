@@ -11,6 +11,23 @@ class McpTool < MCP::Tool
       @name_value || super.delete_suffix("_tool")
     end
 
+    # Which OAuth scope a tool needs. Read is the default because it is the safe
+    # one: a tool added later without thinking about scopes stays read-only
+    # rather than silently escaping the write restriction.
+    def required_scope(scope = nil)
+      @required_scope = scope if scope
+      @required_scope || "mcp:read"
+    end
+
+    # Tools a token may use. A nil scope list means the legacy static token,
+    # which predates scopes entirely and keeps full access for its deprecation
+    # window.
+    def permitted_for(tools, scopes)
+      return tools if scopes.nil?
+
+      tools.select { |tool| scopes.include?(tool.required_scope) }
+    end
+
     private
 
     def current_user(server_context)

@@ -1,5 +1,6 @@
 class SetDeckCardQuantityTool < McpTool
   description "Set the total number of copies of a card in a deck (proxies included). 0 removes the card. Real copies are recapped to the new total but never auto-increased."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       deck_id: { type: "integer", description: "ID of the user's deck" },

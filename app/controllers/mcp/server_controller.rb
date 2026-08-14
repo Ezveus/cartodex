@@ -80,11 +80,20 @@ module Mcp
       by: -> { @current_user.id },
       name: "mcp-user", store: RATE_LIMIT_STORE, only: :handle
 
+    # Scopes are enforced by what the server is even told about. A tool absent
+    # from this list is absent from tools/list and unroutable by tools/call, so a
+    # client that guesses a name gets "tool not found" rather than a refusal.
+    #
+    # This is a deliberate departure from the specification's step-up flow, which
+    # expects a 403 insufficient_scope. Producing that would mean parsing the
+    # JSON-RPC body here to learn which tool was called, duplicating the dispatch
+    # the mcp gem owns. The client learns the same thing at tools/list instead —
+    # earlier, and without us reimplementing the protocol. See the design spec.
     def handle
       server = MCP::Server.new(
         name: "cartodex",
         version: "1.0.0",
-        tools: TOOLS,
+        tools: McpTool.permitted_for(TOOLS, @current_scopes),
         server_context: { user: @current_user }
       )
       transport = MCP::Server::Transports::StreamableHTTPTransport.new(

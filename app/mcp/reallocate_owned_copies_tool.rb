@@ -1,5 +1,6 @@
 class ReallocateOwnedCopiesTool < McpTool
   description "Move real (owned-backed) copies of a card from one physical deck to another. Deck sizes are unchanged; a proxy in the target becomes real and a real in the source becomes a proxy."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       from_deck_id: { type: "integer", description: "ID of the source physical deck" },

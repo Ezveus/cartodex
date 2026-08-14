@@ -1,5 +1,6 @@
 class AddCardToCollectionTool < McpTool
   description "Add a quantity of a card (by card_id) to the authenticated user's collection."
+  required_scope "mcp:write"
   input_schema(
     properties: {
       card_id: { type: "integer", description: "ID of the card to add" },
