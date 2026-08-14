@@ -28,6 +28,11 @@ Rails.application.routes.draw do
   get ".well-known/oauth-protected-resource",     to: "oauth/metadata#protected_resource"
   get ".well-known/oauth-protected-resource/mcp", to: "oauth/metadata#protected_resource"
 
+  # RFC 7591 dynamic client registration. Unauthenticated by necessity — see
+  # Oauth::ClientRegistrar for why the redirect-URI allowlist is what keeps
+  # this endpoint safe.
+  post "oauth/register", to: "oauth/registrations#create"
+
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in Layouts::ApplicationLayout)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker

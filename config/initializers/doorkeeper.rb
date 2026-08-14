@@ -42,6 +42,15 @@ Doorkeeper.configure do
   # Every client must be consented to explicitly. Dynamic registration means any
   # party can create a client, so silent authorization would be a hole.
   skip_authorization { false }
+
+  # Doorkeeper's own RedirectUriValidator forces HTTPS on every redirect_uri in
+  # every non-development environment by default, with no loopback exception.
+  # Oauth::ClientRegistrar deliberately allows plain HTTP for CLI clients
+  # binding an ephemeral local port (Oauth::ClientRegistrar::PLAIN_HTTP_HOSTS);
+  # without this override, Doorkeeper's model-level validation would reject
+  # those applications before ClientRegistrar's own checks ever ran, in test
+  # and production alike.
+  force_ssl_in_redirect_uri ->(uri) { !Oauth::ClientRegistrar::PLAIN_HTTP_HOSTS.include?(uri.host) }
 end
 
 # Doorkeeper 5.9's `force_pkce` only requires PKCE from non-confidential
