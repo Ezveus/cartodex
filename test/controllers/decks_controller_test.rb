@@ -242,6 +242,27 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "form.deck-filters input[name=q][value=ogerpon]"
   end
 
+  # The filter form targets this frame (instead of a full-page visit) so the search field
+  # survives the live-filtering debounce — see Decks::IndexView::FRAME_ID.
+  test "index wraps the deck grid in a turbo frame the filter form targets" do
+    get decks_path
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #decks-grid"
+    assert_select "form.deck-filters[data-turbo-frame=deck_results][data-turbo-action=replace]"
+  end
+
+  test "a q request renders the matching decks inside the turbo frame" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #deck-#{@deck.id}"
+    assert_select "turbo-frame#deck_results #deck-#{other.id}", false
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do

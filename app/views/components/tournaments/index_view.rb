@@ -1,5 +1,9 @@
 module Tournaments
   class IndexView < ApplicationComponent
+    include Phlex::Rails::Helpers::TurboFrameTag
+
+    FRAME_ID = "tournament_results".freeze
+
     def initialize(tournaments:, query: "")
       @tournaments = tournaments
       @query = query
@@ -13,28 +17,30 @@ module Tournaments
 
         search_form
 
-        if @tournaments.any?
-          render Ui::DataTable.new(columns: %w[Name Date Tier Deck Placement CP Actions]) do |t|
-            @tournaments.each do |tournament|
-              t.row do
-                t.cell { link_to tournament.name, tournament_path(tournament) }
-                t.cell { localize(tournament.date, format: :long) }
-                t.cell { tournament.tier_label }
-                t.cell { tournament.deck.name }
-                t.cell { placement_label(tournament) }
-                t.cell { tournament.championship_points || "—" }
-                t.cell do
-                  render Ui::AdminActions.new(
-                    edit_path: edit_tournament_path(tournament),
-                    delete_path: tournament_path(tournament),
-                    confirm_message: "Delete #{tournament.name}?"
-                  )
+        turbo_frame_tag(FRAME_ID) do
+          if @tournaments.any?
+            render Ui::DataTable.new(columns: %w[Name Date Tier Deck Placement CP Actions]) do |t|
+              @tournaments.each do |tournament|
+                t.row do
+                  t.cell { link_to tournament.name, tournament_path(tournament) }
+                  t.cell { localize(tournament.date, format: :long) }
+                  t.cell { tournament.tier_label }
+                  t.cell { tournament.deck.name }
+                  t.cell { placement_label(tournament) }
+                  t.cell { tournament.championship_points || "—" }
+                  t.cell do
+                    render Ui::AdminActions.new(
+                      edit_path: edit_tournament_path(tournament),
+                      delete_path: tournament_path(tournament),
+                      confirm_message: "Delete #{tournament.name}?"
+                    )
+                  end
                 end
               end
             end
+          else
+            p { @query.present? ? "No tournaments match this search." : "No tournaments yet." }
           end
-        else
-          p { @query.present? ? "No tournaments match this search." : "No tournaments yet." }
         end
       end
     end
@@ -42,7 +48,12 @@ module Tournaments
     private
 
     def search_form
-      form(action: tournaments_path, method: "get", class: "tournaments-search", data: { controller: "card-filter" }) do
+      form(
+        action: tournaments_path,
+        method: "get",
+        class: "tournaments-search",
+        data: { controller: "card-filter", turbo_frame: FRAME_ID, turbo_action: "replace" }
+      ) do
         input(
           type: "search",
           name: "q",

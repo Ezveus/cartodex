@@ -131,4 +131,25 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "form.tournaments-search input[name=q][value=lyon]"
   end
+
+  # The filter form targets this frame (instead of a full-page visit) so the search field
+  # survives the live-filtering debounce — see Tournaments::IndexView::FRAME_ID.
+  test "index wraps the results table in a turbo frame the filter form targets" do
+    get tournaments_path
+
+    assert_response :success
+    assert_select "turbo-frame#tournament_results .data-table-row"
+    assert_select "form.tournaments-search[data-turbo-frame=tournament_results][data-turbo-action=replace]"
+  end
+
+  test "a q request renders the matching tournaments inside the turbo frame" do
+    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "lyon")
+
+    assert_response :success
+    assert_select "turbo-frame#tournament_results .data-table-row", text: /League Cup Lyon/
+    assert_select "turbo-frame#tournament_results .data-table-row", count: 1
+  end
 end

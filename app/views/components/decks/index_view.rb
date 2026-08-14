@@ -1,5 +1,9 @@
 module Decks
   class IndexView < ApplicationComponent
+    include Phlex::Rails::Helpers::TurboFrameTag
+
+    FRAME_ID = "deck_results".freeze
+
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
 
@@ -29,14 +33,16 @@ module Decks
 
         render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
 
-        div(class: "decks-grid", id: "decks-grid") do
-          if @decks.any?
-            @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
-          else
-            p(id: "decks-empty") do
-              plain "No decks match these filters. "
-              link_to "Clear filters", decks_path
-              plain "."
+        turbo_frame_tag(FRAME_ID) do
+          div(class: "decks-grid", id: "decks-grid") do
+            if @decks.any?
+              @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
+            else
+              p(id: "decks-empty") do
+                plain "No decks match these filters. "
+                link_to "Clear filters", decks_path, data: { turbo_frame: "_top" }
+                plain "."
+              end
             end
           end
         end
@@ -67,7 +73,12 @@ module Decks
     end
 
     def filter_bar
-      form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
+      form(
+        action: decks_path,
+        method: "get",
+        class: "deck-filters",
+        data: { controller: "card-filter", turbo_frame: FRAME_ID, turbo_action: "replace" }
+      ) do
         search_input
         filter_select(:format, format_options)
         filter_select(:primary, primary_options) if @primary_options.any?
