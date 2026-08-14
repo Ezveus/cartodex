@@ -19,20 +19,24 @@ module Settings
 
     private
 
-    # Grouped by application, keeping every live token (not just the earliest):
-    # re-authorizing the same client without reuse_access_token or revoke_previous_client_credentials_authorizations
-    # leaves the old token in place alongside the new one, so a single token
-    # would silently under-report what the client currently holds. "Live" means
-    # Doorkeeper's own #accessible? (not expired, not revoked) — the same test
-    # the MCP endpoint itself gates on — so an application whose tokens have all
-    # expired drops off the list entirely instead of lingering as "connected"
-    # forever. Filtering in Ruby after the DB query is fine at this scale: a
-    # user has a handful of connections, not thousands.
+    # Grouped by application, keeping every unrevoked token (not just the
+    # earliest): re-authorizing the same client without reuse_access_token or
+    # revoke_previous_client_credentials_authorizations leaves the old token in
+    # place alongside the new one, so a single token would silently under-report
+    # what the client currently holds.
+    #
+    # "Live" is `revoked_at: nil`, deliberately NOT Doorkeeper's #accessible?.
+    # An access token expires after two hours but its refresh token does not, so
+    # an unrevoked row is a fully working connection the client can resume at
+    # any moment. Filtering on #accessible? here hid every connection that was
+    # not being actively used at that second, while ConnectedAppsController
+    # #destroy scoped on revoked_at — the page and the only revocation control
+    # in the product disagreed, and in the steady state the control was simply
+    # unreachable. This query and #destroy must stay the same set.
     def connections
       @connections ||= Doorkeeper::AccessToken
         .where(resource_owner_id: @user.id, revoked_at: nil)
         .includes(:application)
-        .select(&:accessible?)
         .group_by(&:application)
         .filter_map { |application, tokens| [ application, tokens ] if application }
     end
@@ -57,14 +61,17 @@ module Settings
       end
     end
 
-    # Union of scopes across every live token for the application: answers
+    # Union of scopes across every unrevoked token for the application: answers
     # "what can this client do right now", not "what did its oldest token get".
+    # An expired access token still counts, because refreshing it yields a new
+    # one with the same scopes — the client's reach is unchanged by the clock.
     def scope_summary(tokens)
       tokens.any? { |token| token.scopes.include?("mcp:write") } ? "Read and write" : "Read only"
     end
 
-    # The earliest *live* token's date — a token that has since expired or been
-    # revoked no longer counts as part of this connection's history.
+    # The earliest unrevoked token's date: when this still-standing connection
+    # began. A revoked token is genuinely gone and drops out of the history;
+    # a merely expired one does not, since the connection outlived it.
     def connected_since(tokens)
       tokens.min_by(&:created_at).created_at.to_date.to_fs(:long)
     end
