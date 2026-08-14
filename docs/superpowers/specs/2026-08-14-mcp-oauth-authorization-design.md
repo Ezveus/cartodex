@@ -73,7 +73,8 @@ to save roughly a hundred lines is the wrong trade. Migrating to 6.0 is a delibe
 | Option | Value | Why |
 | --- | --- | --- |
 | `grant_flows` | `["authorization_code"]` | No implicit, password or client-credentials grant. |
-| `force_pkce` | `true` | Required by OAuth 2.1. |
+| `force_pkce` | enabled | Required by OAuth 2.1. Doorkeeper 5.9 exempts **confidential** clients from this, which is every client Claude registers by DCR, so the exemption is removed by a small `Doorkeeper::OAuth::PreAuthorization` prepend — see [PKCE is not free here](#pkce-is-not-free-here). |
+| `pkce_code_challenge_methods` | `%w[S256]` | Doorkeeper defaults to `%w[plain S256]`, and its token endpoint honours `plain`. A `plain` challenge is transmitted openly in the authorization request and *is* the verifier, so it gives no protection against the code-interception attack PKCE exists to prevent. Restricting it is what makes the metadata document's `code_challenge_methods_supported: ["S256"]` a true statement rather than a claim. |
 | `use_refresh_token` | `true` | Lets Claude refresh silently instead of re-prompting. |
 | `hash_token_secrets` | enabled | Matches the choice already made for `api_token_digest`. |
 | `hash_application_secrets` | enabled | Same. |
@@ -84,6 +85,31 @@ to save roughly a hundred lines is the wrong trade. Migrating to 6.0 is a delibe
 
 Three tables land in the `primary` database and therefore in `db/schema.rb`:
 `oauth_applications`, `oauth_access_grants`, `oauth_access_tokens`.
+
+### PKCE is not free here
+
+Both of these were found during implementation, not design, and both are the difference between PKCE
+working and PKCE being decorative. Neither is obvious from Doorkeeper's configuration surface.
+
+**`force_pkce` exempts confidential clients.** `Doorkeeper::OAuth::PreAuthorization#validate_code_challenge`
+reads `return true if client.confidential` before it checks for a challenge (5.9.6,
+`pre_authorization.rb:150`). Clients registered through DCR with a `client_secret` — which is what
+Claude registers — are confidential, so `force_pkce` alone would leave PKCE optional for precisely
+the client this feature exists to serve. The exemption is removed by prepending a module that
+reproduces the method without that line, still gated on `force_pkce?`. The guard against a future
+Doorkeeper upgrade silently restoring the exemption is a test that authorizes a **confidential**
+application without a challenge and asserts the redirect carries `error=invalid_request`; a public
+application would pass either way and prove nothing.
+
+**`plain` is accepted by default.** `pkce_code_challenge_methods` defaults to `%w[plain S256]`
+(`config.rb:276`) and `AuthorizationCodeRequest` has a live plaintext branch
+(`authorization_code_request.rb:101`). With `plain`, the challenge sent openly in the authorization
+request *is* the verifier, so an attacker who intercepts the authorization code already holds
+everything needed to redeem it.
+
+Both tests assert on the **redirect's query string**, not on the HTTP status. A rejected authorization
+request redirects to the client's registered `redirect_uri` carrying `error=`, exactly as an accepted
+one redirects carrying `code=` — both are 302, so a status assertion cannot tell them apart.
 
 ### Routes
 
