@@ -136,11 +136,36 @@ module Mcp
       access_token = Doorkeeper::AccessToken.by_token(token)
       return false unless access_token&.accessible?
 
+      rotate_refresh_token(access_token)
+
       @current_user = User.find_by(id: access_token.resource_owner_id)
       return false if @current_user.nil?
 
       @current_scopes = access_token.scopes.to_a
       true
+    end
+
+    # Retires the refresh token that this access token superseded.
+    #
+    # Doorkeeper rotates refresh tokens lazily: a refresh mints a new access
+    # token carrying `previous_refresh_token`, and the old one is only revoked
+    # once the *new* access token is presented to a resource server. The gem
+    # fires that from `Doorkeeper::OAuth::Token.authenticate`, which is its one
+    # and only call site (`lib/doorkeeper/oauth/token.rb:19`) and sits on the
+    # `doorkeeper_authorize!` path. This controller resolves tokens itself, so
+    # without this line the hook never runs: every refresh token ever issued
+    # stays redeemable forever, and replaying a leaked one is indistinguishable
+    # from a legitimate refresh.
+    #
+    # Firing it here rather than at the token endpoint is deliberate — it keeps
+    # Doorkeeper's concurrency grace window, where two racing refreshes both
+    # succeed because the old token survives until the new one is actually used.
+    #
+    # Note that Doorkeeper 5.9.6 has no `refresh_token_expires_in` (the option
+    # does not exist in the gem): a refresh token's lifetime is the row's, so
+    # rotation plus /settings revocation is what bounds it. See the design spec.
+    def rotate_refresh_token(access_token)
+      access_token.revoke_previous_refresh_token! if Doorkeeper.config.refresh_token_enabled?
     end
 
     # Deprecated. The static per-user bearer token predates OAuth and stays only
