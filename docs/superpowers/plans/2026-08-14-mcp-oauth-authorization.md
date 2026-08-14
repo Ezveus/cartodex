@@ -1476,7 +1476,7 @@ git commit -m "feat: add a Phlex consent screen with a refusable write scope"
 
 **Interfaces:**
 - Consumes: `Oauth::MetadataController` for the canonical URI shape (Task 2), `Oauth::AuthorizationsController` (Task 6).
-- Produces: `Oauth::ResourceIndicator.valid?(value, request)`, shared by both controllers.
+- Produces: `Oauth::ResourceIndicator.valid?(value, canonical_uri)` — two Strings, not a request object — shared by both controllers through `Oauth::ResourceIndicatorEnforcement`.
 
 - [ ] **Step 1: Write the failing test**
 
