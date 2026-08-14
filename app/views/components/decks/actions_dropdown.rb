@@ -29,18 +29,25 @@ module Decks
       link_to "Edit", edit_deck_path(@deck), **link_opts
     end
 
+    # Duplicate and Delete always redirect to a full page (the new deck, the index),
+    # so they must break out of any enclosing Turbo Frame — the decks index renders
+    # this dropdown inside deck_results, where an in-frame response would swap the
+    # grid for "Content missing" and swallow the flash. For button_to the `data:`
+    # option lands on the <button>, so the frame target goes on the generated form.
+    # Outside a frame (the deck show page) "_top" is already the default, so it is
+    # safe to hardcode here.
     def duplicate_item
       button_to "Duplicate", duplicate_deck_path(@deck),
         method: :post,
         class: "dropdown-item",
-        form: { class: "dropdown-item-form" }
+        form: { class: "dropdown-item-form", data: { turbo_frame: "_top" } }
     end
 
     def delete_item
       button_to "Delete", deck_path(@deck),
         method: :delete,
         class: "dropdown-item dropdown-item-danger",
-        form: { class: "dropdown-item-form", data: { turbo_confirm: "Delete this deck? Cards and results will be permanently removed." } }
+        form: { class: "dropdown-item-form", data: { turbo_frame: "_top", turbo_confirm: "Delete this deck? Cards and results will be permanently removed." } }
     end
   end
 end

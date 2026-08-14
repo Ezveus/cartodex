@@ -107,4 +107,63 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  test "index filters tournaments by name" do
+    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "lyon")
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+    assert_select ".data-table-row", text: /League Cup Lyon/
+  end
+
+  test "index ignores a blank q" do
+    get tournaments_path(q: "   ")
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+  end
+
+  test "index keeps the query in the search field" do
+    get tournaments_path(q: "lyon")
+
+    assert_select "form.tournaments-search input[name=q][value=lyon]"
+  end
+
+  # The filter form targets this frame (instead of a full-page visit) so the search field
+  # survives the live-filtering debounce — see Tournaments::IndexView::FRAME_ID.
+  test "index wraps the results table in a turbo frame the filter form targets" do
+    get tournaments_path
+
+    assert_response :success
+    assert_select "turbo-frame#tournament_results .data-table-row"
+    assert_select "form.tournaments-search[data-turbo-frame=tournament_results][data-turbo-action=replace]"
+  end
+
+  # The spotlight renders "See all N tournaments" from Search::Global; this page must then show N.
+  test "index shows exactly as many tournaments as the spotlight's total promises" do
+    @user.tournaments.create!(deck: @deck, name: "Ogerpon Cup", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+    @user.tournaments.create!(deck: @deck, name: "Ogerpon League", date: Date.new(2026, 5, 2),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "ogerpon")
+
+    assert_response :success
+    assert_equal Search::Global.call(user: @user, query: "ogerpon").tournament_total,
+      css_select(".data-table-row").size
+  end
+
+  test "a q request renders the matching tournaments inside the turbo frame" do
+    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
+                              format: "standard", tier: "league_cup")
+
+    get tournaments_path(q: "lyon")
+
+    assert_response :success
+    assert_select "turbo-frame#tournament_results .data-table-row", text: /League Cup Lyon/
+    assert_select "turbo-frame#tournament_results .data-table-row", count: 1
+  end
 end

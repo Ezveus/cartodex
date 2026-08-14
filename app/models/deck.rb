@@ -1,4 +1,6 @@
 class Deck < ApplicationRecord
+  include NameNormalizable
+
   belongs_to :user
   belongs_to :archetype, optional: true
   has_many :deck_cards, dependent: :destroy
@@ -20,6 +22,14 @@ class Deck < ApplicationRecord
 
   before_validation :clear_inapplicable_classification
   after_update :release_owned_copies_if_not_physical
+
+  # Matches the deck's own name or its archetype's (which itself spans the archetype name and its
+  # member Pokémon). The archetype side goes in as a subquery rather than a join: Archetype.search
+  # carries its own left_joins and distinct, which #or refuses to merge, and a subquery keeps the
+  # deck rows unduplicated.
+  scope :search, ->(query) {
+    name_matching(query).or(where(archetype_id: Archetype.search(query).select(:id)))
+  }
 
   # Human-readable format label. For the "other" format the user-supplied
   # name takes precedence when present.

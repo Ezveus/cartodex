@@ -23,7 +23,10 @@ module Decks
           aria_label: "Select #{@deck.name} to compare",
           data: { deck_compare_target: "checkbox", action: "deck-compare#toggle" }
         )
-        a(href: Rails.application.routes.url_helpers.deck_path(@deck), class: "deck-item-link") do
+        # The decks index renders this card inside the deck_results Turbo Frame, so
+        # every link in it is frame-scoped by default and would swap the grid for a
+        # "Content missing" error. Break out to the top level instead.
+        a(href: Rails.application.routes.url_helpers.deck_path(@deck), class: "deck-item-link", data: { turbo_frame: "_top" }) do
           h2 { @deck.name }
           render Decks::ClassificationBadges.new(deck: @deck, over_allocated: @over_allocated)
           p(class: "deck-description") { @deck.description } if @deck.description.present?
@@ -31,7 +34,10 @@ module Decks
         end
         if @with_actions
           div(class: "deck-item-actions") do
-            render Decks::ActionsDropdown.new(deck: @deck)
+            # Same reason as the link above: Edit must leave the frame here. The
+            # deck show page passes Decks::HeaderFrame::FRAME_ID instead, so the
+            # target stays a call-site decision rather than a hardcoded "_top".
+            render Decks::ActionsDropdown.new(deck: @deck, edit_frame: "_top")
           end
         end
       end

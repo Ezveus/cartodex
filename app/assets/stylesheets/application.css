@@ -94,6 +94,12 @@
   --border-color: var(--line);
 }
 
+/* The UA rule for [hidden] is a plain `display: none` on the element, so any component that sets
+   its own display — .btn, flex containers — silently outranks it and stays visible. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -608,6 +614,11 @@ textarea.form-input {
   width: auto;
   min-width: 9rem;
   padding: 0.4rem 0.6rem;
+}
+
+.deck-filter-search {
+  flex: 1 1 14rem;
+  min-width: 10rem;
 }
 
 /* Result modal */
@@ -2219,6 +2230,15 @@ textarea.form-input {
     width: 100%;
   }
 
+  .spotlight-option {
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .spotlight-option-meta {
+    white-space: normal;
+  }
+
   /* Deck form */
   .deck-form-actions {
     flex-direction: column;
@@ -2689,3 +2709,100 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .over-allocation-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .over-allocation-decks { display: inline-flex; gap: 0.5rem; }
 .over-allocation-banner { display: block; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem; }
+
+.tournaments-search {
+  margin-bottom: 1rem;
+}
+
+.tournaments-search .form-input {
+  max-width: 22rem;
+}
+
+.sg-spotlight-demo {
+  position: relative;
+  min-height: 4rem;
+}
+
+/* Dashboard spotlight search */
+.spotlight {
+  position: relative;
+  margin-top: 1.5rem;
+}
+
+.spotlight-input {
+  width: 100%;
+}
+
+.spotlight-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 0 0 8px 8px;
+  box-shadow: var(--e2);
+  z-index: 50;
+}
+
+.spotlight-panel-open {
+  display: block;
+}
+
+.spotlight-group + .spotlight-group {
+  border-top: 1px solid var(--line);
+}
+
+.spotlight-group-header {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-500);
+}
+
+.spotlight-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--ink-900);
+  text-decoration: none;
+}
+
+.spotlight-option:hover,
+.spotlight-option.is-active {
+  background: var(--flare);
+  color: var(--paper);
+}
+
+.spotlight-option-meta {
+  color: var(--ink-500);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.spotlight-option:hover .spotlight-option-meta,
+.spotlight-option.is-active .spotlight-option-meta {
+  color: var(--paper);
+}
+
+.spotlight-see-all {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* The see-all link is a listbox option too, so it has to show the keyboard highlight. */
+.spotlight-see-all:hover,
+.spotlight-see-all.is-active {
+  background: var(--flare);
+  color: var(--paper);
+}
+
+.spotlight-empty {
+  padding: 0.75rem;
+  color: var(--ink-500);
+}

@@ -17,6 +17,7 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     get "dashboard", to: "home#dashboard"
+    get "search", to: "search#show"
     resource :settings, only: [ :show ]
     resource :mcp_token, only: [ :create, :destroy ]
 

@@ -9,6 +9,8 @@ module Home
       div(class: "dashboard-container", data: { controller: "decks" }) do
         h1 { "Welcome, #{@current_user.email}" }
 
+        render Search::Spotlight.new
+
         div(class: "dashboard-grid") do
           collection_card
           decks_card

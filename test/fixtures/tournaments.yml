@@ -3,6 +3,7 @@ one:
   deck: one
   tournament_profile: ash
   name: Regional Championship
+  name_normalized: regional championship
   date: 2026-03-14
   format: standard
   tier: regional
@@ -14,6 +15,7 @@ two:
   user: two
   deck: two
   name: Local League Cup
+  name_normalized: local league cup
   date: 2026-02-01
   format: standard
   tier: league_cup

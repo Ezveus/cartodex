@@ -14,6 +14,10 @@ export default class extends Controller {
     this.update()
   }
 
+  // Also wired to turbo:frame-load on the deck_results frame: filtering swaps the
+  // checkboxes in unchecked while the bar (outside the frame) survives, so its count
+  // has to be recomputed against the new DOM. Target getters query live, so the
+  // freshly inserted checkboxes are already visible here.
   update() {
     const selected = this.#selected()
     const count = selected.length

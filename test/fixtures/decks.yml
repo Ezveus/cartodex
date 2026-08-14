@@ -1,11 +1,16 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# NOTE: fixtures skip callbacks, so name_normalized is spelled out by hand. DeckTest asserts it
+# stays in step with name.
 
 one:
   user: one
   name: MyString
+  name_normalized: mystring
   description: MyText
 
 two:
   user: two
   name: MyString
+  name_normalized: mystring
   description: MyText

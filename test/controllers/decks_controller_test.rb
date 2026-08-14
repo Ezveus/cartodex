@@ -206,6 +206,130 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "index filters decks by name" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Ogerpon Toolbox/
+    assert_select "#decks-grid", text: /Charizard Pidgeot/, count: 0
+    assert_not_nil other
+  end
+
+  test "index finds a deck through its archetype" do
+    @deck.update!(name: "Tuesday List", archetype: archetypes(:ogerpon))
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Tuesday List/
+  end
+
+  test "index ignores a blank q" do
+    @deck.update!(name: "Ogerpon Toolbox")
+
+    get decks_path(q: "   ")
+
+    assert_response :success
+    assert_select "#decks-grid", text: /Ogerpon Toolbox/
+  end
+
+  test "index keeps the query in the search field" do
+    get decks_path(q: "ogerpon")
+
+    assert_select "form.deck-filters input[name=q][value=ogerpon]"
+  end
+
+  # The filter form targets this frame (instead of a full-page visit) so the search field
+  # survives the live-filtering debounce — see Decks::IndexView::FRAME_ID.
+  test "index wraps the deck grid in a turbo frame the filter form targets" do
+    get decks_path
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #decks-grid"
+    assert_select "form.deck-filters[data-turbo-frame=deck_results][data-turbo-action=replace]"
+  end
+
+  # The spotlight renders "See all N decks" from Search::Global; this page must then show N.
+  test "index shows exactly as many decks as the spotlight's total promises" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    @user.decks.create!(name: "Ogerpon Build")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_equal Search::Global.call(user: @user, query: "ogerpon").deck_total,
+      css_select("#decks-grid .deck-item").size
+  end
+
+  test "a q request renders the matching decks inside the turbo frame" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon")
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #deck-#{@deck.id}"
+    assert_select "turbo-frame#deck_results #deck-#{other.id}", false
+  end
+
+  # The spotlight orders its five decks by name, so the page behind "See all N decks" has to open
+  # with the same rows — creation order would show the user a different five.
+  test "index lists decks in the order the spotlight promised" do
+    @deck.update!(name: "Zoroark Toolbox")
+    @user.decks.create!(name: "Ancient Toolbox")
+    @user.decks.create!(name: "Miraidon Toolbox")
+
+    get decks_path(q: "toolbox")
+
+    assert_response :success
+    grid = css_select("#decks-grid .deck-item").map { |item| item["id"].delete_prefix("deck-").to_i }
+    spotlight = Search::Global.call(user: @user, query: "toolbox").decks.map(&:id)
+
+    assert_equal spotlight, grid.first(spotlight.size)
+  end
+
+  # Turbo keeps #deck_results and discards the rest of the response, so the import banner and the
+  # filter bar's two option lists must not be queried for a keystroke.
+  test "a frame request skips the queries that only feed the page outside the frame" do
+    get decks_path # warm the session: the first request of a test also loads the Devise user
+
+    page = count_queries { get decks_path }
+    frame = count_queries { get decks_path, headers: { "Turbo-Frame" => "deck_results" } }
+
+    assert_response :success
+    assert_operator frame, :<, page,
+      "a frame request costs as much as the whole page: #{frame} vs #{page}"
+  end
+
+  test "a frame request still renders the filtered grid" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon"), headers: { "Turbo-Frame" => "deck_results" }
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #deck-#{@deck.id}"
+    assert_select "turbo-frame#deck_results #deck-#{other.id}", false
+  end
+
+  # The filter bar renders outside deck_results, so live filtering never re-renders it: the link
+  # ships in both states and the card-filter controller flips `hidden` as the fields change.
+  test "index renders the Clear link hidden when no filter is set" do
+    get decks_path
+
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]"
+  end
+
+  test "index renders the Clear link visible when a filter is set" do
+    get decks_path(q: "ogerpon")
+
+    assert_select "form.deck-filters a[data-card-filter-target=clear]"
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]", count: 0
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do

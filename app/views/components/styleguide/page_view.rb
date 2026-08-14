@@ -46,6 +46,7 @@ module Styleguide
         badges_section
         stats_section
         form_section
+        spotlight_section
         deck_card_section
         settings_section
         tokens_section
@@ -172,6 +173,47 @@ module Styleguide
           end
         end
       end
+    end
+
+    # Renders the real components with a hand-built Result, so the reference can't drift from the
+    # spotlight the dashboard ships. The panel is forced open — on the dashboard, Stimulus opens it.
+    #
+    # ResultsList, not ResultsView: the latter wraps everything in turbo_frame_tag(FRAME_ID), and
+    # Search::Spotlight above already put one of those on this page. Two elements with the same id
+    # is the exact bug StyleguideControllerTest guards against for the MCP panels.
+    def spotlight_section
+      sg_section("Composants", "Recherche spotlight",
+              "Champ de recherche du dashboard : panneau flottant, résultats groupés par type.") do
+        div(class: "sg-spotlight-demo") do
+          render Search::Spotlight.new
+          div(class: "spotlight-panel spotlight-panel-open") do
+            render Search::ResultsList.new(results: sg_spotlight_results)
+          end
+        end
+      end
+    end
+
+    # Plain in-memory records (never persisted), like sg_settings_user_with_token above: this page
+    # never touches the database. The ids are what the path helpers need; nothing is saved.
+    def sg_spotlight_results
+      Search::Global::Result.new(
+        query: "ogerpon",
+        decks: [
+          Deck.new(id: 1, name: "Ogerpon Toolbox", format: "standard",
+                   archetype: Archetype.new(name: "Teal Mask Ogerpon ex")),
+          Deck.new(id: 2, name: "Tuesday List", format: "glc")
+        ],
+        deck_total: 4,
+        cards: [
+          Card.new(id: 1, name: "Teal Mask Ogerpon ex", set_name: "TWM", set_number: "25"),
+          Card.new(id: 2, name: "Ogerpon", set_name: "SVI", set_number: "211")
+        ],
+        card_total: 9,
+        tournaments: [
+          Tournament.new(id: 1, name: "Ogerpon Open", date: Date.new(2026, 4, 12), tier: "league_cup")
+        ],
+        tournament_total: 1
+      )
     end
 
     def deck_card_section

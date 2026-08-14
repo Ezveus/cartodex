@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_12_093000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_13_112536) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -24,6 +24,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_093000) do
   create_table "archetypes", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.string "name_normalized"
     t.integer "parent_id"
     t.integer "primary_pokemon_id", null: false
     t.integer "secondary_pokemon_id"
@@ -136,6 +137,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_093000) do
     t.string "format", default: "standard", null: false
     t.boolean "has_proxies", default: false, null: false
     t.string "name"
+    t.string "name_normalized"
     t.string "other_format_name"
     t.boolean "physical", default: false, null: false
     t.boolean "tcg_live", default: false, null: false
@@ -185,6 +187,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_093000) do
     t.integer "deck_id", null: false
     t.string "format", default: "standard", null: false
     t.string "name", null: false
+    t.string "name_normalized"
     t.string "other_format_name"
     t.integer "participant_count"
     t.integer "placement"

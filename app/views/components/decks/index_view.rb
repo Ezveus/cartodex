@@ -1,11 +1,17 @@
 module Decks
   class IndexView < ApplicationComponent
+    include Phlex::Rails::Helpers::TurboFrameTag
+
+    FRAME_ID = "deck_results".freeze
+
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
 
     def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [], over_allocated_deck_ids: [], over_allocation_count: 0)
       @decks = decks
-      @pending_deck_imports = pending_deck_imports
+      # nil, not just absent: a Turbo Frame request skips loading these — see
+      # DecksController#results_frame_request?.
+      @pending_deck_imports = pending_deck_imports || []
       @filters = filters || {}
       @primary_options = primary_options || []
       @secondary_options = secondary_options || []
@@ -29,14 +35,22 @@ module Decks
 
         render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
 
-        div(class: "decks-grid", id: "decks-grid") do
-          if @decks.any?
-            @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
-          else
-            p(id: "decks-empty") do
-              plain "No decks match these filters. "
-              link_to "Clear filters", decks_path
-              plain "."
+        # Everything inside this frame is frame-scoped by default, so each deck link
+        # and dropdown action carries data-turbo-frame="_top" (see Decks::DeckCard).
+        #
+        # compare_bar lives outside the frame but counts the checkboxes inside it, so
+        # a filter swap replaces them with unchecked ones while the bar keeps its
+        # stale count. turbo:frame-load re-runs the controller's own update path.
+        turbo_frame_tag(FRAME_ID, data: { action: "turbo:frame-load->deck-compare#update" }) do
+          div(class: "decks-grid", id: "decks-grid") do
+            if @decks.any?
+              @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
+            else
+              p(id: "decks-empty") do
+                plain "No decks match these filters. "
+                link_to "Clear filters", decks_path, data: { turbo_frame: "_top" }
+                plain "."
+              end
             end
           end
         end
@@ -67,14 +81,46 @@ module Decks
     end
 
     def filter_bar
-      form(action: decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
+      form(
+        action: decks_path,
+        method: "get",
+        class: "deck-filters",
+        data: { controller: "card-filter", turbo_frame: FRAME_ID, turbo_action: "replace" }
+      ) do
+        search_input
         filter_select(:format, format_options)
         filter_select(:primary, primary_options) if @primary_options.any?
         filter_select(:secondary, secondary_options) if @secondary_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
-        link_to "Clear", decks_path, class: "btn btn-secondary btn-sm" if active_filters?
+        clear_link
       end
+    end
+
+    # The bar sits outside deck_results, so live filtering never re-renders it: shown or hidden
+    # from the server's view of the params it would stay that way while the user typed, and go
+    # stale the moment they emptied a field. It ships in both states instead, and the card-filter
+    # controller flips `hidden` from the form's own values on every change.
+    def clear_link
+      a(
+        href: decks_path,
+        class: "btn btn-secondary btn-sm",
+        hidden: !active_filters?,
+        data: { card_filter_target: "clear" }
+      ) { "Clear" }
+    end
+
+    def search_input
+      input(
+        type: "search",
+        name: "q",
+        value: @filters[:q],
+        placeholder: "Deck or archetype name…",
+        class: "form-input deck-filter-search",
+        autocomplete: "off",
+        aria_label: "Search decks",
+        data: { action: "input->card-filter#debounce" }
+      )
     end
 
     def filter_select(name, options)
