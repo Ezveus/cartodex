@@ -80,8 +80,11 @@ to save roughly a hundred lines is the wrong trade. Migrating to 6.0 is a delibe
 | `hash_application_secrets` | enabled | Same. |
 | `default_scopes` | `["mcp:read"]` | What a client gets when it requests no scope at all. |
 | `optional_scopes` | `["mcp:write"]` | Grantable, and refusable at consent. |
+| `enforce_configured_scopes` | enabled | Added during Task 4. Disabled by default; without it, `Oauth::ClientRegistrar::SERVER_SCOPES` was the *only* thing standing between a registration request and an application holding a scope this server never configured, unlike `redirect_uri`, which already had two independent layers. |
+| `access_token_expires_in` | `2.hours` | Not in the original design; needed a value and this is Doorkeeper's own default made explicit. |
 | `skip_authorization` | `false` | Every user consents explicitly, every time a new client asks. |
 | `resource_owner_authenticator` | Devise `current_user`, else redirect to sign-in with return | |
+| `force_ssl_in_redirect_uri` | `->(uri) { !ClientRegistrar::PLAIN_HTTP_HOSTS.include?(uri.host) }` | Added during Task 4. Doorkeeper's `RedirectUriValidator` forces HTTPS on every redirect URI outside development with no loopback exception, so without this override the model layer would reject a loopback CLI client's `http://` redirect before `Oauth::ClientRegistrar`'s own checks ever ran. Points at `ClientRegistrar`'s own host list rather than restating it. |
 
 Three tables land in the `primary` database and therefore in `db/schema.rb`:
 `oauth_applications`, `oauth_access_grants`, `oauth_access_tokens`.
@@ -119,6 +122,7 @@ publicly readable.
 
 ```ruby
 use_doorkeeper do
+  controllers authorizations: "oauth/authorizations", tokens: "oauth/tokens"
   skip_controllers :applications, :authorized_applications
 end
 
@@ -127,6 +131,11 @@ get ".well-known/oauth-authorization-server", to: "oauth/metadata#authorization_
 get ".well-known/oauth-protected-resource",     to: "oauth/metadata#protected_resource"
 get ".well-known/oauth-protected-resource/mcp", to: "oauth/metadata#protected_resource"
 ```
+
+The `controllers` line is not in the original design's sketch of this block. It is what actually
+routes Doorkeeper's `/oauth/authorize` and `/oauth/token` to `Oauth::AuthorizationsController` and
+`Oauth::TokensController` instead of the gem's own — without it, the consent-narrowing and resource-
+indicator code added at Tasks 6 and 7 would sit in the app unreached.
 
 The protected-resource document is served at **two** paths deliberately. RFC 9728 has the client
 insert the well-known segment *before* the resource's path, so the canonical URL for a resource at
@@ -144,9 +153,13 @@ component of ours (see [Settings](#settings)).
 | `app/controllers/oauth/registrations_controller.rb` | RFC 7591 endpoint; delegates to the service |
 | `app/controllers/oauth/metadata_controller.rb` | The two `.well-known` documents |
 | `app/controllers/oauth/authorizations_controller.rb` | Subclasses Doorkeeper's; narrows scopes at consent |
+| `app/controllers/oauth/tokens_controller.rb` | Subclasses Doorkeeper's; adds RFC 8707 resource validation (not in the original design; see [Audience validation](#audience-validation)) |
+| `app/controllers/concerns/oauth/resource_indicator_enforcement.rb` | Shared `before_action` for the resource check, included by both the authorizations and tokens controllers above (not in the original design) |
 | `app/services/oauth/client_registrar.rb` | Validates registration metadata, creates the application |
+| `app/services/oauth/resource_indicator.rb` | The single definition of the canonical resource URI and RFC 8707 comparison; used by the metadata controller and both endpoints above (not in the original design — the design described the check inline on the two controllers) |
 | `app/views/components/oauth/consent_view.rb` | Phlex consent screen |
 | `app/views/components/settings/connected_apps_section.rb` | Connected applications + revocation |
+| `app/jobs/oauth/purge_stale_applications_job.rb` | Deletes never-authorized registrations older than the grace period (not in the original design's file list, though the job itself was — see [Purge](#purge)) |
 
 ## Connection flow
 
@@ -243,9 +256,12 @@ at that point tokens must record their intended resource and `/mcp` must check i
 
 ## Authentication on `/mcp`
 
-`authenticate_token!` tries a `Doorkeeper::AccessToken` first, then falls back to the existing static
-token, with the fallback branch marked deprecated. One entry point, two identity sources,
-`@current_user` unchanged for the rest of the controller.
+`identify_token_user` tries a `Doorkeeper::AccessToken` first (`Doorkeeper::AccessToken.by_token`,
+gated on `#accessible?`), then falls back to the existing static token, with the fallback branch
+marked deprecated. One entry point, two identity sources, `@current_user` unchanged for the rest of
+the controller. It never halts the callback chain itself — see [Rate limiting](#rate-limiting) for why
+that split (`identify_token_user` / `reject_unauthenticated!`) exists and is load-bearing, not the
+single `authenticate_token!` this section originally sketched.
 
 ## Scopes
 
@@ -253,9 +269,16 @@ Each tool class declares a `required_scope`: `mcp:read` by default, `mcp:write` 
 tools (`add_card_to_collection`, `set_collection_quantity`, `add_card_to_deck`,
 `set_deck_card_owned_copies`, `reallocate_owned_copies`, `set_deck_card_quantity`).
 
-Enforcement is doubled. `MCP::Server.new` receives only the tools covered by the token's scopes, so
-`tools/list` never advertises an inaccessible tool; and `McpTool` re-checks in the call path, so a
-client that guesses a tool name is still refused.
+Enforcement is a single filter, not the doubled check originally planned here. `McpTool.permitted_for`
+filters the tool array by `@current_scopes` once, before `MCP::Server.new` is even called
+(`Mcp::ServerController#handle`), and that one filtered array is both what `tools/list` advertises
+and what `tools/call` dispatches from — verified directly in mcp-1.1.0: `MCP::Server#initialize` builds
+`@tools` from exactly the array it is given (`server.rb:174`), and `call_tool` looks a tool up in that
+same hash, raising "Tool not found" if it is absent (`server.rb:754`). A second explicit scope check
+inside `McpTool` would therefore be redundant, not defense in depth — there is nothing downstream of
+the filter left to enforce against. A client that guesses an out-of-scope tool's name gets "tool not
+found," the same outcome originally described as coming from a re-check that does not exist in the
+shipped code.
 
 ### Deviation: no HTTP 403 `insufficient_scope`
 

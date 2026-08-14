@@ -107,6 +107,29 @@ end
 
 For `text_field_tag` / `submit_tag`, access via `helpers.text_field_tag`.
 
+### Symbol Attribute Values Get Dasherized — Use Strings When Text Matters
+
+Phlex dasherizes a `Symbol` passed as an attribute *value*, the same way it dasherizes `Symbol` attribute *keys* (see "Stimulus Data Attributes" above). This is easy to miss because it is silent and only bites values built by hand from a hash of Symbols — e.g. constructing a bag of hidden fields:
+
+```ruby
+# Wrong — Phlex dasherizes the Symbol value, not just the key
+input(name: :client_id)
+# => <input name="client-id">
+
+# Correct — String values pass through untouched
+input(name: "client_id")
+# => <input name="client_id">
+```
+
+This shipped broken once: an OAuth consent form built its hidden fields from a `Symbol`-keyed hash and passed each key straight through as `name:`. Every hidden field rendered with a dashed name (`name="client-id"` instead of `name="client_id"`), so the receiving controller's `params[:client_id]` was always `nil`. The screen could not have worked for a single real user, and seven tests passed anyway.
+
+They passed because every one of those tests hand-built its POST params (`post url, params: { client_id: "…" }`) instead of going through the rendered form — so none of them ever exercised the `name:` attribute the view actually emits. The fix was two-fold, and both halves matter:
+
+1. **Use `String` values, not `Symbol`s, for any attribute whose exact text is load-bearing** — `name`, `id`, `value`, anything a server or a CSS selector will match against verbatim.
+2. **Test a form by round-tripping the rendered output**, not by reconstructing the params you assume it sends. Render the view, harvest the real `name=`/`value=` pairs out of the markup (e.g. via `assert_select` or a Capybara `fill_in`/`click_button` flow), and POST *that*. A hand-built params hash can only ever confirm the controller works — it says nothing about whether the view that real users click through agrees with it.
+
+This applies to every form in the app, not just OAuth screens — any Phlex view that builds input attributes from a Symbol-keyed structure is one refactor away from repeating this.
+
 ### Conditional CSS Classes
 
 `tokens()` is **not available** in Phlex 2.4. Use array + compact + join:
