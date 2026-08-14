@@ -35,7 +35,11 @@ module Decks
 
         # Everything inside this frame is frame-scoped by default, so each deck link
         # and dropdown action carries data-turbo-frame="_top" (see Decks::DeckCard).
-        turbo_frame_tag(FRAME_ID) do
+        #
+        # compare_bar lives outside the frame but counts the checkboxes inside it, so
+        # a filter swap replaces them with unchecked ones while the bar keeps its
+        # stale count. turbo:frame-load re-runs the controller's own update path.
+        turbo_frame_tag(FRAME_ID, data: { action: "turbo:frame-load->deck-compare#update" }) do
           div(class: "decks-grid", id: "decks-grid") do
             if @decks.any?
               @decks.each { |deck| render Decks::DeckCard.new(deck: deck, over_allocated: @over_allocated_deck_ids.include?(deck.id)) }
