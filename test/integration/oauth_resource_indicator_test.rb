@@ -96,6 +96,21 @@ class OauthResourceIndicatorTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  # An opaque URI parses without raising but has a nil host and a nil path, so
+  # the normalisation step used to call nil.chomp and blow up with NoMethodError
+  # — an unauthenticated 500 on /oauth/token and /oauth/authorize, where every
+  # other malformed resource produces a clean 400 invalid_target. These have to
+  # land in the same bucket as "resource points somewhere else", because that is
+  # what they are.
+  %w[urn:ietf:x mailto:a@b.com javascript:alert(1)].each do |opaque|
+    test "rejects the opaque resource URI #{opaque}" do
+      post "/oauth/authorize", params: authorize_params(resource: opaque)
+
+      assert_response :bad_request
+      assert_equal "invalid_target", JSON.parse(response.body)["error"]
+    end
+  end
+
   test "rejects a token request aimed at another resource" do
     post "/oauth/authorize", params: authorize_params
     code = Rack::Utils.parse_query(URI.parse(response.location).query)["code"]

@@ -22,6 +22,14 @@ module Oauth
       return true if value.blank?
 
       uri = URI.parse(value.to_s)
+      # Opaque URIs ("urn:ietf:x", "mailto:a@b.com", "javascript:alert(1)")
+      # parse without raising but have a nil host and a nil path, so normalize's
+      # `uri.path.chomp` used to blow up with NoMethodError — a 500 on an
+      # unauthenticated endpoint, where every other malformed resource yields a
+      # clean 400 invalid_target. A hierarchical URI with no path at all
+      # ("https://example.com") is rejected here too: the canonical resource
+      # always has one, so it could never have matched anyway.
+      return false if uri.host.blank? || uri.path.blank?
       return false unless uri.fragment.nil?
       return false unless uri.userinfo.nil?
 
