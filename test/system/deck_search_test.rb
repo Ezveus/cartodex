@@ -39,6 +39,22 @@ class DeckSearchTest < ApplicationSystemTestCase
     assert_current_path edit_deck_path(@deck)
   end
 
+  # The filter bar sits outside deck_results, so the server renders its "Clear" link once and
+  # never again — only the browser can keep it in step with what is actually in the fields.
+  test "the Clear link follows the query as it is typed and emptied" do
+    visit decks_path
+
+    assert_no_selector "form.deck-filters a", text: "Clear"
+
+    fill_in "Search decks", with: "Charizard"
+
+    assert_selector "form.deck-filters a", text: "Clear"
+
+    fill_in "Search decks", with: ""
+
+    assert_no_selector "form.deck-filters a", text: "Clear"
+  end
+
   private
 
   # Types into the search field and waits for the frame to swap. Asserting the

@@ -315,6 +315,21 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck_results #deck-#{other.id}", false
   end
 
+  # The filter bar renders outside deck_results, so live filtering never re-renders it: the link
+  # ships in both states and the card-filter controller flips `hidden` as the fields change.
+  test "index renders the Clear link hidden when no filter is set" do
+    get decks_path
+
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]"
+  end
+
+  test "index renders the Clear link visible when a filter is set" do
+    get decks_path(q: "ogerpon")
+
+    assert_select "form.deck-filters a[data-card-filter-target=clear]"
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]", count: 0
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do

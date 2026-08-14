@@ -93,8 +93,21 @@ module Decks
         filter_select(:secondary, secondary_options) if @secondary_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
-        link_to "Clear", decks_path, class: "btn btn-secondary btn-sm" if active_filters?
+        clear_link
       end
+    end
+
+    # The bar sits outside deck_results, so live filtering never re-renders it: shown or hidden
+    # from the server's view of the params it would stay that way while the user typed, and go
+    # stale the moment they emptied a field. It ships in both states instead, and the card-filter
+    # controller flips `hidden` from the form's own values on every change.
+    def clear_link
+      a(
+        href: decks_path,
+        class: "btn btn-secondary btn-sm",
+        hidden: !active_filters?,
+        data: { card_filter_target: "clear" }
+      ) { "Clear" }
     end
 
     def search_input

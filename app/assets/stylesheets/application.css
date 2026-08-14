@@ -94,6 +94,12 @@
   --border-color: var(--line);
 }
 
+/* The UA rule for [hidden] is a plain `display: none` on the element, so any component that sets
+   its own display — .btn, flex containers — silently outranks it and stays visible. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 0;
