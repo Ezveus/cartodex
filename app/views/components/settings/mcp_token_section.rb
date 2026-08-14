@@ -18,7 +18,10 @@ module Settings
       section(id: @dom_id, class: "settings-section") do
         h2 { "MCP token" }
         p(class: "settings-section-lead") do
-          plain "A bearer token lets an MCP client manage your collection and decks on your behalf."
+          strong { "Deprecated." }
+          plain " Connect through an OAuth client instead — most MCP clients do this "
+          plain "for you when you give them the server URL. This token still works, "
+          plain "and will be removed in a future release."
         end
         reveal if @raw_token
         metadata

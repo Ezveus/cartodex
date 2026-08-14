@@ -272,6 +272,12 @@ module Styleguide
               user: sg_settings_user_with_token, raw_token: PLACEHOLDER_TOKEN, dom_id: "sg-mcp-token-revealed"
             )
           end
+          # Unpersisted user (id nil): the section's query can never match a
+          # real Doorkeeper::AccessToken row, so this renders the empty state
+          # without needing fixtures.
+          settings_panel do
+            render Settings::ConnectedAppsSection.new(user: sg_settings_user_without_token)
+          end
         end
       end
     end

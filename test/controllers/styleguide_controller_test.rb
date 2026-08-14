@@ -22,7 +22,7 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
     get styleguide_path
 
     assert_response :success
-    ids = css_select("section.settings-section").map { |section| section["id"] }
+    ids = css_select("section.settings-section[id^='sg-mcp-token']").map { |section| section["id"] }
 
     assert_equal 2, ids.size, "sanity: the styleguide shows both states of the panel"
     assert_equal ids.uniq, ids, "duplicate section ids: #{ids.inspect}"

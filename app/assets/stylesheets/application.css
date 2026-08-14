@@ -1884,6 +1884,41 @@ textarea.form-input {
   margin-top: 0.75rem;
 }
 
+.settings-section + .settings-section {
+  margin-top: 1.5rem;
+}
+
+/* Settings — connected applications list. One row per OAuth application. */
+.settings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-list-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-list-item:last-child {
+  border-bottom: none;
+}
+
+.settings-list-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
+.settings-list-revoke {
+  margin-left: auto;
+}
+
 /* The reveal block is the only moment the raw token is ever visible again —
    weighted as a callout (elevated, amber-ringed) rather than a neutral box. */
 .settings-reveal {

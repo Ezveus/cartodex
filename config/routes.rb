@@ -44,6 +44,7 @@ Rails.application.routes.draw do
     get "search", to: "search#show"
     resource :settings, only: [ :show ]
     resource :mcp_token, only: [ :create, :destroy ]
+    resources :connected_apps, only: [ :destroy ]
 
     # Living design-system reference. Not exposed in production.
     get "styleguide", to: "styleguide#show" unless Rails.env.production?

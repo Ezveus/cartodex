@@ -12,6 +12,7 @@ module Settings
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "Settings")
         render Settings::McpTokenSection.new(user: @user, raw_token: @raw_token)
+        render Settings::ConnectedAppsSection.new(user: @user)
       end
     end
   end
