@@ -51,41 +51,87 @@ class McpServerTest < ActionDispatch::IntegrationTest
     assert_equal 2, @user.collections.find_by(card: @card).quantity
   end
 
-  test "throttles requests past the configured rate limit" do
+  test "does not spend the anonymous per-IP limit on authenticated requests" do
     with_real_rate_limit_store do
-      limit = Mcp::ServerController::RATE_LIMIT_TO
-
-      limit.times do
-        post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
+      # The user-visible symptom being fixed: a single agent session goes well
+      # past IP_RATE_LIMIT_TO calls a minute from one address (importing a
+      # decklist card by card is ~60 calls), and must not be cut off by the
+      # limiter that exists to throttle anonymous token spam.
+      (Mcp::ServerController::IP_RATE_LIMIT_TO + 10).times do
+        post_mcp
         assert_response :success
       end
-
-      post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
-
-      assert_response :too_many_requests
     end
   end
 
   test "throttles unauthenticated requests before authentication rejects them" do
     with_real_rate_limit_store do
-      limit = Mcp::ServerController::RATE_LIMIT_TO
+      limit = Mcp::ServerController::IP_RATE_LIMIT_TO
 
       limit.times do
-        post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+        post_mcp(token: "not-a-real-token")
         assert_response :unauthorized
       end
 
-      post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+      post_mcp(token: "not-a-real-token")
 
       # If this returns :unauthorized instead of :too_many_requests, the rate
       # limiter is being skipped for unauthenticated requests (i.e. it runs
-      # after authenticate_token! halts the callback chain), which means
+      # after reject_unauthenticated! halts the callback chain), which means
       # invalid-token spam is never throttled.
       assert_response :too_many_requests
     end
   end
 
+  test "throttles one user past the per-user rate limit" do
+    with_real_rate_limit_store do
+      limit = Mcp::ServerController::USER_RATE_LIMIT_TO
+
+      limit.times do
+        post_mcp
+        assert_response :success
+      end
+
+      post_mcp
+
+      assert_response :too_many_requests
+    end
+  end
+
+  test "does not share the per-user quota between two users on one IP" do
+    with_real_rate_limit_store do
+      other_token = users(:two).regenerate_api_token
+      limit = Mcp::ServerController::USER_RATE_LIMIT_TO
+
+      (limit + 1).times { post_mcp }
+      assert_response :too_many_requests
+
+      # Same source IP the first user has been hammering, different bearer
+      # token. The per-user bucket must be keyed on the authenticated user, so
+      # one user burning their quota never locks out another user who happens
+      # to share an egress IP (two agents on one machine, or two accounts
+      # behind one provider NAT).
+      post_mcp(token: other_token)
+
+      assert_response :success
+    end
+  end
+
   private
+
+  # RFC 5737 TEST-NET-3. Public-looking on purpose: ActionDispatch::RemoteIp
+  # treats loopback and private ranges as trusted proxies, so a private address
+  # here would not survive as request.remote_ip. Every request in this file
+  # comes from this one address, which is the scenario that matters: the
+  # limiters have to tell clients apart by something other than their IP.
+  SOURCE_IP = "203.0.113.1"
+
+  def post_mcp(token: @token)
+    post "/mcp",
+      params: rpc("list_decks", {}),
+      headers: auth_headers(token: token),
+      env: { "REMOTE_ADDR" => SOURCE_IP }
+  end
 
   # The test environment's cache store is :null_store (config/environments/test.rb),
   # which makes `rate_limit` a no-op. Swap in a real store for the duration of

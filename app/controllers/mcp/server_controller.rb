@@ -24,8 +24,11 @@ module Mcp
       end
     end
 
-    RATE_LIMIT_TO = 30
-    RATE_LIMIT_WITHIN = 1.minute
+    IP_RATE_LIMIT_TO = 30
+    IP_RATE_LIMIT_WITHIN = 1.minute
+
+    USER_RATE_LIMIT_TO = 300
+    USER_RATE_LIMIT_WITHIN = 1.minute
 
     # Hostnames legitimately serving this app, checked by the mcp gem's DNS
     # rebinding protection (added in 0.23) against the request's Host header.
@@ -33,13 +36,49 @@ module Mcp
     # test host; loopback hosts are allowed by the gem itself.
     ALLOWED_HOSTS = [ "cartodex.ezveus.eu", "www.example.com" ].freeze
 
-    # `rate_limit` registers its own before_action at the point it's declared,
-    # and before_actions run in declaration order. It must be declared before
-    # authenticate_token! so invalid/missing-token requests are throttled too
-    # (otherwise authenticate_token!'s `head :unauthorized` halts the chain
-    # before the limiter ever runs, letting attackers spam tokens unthrottled).
-    rate_limit to: RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN, store: RATE_LIMIT_STORE, only: :handle
-    before_action :authenticate_token!
+    # Two limiters, and their positions in the callback chain matter. Both are
+    # plain before_actions (`rate_limit` forwards its options straight to
+    # `before_action`), so both run on every request that reaches them and an
+    # authenticated request is bound by whichever budget it exhausts first.
+    #
+    # Authentication is therefore split in two: identify_token_user resolves
+    # the bearer token without halting, and reject_unauthenticated! issues the
+    # 401 afterwards. That lets each limiter sit exactly where it belongs.
+    before_action :identify_token_user
+
+    # Anti-abuse for anonymous traffic, which has no identity other than its
+    # IP. `unless:` restricts it to requests that failed to authenticate, so it
+    # never eats into a legitimate client's quota — the whole point of the
+    # split, since an authenticated MCP session routinely burns far more than
+    # IP_RATE_LIMIT_TO calls a minute (importing a decklist card by card is
+    # ~60), and several users can share one egress IP.
+    #
+    # The tradeoff: this limiter now runs *after* the token digest lookup
+    # instead of before it. What it still protects is the application — the MCP
+    # server, tool dispatch, and every query behind it stay unreachable to
+    # invalid-token spam beyond IP_RATE_LIMIT_TO per minute. What it no longer
+    # protects is the database: each rejected attempt costs one indexed lookup
+    # in User.authenticate_api_token before it is counted, where previously a
+    # request past the limit was refused with zero database work. Accepted
+    # because that lookup is a single indexed read on a digest, and because
+    # anything cheaper would have to throttle authenticated users by IP.
+    rate_limit to: IP_RATE_LIMIT_TO, within: IP_RATE_LIMIT_WITHIN,
+      name: "mcp-ip", unless: -> { @current_user },
+      store: RATE_LIMIT_STORE, only: :handle
+
+    before_action :reject_unauthenticated!
+
+    # The work quota. Keyed by user id rather than by IP because an IP is not a
+    # usable identity for an authenticated client here: MCP clients are
+    # increasingly server-side (Claude web connectors call from shared,
+    # rotating provider egress IPs, and two local agents on one machine share a
+    # home NAT), so an IP-keyed quota either lumps unrelated users into one
+    # bucket or follows a single user around as they change IPs.
+    #
+    # Both limiters pass an explicit `name:` so they get distinct cache keys.
+    rate_limit to: USER_RATE_LIMIT_TO, within: USER_RATE_LIMIT_WITHIN,
+      by: -> { @current_user.id },
+      name: "mcp-user", store: RATE_LIMIT_STORE, only: :handle
 
     def handle
       server = MCP::Server.new(
@@ -69,9 +108,15 @@ module Mcp
       headers&.find { |name, _| name.to_s.casecmp?("content-type") }&.last || "application/json"
     end
 
-    def authenticate_token!
+    # Deliberately does not halt the chain: the per-IP limiter is declared
+    # between this and reject_unauthenticated! and needs to know whether the
+    # request authenticated before deciding to count it.
+    def identify_token_user
       token = request.headers["Authorization"].to_s.delete_prefix("Bearer ").strip
       @current_user = User.authenticate_api_token(token)
+    end
+
+    def reject_unauthenticated!
       head :unauthorized unless @current_user
     end
   end
