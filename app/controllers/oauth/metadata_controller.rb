@@ -45,7 +45,7 @@ module Oauth
     end
 
     def canonical_resource_uri
-      "#{issuer}/mcp"
+      ResourceIndicator.canonical_uri(root_url)
     end
   end
 end

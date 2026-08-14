@@ -18,7 +18,7 @@ Rails.application.routes.draw do
   # are created by dynamic registration (Oauth::RegistrationsController), and the
   # user-facing list of connected apps is a Phlex section of /settings.
   use_doorkeeper do
-    controllers authorizations: "oauth/authorizations"
+    controllers authorizations: "oauth/authorizations", tokens: "oauth/tokens"
     skip_controllers :applications, :authorized_applications
   end
 
