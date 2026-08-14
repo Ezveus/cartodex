@@ -193,7 +193,8 @@ it — the attacker then holds a token over that user's collection and decks. Th
 from the registration request and is entirely attacker-controlled.
 
 ```ruby
-Oauth::REGISTRABLE_REDIRECT_HOSTS = %w[claude.ai claude.com localhost 127.0.0.1].freeze
+Oauth::ClientRegistrar::ALLOWED_REDIRECT_HOSTS = %w[claude.ai claude.com localhost 127.0.0.1].freeze
+Oauth::ClientRegistrar::PLAIN_HTTP_HOSTS       = %w[localhost 127.0.0.1].freeze
 ```
 
 `claude.ai` is Claude's current callback host and `claude.com` is the announced successor; Anthropic
@@ -201,6 +202,15 @@ explicitly asks server operators to allowlist both. `localhost` and `127.0.0.1` 
 which use an ephemeral loopback callback port, and are the only hosts allowed over plain HTTP.
 Anything else is rejected with `invalid_redirect_uri`. Supporting a new MCP client is a one-line
 change plus a deploy — an acceptable price for closing the phishing vector almost entirely.
+
+Two constants, not one, because the allowlist and the TLS exception answer different questions and
+have different memberships in principle: `ALLOWED_REDIRECT_HOSTS` says which hosts may register at
+all, `PLAIN_HTTP_HOSTS` says which of those may do so without HTTPS. Today the loopback pair happens
+to be exactly the subset of the allowlist that gets the plain-HTTP exception, but a future host could
+join the allowlist without joining the TLS exception — a self-hosted MCP client on a real domain would
+belong in the first list only. `config/initializers/doorkeeper.rb`'s `force_ssl_in_redirect_uri`
+callable reads `PLAIN_HTTP_HOSTS` specifically, not the combined allowlist, which is the mechanism this
+split exists to support.
 
 ### Throttling
 
@@ -274,7 +284,8 @@ filters the tool array by `@current_scopes` once, before `MCP::Server.new` is ev
 (`Mcp::ServerController#handle`), and that one filtered array is both what `tools/list` advertises
 and what `tools/call` dispatches from — verified directly in mcp-1.1.0: `MCP::Server#initialize` builds
 `@tools` from exactly the array it is given (`server.rb:174`), and `call_tool` looks a tool up in that
-same hash, raising "Tool not found" if it is absent (`server.rb:754`). A second explicit scope check
+same hash (`server.rb:754`) and raises "Tool not found" if it is absent (`server.rb:758`). A second
+explicit scope check
 inside `McpTool` would therefore be redundant, not defense in depth — there is nothing downstream of
 the filter left to enforce against. A client that guesses an out-of-scope tool's name gets "tool not
 found," the same outcome originally described as coming from a re-check that does not exist in the
