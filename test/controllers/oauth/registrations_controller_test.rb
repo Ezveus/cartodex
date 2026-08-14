@@ -96,6 +96,31 @@ module Oauth
       ClientRegistrar.singleton_class.send(:remove_method, :call)
     end
 
+    test "maps a Doorkeeper-level scope validation failure to invalid_client_metadata, not invalid_redirect_uri" do
+      # Same simulated-regression approach as the redirect_uri case above, but
+      # for scopes_match_configured (enforce_configured_scopes in
+      # config/initializers/doorkeeper.rb): the backstop for ClientRegistrar's
+      # own scope allowlist. A scope failure has nothing to do with the
+      # redirect_uri, so the response must say invalid_client_metadata — the
+      # whole point of this fix round is that a broad rescue used to mislabel
+      # this as invalid_redirect_uri.
+      ClientRegistrar.define_singleton_method(:call) do |_metadata|
+        Doorkeeper::Application.create!(
+          name: "Claude",
+          redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+          scopes: "admin"
+        )
+      end
+
+      register(valid_metadata)
+
+      assert_response :bad_request
+      assert_equal "invalid_client_metadata", JSON.parse(response.body)["error"]
+      assert_equal 0, Doorkeeper::Application.count
+    ensure
+      ClientRegistrar.singleton_class.send(:remove_method, :call)
+    end
+
     private
 
     # Same fix as test/integration/mcp_server_test.rb's helper of the same

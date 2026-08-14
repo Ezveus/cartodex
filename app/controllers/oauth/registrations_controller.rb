@@ -27,17 +27,21 @@ module Oauth
     rescue ClientRegistrar::InvalidMetadata => e
       render json: { error: e.code, error_description: e.message }, status: :bad_request
     rescue ActiveRecord::RecordInvalid => e
-      # Doorkeeper's own RedirectUriValidator independently re-checks the
-      # fragment and http-scheme cases ClientRegistrar already validates
-      # (see config/initializers/doorkeeper.rb). No application is created
-      # either way, but without this rescue a regression in ClientRegistrar's
-      # own check would leak as an unhandled RecordInvalid instead of honoring
-      # the RFC 7591 error contract this endpoint promises everywhere else.
-      # Model-level validation on this endpoint only ever concerns redirect_uri
-      # (name and scopes are either free-form or already screened by
-      # ClientRegistrar before Doorkeeper::Application.create! runs), so the
-      # same invalid_redirect_uri code applies here too.
-      render json: { error: "invalid_redirect_uri", error_description: e.message }, status: :bad_request
+      # Two independent model-level validations can raise this once
+      # ClientRegistrar's own checks have already run once: RedirectUriValidator
+      # (a backstop for the fragment/http-scheme cases it also validates, see
+      # config/initializers/doorkeeper.rb) and scopes_match_configured (a
+      # backstop for its own scope allowlist, enabled by the same
+      # enforce_configured_scopes). No application is created either way, but
+      # which RFC 7591 error code is honest depends on which one fired — a
+      # regression in the scope check is not a malformed redirect_uri, and
+      # reporting it as one points a client at the wrong problem. uid
+      # uniqueness (also validated at this layer) falls into the
+      # invalid_client_metadata bucket too: a collision in a 256-bit
+      # SecureRandom token is not a real-world event, and RFC 7591 gives this
+      # endpoint no third code to spend on it.
+      code = e.record.errors.attribute_names.include?(:redirect_uri) ? "invalid_redirect_uri" : "invalid_client_metadata"
+      render json: { error: code, error_description: e.message }, status: :bad_request
     end
 
     private
