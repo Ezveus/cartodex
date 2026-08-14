@@ -117,6 +117,71 @@ class McpServerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "authenticates a Doorkeeper access token" do
+    application = Doorkeeper::Application.create!(
+      name: "Test Client",
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+      scopes: "mcp:read mcp:write"
+    )
+    token = Doorkeeper::AccessToken.create!(
+      application: application, resource_owner_id: @user.id, scopes: "mcp:read mcp:write"
+    )
+
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: token.plaintext_token)
+
+    assert_response :success
+  end
+
+  test "still authenticates the legacy static token" do
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
+
+    assert_response :success
+  end
+
+  test "rejects a revoked Doorkeeper token" do
+    application = Doorkeeper::Application.create!(
+      name: "Test Client",
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+      scopes: "mcp:read"
+    )
+    token = Doorkeeper::AccessToken.create!(
+      application: application, resource_owner_id: @user.id, scopes: "mcp:read"
+    )
+    raw = token.plaintext_token
+    token.revoke
+
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: raw)
+
+    assert_response :unauthorized
+  end
+
+  test "challenges with the protected resource metadata URL on 401" do
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+
+    assert_response :unauthorized
+    challenge = response.headers["WWW-Authenticate"]
+    assert_includes challenge, "Bearer"
+    assert_includes challenge, "resource_metadata=\"#{root_url.chomp('/')}/.well-known/oauth-protected-resource/mcp\""
+    # No scope parameter: the client is meant to request everything the
+    # protected-resource document advertises, and the consent screen arbitrates.
+    assert_not_includes challenge, "scope="
+  end
+
+  test "challenges identically whether the token is absent, unknown or expired" do
+    post "/mcp", params: rpc("list_decks", {}), headers: { "Content-Type" => "application/json" }
+    absent = response.headers["WWW-Authenticate"]
+
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
+    unknown = response.headers["WWW-Authenticate"]
+
+    @user.update_column(:api_token_expires_at, 1.day.ago)
+    post "/mcp", params: rpc("list_decks", {}), headers: auth_headers
+    expired = response.headers["WWW-Authenticate"]
+
+    assert_equal absent, unknown
+    assert_equal absent, expired
+  end
+
   private
 
   # RFC 5737 TEST-NET-3. Public-looking on purpose: ActionDispatch::RemoteIp

@@ -113,11 +113,46 @@ module Mcp
     # request authenticated before deciding to count it.
     def identify_token_user
       token = request.headers["Authorization"].to_s.delete_prefix("Bearer ").strip
-      @current_user = User.authenticate_api_token(token)
+      authenticate_oauth_token(token) || authenticate_legacy_token(token)
     end
 
     def reject_unauthenticated!
-      head :unauthorized unless @current_user
+      challenge! if @current_user.nil?
+    end
+
+    # An OAuth 2.1 access token issued by this app's own authorization server.
+    # `accessible?` covers both expiry and revocation, so a revoked client's
+    # tokens stop working the moment the user revokes it in /settings.
+    def authenticate_oauth_token(token)
+      access_token = Doorkeeper::AccessToken.by_token(token)
+      return false unless access_token&.accessible?
+
+      @current_user = User.find_by(id: access_token.resource_owner_id)
+      return false if @current_user.nil?
+
+      @current_scopes = access_token.scopes.to_a
+      true
+    end
+
+    # Deprecated. The static per-user bearer token predates OAuth and stays only
+    # so existing CLI configurations keep working; it is scheduled for removal
+    # once OAuth has been verified against a real connector. It carries no
+    # scopes, so it keeps full access — narrowing it now would break the very
+    # setups this branch exists to preserve.
+    def authenticate_legacy_token(token)
+      @current_user = User.authenticate_api_token(token)
+      @current_scopes = nil
+      @current_user.present?
+    end
+
+    # RFC 9728: the 401 tells the client where to find the metadata that starts
+    # the authorization flow. The challenge is byte-identical whether the token
+    # was absent, unknown, expired or revoked — distinguishing them would let a
+    # caller probe which tokens exist.
+    def challenge!
+      response.headers["WWW-Authenticate"] =
+        %(Bearer resource_metadata="#{root_url.chomp('/')}/.well-known/oauth-protected-resource/mcp")
+      head :unauthorized
     end
   end
 end
