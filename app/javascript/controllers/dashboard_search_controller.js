@@ -10,6 +10,7 @@ export default class extends Controller {
   connect() {
     this.options = []
     this.activeIndex = -1
+    this.dismissed = false
     this.element.addEventListener("turbo:frame-load", this.#frameLoaded)
   }
 
@@ -26,6 +27,8 @@ export default class extends Controller {
       return
     }
 
+    // A fresh request is about to be scheduled: any earlier dismissal no longer applies.
+    this.dismissed = false
     this.timeout = setTimeout(() => this.formTarget.requestSubmit(), this.delayValue)
   }
 
@@ -87,6 +90,12 @@ export default class extends Controller {
     this.activeIndex = -1
     // The frame swap replaced the options, so any previously referenced id is gone from the DOM.
     this.inputTarget.removeAttribute("aria-activedescendant")
+
+    // A request already in flight when the panel was dismissed can still land afterwards (a 304
+    // never even fires this listener, but a 200 does) — #dismissed is what stops it from
+    // reopening what the user just closed.
+    if (this.dismissed) return
+
     this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
   }
 
@@ -109,8 +118,11 @@ export default class extends Controller {
 
   #collapse() {
     // Cancels a debounce still in flight: without this, a dismissed panel reopens when the
-    // pending request lands and #frameLoaded sees content.
+    // pending request lands and #frameLoaded sees content. The timer is only half the story —
+    // a request already sent to the server keeps running after clearTimeout, so #dismissed also
+    // tells #frameLoaded not to reopen once that response arrives.
     clearTimeout(this.timeout)
+    this.dismissed = true
     this.options = []
     this.activeIndex = -1
     this.#setExpanded(false)
