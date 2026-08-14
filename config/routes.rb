@@ -21,6 +21,13 @@ Rails.application.routes.draw do
     skip_controllers :applications, :authorized_applications
   end
 
+  # Discovery documents. Public by necessity: a client reads them before it has
+  # any credential. The protected-resource document answers at two paths — see
+  # the controller for why.
+  get ".well-known/oauth-authorization-server", to: "oauth/metadata#authorization_server"
+  get ".well-known/oauth-protected-resource",     to: "oauth/metadata#protected_resource"
+  get ".well-known/oauth-protected-resource/mcp", to: "oauth/metadata#protected_resource"
+
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in Layouts::ApplicationLayout)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
