@@ -5,6 +5,24 @@ module Oauth
   class AuthorizationsController < Doorkeeper::AuthorizationsController
     include ResourceIndicatorEnforcement
 
+    # Doorkeeper's controllers descend from ActionController::Base, so Rails'
+    # layout lookup walks up to layouts/doorkeeper/application — the *gem's*
+    # layout, which loads doorkeeper/application.css and none of ours. The
+    # consent screen then rendered with every design token and every class it
+    # uses undefined, under the title "OAuth authorization required".
+    #
+    # That is not cosmetic here. This screen's whole defence against a client
+    # that registered itself as "Claude" is the user recognising the page as
+    # Cartodex and reading the redirect host on it; an unstyled page carrying
+    # someone else's chrome undermines exactly that.
+    #
+    # Set on this controller rather than through Doorkeeper's
+    # `base_controller "ApplicationController"`: ApplicationController carries
+    # `before_action :authenticate_user!`, which would run ahead of — and
+    # collide with — resource_owner_authenticator's own store_location_for
+    # redirect on the consent POST.
+    layout -> { Layouts::ApplicationLayout }
+
     # The consent form never posts a `scope` field — Doorkeeper::PreAuthorization
     # reads only `params[:scope]` on POST and, finding it blank, falls back to
     # `default_scopes` ("mcp:read"), silently discarding a checked mcp:write box.

@@ -107,6 +107,30 @@ class OauthConsentTest < ActionDispatch::IntegrationTest
     assert_equal "mcp:read", granted_scopes
   end
 
+  test "renders inside Cartodex's own layout, not Doorkeeper's" do
+    # Doorkeeper's controllers descend from ActionController::Base, so layout
+    # lookup climbs to layouts/doorkeeper/application — the gem's, which pulls
+    # in doorkeeper/application.css and none of ours. Every class and every
+    # design token this screen uses would then be undefined.
+    #
+    # That matters here more than anywhere else in the app: the only defence
+    # against a client that registered itself as "Claude" is the user
+    # recognising this page as Cartodex and reading the redirect host on it.
+    #
+    # The body-content assertions above are structurally blind to this — they
+    # pass identically under either layout, which is exactly how it shipped.
+    sign_in @user
+
+    get "/oauth/authorize", params: authorize_params
+
+    assert_response :success
+    assert_select "head link[rel=stylesheet][href^='/assets/application-']", count: 1
+    assert_select "head link[rel=stylesheet][href*='doorkeeper']", count: 0
+    assert_select "head title", text: "Cartodex"
+    # The app's own chrome, which only Layouts::ApplicationLayout renders.
+    assert_select "body nav.navbar a.navbar-brand", text: "Cartodex"
+  end
+
   test "escapes a client name that tries to inject markup" do
     @application.update!(name: "<script>alert(1)</script>")
     sign_in @user
