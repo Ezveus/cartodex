@@ -313,7 +313,7 @@ git commit -m "feat: add Doorkeeper as the OAuth 2.1 authorization server"
 
 **Interfaces:**
 - Consumes: the Doorkeeper routes from Task 1.
-- Produces: `Oauth::MetadataController::CANONICAL_RESOURCE_URI`, the string `"#{root_url}mcp"` without trailing slash, reused by Task 7 for `resource` validation.
+- Produces: a private `#canonical_resource_uri`, the string `"#{root_url.chomp('/')}/mcp"`. It is an instance method, **not** a constant — the value is derived per request and a frozen constant could not hold it. Task 7 needs the same value and consolidates both into one definition; do not try to reuse this method from outside the controller.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1471,6 +1471,9 @@ git commit -m "feat: add a Phlex consent screen with a refusable write scope"
 **Files:**
 - Modify: `app/controllers/oauth/authorizations_controller.rb`
 - Create: `app/controllers/oauth/tokens_controller.rb`
+- Create: `app/services/oauth/resource_indicator.rb`
+- Create: `app/controllers/concerns/oauth/resource_indicator_enforcement.rb`
+- Modify: `app/controllers/oauth/metadata_controller.rb` — replace its private `canonical_resource_uri` body with `ResourceIndicator.canonical_uri(root_url)`, so the canonical value has one definition rather than two. Task 2's own tests must still pass unchanged; if they do not, the two definitions had already diverged and that is a finding to report.
 - Modify: `config/routes.rb`
 - Test: `test/integration/oauth_resource_indicator_test.rb`
 
@@ -1585,6 +1588,14 @@ module Oauth
   module ResourceIndicator
     module_function
 
+    # The one definition of what "this resource" means. Both the metadata
+    # document (which advertises it) and the two OAuth endpoints (which validate
+    # against it) call this, so the advertised value and the accepted value
+    # cannot drift apart.
+    def canonical_uri(root_url)
+      "#{root_url.chomp('/')}/mcp"
+    end
+
     # Absent is acceptable; present and wrong is not.
     def valid?(value, canonical_uri)
       return true if value.blank?
@@ -1643,8 +1654,14 @@ module Oauth
       }, status: :bad_request
     end
 
+    # Delegates so the canonical URI has exactly one definition. Task 2 built the
+    # same expression privately in Oauth::MetadataController; this task moves the
+    # single copy into ResourceIndicator and points both callers at it. Two
+    # independent definitions of this value would be a real hazard, not a style
+    # nit: if they ever diverged, the metadata document would advertise one
+    # resource while the token endpoint accepted another.
     def canonical_resource_uri
-      "#{root_url.chomp('/')}/mcp"
+      ResourceIndicator.canonical_uri(root_url)
     end
   end
 end
