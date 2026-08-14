@@ -18,6 +18,13 @@ Doorkeeper.configure do
   # password, no client credentials — an MCP client always acts for a user.
   grant_flows %w[authorization_code]
   force_pkce
+  # Doorkeeper defaults this to %w[plain S256]. The "plain" method sends the
+  # PKCE challenge in the clear during /oauth/authorize, so it *is* the
+  # verifier the token endpoint later checks — an interceptor who captured the
+  # authorization request already holds everything needed to redeem the code,
+  # defeating PKCE entirely. The metadata document (oauth/metadata_controller)
+  # already advertises S256 only; this makes the server actually enforce that.
+  pkce_code_challenge_methods %w[S256]
   use_refresh_token
 
   # Same reasoning as users.api_token_digest: a database read must never yield a

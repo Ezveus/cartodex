@@ -77,6 +77,29 @@ class OauthAuthorizationFlowTest < ActionDispatch::IntegrationTest
     assert_nil query["code"]
   end
 
+  test "rejects an authorization request using the plain PKCE method" do
+    sign_in @user
+
+    # code_challenge_method=plain sends the challenge in the clear, so the
+    # challenge itself would double as the verifier — no protection against
+    # an interceptor at all. pkce_code_challenge_methods restricts the server
+    # to S256, so this must be rejected the same way a missing challenge is:
+    # a redirect to the client's registered redirect_uri carrying an error,
+    # not a code, with no grant persisted (Doorkeeper raises
+    # invalid_code_challenge_method, distinct from the missing-challenge
+    # invalid_request above, but equally fatal to the request).
+    assert_no_difference -> { Doorkeeper::AccessGrant.count } do
+      post "/oauth/authorize", params: authorize_params(
+        code_challenge: @verifier, code_challenge_method: "plain"
+      )
+    end
+
+    assert_response :redirect
+    query = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal "invalid_code_challenge_method", query["error"]
+    assert_nil query["code"]
+  end
+
   test "rejects a token exchange with the wrong code verifier" do
     sign_in @user
     post "/oauth/authorize", params: authorize_params
