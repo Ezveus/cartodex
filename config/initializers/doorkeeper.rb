@@ -37,6 +37,13 @@ Doorkeeper.configure do
   default_scopes  :"mcp:read"
   optional_scopes :"mcp:write"
 
+  # Model-layer backstop to Oauth::ClientRegistrar's own scope check, the same
+  # role RedirectUriValidator already plays for redirect_uri: without this,
+  # ClientRegistrar::SERVER_SCOPES is the *only* thing standing between a
+  # registration request and an application holding a scope this server never
+  # configured. Doorkeeper leaves this disabled by default.
+  enforce_configured_scopes
+
   access_token_expires_in 2.hours
 
   # Every client must be consented to explicitly. Dynamic registration means any

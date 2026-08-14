@@ -58,5 +58,59 @@ module Oauth
 
       assert_response :created
     end
+
+    test "throttles registrations past the per-IP limit" do
+      with_real_rate_limit_store do
+        RegistrationsController::RATE_LIMIT_TO.times do
+          register(valid_metadata)
+          assert_response :created
+        end
+
+        register(valid_metadata)
+
+        assert_response :too_many_requests
+      end
+    end
+
+    test "maps a Doorkeeper-level redirect_uri validation failure to the same 400 shape" do
+      # ClientRegistrar's own checks already screen out a fragment-carrying
+      # redirect_uri (see client_registrar_test.rb) before Doorkeeper's model
+      # validation ever runs, so provoking the controller's
+      # ActiveRecord::RecordInvalid rescue for real requires simulating the
+      # regression it exists to guard against: ClientRegistrar itself failing
+      # to catch a bad redirect_uri and handing Doorkeeper::Application.create!
+      # something only Doorkeeper's own RedirectUriValidator still rejects.
+      ClientRegistrar.define_singleton_method(:call) do |_metadata|
+        Doorkeeper::Application.create!(
+          name: "Claude",
+          redirect_uri: "https://claude.ai/api/mcp/auth_callback#fragment"
+        )
+      end
+
+      register(valid_metadata)
+
+      assert_response :bad_request
+      assert_equal "invalid_redirect_uri", JSON.parse(response.body)["error"]
+      assert_equal 0, Doorkeeper::Application.count
+    ensure
+      ClientRegistrar.singleton_class.send(:remove_method, :call)
+    end
+
+    private
+
+    # Same fix as test/integration/mcp_server_test.rb's helper of the same
+    # name: config/environments/test.rb sets :null_store, which makes
+    # `rate_limit` a silent no-op, so a real per-request-counting store is
+    # needed for the duration of a throttle test. Safe only because tests run
+    # in separate forked processes (parallelize in test_helper.rb), not
+    # threads sharing one process.
+    def with_real_rate_limit_store
+      original_cache = Rails.cache
+      Rails.cache = ActiveSupport::Cache::MemoryStore.new
+
+      yield
+    ensure
+      Rails.cache = original_cache
+    end
   end
 end

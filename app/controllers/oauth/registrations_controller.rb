@@ -26,6 +26,18 @@ module Oauth
       render json: registration_response(application), status: :created
     rescue ClientRegistrar::InvalidMetadata => e
       render json: { error: e.code, error_description: e.message }, status: :bad_request
+    rescue ActiveRecord::RecordInvalid => e
+      # Doorkeeper's own RedirectUriValidator independently re-checks the
+      # fragment and http-scheme cases ClientRegistrar already validates
+      # (see config/initializers/doorkeeper.rb). No application is created
+      # either way, but without this rescue a regression in ClientRegistrar's
+      # own check would leak as an unhandled RecordInvalid instead of honoring
+      # the RFC 7591 error contract this endpoint promises everywhere else.
+      # Model-level validation on this endpoint only ever concerns redirect_uri
+      # (name and scopes are either free-form or already screened by
+      # ClientRegistrar before Doorkeeper::Application.create! runs), so the
+      # same invalid_redirect_uri code applies here too.
+      render json: { error: "invalid_redirect_uri", error_description: e.message }, status: :bad_request
     end
 
     private
