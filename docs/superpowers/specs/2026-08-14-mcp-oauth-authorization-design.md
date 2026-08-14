@@ -273,6 +273,30 @@ the controller. It never halts the callback chain itself — see [Rate limiting]
 that split (`identify_token_user` / `reject_unauthenticated!`) exists and is load-bearing, not the
 single `authenticate_token!` this section originally sketched.
 
+### Refresh-token rotation
+
+`use_refresh_token` alone is not rotation. Doorkeeper rotates **lazily**: redeeming a refresh token
+mints a new access token carrying `previous_refresh_token`, and the superseded refresh token is only
+revoked once the *new* access token is presented to a resource server. That hook,
+`AccessToken#revoke_previous_refresh_token!`, has exactly one call site in the gem —
+`Doorkeeper::OAuth::Token.authenticate` (`lib/doorkeeper/oauth/token.rb:19`), on the
+`doorkeeper_authorize!` path. `Mcp::ServerController` resolves tokens itself and therefore bypasses
+it, so it must fire the hook itself (`rotate_refresh_token`). Without that call, every refresh token
+ever issued stays redeemable indefinitely and a replay is indistinguishable from a legitimate
+refresh — a leaked refresh token would be a permanent, full-scope credential.
+
+Firing it at `/mcp` rather than at the token endpoint is deliberate: it preserves Doorkeeper's
+concurrency grace window, where two refreshes racing each other both succeed because the old token
+survives until the new one is actually used.
+
+**There is no `refresh_token_expires_in` in Doorkeeper 5.9.6** — the option does not exist in the
+gem (`grep` over `lib/` returns nothing), and `RefreshTokenRequest` has no notion of a refresh-token
+lifetime at all: validity is "the row is not revoked". Giving refresh tokens a TTL would mean a
+custom column plus a patched `RefreshTokenRequest` validation, i.e. reimplementing a feature 6.0
+does not have either. The bound on a refresh token's life is therefore rotation (above) plus user
+revocation from `/settings`, and this is the reason [Settings](#settings) lists connections by
+`revoked_at`, not by `#accessible?`.
+
 ## Scopes
 
 Each tool class declares a `required_scope`: `mcp:read` by default, `mcp:write` for the six write
@@ -360,12 +384,43 @@ Skipping Doorkeeper's `:authorized_applications` controller means building its c
 the user's connected applications, with granted scopes, connection date, and a revoke button. The
 existing static-token section gains a deprecation notice.
 
+"Connected" means **`revoked_at: nil`**, not Doorkeeper's `#accessible?`. Access tokens expire after
+two hours; refresh tokens do not (see [Refresh-token rotation](#refresh-token-rotation)), so an
+expired-but-unrevoked token is a working connection the client resumes whenever it likes. Filtering
+on `#accessible?` hid every connection not in active use at that second, while
+`ConnectedAppsController#destroy` scoped on `revoked_at` — which left revocation, the only such
+control in the product, unreachable in the steady state. The list query and `#destroy` must stay the
+same set. The granted-scope summary and the "connected since" date both derive from that set: the
+union of scopes over unrevoked tokens (an expired one refreshes back into the same scopes, so the
+client's reach is unchanged by the clock) and the earliest unrevoked token's date.
+
+`#destroy` revokes the application's outstanding `Doorkeeper::AccessGrant`s alongside its tokens. An
+unredeemed authorization code is a credential with a ten-minute life that exchanges into a fresh
+access + refresh token pair, so leaving it would let a just-revoked connection walk back in.
+
+The consent screen and this section are the only OAuth pages a human ever sees, and
+`Oauth::AuthorizationsController` sets `layout -> { Layouts::ApplicationLayout }` so the first of
+them renders as Cartodex. Doorkeeper's controllers descend from `ActionController::Base`, so Rails'
+layout lookup otherwise climbs to `layouts/doorkeeper/application` — the gem's, which loads
+`doorkeeper/application.css` and none of the app's design tokens. That is load-bearing rather than
+cosmetic: the anti-phishing argument in [Consent screen](#consent-screen) rests on the user
+recognising the page as Cartodex and reading the redirect host on it. It is set per-controller and
+**not** through `Doorkeeper.configure { base_controller "ApplicationController" }`, because
+`ApplicationController` carries `before_action :authenticate_user!`, which would collide with
+`resource_owner_authenticator`'s own `store_location_for` redirect on the consent POST.
+
 ## Testing
 
 Minitest with fixtures, as elsewhere in the repo.
 
-The core is an integration test playing the whole flow — registration, authorize, consent, code
-exchange, `/mcp` call. Around it, the negative cases that matter:
+The core is an integration test playing the whole flow — `test/integration/oauth_end_to_end_test.rb`.
+It starts from nothing but the MCP URL and discovers every subsequent URL from the previous step's
+response: the 401 challenge, the RFC 9728 protected-resource document, the RFC 8414
+authorization-server document, dynamic registration, the consent screen **posted as the rendered form**
+(the harvest helper is shared through `test/support/oauth_consent_form.rb` so it cannot diverge from
+the screen a user really submits), code exchange with PKCE, `tools/list`, and a write call — plus
+`state` surviving the round trip and the connection appearing in `/settings`. Around it, the negative
+cases that matter:
 
 - PKCE absent, and a wrong `code_verifier`
 - an authorization code replayed
@@ -376,6 +431,10 @@ exchange, `/mcp` call. Around it, the negative cases that matter:
 - a read-only token whose `tools/list` excludes the six write tools, and which is refused on a direct write call
 - consent with `mcp:write` unchecked producing a token without it
 - the static bearer token still authenticating
+- a refresh token replayed after the access token it minted has been used
+- a `resource` that is an opaque URI (`urn:`, `mailto:`, `javascript:`), which has no path to
+  normalise and used to 500 on an unauthenticated endpoint
+- the consent screen rendering in the app's own layout, with the app's stylesheet
 
 **Every one of these is verified by sabotage** — breaking the implementation in the specific way the
 test is meant to catch, confirming the test goes red for the right reason, then restoring. A test
