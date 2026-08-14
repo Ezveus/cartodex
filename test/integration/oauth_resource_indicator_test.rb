@@ -75,6 +75,27 @@ class OauthResourceIndicatorTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_target", JSON.parse(response.body)["error"]
   end
 
+  test "rejects a resource carrying userinfo" do
+    # user@ resolves to the same host and would silently normalise to the
+    # canonical string if userinfo were not checked — it does not point
+    # anywhere else, but RFC 8707 canonical resource identifiers carry no
+    # userinfo, so this must be rejected the same way a fragment is.
+    uri = URI.parse(root_url)
+    post "/oauth/authorize", params: authorize_params(resource: "#{uri.scheme}://user@#{uri.host}/mcp")
+
+    assert_response :bad_request
+    assert_equal "invalid_target", JSON.parse(response.body)["error"]
+  end
+
+  test "accepts a resource with a trailing slash on the path" do
+    # Pinned tolerance, not an accident: the MCP specification notes both
+    # trailing-slash forms are valid URIs and recommends the bare one, so a
+    # client sending the other form should not be rejected over it.
+    post "/oauth/authorize", params: authorize_params(resource: "#{root_url.chomp('/')}/mcp/")
+
+    assert_response :redirect
+  end
+
   test "rejects a token request aimed at another resource" do
     post "/oauth/authorize", params: authorize_params
     code = Rack::Utils.parse_query(URI.parse(response.location).query)["code"]

@@ -23,10 +23,14 @@ module Oauth
 
       uri = URI.parse(value.to_s)
       return false unless uri.fragment.nil?
+      return false unless uri.userinfo.nil?
 
-      # RFC 8707 canonical form is lowercase scheme and host, but the MCP
-      # specification asks servers to accept uppercase for robustness. The path
-      # is compared as-is: it is case-sensitive by RFC 3986.
+      # Scheme and host are compared case-insensitively: RFC 8707 canonical form
+      # is lowercase, but the MCP specification asks servers to accept uppercase
+      # for robustness. A trailing slash on the path is tolerated for the same
+      # reason — the MCP spec itself notes both forms are valid URIs and
+      # recommends the bare one, and rejecting the other would break a real
+      # client over a cosmetic difference. Everything else is compared exactly.
       normalize(uri) == canonical_uri
     rescue URI::InvalidURIError
       false
