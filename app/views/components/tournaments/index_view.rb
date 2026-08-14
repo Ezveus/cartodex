@@ -17,12 +17,15 @@ module Tournaments
 
         search_form
 
+        # Everything inside this frame is frame-scoped by default, so the row links
+        # (name, Edit, Delete) need data-turbo-frame="_top" or they would swap the
+        # table for a "Content missing" error instead of navigating.
         turbo_frame_tag(FRAME_ID) do
           if @tournaments.any?
             render Ui::DataTable.new(columns: %w[Name Date Tier Deck Placement CP Actions]) do |t|
               @tournaments.each do |tournament|
                 t.row do
-                  t.cell { link_to tournament.name, tournament_path(tournament) }
+                  t.cell { link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" } }
                   t.cell { localize(tournament.date, format: :long) }
                   t.cell { tournament.tier_label }
                   t.cell { tournament.deck.name }
@@ -32,7 +35,8 @@ module Tournaments
                     render Ui::AdminActions.new(
                       edit_path: edit_tournament_path(tournament),
                       delete_path: tournament_path(tournament),
-                      confirm_message: "Delete #{tournament.name}?"
+                      confirm_message: "Delete #{tournament.name}?",
+                      frame: "_top"
                     )
                   end
                 end

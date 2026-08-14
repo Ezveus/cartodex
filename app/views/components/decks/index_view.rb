@@ -33,6 +33,8 @@ module Decks
 
         render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
 
+        # Everything inside this frame is frame-scoped by default, so each deck link
+        # and dropdown action carries data-turbo-frame="_top" (see Decks::DeckCard).
         turbo_frame_tag(FRAME_ID) do
           div(class: "decks-grid", id: "decks-grid") do
             if @decks.any?
