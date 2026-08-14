@@ -45,7 +45,11 @@ module Oauth
     end
 
     def scope_form
-      form_with(url: oauth_authorization_path, method: :post, class: "settings-form") do
+      # Distinct ids: a test harvesting "the rendered form" into POST params
+      # needs to scope its query to one of these two forms, or it picks up the
+      # other form's hidden fields (including method-override's _method=delete)
+      # right along with it.
+      form_with(url: oauth_authorization_path, method: :post, id: "consent-authorize-form", class: "settings-form") do
         hidden_fields
         fieldset(class: "form-fieldset") do
           legend(class: "form-label") { "Permissions" }
@@ -55,7 +59,7 @@ module Oauth
           render Ui::Button.new(label: "Authorize", variant: :primary, type: "submit")
         end
       end
-      form_with(url: oauth_authorization_path, method: :delete, class: "settings-form") do
+      form_with(url: oauth_authorization_path, method: :delete, id: "consent-deny-form", class: "settings-form") do
         hidden_fields
         div(class: "form-actions") do
           render Ui::Button.new(label: "Deny", variant: :secondary, type: "submit")
@@ -65,14 +69,20 @@ module Oauth
 
     # Everything Doorkeeper needs to rebuild the request, PKCE challenge
     # included. Losing any of these silently downgrades or breaks the flow.
+    #
+    # String keys, not Symbol: Phlex dasherizes a Symbol used as an attribute
+    # *value* the same way it dasherizes Symbol attribute *keys* (see
+    # Phlex::SGML::Attributes#generate_attributes) — passing the Symbol :client_id
+    # as this `name` attribute's value would silently render name="client-id",
+    # a field Doorkeeper's params parsing would never recognise.
     def hidden_fields
       {
-        client_id: @pre_auth.client.uid,
-        redirect_uri: @pre_auth.redirect_uri,
-        state: @pre_auth.state,
-        response_type: @pre_auth.response_type,
-        code_challenge: @pre_auth.code_challenge,
-        code_challenge_method: @pre_auth.code_challenge_method
+        "client_id" => @pre_auth.client.uid,
+        "redirect_uri" => @pre_auth.redirect_uri,
+        "state" => @pre_auth.state,
+        "response_type" => @pre_auth.response_type,
+        "code_challenge" => @pre_auth.code_challenge,
+        "code_challenge_method" => @pre_auth.code_challenge_method
       }.each do |name, value|
         input(type: "hidden", name: name, value: value) if value.present?
       end
