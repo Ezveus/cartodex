@@ -1,0 +1,4 @@
+<%# Doorkeeper renders its authorization screen by view lookup, which is the
+    stable seam for replacing it. This file exists only to hand off to the Phlex
+    component — it holds no view logic, and it is the single ERB view in the app. %>
+<%= render Oauth::ConsentView.new(pre_auth: @pre_auth) %>
