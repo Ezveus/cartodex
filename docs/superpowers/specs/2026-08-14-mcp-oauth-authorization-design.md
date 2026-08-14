@@ -264,15 +264,35 @@ those states may be distinguishable from outside.
 
 ## Rate limiting
 
-`/mcp` ends up with a per-IP limiter before authentication and a per-user limiter after it. The
-per-user limiter covers **both** authentication paths without modification, since it keys on
-`@current_user.id`. This shape is introduced by the separate `fix/mcp-rate-limit-per-user` change and
-is a prerequisite for this one.
+`/mcp` ends up with a per-IP limiter that counts **only requests that fail authentication**, and a
+per-user limiter that carries the real quota. This shape is introduced by the separate
+`fix/mcp-rate-limit-per-user` change and is a prerequisite for this one.
 
-The pre-authentication IP bucket is the one remaining place where Anthropic's shared, rotating egress
-IPs can cause false positives: every request without a valid token counts there, including each new
-connector's initial 401 probe and every expired token. **Raise it from 30/min to 60/min as part of
-this feature**, and revisit it against real traffic rather than guessing further.
+The `unless:` condition is not a detail. Two independent limiters both run as `before_action`s on
+every request, so an authenticated request would increment both and its effective budget would be the
+*smaller* of the two — the per-IP ceiling would keep binding and the per-user quota would be
+unreachable from a fixed address. Scoping the IP limiter to unauthenticated traffic is what makes the
+per-user quota real:
+
+```ruby
+before_action :identify_token_user            # sets @current_user, never halts
+rate_limit to: 30, within: 1.minute, name: "mcp-ip", unless: -> { @current_user }, …
+before_action :reject_unauthenticated!
+rate_limit to: 300, within: 1.minute, by: -> { @current_user.id }, name: "mcp-user", …
+```
+
+The per-user limiter covers **both** authentication paths without modification, since it keys on
+`@current_user.id`.
+
+This matters more under OAuth than it did before. Claude web connectors call from Anthropic's shared,
+rotating egress IPs: with a per-IP ceiling applying to authenticated traffic, unrelated users would
+throttle each other. Only unauthenticated requests now land in the IP bucket — each new connector's
+initial 401 probe, and expired tokens between refreshes — which is sparse enough for 30/min to hold.
+
+The tradeoff, stated so it is not rediscovered later: the token lookup now happens *before* the
+throttle. A request past the IP ceiling used to be refused with no database work; now every attempt
+costs an indexed digest lookup before it is counted. The limiter still caps invalid-token spam, but
+it protects the application rather than the database.
 
 ## Settings
 
