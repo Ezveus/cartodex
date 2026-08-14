@@ -2,7 +2,9 @@ class DecksController < ApplicationController
   include Searchable
 
   def index
-    @decks = filter_decks(current_user.decks.includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
+    # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
+    # the ones it just showed — it orders by name too.
+    @decks = filter_decks(current_user.decks.order(:name).includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
     @pending_deck_imports = current_user.imports.deck_imports.pending
     @filters = filter_params
     @primary_options = primary_filter_options

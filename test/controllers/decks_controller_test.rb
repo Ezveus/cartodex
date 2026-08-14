@@ -275,6 +275,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck_results #deck-#{other.id}", false
   end
 
+  # The spotlight orders its five decks by name, so the page behind "See all N decks" has to open
+  # with the same rows — creation order would show the user a different five.
+  test "index lists decks in the order the spotlight promised" do
+    @deck.update!(name: "Zoroark Toolbox")
+    @user.decks.create!(name: "Ancient Toolbox")
+    @user.decks.create!(name: "Miraidon Toolbox")
+
+    get decks_path(q: "toolbox")
+
+    assert_response :success
+    grid = css_select("#decks-grid .deck-item").map { |item| item["id"].delete_prefix("deck-").to_i }
+    spotlight = Search::Global.call(user: @user, query: "toolbox").decks.map(&:id)
+
+    assert_equal spotlight, grid.first(spotlight.size)
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do
