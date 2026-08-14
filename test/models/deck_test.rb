@@ -164,6 +164,21 @@ class DeckTest < ActiveSupport::TestCase
     assert_empty Deck.search("oger%on"), "% must not act as a wildcard"
   end
 
+  # LIKE '%…%' can't use an index, so the pattern's length is a multiplier on a full scan the
+  # spotlight runs per keystroke. Nothing legitimate reaches the cap; an abusive query does.
+  test "name_matching caps how long a LIKE pattern a request can ask for" do
+    pattern = Deck.name_matching("a" * 500).to_sql[/'%(a+)%'/, 1]
+
+    assert_equal NameNormalizable::MAX_QUERY_LENGTH, pattern.length
+  end
+
+  test "name_matching leaves a query under the cap alone" do
+    deck = decks(:one)
+    deck.update!(name: "Ogerpon Toolbox")
+
+    assert_includes Deck.name_matching("ogerpon toolbox"), deck
+  end
+
   test "search chains off a user's decks" do
     decks(:one).update!(name: "Ogerpon Toolbox", user: users(:one))
     decks(:two).update!(name: "Ogerpon Toolbox", user: users(:two))

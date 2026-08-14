@@ -12,6 +12,12 @@
 module NameNormalizable
   extend ActiveSupport::Concern
 
+  # LIKE '%…%' can't use an index, so every match is a scan whose cost is O(rows × pattern) —
+  # and the spotlight fires one per keystroke on the whole card catalog, unthrottled. Nothing
+  # the app stores in a `name` comes close to this, so capping the pattern here costs no real
+  # query its matches while putting a ceiling on what a single request can make the database do.
+  MAX_QUERY_LENGTH = 100
+
   included do
     before_save :normalize_name
 
@@ -28,8 +34,12 @@ module NameNormalizable
     # sanitize_sql_like escapes with a backslash, but SQLite's LIKE has no default escape
     # character, so without the clause the backslash itself would be matched. ESCAPE is standard
     # SQL, so this survives the move to PostgreSQL contemplated in #62.
+    #
+    # The cap is applied before the escaping, not after: sanitize_sql_like doubles backslashes, so
+    # truncating its output could cut a `\\` in half and leave a dangling escape that changes what
+    # the pattern means.
     def normalize_for_match(query)
-      sanitize_sql_like(query.to_s.downcase)
+      sanitize_sql_like(query.to_s.downcase.first(MAX_QUERY_LENGTH))
     end
   end
 

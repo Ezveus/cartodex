@@ -38,18 +38,29 @@ module Search
     def call
       return empty_result if @query.length < MIN_QUERY_LENGTH
 
+      decks = deck_scope.order(:name).limit(@limit).includes(:archetype).to_a
+      cards = card_scope.order(:name, :set_name).limit(@limit).to_a
+      tournaments = tournament_scope.order(date: :desc).limit(@limit).to_a
+
       Result.new(
         query: @query,
-        decks: deck_scope.order(:name).limit(@limit).includes(:archetype).to_a,
-        deck_total: deck_scope.count,
-        cards: card_scope.order(:name, :set_name).limit(@limit).to_a,
-        card_total: card_scope.count,
-        tournaments: tournament_scope.order(date: :desc).limit(@limit).to_a,
-        tournament_total: tournament_scope.count
+        decks: decks,
+        deck_total: total_for(deck_scope, decks),
+        cards: cards,
+        card_total: total_for(card_scope, cards),
+        tournaments: tournaments,
+        tournament_total: total_for(tournament_scope, tournaments)
       )
     end
 
     private
+
+    # A page that came back short of the cap *is* the whole result set, so its size is the total.
+    # Worth the branch: the card count is a second `LIKE '%…%'` scan of the entire catalog, run
+    # on every keystroke, and only the queries broad enough to fill the page now pay for it.
+    def total_for(scope, page)
+      page.size < @limit ? page.size : scope.count
+    end
 
     # Below the minimum, nothing touches the database — this is what keeps a one-letter query
     # cheap.
