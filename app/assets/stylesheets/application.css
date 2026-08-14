@@ -2789,6 +2789,13 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-size: 0.875rem;
 }
 
+/* The see-all link is a listbox option too, so it has to show the keyboard highlight. */
+.spotlight-see-all:hover,
+.spotlight-see-all.is-active {
+  background: var(--flare);
+  color: var(--paper);
+}
+
 .spotlight-empty {
   padding: 0.75rem;
   color: var(--ink-500);

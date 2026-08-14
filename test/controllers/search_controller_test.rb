@@ -52,6 +52,25 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[role=option][data-turbo-frame=_top]"
   end
 
+  # aria-activedescendant only says where the highlight is; without aria-selected a screen reader
+  # reads the row it points at without ever calling it selected. The Stimulus controller moves the
+  # "true" around, so the server's job is to ship every row with the attribute present and false.
+  test "every option ships with aria-selected for the keyboard walk to move" do
+    get search_path(q: "ogerpon")
+
+    assert_select "a[role=option][aria-selected=false]"
+    assert_select "a[role=option]:not([aria-selected])", count: 0
+  end
+
+  # A listbox may only contain options and groups. The see-all row was a bare link inside one,
+  # which made the panel's ARIA invalid and left it out of the arrow-key walk.
+  test "the see-all row is an option of its group, addressable by id" do
+    get search_path(q: "ogerpon")
+
+    assert_select "a.spotlight-see-all[role=option][id=?]", "spotlight-group-decks-see-all"
+    assert_select ".spotlight-listbox a:not([role=option])", count: 0
+  end
+
   test "each group links to its index pre-filtered with the query" do
     get search_path(q: "ogerpon")
 

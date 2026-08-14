@@ -17,11 +17,26 @@ module Search
       div(role: "group", aria_labelledby: header_id, class: "spotlight-group") do
         div(class: "spotlight-group-header", id: header_id) { header_text }
         @records.each { |record| row.call(record) }
-        link_to @see_all_label, @index_path, class: "spotlight-see-all", data: { turbo_frame: "_top" }
+        see_all_option
       end
     end
 
     private
+
+    # role="option", like the rows above it: a listbox may only contain options and groups, so a
+    # plain link here made the whole panel invalid ARIA. Being an option also puts it in the
+    # keyboard walk, one step past the last row of its group — which is where a user who read the
+    # five results and wants the rest would look for it.
+    def see_all_option
+      a(
+        id: "#{header_id}-see-all",
+        href: @index_path,
+        role: "option",
+        aria_selected: "false",
+        class: "spotlight-see-all",
+        data: { turbo_frame: "_top" }
+      ) { @see_all_label }
+    end
 
     def header_id
       "spotlight-group-#{@key}"

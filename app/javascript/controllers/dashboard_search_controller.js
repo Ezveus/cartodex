@@ -72,6 +72,18 @@ export default class extends Controller {
     this.#collapse()
   }
 
+  // Coming back to the field undoes an earlier dismissal. Without this, #dismissed is only ever
+  // cleared by an `input` event, so a user who clicked away and clicked back would find Enter and
+  // the arrow keys dead until they edited the query text. The panel still holds the last results,
+  // so restore them rather than making the user retype.
+  resume() {
+    if (!this.dismissed) return
+
+    this.dismissed = false
+    this.#collectOptions()
+    this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
+  }
+
   // ⌘K / Ctrl+K / "/" focus the field. Stimulus key filters can't express modifiers, so both
   // shortcuts share one handler.
   shortcut(event) {
@@ -86,27 +98,45 @@ export default class extends Controller {
   }
 
   #frameLoaded = () => {
-    this.options = Array.from(this.panelTarget.querySelectorAll("[role=option]"))
-    this.activeIndex = -1
-    // The frame swap replaced the options, so any previously referenced id is gone from the DOM.
-    this.inputTarget.removeAttribute("aria-activedescendant")
-
     // A request already in flight when the panel was dismissed can still land afterwards (a 304
     // never even fires this listener, but a 200 does) — #dismissed is what stops it from
-    // reopening what the user just closed.
+    // reopening what the user just closed. Bail before collecting the options too, not just
+    // before reopening: #collapse emptied them on purpose, and refilling them here would leave
+    // the arrow keys walking a hidden panel and Enter navigating to a row nobody ever saw.
     if (this.dismissed) return
 
+    this.#collectOptions()
     this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
   }
 
+  #collectOptions() {
+    this.#deactivate()
+    this.options = Array.from(this.panelTarget.querySelectorAll("[role=option]"))
+  }
+
   #activate(index) {
-    this.options.forEach((option) => option.classList.remove("is-active"))
+    this.#deactivate()
     this.activeIndex = index
 
     const option = this.options[index]
     option.classList.add("is-active")
+    // aria-activedescendant only tells assistive tech where the focus ring is; aria-selected is
+    // what makes it announce the row as the selected one.
+    option.setAttribute("aria-selected", "true")
     option.scrollIntoView({ block: "nearest" })
     this.inputTarget.setAttribute("aria-activedescendant", option.id)
+  }
+
+  // Drops the highlight from whatever currently carries it. Called before every #activate, and
+  // before the options are replaced or dropped — otherwise a row kept its `is-active` styling
+  // while activeIndex said nothing was highlighted, and #resume brought that mismatch back.
+  #deactivate() {
+    this.options.forEach((option) => {
+      option.classList.remove("is-active")
+      option.setAttribute("aria-selected", "false")
+    })
+    this.activeIndex = -1
+    this.inputTarget.removeAttribute("aria-activedescendant")
   }
 
   #clear() {
@@ -123,8 +153,8 @@ export default class extends Controller {
     // tells #frameLoaded not to reopen once that response arrives.
     clearTimeout(this.timeout)
     this.dismissed = true
+    this.#deactivate()
     this.options = []
-    this.activeIndex = -1
     this.#setExpanded(false)
   }
 

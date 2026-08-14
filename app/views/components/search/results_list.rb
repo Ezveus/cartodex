@@ -76,8 +76,12 @@ module Search
 
     # data-turbo-frame="_top" so picking a result navigates the whole page instead of replacing
     # the panel with the target page's markup.
+    #
+    # aria-selected starts out false on every row and the Stimulus controller moves the "true" as
+    # the arrow keys walk the list: aria-activedescendant alone points at a row without ever
+    # saying it is the selected one.
     def option_row(dom_id:, path:, name:, meta:)
-      a(id: dom_id, href: path, role: "option", class: "spotlight-option", data: { turbo_frame: "_top" }) do
+      a(id: dom_id, href: path, role: "option", aria_selected: "false", class: "spotlight-option", data: { turbo_frame: "_top" }) do
         span(class: "spotlight-option-name") { name }
         span(class: "spotlight-option-meta") { meta }
       end

@@ -50,6 +50,7 @@ module Search
           data: {
             dashboard_search_target: "input",
             action: "input->dashboard-search#search " \
+                    "focus->dashboard-search#resume " \
                     "keydown.down->dashboard-search#next " \
                     "keydown.up->dashboard-search#previous " \
                     "keydown.enter->dashboard-search#open " \
