@@ -53,6 +53,19 @@ module Oauth
       assert_equal 0, Doorkeeper::Application.count
     end
 
+    test "truncates an over-long client name" do
+      # Nobody authenticates to reach this endpoint and client_name is stored
+      # verbatim, so it needs a bound. Truncated rather than rejected: an
+      # over-long name is a nuisance, not something to fail a client over.
+      register(valid_metadata.merge(client_name: "A" * 5_000))
+
+      assert_response :created
+      assert_equal ClientRegistrar::MAX_CLIENT_NAME_LENGTH,
+        JSON.parse(response.body)["client_name"].length
+      assert_equal ClientRegistrar::MAX_CLIENT_NAME_LENGTH,
+        Doorkeeper::Application.sole.name.length
+    end
+
     test "requires no authentication" do
       register(valid_metadata)
 

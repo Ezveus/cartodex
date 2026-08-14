@@ -30,11 +30,27 @@ module Mcp
     USER_RATE_LIMIT_TO = 300
     USER_RATE_LIMIT_WITHIN = 1.minute
 
+    # RFC 6750 §2.1 defines the credentials as "Bearer" 1*SP b64token, and
+    # RFC 7235 §2.1 makes the scheme name case-insensitive — "bearer <token>"
+    # is as valid as "Bearer <token>", and clients do send it.
+    BEARER_SCHEME = /\ABearer\s+/i
+
     # Hostnames legitimately serving this app, checked by the mcp gem's DNS
     # rebinding protection (added in 0.23) against the request's Host header.
+    # Loopback hosts are allowed by the gem itself.
+    #
     # "www.example.com" is Rails' ActionDispatch::Integration::Session default
-    # test host; loopback hosts are allowed by the gem itself.
-    ALLOWED_HOSTS = [ "cartodex.ezveus.eu", "www.example.com" ].freeze
+    # test host, and it exists here only so the suite can reach the endpoint. It
+    # is admitted outside production only: shipping it would hand a production
+    # DNS-rebinding attempt a Host header this app has no reason to serve.
+    #
+    # A method rather than a bare literal so the production membership is
+    # assertable from a test that itself runs in the test environment.
+    def self.allowed_hosts(env = Rails.env)
+      [ "cartodex.ezveus.eu", ("www.example.com" unless env.production?) ].compact
+    end
+
+    ALLOWED_HOSTS = allowed_hosts.freeze
 
     # Two limiters, and their positions in the callback chain matter. Both are
     # plain before_actions (`rate_limit` forwards its options straight to
@@ -121,7 +137,7 @@ module Mcp
     # between this and reject_unauthenticated! and needs to know whether the
     # request authenticated before deciding to count it.
     def identify_token_user
-      token = request.headers["Authorization"].to_s.delete_prefix("Bearer ").strip
+      token = request.headers["Authorization"].to_s.sub(BEARER_SCHEME, "").strip
       authenticate_oauth_token(token) || authenticate_legacy_token(token)
     end
 

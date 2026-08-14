@@ -51,6 +51,30 @@ class McpServerTest < ActionDispatch::IntegrationTest
     assert_equal 2, @user.collections.find_by(card: @card).quantity
   end
 
+  test "the Rails test host is not an allowed Host header in production" do
+    # The mcp gem checks these against the request's Host header as DNS
+    # rebinding protection. www.example.com is here purely so the integration
+    # suite can reach /mcp; it must not travel to production.
+    assert_includes Mcp::ServerController::ALLOWED_HOSTS, "www.example.com",
+      "the test suite's own host has to stay allowed here"
+    assert_includes Mcp::ServerController::ALLOWED_HOSTS, "cartodex.ezveus.eu"
+
+    production = Mcp::ServerController.allowed_hosts(ActiveSupport::StringInquirer.new("production"))
+    assert_not_includes production, "www.example.com"
+    assert_includes production, "cartodex.ezveus.eu"
+  end
+
+  test "accepts a lowercase bearer scheme" do
+    # RFC 7235 §2.1 makes the auth-scheme name case-insensitive, and clients do
+    # send "bearer". Stripping the literal prefix "Bearer " left the scheme name
+    # glued to the front of the token, so the digest never matched and the
+    # request 401'd with nothing to explain why.
+    post "/mcp", params: rpc("list_decks", {}),
+      headers: auth_headers.merge("Authorization" => "bearer #{@token}")
+
+    assert_response :success
+  end
+
   test "does not spend the anonymous per-IP limit on authenticated requests" do
     with_real_rate_limit_store do
       # The user-visible symptom being fixed: a single agent session goes well

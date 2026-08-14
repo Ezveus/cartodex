@@ -27,6 +27,12 @@ module Oauth
 
     SERVER_SCOPES = %w[mcp:read mcp:write].freeze
 
+    # Anyone can reach the registration endpoint, and client_name is stored and
+    # then rendered on the consent screen. Truncated rather than rejected: an
+    # over-long name is a nuisance, not an attack we need to report on, and
+    # rejecting it would break a client over a cosmetic field.
+    MAX_CLIENT_NAME_LENGTH = 255
+
     def initialize(metadata)
       @metadata = metadata
     end
@@ -45,7 +51,7 @@ module Oauth
     attr_reader :metadata
 
     def client_name
-      name = metadata["client_name"].to_s.strip
+      name = metadata["client_name"].to_s.strip.truncate(MAX_CLIENT_NAME_LENGTH)
       name.presence || "Unnamed MCP client"
     end
 

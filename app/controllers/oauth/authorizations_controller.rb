@@ -32,6 +32,8 @@ module Oauth
     # it rebuilds pre_auth from params.
     before_action :narrow_scopes_to_consent, only: :create
 
+    private
+
     def narrow_scopes_to_consent
       # This only intersects against the server's whole scope vocabulary, not
       # against what the request originally asked for or what the client is
