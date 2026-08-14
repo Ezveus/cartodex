@@ -34,6 +34,19 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
       "each label must point at its own panel's select"
   end
 
+  # General guard, independent of the MCP-token-specific check above: no two
+  # elements anywhere on the reference page may share an id. Narrowing the
+  # test above to the token panels lost this page-wide coverage; restored here
+  # as its own assertion so it isn't accidentally scoped away again.
+  test "no element on the styleguide page shares an id with another" do
+    get styleguide_path
+
+    assert_response :success
+    ids = css_select("[id]").map { |element| element["id"] }
+
+    assert_equal ids.uniq, ids, "duplicate ids on the page: #{ids.tally.select { |_, n| n > 1 }.keys}"
+  end
+
   # The page renders the spotlight input and, separately, an open results panel. Rendering
   # ResultsView for the demo would have put a second turbo-frame#search_results on the page.
   test "the spotlight demo does not duplicate the results frame" do
