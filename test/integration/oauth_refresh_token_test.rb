@@ -98,6 +98,31 @@ class OauthRefreshTokenTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "settings still dates the connection from the consent, not the refresh" do
+    # The seam between C1 and C2, driven through the real endpoints rather than
+    # hand-made rows: rotation revokes the superseded AccessToken, so a
+    # token-derived "connected since" would report the refresh date. The grant
+    # created at consent is what actually records the authorization — and it is
+    # revoked on redemption, so the derivation cannot look for an unrevoked one.
+    travel_to Time.zone.parse("2026-07-15 10:00") do
+      @first = initial_tokens
+    end
+
+    travel_to Time.zone.parse("2026-08-14 10:00") do
+      second = refresh(@first["refresh_token"])
+      call_mcp(second["access_token"])
+      assert_response :success
+
+      assert_equal 0, Doorkeeper::AccessGrant.where(revoked_at: nil).count,
+        "the grant is revoked at redemption; an unrevoked-grant lookup would find nothing"
+      assert_equal 1, Doorkeeper::AccessToken.where(revoked_at: nil).count,
+        "rotation left exactly one live token, dated today"
+
+      get settings_path
+      assert_select "[data-testid='connected-app']", text: /connected July 15, 2026/
+    end
+  end
+
   test "rotating does not disturb a token that never superseded another" do
     # The first access token of a connection has no previous_refresh_token, so
     # the hook must be a no-op for it rather than revoking anything.

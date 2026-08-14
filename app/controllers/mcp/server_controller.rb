@@ -161,25 +161,42 @@ module Mcp
       true
     end
 
-    # Retires the refresh token that this access token superseded.
+    # Retires the credential row this access token superseded — the whole row,
+    # access token included, not just its refresh token. A client still holding
+    # requests in flight on the old access token therefore gets 401 from the
+    # moment it presents the new one. That is standard revoked-on-use behaviour
+    # and no client is harmed by it (a 401 on /mcp starts a refresh), but it is
+    # worth stating, because "rotate the refresh token" undersells what happens.
     #
-    # Doorkeeper rotates refresh tokens lazily: a refresh mints a new access
-    # token carrying `previous_refresh_token`, and the old one is only revoked
-    # once the *new* access token is presented to a resource server. The gem
-    # fires that from `Doorkeeper::OAuth::Token.authenticate`, which is its one
-    # and only call site (`lib/doorkeeper/oauth/token.rb:19`) and sits on the
-    # `doorkeeper_authorize!` path. This controller resolves tokens itself, so
-    # without this line the hook never runs: every refresh token ever issued
-    # stays redeemable forever, and replaying a leaked one is indistinguishable
-    # from a legitimate refresh.
+    # Doorkeeper rotates lazily: a refresh mints a new access token carrying
+    # `previous_refresh_token`, and the old row is revoked only once the *new*
+    # access token is presented to a resource server. The gem fires that from
+    # `Doorkeeper::OAuth::Token.authenticate`, its one and only call site
+    # (`lib/doorkeeper/oauth/token.rb:19`), on the `doorkeeper_authorize!` path.
+    # This controller resolves tokens itself, so without this line the hook never
+    # runs and no refresh token is ever retired.
     #
     # Firing it here rather than at the token endpoint is deliberate — it keeps
     # Doorkeeper's concurrency grace window, where two racing refreshes both
     # succeed because the old token survives until the new one is actually used.
     #
-    # Note that Doorkeeper 5.9.6 has no `refresh_token_expires_in` (the option
-    # does not exist in the gem): a refresh token's lifetime is the row's, so
-    # rotation plus /settings revocation is what bounds it. See the design spec.
+    # What this does and does not buy, stated precisely because it is easy to
+    # overstate: rotation bounds a **passively** leaked refresh token — one an
+    # attacker holds but has not redeemed — because the legitimate client's next
+    # refresh-then-call retires it. It is NOT RFC 9700 reuse detection. An
+    # attacker who redeems a stolen refresh token inside the grace window mints
+    # their own chain; when the legitimate client later refreshes, the shared
+    # ancestor is already revoked, `revoke` early-returns, and the attacker's
+    # chain survives independently — refreshable indefinitely and grouped into
+    # the same /settings row as the user's own. Reuse detection is not
+    # implemented because, under the concurrency grace window this design keeps
+    # on purpose, a replay is not distinguishable from a legitimate double
+    # refresh. The reliable remedy against an active attacker is the user
+    # revoking the connection, which does kill both chains at once.
+    #
+    # Doorkeeper 5.9.6 also has no `refresh_token_expires_in` — the option does
+    # not exist in the gem — so rotation plus that revocation is the whole bound
+    # on a refresh token's life. See the design spec.
     def rotate_refresh_token(access_token)
       access_token.revoke_previous_refresh_token! if Doorkeeper.config.refresh_token_enabled?
     end

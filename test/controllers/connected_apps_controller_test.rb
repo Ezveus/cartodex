@@ -21,10 +21,11 @@ class ConnectedAppsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def grant_for(user)
+  def grant_for(user, created_at: Time.current, revoked_at: nil)
     Doorkeeper::AccessGrant.create!(
       application: @application, resource_owner_id: user.id, scopes: "mcp:read",
-      redirect_uri: @application.redirect_uri, expires_in: 10.minutes.to_i
+      redirect_uri: @application.redirect_uri, expires_in: 10.minutes.to_i,
+      created_at: created_at, revoked_at: revoked_at
     )
   end
 
@@ -102,6 +103,47 @@ class ConnectedAppsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "[data-testid='connected-app']", count: 1
     assert_select "[data-testid='connected-app']", text: /Claude/
+  end
+
+  test "connected since is the consent date, not the last refresh" do
+    # Refresh-token rotation revokes the superseded AccessToken row, so after a
+    # single refresh the only live token is dated today. Reading the date off
+    # tokens would tell a user who connected in July that they connected today.
+    # The grant is created at consent and rotation never touches it.
+    grant_for(@user, created_at: Time.zone.parse("2026-07-15 10:00"),
+                     revoked_at: Time.zone.parse("2026-07-15 10:00"))
+    token_for(@user, created_at: Time.zone.parse("2026-07-15 10:00")).revoke
+    token_for(@user, created_at: Time.zone.parse("2026-08-14 10:00"))
+
+    get settings_path
+
+    assert_select "[data-testid='connected-app']", text: /connected July 15, 2026/
+  end
+
+  test "connected since follows a revoke and re-authorize to the newer consent" do
+    # Everything from before the revocation is revoked on the token side, so the
+    # oldest live credential is the new one — and the consent that started the
+    # live chain is the newest grant at or before it, not the July one.
+    grant_for(@user, created_at: Time.zone.parse("2026-07-15 10:00"),
+                     revoked_at: Time.zone.parse("2026-07-15 10:00"))
+    token_for(@user, created_at: Time.zone.parse("2026-07-15 10:00")).revoke
+    grant_for(@user, created_at: Time.zone.parse("2026-08-14 09:00"),
+                     revoked_at: Time.zone.parse("2026-08-14 09:00"))
+    token_for(@user, created_at: Time.zone.parse("2026-08-14 09:00"))
+
+    get settings_path
+
+    assert_select "[data-testid='connected-app']", text: /connected August 14, 2026/
+  end
+
+  test "connected since falls back to the oldest live token when no grant exists" do
+    # Tokens created directly (tests, and the legacy path) have no grant behind
+    # them; the row must still render a date rather than blow up.
+    token_for(@user, created_at: Time.zone.parse("2026-08-14 10:00"))
+
+    get settings_path
+
+    assert_select "[data-testid='connected-app']", text: /connected August 14, 2026/
   end
 
   test "a revoked connection stops being listed" do

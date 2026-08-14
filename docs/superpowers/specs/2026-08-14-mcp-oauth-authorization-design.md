@@ -261,8 +261,17 @@ it; refusing clients that do not would cost interoperability and buy nothing, si
 resource a token could be misdirected to.
 
 Audience validation at `/mcp` is then trivially satisfied: every token we issue targets the only
-resource we have. **This reasoning stops holding the moment a second protected resource exists** —
-at that point tokens must record their intended resource and `/mcp` must check it.
+resource we have. **This reasoning stops holding the moment a second protected resource exists.**
+What must change that day, in full:
+
+1. **The consent form must carry `resource` through as a hidden field.** It does not today, so an
+   authorization that arrives at `GET /oauth/authorize` with a valid `resource` posts back without
+   one. Harmless while absence is acceptable and there is one resource; a silent audience drop the
+   moment there are two.
+2. **The token must record the resource it was issued for** — a column, written at the code exchange
+   from the validated `resource` (or from the grant, once the grant carries it too).
+3. **`/mcp` must re-validate that recorded resource when the token is presented**, instead of
+   inferring it. `Oauth::ResourceIndicator`'s header comment says the same thing at the source.
 
 ## Authentication on `/mcp`
 
@@ -281,13 +290,32 @@ revoked once the *new* access token is presented to a resource server. That hook
 `AccessToken#revoke_previous_refresh_token!`, has exactly one call site in the gem —
 `Doorkeeper::OAuth::Token.authenticate` (`lib/doorkeeper/oauth/token.rb:19`), on the
 `doorkeeper_authorize!` path. `Mcp::ServerController` resolves tokens itself and therefore bypasses
-it, so it must fire the hook itself (`rotate_refresh_token`). Without that call, every refresh token
-ever issued stays redeemable indefinitely and a replay is indistinguishable from a legitimate
-refresh — a leaked refresh token would be a permanent, full-scope credential.
+it, so it must fire the hook itself (`rotate_refresh_token`). Without that call, no refresh token is
+ever retired: every one ever issued stays redeemable indefinitely.
+
+The hook retires the **whole superseded row**, access token included, not just its refresh token. A
+client with requests in flight on the old access token gets 401 from the moment it presents the new
+one. That is ordinary revoked-on-use behaviour and harms no client — a 401 on `/mcp` starts a
+refresh — but "rotate the refresh token" undersells it, so it is written down.
 
 Firing it at `/mcp` rather than at the token endpoint is deliberate: it preserves Doorkeeper's
 concurrency grace window, where two refreshes racing each other both succeed because the old token
 survives until the new one is actually used.
+
+**Rotation is not reuse detection, and the difference matters.** What rotation buys is a bound on a
+**passively** leaked refresh token — one an attacker holds but has not redeemed — because the
+legitimate client's next refresh-then-call retires it. It does not defend against an attacker who
+*uses* the token: redeeming a stolen refresh token inside the grace window mints the attacker their
+own chain, and when the legitimate client later refreshes, the shared ancestor is already revoked, so
+`revoke` early-returns and the attacker's chain survives independently — refreshable indefinitely,
+invisible to the user, and grouped into the same `/settings` row as their own.
+
+RFC 9700 reuse detection (revoke the whole token family on replay) is **not implemented**. Under the
+concurrency grace window this design deliberately keeps, a replay is not distinguishable from a
+legitimate double refresh — the same event shape produces both — so detection would either fire on
+honest clients or not fire at all. The reliable remedy against an active attacker is therefore the
+user revoking the connection from `/settings`, which kills both chains at once. That is another
+reason [Settings](#settings) has to actually show the connection.
 
 **There is no `refresh_token_expires_in` in Doorkeeper 5.9.6** — the option does not exist in the
 gem (`grep` over `lib/` returns nothing), and `RefreshTokenRequest` has no notion of a refresh-token
@@ -390,9 +418,23 @@ expired-but-unrevoked token is a working connection the client resumes whenever 
 on `#accessible?` hid every connection not in active use at that second, while
 `ConnectedAppsController#destroy` scoped on `revoked_at` — which left revocation, the only such
 control in the product, unreachable in the steady state. The list query and `#destroy` must stay the
-same set. The granted-scope summary and the "connected since" date both derive from that set: the
-union of scopes over unrevoked tokens (an expired one refreshes back into the same scopes, so the
-client's reach is unchanged by the clock) and the earliest unrevoked token's date.
+same set. The granted-scope summary derives from it: the union of scopes over unrevoked tokens, since
+an expired one refreshes back into the same scopes and the client's reach is unchanged by the clock.
+
+**"Connected since" cannot come from tokens at all.** Rotation revokes the superseded `AccessToken`
+row itself, so the oldest unrevoked token is only ever as old as the client's last refresh: a
+connection made in July and refreshed once in August would read "connected 14 August 2026". Nor can
+it be the oldest *unrevoked* `AccessGrant` — Doorkeeper revokes the grant on redemption
+(`AuthorizationCodeRequest#before_successful_response` calls `grant.revoke`), so in the steady state
+no unrevoked grant exists and that reading falls straight back to the token date it was meant to
+replace. Verified empirically: after one authorization and one refresh, unrevoked grants = 0.
+
+The date is therefore **the most recent consent not newer than the oldest credential still
+standing** — the newest `AccessGrant` row, revoked or not, at or before the oldest unrevoked token.
+A grant is created at consent and rotation never touches it, so it records the authorization; and
+because everything predating a revocation is revoked on the token side, a user who revokes and later
+re-authorizes correctly gets the new date rather than the old one. When no grant exists at all (a
+token created directly, as tests and the legacy path do), it falls back to the oldest live token.
 
 `#destroy` revokes the application's outstanding `Doorkeeper::AccessGrant`s alongside its tokens. An
 unredeemed authorization code is a credential with a ten-minute life that exchanges into a fresh
