@@ -5,14 +5,22 @@ class DecksController < ApplicationController
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
     # the ones it just showed — it orders by name too.
     @decks = filter_decks(current_user.decks.order(:name).includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
-    @pending_deck_imports = current_user.imports.deck_imports.pending
     @filters = filter_params
-    @primary_options = primary_filter_options
-    @secondary_options = secondary_filter_options
 
+    # Needed even for a frame request: the deck cards inside the frame flag their own
+    # over-allocation from this set.
     over_allocations = Allocations::OverAllocations.call(user: current_user)
     @over_allocation_count = over_allocations.size
     @over_allocated_deck_ids = over_allocations.flat_map { |o| o[:decks].map { |d| d[:id] } }.to_set
+
+    # A live-filter keystroke asks for the results frame alone, and Turbo throws the rest of the
+    # response away. Everything below renders outside that frame, so don't pay for it on what is
+    # now the app's most frequent request.
+    return if results_frame_request?
+
+    @pending_deck_imports = current_user.imports.deck_imports.pending
+    @primary_options = primary_filter_options
+    @secondary_options = secondary_filter_options
   end
 
   def show
@@ -132,6 +140,12 @@ class DecksController < ApplicationController
   end
 
   private
+
+  # True when Turbo is refreshing just the deck grid (the filter form targets it) rather than
+  # loading the whole page.
+  def results_frame_request?
+    request.headers["Turbo-Frame"] == Decks::IndexView::FRAME_ID
+  end
 
   def filter_params
     {

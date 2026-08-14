@@ -9,7 +9,9 @@ module Decks
 
     def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [], over_allocated_deck_ids: [], over_allocation_count: 0)
       @decks = decks
-      @pending_deck_imports = pending_deck_imports
+      # nil, not just absent: a Turbo Frame request skips loading these — see
+      # DecksController#results_frame_request?.
+      @pending_deck_imports = pending_deck_imports || []
       @filters = filters || {}
       @primary_options = primary_options || []
       @secondary_options = secondary_options || []

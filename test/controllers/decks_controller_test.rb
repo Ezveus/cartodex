@@ -291,6 +291,30 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal spotlight, grid.first(spotlight.size)
   end
 
+  # Turbo keeps #deck_results and discards the rest of the response, so the import banner and the
+  # filter bar's two option lists must not be queried for a keystroke.
+  test "a frame request skips the queries that only feed the page outside the frame" do
+    get decks_path # warm the session: the first request of a test also loads the Devise user
+
+    page = count_queries { get decks_path }
+    frame = count_queries { get decks_path, headers: { "Turbo-Frame" => "deck_results" } }
+
+    assert_response :success
+    assert_operator frame, :<, page,
+      "a frame request costs as much as the whole page: #{frame} vs #{page}"
+  end
+
+  test "a frame request still renders the filtered grid" do
+    @deck.update!(name: "Ogerpon Toolbox")
+    other = @user.decks.create!(name: "Charizard Pidgeot")
+
+    get decks_path(q: "ogerpon"), headers: { "Turbo-Frame" => "deck_results" }
+
+    assert_response :success
+    assert_select "turbo-frame#deck_results #deck-#{@deck.id}"
+    assert_select "turbo-frame#deck_results #deck-#{other.id}", false
+  end
+
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do
