@@ -65,4 +65,4 @@ Key services:
 
 ## Test Setup
 
-Minitest with parallel execution. Fixtures in `test/fixtures/`. System tests configured with Capybara/Selenium/headless Chrome (no system tests written yet).
+Minitest with parallel execution. Fixtures in `test/fixtures/`. System tests use Capybara/Selenium/headless Chrome and live in `test/system/`; they sign in through `Warden::Test::Helpers` (`login_as user, scope: :user`) because the user fixtures store a literal string in `encrypted_password`, so no password would ever authenticate. `ApplicationSystemTestCase` turns `allow_forgery_protection` **on** for the duration of each system test: the test environment disables it, `csrf_meta_tags` then renders nothing, and `requestJson` reads `.content` off a null meta tag — every browser-driven write dies in its `catch` and reports "the request didn't reach the server". Request tests keep the relaxed setting.
