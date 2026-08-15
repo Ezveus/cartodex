@@ -21,8 +21,18 @@ export default class extends Controller {
     }
   }
 
+  // The click action sits on the whole row, because the row is the tap target we want. But the row
+  // also holds the quantity and allocation steppers, and a tap on one of those bubbles up here —
+  // so pressing "+" both changed the card and opened the viewer on top of it. Anything already
+  // interactive keeps its own click: a rule rather than a list of the controls that exist today,
+  // since the row is where new ones get added.
+  #fromControl(event) {
+    return Boolean(event.target.closest("button, a, input, select, textarea, label"))
+  }
+
   open(event) {
     if (!this.isMobile) return
+    if (this.#fromControl(event)) return
 
     const { cardPreviewUrl, cardPreviewCardId } = event.currentTarget.dataset
     if (cardPreviewUrl && this.hasModalImageTarget) {
