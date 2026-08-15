@@ -5,12 +5,14 @@ require "application_system_test_case"
 # The suite runs twice, once on each side of the 768px breakpoint, and which side is selected by
 # SYSTEM_TEST_VIEWPORT. Every other system test then trusts that selection silently: a run that
 # believes it is mobile while the browser renders desktop layout does not fail, it passes — on the
-# wrong side, proving nothing. Nine tests already did exactly that before #97, which is what this
-# issue is about.
+# wrong side, proving nothing. That is the shape of what #97 cost, where nine tests passed on the
+# desktop side of a bug that only existed on the other one.
 #
-# So this class asks the browser directly, and it deliberately reads the environment variable rather
-# than asking ApplicationSystemTestCase what side it thinks it picked. The question is whether the
-# side the *run* was asked for reached the browser; a mechanism reporting on itself cannot answer it.
+# So this class asks the browser directly, rather than asking ApplicationSystemTestCase what side it
+# thinks it picked. What it can catch is a broken *plumbing* — a screen_size that stopped being
+# applied, an override leaking in from elsewhere. What it cannot catch is a broken *selector*, since
+# it reads the same environment variable the mechanism does: that half is covered by
+# `sweep_viewport` raising on any value it does not recognise, rather than by an assertion here.
 #
 # Both consumers of the breakpoint are checked, because they are two separate reads that could
 # disagree: the CSS media query (`@media (max-width: 768px)`, three blocks in application.css) and

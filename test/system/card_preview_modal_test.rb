@@ -24,6 +24,9 @@ require_relative "../support/deck_card_rows"
 class CardPreviewModalTest < ApplicationSystemTestCase
   include DeckCardRows
 
+  # Declared before the setup below, and that order is load-bearing: `drive_at` registers its own
+  # setup, which skips on the desktop half and on the remote driver — so the fixture setup, which
+  # reaches for `page.server`, never runs where it has no business running.
   drive_at 390, 844
 
   setup do
@@ -110,10 +113,19 @@ class CardPreviewModalTest < ApplicationSystemTestCase
     assert_no_selector "dialog.card-preview-modal"
   end
 
-  # Capybara's offsets are measured from the element's centre, which is exactly where the content
-  # box sits. A quarter of the viewport up and to the left of that lands on the dialog itself.
+  # The dialog is a centred box, not a full-screen sheet, so the backdrop is everything around it.
+  # Capybara measures offsets from the element's own centre, and a point just above the dialog's top
+  # edge lands on the `::backdrop` — which hit-tests to the dialog element itself, which is what
+  # `backdropClose` compares `event.target` against.
+  #
+  # Derived from the measured rect rather than written as a fixed offset: a constant tuned to
+  # today's layout starts landing *inside* the content box the moment the dialog grows, and the test
+  # would then fail as though backdrop-close were broken.
   def tap_backdrop
-    find("dialog.card-preview-modal").click(x: -150, y: -350)
+    dialog = find("dialog.card-preview-modal")
+    height = page.evaluate_script("arguments[0].getBoundingClientRect().height", dialog)
+
+    dialog.click(x: 0, y: -((height / 2) + 20).round)
   end
 
   def modal_image_src

@@ -45,13 +45,24 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   MOBILE_SCREEN_SIZE = [ 390, 844 ].freeze
   DESKTOP_SCREEN_SIZE = [ 1400, 1400 ].freeze
 
-  # How many times click_nav_link will open the menu before giving up — see the comment there.
+  # How many times click_nav_link will open the menu before giving up — see the comment there. Each
+  # attempt spends Capybara.default_max_wait_time, so this is a multiplier on that budget.
   NAV_ATTEMPTS = 3
 
-  # Which half of the sweep this process is. Anything other than "mobile" — unset, above all — is
-  # the desktop half, so a plain `bin/rails test:system` keeps behaving exactly as it did.
+  # Which half of the sweep this process is. Unset is the desktop half, so a plain
+  # `bin/rails test:system` keeps behaving exactly as it did.
+  #
+  # An unrecognised value raises rather than falling back, because the failure is otherwise
+  # invisible: `SYSTEM_TEST_VIEWPORT=Mobile` would render 1400px, skip every class pinned to a
+  # narrow width, and produce output byte-identical to a deliberate desktop run — a green CI job
+  # proving nothing, from one typo in a YAML string. This runs at class-definition time (below,
+  # through sweep_screen_size), so the typo takes the process down before a single test reports.
   def self.sweep_viewport
-    ENV["SYSTEM_TEST_VIEWPORT"] == "mobile" ? :mobile : :desktop
+    case ENV["SYSTEM_TEST_VIEWPORT"]
+    when nil, "", "desktop" then :desktop
+    when "mobile" then :mobile
+    else raise ArgumentError, "SYSTEM_TEST_VIEWPORT must be \"mobile\" or \"desktop\", got #{ENV["SYSTEM_TEST_VIEWPORT"].inspect}"
+    end
   end
 
   def self.sweep_screen_size
@@ -82,11 +93,19 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
         "Emulation.setDeviceMetricsOverride",
         width: width, height: height, deviceScaleFactor: 1, mobile: false
       )
+      @viewport_override = true
     end
 
-    # The browser is shared by the whole run, so an override left behind would move every later
-    # test to a viewport it never asked for.
-    teardown { page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride") if cdp? }
+    # The browser is shared by the whole run, so an override left behind would move every later test
+    # to a viewport it never asked for.
+    #
+    # Guarded on the setup having actually run: a `skip` raises, but Minitest runs the teardown
+    # chain anyway, so without this the clearing call fires on every skipped test — touching
+    # page.driver.browser, which starts Chrome for a test that has no use for it. Worse than waste:
+    # this callback is registered last and therefore runs *first*, and ActiveSupport abandons the
+    # chain on the first exception, so a dead browser here would swallow `Warden.test_reset!` and
+    # the `allow_forgery_protection = false` above for the rest of the process.
+    teardown { page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride") if @viewport_override }
   end
 
   def cdp?
@@ -113,11 +132,19 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     # page's menu shut, and the link then never becomes visible. Opening is therefore retried until
     # the link is actually clickable, rather than attempted once and assumed to have worked. Without
     # this, any test navigating twice in a row is flaky on the mobile half of the sweep only.
+    #
+    # Each attempt waits Capybara's own budget rather than a hardcoded second: the scenario this
+    # exists for consumes a whole attempt by design, and how long a Turbo navigation takes is a
+    # property of the machine, which a number written here cannot know.
     NAV_ATTEMPTS.times do
-      open_navbar_menu
-
       begin
-        return find(:link, label, class: "navbar-link", wait: 1).click
+        open_navbar_menu
+
+        return find(:link, label, class: "navbar-link", wait: Capybara.default_max_wait_time).click
+      rescue Capybara::Ambiguous
+        # A subclass of ElementNotFound, so the rescue below would swallow it and report the exact
+        # opposite of what happened — "no visible link" for "two links matched". Never retryable.
+        raise
       rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::StaleElementReferenceError
         next
       end

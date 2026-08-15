@@ -12,7 +12,8 @@ Cartodex is a Pokémon Trading Card Game card manager built with Rails 8.1 and R
 bin/setup                                    # Initial project setup
 bin/dev                                      # Start development server
 bin/rails test                               # Run unit tests
-bin/rails test:system                        # Run system tests
+bin/rails test:system                        # Run system tests (desktop side of the breakpoint)
+SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system  # …and the mobile side; both must pass
 bin/rails test test/models/card_test.rb      # Run a single test file
 bin/rails test test/models/card_test.rb:10   # Run a specific test by line
 bin/rubocop                                  # Lint (rubocop-rails-omakase style)
@@ -20,7 +21,7 @@ bin/brakeman --no-pager                      # Security scan
 bin/importmap audit                          # JS dependency audit
 ```
 
-CI runs four checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f github`, `bin/rails db:test:prepare test test:system`) on every push and PR. Production deploy via Kamal is **manual**: trigger the workflow with `workflow_dispatch` (Actions → CI → Run workflow, or `gh workflow run ci.yml`), which re-runs the checks and deploys only if they pass. Kamal config lives in `config/deploy.yml` and `.kamal/`; `bin/kamal` is the deploy CLI. `bin/jobs` runs the Solid Queue worker locally.
+CI runs five checks (`bin/brakeman`, `bin/importmap audit`, `bin/rubocop -f github`, `bin/rails db:test:prepare test test:system`, and the same system tests again below the 768px breakpoint — see Test Setup) on every push and PR. Production deploy via Kamal is **manual**: trigger the workflow with `workflow_dispatch` (Actions → CI → Run workflow, or `gh workflow run ci.yml`), which re-runs the checks and deploys only if they pass. Kamal config lives in `config/deploy.yml` and `.kamal/`; `bin/kamal` is the deploy CLI. `bin/jobs` runs the Solid Queue worker locally.
 
 ## Architecture
 
