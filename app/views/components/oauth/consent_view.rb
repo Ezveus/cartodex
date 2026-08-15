@@ -44,12 +44,21 @@ module Oauth
       @pre_auth.redirect_uri
     end
 
+    # Both submissions end in a 302 to the client's own origin — that redirect
+    # *is* the authorization response. Turbo would submit them with fetch(),
+    # which follows a cross-origin redirect only when the final response carries
+    # Access-Control-Allow-Origin; an OAuth callback has no reason to and
+    # claude.ai does not. Under Turbo both buttons therefore fail in the browser
+    # with "blocked by CORS policy" while the server happily issues the grant.
+    # Only a native form submit navigates the top-level document to the client.
+    NO_TURBO = { turbo: false }.freeze
+
     def scope_form
       # Distinct ids: a test harvesting "the rendered form" into POST params
       # needs to scope its query to one of these two forms, or it picks up the
       # other form's hidden fields (including method-override's _method=delete)
       # right along with it.
-      form_with(url: oauth_authorization_path, method: :post, id: "consent-authorize-form", class: "settings-form") do
+      form_with(url: oauth_authorization_path, method: :post, id: "consent-authorize-form", class: "settings-form", data: NO_TURBO) do
         hidden_fields
         fieldset(class: "form-fieldset") do
           legend(class: "form-label") { "Permissions" }
@@ -59,7 +68,7 @@ module Oauth
           render Ui::Button.new(label: "Authorize", variant: :primary, type: "submit")
         end
       end
-      form_with(url: oauth_authorization_path, method: :delete, id: "consent-deny-form", class: "settings-form") do
+      form_with(url: oauth_authorization_path, method: :delete, id: "consent-deny-form", class: "settings-form", data: NO_TURBO) do
         hidden_fields
         div(class: "form-actions") do
           render Ui::Button.new(label: "Deny", variant: :secondary, type: "submit")

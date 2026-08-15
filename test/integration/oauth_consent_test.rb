@@ -131,6 +131,26 @@ class OauthConsentTest < ActionDispatch::IntegrationTest
     assert_select "body nav.navbar a.navbar-brand", text: "Cartodex"
   end
 
+  # Both consent forms answer with a 302 to the *client's* origin
+  # (https://claude.ai/…), and that is the whole point of the endpoint. Turbo
+  # submits a form with fetch(), and fetch follows a cross-origin redirect only
+  # if the final response carries Access-Control-Allow-Origin — an OAuth
+  # callback never does. Left Turbo-driven, both buttons die in the browser with
+  # "blocked by CORS policy" and the authorization code (or the deny) never
+  # reaches the client, while the server-side tests above all pass.
+  #
+  # Only a native browser submit can follow that redirect as a top-level
+  # navigation, so the opt-out has to be on the form itself.
+  test "opts both consent forms out of Turbo so the browser can follow the cross-origin redirect" do
+    sign_in @user
+
+    get "/oauth/authorize", params: authorize_params
+
+    assert_response :success
+    assert_select "#consent-authorize-form[data-turbo='false']", count: 1
+    assert_select "#consent-deny-form[data-turbo='false']", count: 1
+  end
+
   test "escapes a client name that tries to inject markup" do
     @application.update!(name: "<script>alert(1)</script>")
     sign_in @user
