@@ -12,6 +12,13 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   teardown { Warden.test_reset! }
 
+  # The test environment turns forgery protection off, and `csrf_meta_tags` then renders nothing —
+  # so `requestJson` reads `.content` off a null meta tag, throws, and reports every write as "the
+  # request didn't reach the server". Silent, and fatal to any system test that clicks something
+  # which writes. Request tests keep the relaxed setting; only a real browser needs the token.
+  setup { ActionController::Base.allow_forgery_protection = true }
+  teardown { ActionController::Base.allow_forgery_protection = false }
+
   # This app labels bare inputs with aria-label rather than a <label for>, so
   # without this fill_in "Search decks" cannot find the field. Off by default in
   # Capybara; on here so tests can address inputs the way a screen reader does.

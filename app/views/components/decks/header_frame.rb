@@ -24,7 +24,7 @@ module Decks
     def display
       div do
         h1 { @deck.name }
-        render Decks::ClassificationBadges.new(deck: @deck)
+        render Decks::ClassificationBadges.new(deck: @deck, live: true)
         p(class: "deck-show-description") { @deck.description } if @deck.description.present?
       end
     end

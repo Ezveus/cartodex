@@ -47,4 +47,13 @@ class DeckCardTest < ActiveSupport::TestCase
     dc = deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
     assert_equal 0, dc.proxies
   end
+
+  test "with_proxies selects the rows carrying at least one proxy" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    proxied = deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
+    backed = deck.deck_cards.create!(card: cards(:doublade), quantity: 2, owned_copies: 2)
+
+    assert_includes DeckCard.with_proxies, proxied
+    assert_not_includes DeckCard.with_proxies, backed
+  end
 end

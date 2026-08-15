@@ -28,5 +28,9 @@ export default class extends Controller {
     if (this.hasLabelTarget) {
       this.labelTarget.textContent = `${data.owned_copies} real · ${data.proxies} proxy`
     }
+
+    // The deck's "Proxies" badge derives from this very number, and it lives outside this
+    // controller's element, so the server's deck-wide answer has to be relayed to it.
+    this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: data.deck.has_proxies } })
   }
 }

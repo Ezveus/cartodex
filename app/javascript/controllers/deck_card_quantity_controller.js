@@ -14,14 +14,17 @@ export default class extends Controller {
   }
 
   async #updateQuantity(newQuantity) {
-    // The endpoint answers 204 when the quantity reaches zero and the row goes
-    // away, which requestJson reports as a bare truthy value.
+    // When the quantity reaches zero the row goes away and the endpoint answers
+    // `{ removed: true }` — still carrying the deck-wide state, which the badge needs precisely
+    // when the card that disappears was the deck's last unbacked one.
     const updated = await requestJson(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
       method: "PATCH",
       body: { deck_card: { quantity: newQuantity } },
       failure: "Couldn't update this card's quantity"
     })
     if (!updated) return
+
+    this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: updated.deck.has_proxies } })
 
     const delta = newQuantity - this.quantityValue
     this.quantityValue = newQuantity

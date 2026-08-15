@@ -68,12 +68,72 @@ class DeckTest < ActiveSupport::TestCase
     assert_nil deck.other_format_name
   end
 
-  test "clears proxies when the deck is not physical" do
-    deck = Deck.create!(user: users(:one), name: "Live", physical: true, has_proxies: true)
+  test "has_proxies? is false when every card on a physical deck is fully backed" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+
+    assert_not deck.has_proxies?
+  end
+
+  test "has_proxies? is true when a card on a physical deck is not fully backed" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
+
+    assert deck.has_proxies?
+  end
+
+  test "has_proxies? is false for an empty physical deck" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+
+    assert_not deck.has_proxies?
+  end
+
+  # A non-physical deck never consumes the collection, so its cards sit at owned_copies 0 by
+  # construction. That is not the same thing as playing proxies, and must not raise the badge.
+  test "has_proxies? is false for a non-physical deck holding cards" do
+    deck = users(:one).decks.create!(name: "Live", tcg_live: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2)
+
+    assert_not deck.has_proxies?
+  end
+
+  test "has_proxies? drops when the deck stops being physical" do
+    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
+    assert deck.has_proxies?, "sanity: the deck starts out holding a proxy"
 
     deck.update!(physical: false)
 
     assert_not deck.has_proxies?
+  end
+
+  test "with_proxies selects physical decks holding an unbacked card" do
+    proxied = users(:one).decks.create!(name: "Proxied", physical: true)
+    proxied.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
+    backed = users(:one).decks.create!(name: "Backed", physical: true)
+    backed.deck_cards.create!(card: cards(:doublade), quantity: 1, owned_copies: 1)
+
+    assert_includes Deck.with_proxies, proxied
+    assert_not_includes Deck.with_proxies, backed
+    assert_includes Deck.without_proxies, backed
+    assert_not_includes Deck.without_proxies, proxied
+  end
+
+  # The same rows that has_proxies? clears in Ruby, the scope must clear in SQL: a non-physical
+  # deck's cards are all at owned_copies 0, which the bare `owned_copies < quantity` test matches.
+  test "with_proxies ignores non-physical decks" do
+    live = users(:one).decks.create!(name: "Live", tcg_live: true)
+    live.deck_cards.create!(card: cards(:honedge), quantity: 2)
+
+    assert_not_includes Deck.with_proxies, live
+    assert_includes Deck.without_proxies, live
+  end
+
+  test "without_proxies covers a physical deck with no cards at all" do
+    empty = users(:one).decks.create!(name: "Empty", physical: true)
+
+    assert_includes Deck.without_proxies, empty
+    assert_not_includes Deck.with_proxies, empty
   end
 
   test "format_label uses the custom name for the other format" do

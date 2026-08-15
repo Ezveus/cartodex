@@ -10,8 +10,9 @@ module Decks
 
     def view_template
       div(class: "deck-show-container", data: {
-        controller: "card-preview deck-totals result-modal tournament-pdf",
-        action: "deck-card-quantity:changed->deck-totals#updateTotals",
+        controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies",
+        action: "deck-card-quantity:changed->deck-totals#updateTotals " \
+                "deck-proxies:changed->deck-proxies#toggle",
         result_modal_deck_id_value: @deck.id
       }) do
         header_section

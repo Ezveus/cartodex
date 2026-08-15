@@ -31,12 +31,27 @@ class Deck < ApplicationRecord
     name_matching(query).or(where(archetype_id: Archetype.search(query).select(:id)))
   }
 
+  # SQL counterpart of #has_proxies?, for the deck-list filter. The `physical` half is not
+  # decoration: a non-physical deck's cards all sit at owned_copies 0, so the bare per-card test
+  # would sweep every TCG Live deck in.
+  scope :with_proxies, -> { where(physical: true, id: DeckCard.with_proxies.select(:deck_id)) }
+  scope :without_proxies, -> { where.not(id: Deck.with_proxies.select(:id)) }
+
   # Human-readable format label. For the "other" format the user-supplied
   # name takes precedence when present.
   def format_label
     return other_format_name if other? && other_format_name.present?
 
     FORMAT_LABELS.fetch(format, format.to_s.humanize)
+  end
+
+  # Whether the deck is played with any proxy, derived from the per-card real/proxy split rather
+  # than declared by hand — the two used to be independent and could disagree. Only a physical
+  # deck can hold proxies: a TCG Live deck consumes no collection, so its cards being unbacked
+  # says nothing. Reads off a loaded deck_cards association, which both views that show the badge
+  # already preload.
+  def has_proxies?
+    physical? && deck_cards.any? { |deck_card| deck_card.proxies.positive? }
   end
 
   # Energy types of the deck's archetype, used for the type stripe and badge.
@@ -94,12 +109,10 @@ class Deck < ApplicationRecord
 
   private
 
-  # Drops classification fields that don't apply to the current state so we
-  # never persist a proxy flag on a non-physical deck or a stale custom format
-  # name once the format is no longer "other".
+  # Drops classification fields that don't apply to the current state so we never persist a stale
+  # custom format name once the format is no longer "other".
   def clear_inapplicable_classification
     self.other_format_name = nil unless other?
-    self.has_proxies = false unless physical?
   end
 
   def merge_counts!(target, source)
