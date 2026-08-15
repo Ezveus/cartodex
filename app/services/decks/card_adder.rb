@@ -18,13 +18,13 @@ module Decks
 
     private
 
-    # Greedy backing: use as many reals as the collection makes available to
-    # this deck, capped at the deck_card's total, and never below what the deck
-    # already backs (an add never demotes existing reals).
+    # Greedy backing, the rule in Allocations::Backing: an add never demotes existing reals.
     def target_owned_copies(deck_card)
-      current = deck_card.owned_copies.to_i
       free_for_deck = Allocations::Availability.call(user: @deck.user, card: @card, excluding_deck: @deck).available
-      [ deck_card.quantity, [ current, free_for_deck ].max ].min
+
+      Allocations::Backing.greedy(
+        quantity: deck_card.quantity, current_owned: deck_card.owned_copies.to_i, available: free_for_deck
+      )
     end
   end
 end

@@ -2739,6 +2739,29 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .deck-card-alloc-label { min-width: 8ch; text-align: center; }
 .deck-card-warning { margin-left: 0.25rem; }
 
+/* — Printing picker: the set/number line of a deck row, where another printing exists — */
+.deck-card-printing { position: relative; display: inline-flex; }
+.deck-card-set-swap { padding: 0; border: 0; background: none; font: inherit; color: var(--ink-300); cursor: pointer; }
+.deck-card-set-swap:hover, .deck-card-set-swap[aria-expanded="true"] { color: var(--ink-700); text-decoration: underline; }
+
+.printing-picker-menu {
+  position: absolute; top: 100%; right: 0; z-index: 50;
+  min-width: 15rem; margin: 0.25rem 0 0; padding: 0.25rem; list-style: none;
+  max-height: 18rem; overflow-y: auto;
+  background: var(--surface); border-radius: 8px; box-shadow: var(--e2);
+  cursor: default;
+}
+.printing-option {
+  display: flex; flex-direction: column; gap: 0.1rem;
+  width: 100%; box-sizing: border-box; padding: 0.4rem 0.6rem;
+  border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer;
+}
+.printing-option:hover:not(:disabled) { background: var(--water-bg); }
+.printing-option-current { cursor: default; opacity: 0.65; }
+.printing-option-set { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-900); }
+.printing-option-counts { font-size: 0.7rem; color: var(--ink-500); }
+.printing-option-warning { font-size: 0.7rem; color: #8A6800; }
+
 .collection-tile-alloc { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-500); margin: 0.25rem 0; }
 
 .over-allocation-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
@@ -2756,6 +2779,13 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .sg-spotlight-demo {
   position: relative;
   min-height: 4rem;
+}
+
+/* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in. */
+.sg-printing-demo {
+  position: relative;
+  min-height: 11rem;
+  margin-top: 1rem;
 }
 
 /* Dashboard spotlight search */

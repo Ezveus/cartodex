@@ -103,7 +103,12 @@ Rails.application.routes.draw do
       resources :decks do
         post :import, on: :collection
         get :suggested_archetype, on: :member
-        resources :cards, only: [ :index, :create, :update, :destroy ], controller: "deck_cards"
+        resources :cards, only: [ :index, :create, :update, :destroy ], controller: "deck_cards" do
+          # Swapping a slot to another printing changes the very id that identifies it, so it
+          # gets its own action rather than another branch in deck_cards#update.
+          resources :printings, only: [ :index ], controller: "deck_card_printings"
+          resource :printing, only: [ :update ], controller: "deck_card_printings"
+        end
         resources :results, only: [ :create ], controller: "deck_results"
       end
     end

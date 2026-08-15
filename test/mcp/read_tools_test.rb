@@ -181,4 +181,28 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     assert_includes card_ids, cards(:budew_pre).id
   end
+
+  test "ListPrintingsTool lists printings the user does not own" do
+    response = ListPrintingsTool.call(card_id: cards(:budew_asc).id, server_context: @context)
+    entry = payload(response).find { |p| p["card_id"] == cards(:budew_pre).id }
+
+    assert_equal 0, entry["owned"], "the unowned printing is listed, not filtered out"
+    assert_nil entry["real_after"], "with no deck there is no swap to project"
+  end
+
+  test "ListPrintingsTool projects the swap against a deck when given one" do
+    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck.deck_cards.create!(card: cards(:budew_asc), quantity: 3)
+
+    response = ListPrintingsTool.call(card_id: cards(:budew_asc).id, deck_id: deck.id, server_context: @context)
+    entry = payload(response).find { |p| p["card_id"] == cards(:budew_pre).id }
+
+    assert_equal 3, entry["proxies_after"]
+  end
+
+  test "ListPrintingsTool reports an unknown card id" do
+    response = ListPrintingsTool.call(card_id: -1, server_context: @context)
+
+    assert_match(/Error/i, response.content.first[:text])
+  end
 end

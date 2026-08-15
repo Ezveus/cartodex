@@ -131,4 +131,42 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_match(/equivalent/i, response_text(response))
     assert_match(/Budew/, response_text(response))
   end
+
+  test "SetDeckCardPrintingTool moves the slot to another printing" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical.deck_cards.create!(card: cards(:budew_asc), quantity: 3)
+
+    response = SetDeckCardPrintingTool.call(
+      deck_id: physical.id, card_id: cards(:budew_asc).id,
+      target_card_id: cards(:budew_pre).id, server_context: @context
+    )
+
+    assert_equal [ cards(:budew_pre).id ], physical.deck_cards.reload.map(&:card_id)
+    assert_match(/PRE 4/, response_text(response))
+    assert_match(/3 proxy/, response_text(response))
+  end
+
+  test "SetDeckCardPrintingTool refuses a card that is not another printing" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
+
+    response = SetDeckCardPrintingTool.call(
+      deck_id: physical.id, card_id: cards(:budew_asc).id,
+      target_card_id: cards(:froakie_cri).id, server_context: @context
+    )
+
+    assert_match(/Error/i, response_text(response))
+    assert_equal [ cards(:budew_asc).id ], physical.deck_cards.reload.map(&:card_id)
+  end
+
+  test "SetDeckCardPrintingTool reports a card the deck does not hold" do
+    physical = @user.decks.create!(name: "Phys", physical: true)
+
+    response = SetDeckCardPrintingTool.call(
+      deck_id: physical.id, card_id: cards(:budew_asc).id,
+      target_card_id: cards(:budew_pre).id, server_context: @context
+    )
+
+    assert_match(/Error/i, response_text(response))
+  end
 end
