@@ -1,4 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
+import { flashNotice } from "helpers/flash"
 
 export default class extends Controller {
   static targets = ["qty", "counter", "addButton"]
@@ -13,15 +15,13 @@ export default class extends Controller {
   }
 
   async increment() {
-    const response = await fetch("/api/collections", {
+    const data = await requestJson("/api/collections", {
       method: "POST",
-      headers: this.#headers(),
-      credentials: "same-origin",
-      body: JSON.stringify({ collection: { card_id: this.cardIdValue, quantity: 1 } })
+      body: { collection: { card_id: this.cardIdValue, quantity: 1 } },
+      failure: "Couldn't add this card to your collection"
     })
-    if (!response.ok) return
+    if (!data) return
 
-    const data = await response.json()
     const previous = this.quantityValue
     this.quantityValue = data.quantity
     this.#refreshUi()
@@ -33,13 +33,12 @@ export default class extends Controller {
     if (this.quantityValue <= 1) return this.remove()
 
     const newQuantity = this.quantityValue - 1
-    const response = await fetch(`/api/collections/${this.cardIdValue}`, {
+    const updated = await requestJson(`/api/collections/${this.cardIdValue}`, {
       method: "PATCH",
-      headers: this.#headers(),
-      credentials: "same-origin",
-      body: JSON.stringify({ collection: { quantity: newQuantity } })
+      body: { collection: { quantity: newQuantity } },
+      failure: "Couldn't update this card's quantity"
     })
-    if (!response.ok) return
+    if (!updated) return
 
     this.quantityValue = newQuantity
     this.#refreshUi()
@@ -48,12 +47,11 @@ export default class extends Controller {
 
   async remove() {
     const previous = this.quantityValue
-    const response = await fetch(`/api/collections/${this.cardIdValue}`, {
+    const removed = await requestJson(`/api/collections/${this.cardIdValue}`, {
       method: "DELETE",
-      headers: this.#headers(),
-      credentials: "same-origin"
+      failure: "Couldn't remove this card from your collection"
     })
-    if (!response.ok) return
+    if (!removed) return
 
     const detail = { delta: -previous, removed: true, added: false }
     if (this.hasAddButtonTarget) {
@@ -79,19 +77,9 @@ export default class extends Controller {
     this.dispatch("changed", { detail, bubbles: true })
   }
 
-  #headers() {
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    return { "Content-Type": "application/json", "X-CSRF-Token": token }
-  }
-
   #maybeFlash(message) {
     if (!this.flashOnChangeValue) return
-    const container = document.getElementById("flash-messages")
-    if (!container) return
-    const div = document.createElement("div")
-    div.className = "flash flash-notice"
-    div.dataset.controller = "flash"
-    div.textContent = message
-    container.appendChild(div)
+
+    flashNotice(message)
   }
 }

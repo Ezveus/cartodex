@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
 
 // Archetype picker for the deck form. Searches existing archetypes, creates new
 // ones inline, and can infer one from the deck's line-up via the "Suggest"
@@ -98,21 +99,16 @@ export default class extends Controller {
   async createArchetype() {
     if (!this.primaryIdTarget.value) return
 
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    const body = {
-      primary_pokemon_id: this.primaryIdTarget.value,
-      secondary_pokemon_id: this.secondaryIdTarget.value || null
-    }
-
-    const response = await fetch("/api/archetypes", {
+    const archetype = await requestJson("/api/archetypes", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify(body)
+      body: {
+        primary_pokemon_id: this.primaryIdTarget.value,
+        secondary_pokemon_id: this.secondaryIdTarget.value || null
+      },
+      failure: "Couldn't create the archetype"
     })
+    if (!archetype) return
 
-    if (!response.ok && response.status !== 201) return
-    const archetype = await response.json()
     this.archetypeIdTarget.value = archetype.id
     this.inputTarget.value = archetype.name
     this.#hideCreateSection()

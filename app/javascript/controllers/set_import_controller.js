@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashAlert } from "helpers/flash"
 
 export default class extends Controller {
   static targets = ["url", "submit", "list"]
@@ -26,11 +27,14 @@ export default class extends Controller {
         this.urlTarget.value = ""
         this.#addImportingEntry(import_id, set_code)
       } else {
+        // This endpoint answers with a single `error`, not the `errors` array
+        // the rest of the API uses, so it reads its own body rather than going
+        // through helpers/api.
         const { error } = await response.json()
-        this.#showFlash("alert", error || "Import failed.")
+        flashAlert(error || "Import failed.")
       }
     } catch (e) {
-      this.#showFlash("alert", "Import request failed.")
+      flashAlert("Import request failed.")
     } finally {
       this.submitTarget.disabled = false
       this.submitTarget.value = "Import from Limitless"
@@ -44,16 +48,6 @@ export default class extends Controller {
     item.innerHTML = `<span class="importing-spinner"></span> ${this.#escapeHtml(name)}`
     this.listTarget.appendChild(item)
     this.listTarget.closest(".importing-section").style.display = "block"
-  }
-
-  #showFlash(type, message) {
-    const container = document.getElementById("flash-messages")
-    if (!container) return
-    const div = document.createElement("div")
-    div.className = `flash flash-${type}`
-    div.dataset.controller = "flash"
-    div.textContent = message
-    container.appendChild(div)
   }
 
   #escapeHtml(text) {

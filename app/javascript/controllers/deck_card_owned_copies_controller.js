@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
 
 // Adjusts a deck card's real (owned-backed) copy count via the deck-card API.
 export default class extends Controller {
@@ -16,16 +17,13 @@ export default class extends Controller {
   }
 
   async #update(newOwned) {
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    const response = await fetch(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
+    const data = await requestJson(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify({ deck_card: { owned_copies: newOwned } })
+      body: { deck_card: { owned_copies: newOwned } },
+      failure: "Couldn't update this card's real copies"
     })
-    if (!response.ok) return
+    if (!data) return
 
-    const data = await response.json()
     this.ownedValue = data.owned_copies
     if (this.hasLabelTarget) {
       this.labelTarget.textContent = `${data.owned_copies} real · ${data.proxies} proxy`

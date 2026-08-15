@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static values = { deckId: Number, cardId: Number, quantity: Number }
@@ -13,16 +14,14 @@ export default class extends Controller {
   }
 
   async #updateQuantity(newQuantity) {
-    const token = document.querySelector('meta[name="csrf-token"]').content
-
-    const response = await fetch(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
+    // The endpoint answers 204 when the quantity reaches zero and the row goes
+    // away, which requestJson reports as a bare truthy value.
+    const updated = await requestJson(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify({ deck_card: { quantity: newQuantity } })
+      body: { deck_card: { quantity: newQuantity } },
+      failure: "Couldn't update this card's quantity"
     })
-
-    if (!response.ok) return
+    if (!updated) return
 
     const delta = newQuantity - this.quantityValue
     this.quantityValue = newQuantity

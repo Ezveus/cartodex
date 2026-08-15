@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = ["input", "results"]
@@ -28,32 +29,24 @@ export default class extends Controller {
 
   async add(event) {
     const cardId = event.currentTarget.dataset.cardId
-    const token = document.querySelector('meta[name="csrf-token"]').content
-
-    const response = await fetch(`/api/decks/${this.deckIdValue}/cards`, {
+    const added = await requestJson(`/api/decks/${this.deckIdValue}/cards`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify({ deck_card: { card_id: cardId, quantity: 1 } })
+      body: { deck_card: { card_id: cardId, quantity: 1 } },
+      failure: "Couldn't add the card to this deck"
     })
+    if (!added) return
 
-    if (response.ok) {
-      this.inputTarget.value = ""
-      this.resultsTarget.innerHTML = ""
-      window.Turbo.visit(window.location.href, { action: "replace" })
-    }
+    this.inputTarget.value = ""
+    this.resultsTarget.innerHTML = ""
+    window.Turbo.visit(window.location.href, { action: "replace" })
   }
 
   async #fetchResults(query) {
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}`, {
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin"
+    const cards = await requestJson(`/api/cards?q=${encodeURIComponent(query)}`, {
+      failure: "Card search failed"
     })
+    if (!cards) return
 
-    if (!response.ok) return
-
-    const cards = await response.json()
     this.#renderResults(cards)
   }
 

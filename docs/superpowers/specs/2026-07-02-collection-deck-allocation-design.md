@@ -168,25 +168,35 @@ card's `fingerprint`; ensure `cards.fingerprint` is indexed (add the index if ab
 The mutating services (`Decks::CardAdder`, `Decks::OwnedCopiesSetter`,
 `Decks::OwnedCopiesReallocator`) each run their availability read + bounds check + write inside
 `ApplicationService#serialized_transaction`. On SQLite, `lock!`/row locks are a no-op (SQLite has
-no `SELECT ... FOR UPDATE`), so the serialization instead comes from `BEGIN IMMEDIATE`
-(`ActiveRecord::Base.transaction(isolation: :immediate)`): it takes SQLite's single writer lock
-up front, before the availability read runs, so a concurrent call blocks until the first
-transaction commits and always sees the post-write state. This closes the race described above —
-two concurrent calls can no longer read the same free pool and jointly over-commit.
+no `SELECT ... FOR UPDATE`), so the serialization instead comes from `BEGIN IMMEDIATE`: it takes
+SQLite's single writer lock up front, before the availability read runs, so a concurrent call
+blocks until the first transaction commits and always sees the post-write state. This closes the
+race described above — two concurrent calls can no longer read the same free pool and jointly
+over-commit.
 
-**Caveat:** `isolation: :immediate` raises `ActiveRecord::TransactionIsolationError` if a
-transaction is already open, which is exactly what happens under the test suite's transactional
-fixtures (and any caller that wraps the service in its own transaction). `serialized_transaction`
-detects this (`ActiveRecord::Base.connection.transaction_open?`) and falls back to a nested
-savepoint (`transaction(requires_new: true)`) in that case — correct single-threaded/in-test
-behavior, but without the extra write-lock serialization. True concurrent serialization therefore
-can't be exercised by the (transactional) test suite; it only takes effect for real outside a test
-transaction.
+A plain top-level `ActiveRecord::Base.transaction` is what produces that `BEGIN IMMEDIATE`: the
+SQLite3 adapter begins every joinable transaction in `immediate` mode (`begin_db_transaction` →
+`internal_begin_transaction(:immediate, nil)`). Worth stating what does **not** work, because this
+document asserted the opposite until 2026-08-15 and the code followed it: asking for the mode
+through `transaction(isolation: :immediate)` raises `ActiveRecord::TransactionIsolationError` on
+*every* call, not merely when a transaction is already open. `isolation:` names an ANSI isolation
+level, of which SQLite offers only `read_uncommitted`; `immediate` is a transaction *mode*, not a
+level.
 
-**Future note:** if the app moves off SQLite (e.g. to Postgres or MySQL), `isolation: :immediate`
-is a SQLite-specific mechanism and should be revisited — the equivalent there is pessimistic row
-locking (`SELECT ... FOR UPDATE` via `lock!`) on the relevant `collections` / `deck_cards` rows
-before the availability read, rather than an upfront whole-database write lock.
+**Caveat:** when a transaction is already open — the test suite's transactional fixtures, or a
+caller that wraps the service in its own transaction (`Decks::Fetcher`, `Decks::Duplicator`) —
+`serialized_transaction` detects it (`ActiveRecord::Base.connection.transaction_open?`) and falls
+back to a nested savepoint (`transaction(requires_new: true)`), a nested transaction having no
+write lock left to take. The savepoint keeps the service's own work separately revertible but adds
+no serialization of its own; it does not need to, since a joinable outer transaction has already
+taken the write lock (the fixtures' transaction is `joinable: false` and therefore deferred, but
+nothing runs concurrently under it). True concurrent serialization therefore can't be exercised by
+the (transactional) test suite; it only takes effect for real outside a test transaction.
+
+**Future note:** if the app moves off SQLite (e.g. to Postgres or MySQL), the upfront
+whole-database write lock that `serialized_transaction` leans on is a SQLite-specific mechanism and
+should be revisited — the equivalent there is pessimistic row locking (`SELECT ... FOR UPDATE` via
+`lock!`) on the relevant `collections` / `deck_cards` rows before the availability read.
 
 ## Out of scope
 

@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashAlert, flashNotice, flashResponseError } from "helpers/flash"
 
 export default class extends Controller {
   static targets = ["count", "importModal", "importName", "importDecklist", "importSubmit", "importingList"]
@@ -51,10 +52,13 @@ export default class extends Controller {
         this.importDecklistTarget.value = ""
 
         this.#addImportingEntry(import_id, name)
-        this.#showFlash("notice", `Deck "${name}" is being imported…`)
+        flashNotice(`Deck "${name}" is being imported…`)
+      } else {
+        await flashResponseError(response, "Couldn't start the deck import")
       }
     } catch (error) {
       console.error('Error importing deck:', error)
+      flashAlert("Couldn't start the deck import — the request didn't reach the server")
     } finally {
       this.importSubmitTarget.disabled = false
       this.importSubmitTarget.textContent = "Import"
@@ -70,17 +74,6 @@ export default class extends Controller {
     item.innerHTML = `<span class="importing-spinner"></span> ${this.#escapeHtml(name)}`
     this.importingListTarget.appendChild(item)
     this.importingListTarget.closest(".importing-section").style.display = "block"
-  }
-
-  #showFlash(type, message) {
-    const container = document.getElementById("flash-messages")
-    if (!container) return
-
-    const div = document.createElement("div")
-    div.className = `flash flash-${type}`
-    div.dataset.controller = "flash"
-    div.textContent = message
-    container.appendChild(div)
   }
 
   #escapeHtml(text) {
