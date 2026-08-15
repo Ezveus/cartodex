@@ -76,6 +76,48 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert @deck.expanded?
   end
 
+  # On the show page the allocation steppers change what the badge derives from without a reload,
+  # so the badge ships on every load and `deck-proxies` toggles it. It therefore has to be in the
+  # markup — hidden — even for a deck that currently holds no proxy.
+  test "show renders the proxies badge hidden when the deck is fully backed" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.update_all(owned_copies: 1)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge'][hidden]"
+
+    # The badge and the steppers that move it sit in different subtrees, so the relay only works if
+    # the listener is registered on their common ancestor under the exact event name the two
+    # stepper controllers dispatch (`dispatch("changed", { prefix: "deck-proxies" })`).
+    assert_select ".deck-show-container[data-controller~='deck-proxies']" \
+                  "[data-action*='deck-proxies:changed->deck-proxies#toggle']"
+  end
+
+  test "show renders the proxies badge visible when the deck holds a proxy" do
+    @deck.update!(physical: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge']"
+    assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge'][hidden]", false
+  end
+
+  # The deck list has no such steppers, so it keeps a plain server-rendered badge — no hidden
+  # element to toggle, no target attribute on the dozens of decks it renders.
+  test "index omits the proxies badge entirely for a fully backed deck" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.update_all(owned_copies: 1)
+
+    get decks_path
+
+    assert_response :success
+    assert_select "#deck-#{@deck.id} [data-deck-proxies-target='badge']", false
+    assert_select "#deck-#{@deck.id} .badge-warning", false
+  end
+
   test "index filters decks by format" do
     @deck.update!(format: "expanded")
     other = @user.decks.create!(name: "Std deck", format: "standard")
@@ -89,6 +131,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters decks by support and proxies" do
     @deck.update!(physical: true)
+    # The fixture deck_card is backed off, so the proxy this filter must catch is the one below and
+    # nothing else — otherwise the test would pass against a scope that ignores owned_copies.
+    @deck.deck_cards.update_all(owned_copies: 1)
     @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
     live = @user.decks.create!(name: "Live deck", tcg_live: true)
 
@@ -106,7 +151,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
     backed = @user.decks.create!(name: "Backed deck", physical: true)
     backed.deck_cards.create!(card: cards(:honedge), quantity: 1, owned_copies: 1)
+    # Unbacked cards on purpose: a TCG Live deck's cards always sit at owned_copies 0, so this is
+    # what a scope missing its `physical` half would wrongly file under "with proxies".
     live = @user.decks.create!(name: "Live deck", tcg_live: true)
+    live.deck_cards.create!(card: cards(:doublade), quantity: 2)
 
     get decks_path(proxies: "without")
 

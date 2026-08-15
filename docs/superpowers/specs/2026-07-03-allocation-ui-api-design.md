@@ -34,6 +34,8 @@ over the user's physical decks), **available** (`max(0, owned − committed)`), 
    `Allocations::Availability` per card and does not optimise the aggregate query.
 5. **`has_proxies` reconciliation is out of scope** (issue #56). The manual boolean stays; this
    feature derives proxy state from `owned_copies` for display and does not touch the flag.
+   *Superseded:* issue #56 has since dropped the column and derived `Deck#has_proxies?` from
+   `owned_copies`, so the badge and this feature now read the same source.
 
 ## Architecture
 
@@ -44,7 +46,8 @@ model addition is one derived reader.
 
 - `DeckCard#proxies` → `quantity - owned_copies`. A single tested reader replacing the ad-hoc
   `quantity − owned_copies` computed inline in the spec and (soon) in views. No other model change.
-- `has_proxies` is untouched (issue #56).
+- `has_proxies` is untouched (issue #56). *Superseded:* the column was later dropped and the
+  flag derived — see `Deck#has_proxies?` and `Deck.with_proxies`.
 
 ### 2. JSON API
 
@@ -120,7 +123,7 @@ existing controllers' error handling.
 ## Out of scope
 
 - Batching the collection-index availability N+1 → **issue #59**.
-- Reconciling / deprecating `Deck#has_proxies` → **issue #56**.
+- Reconciling / deprecating `Deck#has_proxies` → **issue #56**. *Done:* column dropped, flag derived.
 - Foil-aware allocation (`collections.foil` still ignored).
 - Deck legality enforcement → issue #61.
 

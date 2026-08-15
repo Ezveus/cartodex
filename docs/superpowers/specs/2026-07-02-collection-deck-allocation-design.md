@@ -56,6 +56,8 @@ copies committed across all physical decks can never exceed what you own.
   **not** introduce a `medium` enum and do **not** derive/drop `has_proxies` this iteration. (Note:
   `has_proxies` may drift from the true proxy state derivable from `owned_copies`; reconciling it —
   and the UI — is deferred to a later iteration.)
+  **Superseded by issue #56:** the `has_proxies` column no longer exists. `Deck#has_proxies?` is
+  derived from `owned_copies`; see the Known seams entry below.
 
 ### Derived quantities (query layer, not stored)
 
@@ -203,6 +205,7 @@ should be revisited — the equivalent there is pessimistic row locking (`SELECT
 - Web UI and JSON API rework (must keep compiling/passing; the existing `Api::DeckCardsController`
   add/update leaves `owned_copies` at its default — acceptable this iteration).
 - Deriving/auto-maintaining `has_proxies` from `owned_copies`, and any UI for real/proxy/over-allocation.
+  (Both landed later — issues #56 and the allocation UI/API spec.)
 - Foil-aware allocation (`collections.foil` ignored; a card is identified by its printing / `card_id`).
 - Deck legality (e.g. max 4-of) enforcement.
 - API token expiry (tracked separately).

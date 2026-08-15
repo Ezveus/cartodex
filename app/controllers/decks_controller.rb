@@ -116,7 +116,8 @@ class DecksController < ApplicationController
   end
 
   def update
-    @deck = current_user.decks.find(params[:id])
+    # The re-rendered header carries the proxy badge, which reads the deck's cards.
+    @deck = current_user.decks.includes(:deck_cards).find(params[:id])
 
     if @deck.update(deck_params)
       @editing = false

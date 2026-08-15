@@ -116,6 +116,7 @@ class DeckTest < ActiveSupport::TestCase
     assert_includes Deck.with_proxies, proxied
     assert_not_includes Deck.with_proxies, backed
     assert_includes Deck.without_proxies, backed
+    assert_not_includes Deck.without_proxies, proxied
   end
 
   # The same rows that has_proxies? clears in Ruby, the scope must clear in SQL: a non-physical
