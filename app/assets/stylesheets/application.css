@@ -2747,6 +2747,7 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .printing-picker-menu {
   position: absolute; top: 100%; right: 0; z-index: 50;
   min-width: 15rem; margin: 0.25rem 0 0; padding: 0.25rem; list-style: none;
+  max-height: 18rem; overflow-y: auto;
   background: var(--surface); border-radius: 8px; box-shadow: var(--e2);
   cursor: default;
 }

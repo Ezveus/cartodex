@@ -12,13 +12,10 @@ module Decks
   # The deck's size never changes: a swap moves copies between printings, it does not add or
   # remove any.
   class PrintingSwapper < ApplicationService
-    # Greedy backing, the rule Decks::CardAdder applies on an add: claim as many real copies
-    # as the collection leaves free to this deck, capped at the row's total, and never below
-    # what the deck already backs of that printing. `available` must already exclude this
-    # deck's own commitments, or the deck would be made to compete with itself.
-    def self.projected_owned_copies(quantity:, current_owned:, available:)
-      [ quantity, [ current_owned, available ].max ].min
-    end
+    # What the swap did. `merged` is decided inside the transaction, because afterwards the two
+    # rows are one and nothing left in the database tells them apart — a caller that asked
+    # beforehand could be answered by a state a concurrent write has since changed.
+    Result = Struct.new(:deck_card, :merged, keyword_init: true)
 
     def initialize(deck:, card:, target_card:)
       @deck = deck
@@ -36,6 +33,7 @@ module Decks
       serialized_transaction do
         source = @deck.deck_cards.find_by!(card: @card)
         target = @deck.deck_cards.find_by(card: @target_card)
+        merged = target.present?
         quantity = source.quantity + target&.quantity.to_i
 
         source.destroy!
@@ -43,7 +41,8 @@ module Decks
         target.quantity = quantity
         target.owned_copies = backing_for(quantity, target)
         target.save!
-        target
+
+        Result.new(deck_card: target, merged: merged)
       end
     end
 
@@ -63,7 +62,7 @@ module Decks
         user: @deck.user, card: @target_card, excluding_deck: @deck
       ).available
 
-      self.class.projected_owned_copies(
+      Allocations::Backing.greedy(
         quantity: quantity, current_owned: target.owned_copies.to_i, available: available
       )
     end

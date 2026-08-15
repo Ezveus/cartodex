@@ -39,6 +39,10 @@ module Decks
 
     def set_label = "#{card.set_name} #{card.set_number}"
 
+    # A card appears at most once per deck, so its id is unique on the page. The picker rewrites
+    # this id along with the rest of the row when the swap lands.
+    def menu_id = "printing-picker-menu-#{card.id}"
+
     # The set/number line doubles as the printing picker's trigger — but only where there is
     # another printing to switch to, so a card the database holds once reads as plain text.
     # The menu is filled in by the controller from the API, since what it lists depends on the
@@ -52,16 +56,19 @@ module Decks
           controller: "printing-picker",
           printing_picker_deck_id_value: @deck_id,
           printing_picker_card_id_value: card.id,
-          action: "click@document->printing-picker#closeOnOutsideClick"
+          action: "click@document->printing-picker#closeOnOutsideClick keydown->printing-picker#navigate"
         }
       ) do
         button(
           type: "button",
           class: "deck-card-set deck-card-set-swap",
-          aria: { label: "Change printing", expanded: "false", haspopup: "true" },
+          aria: { label: "Change printing", expanded: "false", haspopup: "true", controls: menu_id },
           data: { action: "printing-picker#toggle", printing_picker_target: "trigger" }
         ) { "#{set_label} ▾" }
-        ul(class: "printing-picker-menu", hidden: true, data: { printing_picker_target: "menu" })
+        ul(
+          id: menu_id, class: "printing-picker-menu", hidden: true, role: "menu",
+          data: { printing_picker_target: "menu" }
+        )
       end
     end
 

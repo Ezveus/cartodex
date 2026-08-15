@@ -13,7 +13,7 @@ module Decks
     test "moves the slot to the target printing, keeping its quantity" do
       @deck.deck_cards.create!(card: @asc, quantity: 3)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal @pre.id, deck_card.card_id
       assert_equal 3, deck_card.quantity
@@ -24,7 +24,7 @@ module Decks
       @user.collections.find_by!(card: @pre).update!(quantity: 4)
       @deck.deck_cards.create!(card: @asc, quantity: 3)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal 3, deck_card.owned_copies
     end
@@ -33,7 +33,7 @@ module Decks
       @user.collections.find_by!(card: @asc).update!(quantity: 2)
       @deck.deck_cards.create!(card: @asc, quantity: 3, owned_copies: 2)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal 0, deck_card.owned_copies
       assert_equal 3, deck_card.proxies
@@ -45,7 +45,7 @@ module Decks
       other.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 2)
       @deck.deck_cards.create!(card: @asc, quantity: 4)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal 1, deck_card.owned_copies
     end
@@ -54,11 +54,35 @@ module Decks
       @deck.deck_cards.create!(card: @asc, quantity: 2)
       @deck.deck_cards.create!(card: @pre, quantity: 1)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal 3, deck_card.quantity
       assert_equal [ @pre.id ], @deck.deck_cards.reload.map(&:card_id)
       assert_equal 3, @deck.deck_cards.sum(&:quantity), "a swap never changes the deck's size"
+    end
+
+    test "reports whether it merged with an existing row" do
+      @deck.deck_cards.create!(card: @asc, quantity: 2)
+
+      assert_not Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).merged
+
+      @deck.deck_cards.create!(card: @asc, quantity: 1)
+
+      assert Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).merged
+    end
+
+    test "leaves a pre-existing over-allocation on the target printing untouched" do
+      # Only a collection decrease can produce this, and the app never auto-corrects it: the deck
+      # backs one copy the user no longer owns, and a swap onto that printing must not quietly
+      # "fix" it by demoting the copy — nor add to it.
+      @user.collections.find_by!(card: @pre).update!(quantity: 0)
+      @deck.deck_cards.create!(card: @asc, quantity: 1)
+      @deck.deck_cards.create!(card: @pre, quantity: 1, owned_copies: 1)
+
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
+
+      assert_equal 2, deck_card.quantity
+      assert_equal 1, deck_card.owned_copies
     end
 
     test "keeps the copies an existing target row already backs" do
@@ -66,7 +90,7 @@ module Decks
       @deck.deck_cards.create!(card: @asc, quantity: 2)
       @deck.deck_cards.create!(card: @pre, quantity: 1, owned_copies: 1)
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @asc, target_card: @pre).deck_card
 
       assert_equal 3, deck_card.quantity
       assert_equal 1, deck_card.owned_copies
@@ -77,7 +101,7 @@ module Decks
       live.deck_cards.create!(card: @asc, quantity: 2)
       @user.collections.find_by!(card: @pre).update!(quantity: 4)
 
-      deck_card = Decks::PrintingSwapper.call(deck: live, card: @asc, target_card: @pre)
+      deck_card = Decks::PrintingSwapper.call(deck: live, card: @asc, target_card: @pre).deck_card
 
       assert_equal 0, deck_card.owned_copies
     end

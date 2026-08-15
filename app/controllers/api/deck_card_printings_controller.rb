@@ -14,12 +14,10 @@ module Api
 
     def update
       target = Card.find(printing_params[:card_id])
-      # Read before the write: afterwards the two rows are one, and nothing tells them apart.
-      merged = @deck.deck_cards.exists?(card_id: target.id)
+      result = Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target)
+      deck_card = result.deck_card
 
-      deck_card = Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target)
-
-      render json: with_deck_state(deck_card_json(deck_card).merge(merged: merged, **row_state(deck_card)))
+      render json: with_deck_state(deck_card_json(deck_card).merge(merged: result.merged, **row_state(deck_card)))
     rescue ArgumentError => e
       render json: { errors: [ e.message ] }, status: :unprocessable_entity
     end

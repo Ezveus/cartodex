@@ -104,6 +104,23 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal image_card_path(@pre), JSON.parse(response.body)["image_path"]
   end
 
+  test "update on a non-physical deck answers with no backing to speak of" do
+    # A TCG Live deck consumes no collection, so its rows sit at owned_copies 0 by construction and
+    # the page renders no allocation stepper for the picker to re-bound.
+    live = @user.decks.create!(name: "Live", physical: false)
+    live.deck_cards.create!(card: @asc, quantity: 2)
+    @user.collections.find_by!(card: @pre).update!(quantity: 4)
+
+    patch api_deck_card_printing_path(live, @asc),
+      params: { printing: { card_id: @pre.id } }, as: :json
+
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert_equal 0, json["owned_copies"]
+    assert_equal 0, json["max_owned"]
+    assert_not json["deck"]["has_proxies"]
+  end
+
   test "update rejects a card that is not another printing" do
     @deck.deck_cards.create!(card: @asc, quantity: 1)
 

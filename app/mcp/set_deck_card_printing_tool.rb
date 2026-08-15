@@ -15,7 +15,7 @@ class SetDeckCardPrintingTool < McpTool
     deck = find_deck!(user, deck_id)
     card = find_card!(card_id)
     target = find_card!(target_card_id)
-    deck_card = Decks::PrintingSwapper.call(deck: deck, card: card, target_card: target)
+    deck_card = Decks::PrintingSwapper.call(deck: deck, card: card, target_card: target).deck_card
 
     text("#{target.name} in deck “#{deck.name}” is now #{target.set_name} #{target.set_number}: " \
          "#{deck_card.quantity} copies, #{deck_card.owned_copies} real, #{deck_card.proxies} proxy.")

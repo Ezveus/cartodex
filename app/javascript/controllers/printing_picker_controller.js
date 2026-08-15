@@ -8,6 +8,10 @@ export default class extends Controller {
   static targets = ["trigger", "menu"]
   static values = { deckId: Number, cardId: Number }
 
+  // A double-click would otherwise fire two swaps of the same slot; the second one 404s, because
+  // the first has already moved the row, and reports a failure for a write that succeeded.
+  #busy = false
+
   async toggle(event) {
     event.preventDefault()
     this.menuTarget.hidden ? await this.open() : this.close()
@@ -22,11 +26,18 @@ export default class extends Controller {
     this.menuTarget.replaceChildren(...printings.map((printing) => this.#option(printing, printings)))
     this.menuTarget.hidden = false
     this.triggerTarget.setAttribute("aria-expanded", "true")
+    this.#choices[0]?.focus()
   }
 
+  // Focus goes back to the trigger only when it was inside the menu: closing because a click
+  // landed elsewhere on the page must not yank it away from wherever the user just went.
   close() {
+    const focusWasInside = this.element.contains(document.activeElement)
+
+    this.menuTarget.replaceChildren()
     this.menuTarget.hidden = true
     this.triggerTarget.setAttribute("aria-expanded", "false")
+    if (focusWasInside) this.triggerTarget.focus()
   }
 
   closeOnOutsideClick(event) {
@@ -34,26 +45,61 @@ export default class extends Controller {
     this.close()
   }
 
+  navigate(event) {
+    if (this.menuTarget.hidden) return
+
+    if (event.key === "Escape") {
+      event.preventDefault()
+      this.close()
+      return
+    }
+
+    const choices = this.#choices
+    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key]
+    let next
+    if (step) next = choices[(choices.indexOf(document.activeElement) + step + choices.length) % choices.length]
+    if (event.key === "Home") next = choices[0]
+    if (event.key === "End") next = choices[choices.length - 1]
+    if (!next) return
+
+    event.preventDefault()
+    next.focus()
+  }
+
   async select(event) {
+    if (this.#busy) return
+    this.#busy = true
     const targetCardId = Number(event.currentTarget.dataset.printingCardId)
 
-    const data = await requestJson(this.#url("printing"), {
-      method: "PATCH",
-      body: { printing: { card_id: targetCardId } },
-      failure: "Couldn't switch this card's printing"
-    })
-    if (!data) return
+    try {
+      const data = await requestJson(this.#url("printing"), {
+        method: "PATCH",
+        body: { printing: { card_id: targetCardId } },
+        failure: "Couldn't switch this card's printing"
+      })
+      // Closed either way: on failure the menu would otherwise stay open showing projections of a
+      // swap that did not happen.
+      this.close()
+      if (!data) return
 
-    this.close()
-    this.#absorbMergedRow(data)
-    this.#rewriteRow(data)
+      this.#absorbMergedRow(data)
+      this.#rewriteRow(data)
 
-    // The deck's "Proxies" badge derives from this very split, and it lives outside this row.
-    this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: data.deck.has_proxies } })
+      // The deck's "Proxies" badge derives from this very split, and it lives outside this row.
+      this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: data.deck.has_proxies } })
+    } finally {
+      this.#busy = false
+    }
   }
 
   get #row() {
     return this.element.closest("li.deck-card-item")
+  }
+
+  // The printings that can actually be chosen — the current one is in the menu for its counts, not
+  // as a destination, so keyboard navigation skips it.
+  get #choices() {
+    return Array.from(this.menuTarget.querySelectorAll(".printing-option:not(:disabled)"))
   }
 
   #url(segment) {
@@ -64,6 +110,7 @@ export default class extends Controller {
     const button = document.createElement("button")
     button.type = "button"
     button.className = "printing-option"
+    button.setAttribute("role", "menuitem")
     button.dataset.printingCardId = printing.card_id
     button.dataset.action = "printing-picker#select"
 
@@ -92,14 +139,20 @@ export default class extends Controller {
     }
 
     const item = document.createElement("li")
+    item.setAttribute("role", "none")
     item.append(button)
     return item
   }
 
+  // "Free" is what the collection leaves available to *this* deck, so on the printing the row
+  // already uses it would count copies this very deck holds — true, and unreadable. The current
+  // entry reports what is owned and nothing else.
   #countsLabel(printing) {
     const parts = [`${printing.owned} owned`]
+    if (printing.current) return parts.join(" · ")
+
     if (printing.owned > 0) parts.push(`${printing.available} free`)
-    if (!printing.current && printing.in_deck > 0) parts.push(`${printing.in_deck} already in deck`)
+    if (printing.in_deck > 0) parts.push(`${printing.in_deck} already in deck`)
     return parts.join(" · ")
   }
 
@@ -121,7 +174,8 @@ export default class extends Controller {
   #absorbMergedRow(data) {
     if (!data.merged) return
 
-    const merged = document.querySelector(`li.deck-card-item[data-card-preview-card-id="${data.card.id}"]`)
+    const list = this.#row.closest(".deck-show-main") ?? document
+    const merged = list.querySelector(`li.deck-card-item[data-card-preview-card-id="${data.card.id}"]`)
     if (!merged || merged === this.#row) return
 
     merged.dispatchEvent(new CustomEvent("deck-card-quantity:changed", {
@@ -133,7 +187,9 @@ export default class extends Controller {
 
   // Everything in the row that names the old printing. The row is identified by card id in three
   // places — the preview, the quantity stepper and the allocation stepper — and every one of them
-  // would keep writing to the printing that is no longer there.
+  // would keep writing to the printing that is no longer there. The quantity stepper is the worst
+  // of the three: DeckCardQuantitySetter builds the row it cannot find, so a stale id there would
+  // recreate one for the printing the swap just moved away from.
   #rewriteRow(data) {
     const row = this.#row
 
@@ -149,6 +205,8 @@ export default class extends Controller {
 
     this.cardIdValue = data.card.id
     this.triggerTarget.textContent = `${data.card.set_name} ${data.card.set_number} ▾`
+    this.menuTarget.id = `printing-picker-menu-${data.card.id}`
+    this.triggerTarget.setAttribute("aria-controls", this.menuTarget.id)
 
     const allocation = row.querySelector(".deck-card-alloc")
     if (!allocation) return

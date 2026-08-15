@@ -17,7 +17,9 @@ module Cards
     # needs to decide which rows get a picker at all. One grouped query for the whole page: asking
     # per row would be an N+1 the size of a decklist.
     def self.swappable_card_ids(cards)
-      fingerprints = cards.filter_map(&:fingerprint).uniq
+      # `.presence`, not just a nil check: a blank fingerprint matches every other blank, which is
+      # why #printings and PrintingSwapper both refuse to treat it as an equivalence.
+      fingerprints = cards.filter_map { |card| card.fingerprint.presence }.uniq
       return Set.new if fingerprints.empty?
 
       reprinted = Card.where(fingerprint: fingerprints).group(:fingerprint).count.select { |_, n| n > 1 }
@@ -90,7 +92,7 @@ module Cards
       else
         target = deck_row(printing.id)
         total = source&.quantity.to_i + target&.quantity.to_i
-        real = Decks::PrintingSwapper.projected_owned_copies(
+        real = Allocations::Backing.greedy(
           quantity: total, current_owned: target&.owned_copies.to_i, available: available
         )
       end
