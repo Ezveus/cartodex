@@ -27,6 +27,9 @@ class DecksController < ApplicationController
     @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
+    # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
+    # what every export prints, which is reason enough on a TCG Live deck.
+    @swappable_card_ids = Cards::Printings.swappable_card_ids(@deck.deck_cards.map(&:card))
 
     if @deck.physical?
       @availability = Allocations::Availability.for_cards(

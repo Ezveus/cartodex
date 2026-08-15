@@ -1,11 +1,12 @@
 module Decks
   class DeckCardItem < ApplicationComponent
-    def initialize(deck_card:, deck_id:, physical: false, max_owned: 0, over_allocated: false)
+    def initialize(deck_card:, deck_id:, physical: false, max_owned: 0, over_allocated: false, swappable: false)
       @deck_card = deck_card
       @deck_id = deck_id
       @physical = physical
       @max_owned = max_owned
       @over_allocated = over_allocated
+      @swappable = swappable
     end
 
     def view_template
@@ -27,7 +28,7 @@ module Decks
           button(class: "qty-btn", data: { action: "deck-card-quantity#increment" }) { "+" }
         end
         span(class: "deck-card-name") { card.name }
-        span(class: "deck-card-set") { "#{card.set_name} #{card.set_number}" }
+        printing_line
         allocation_controls if @physical
       end
     end
@@ -35,6 +36,34 @@ module Decks
     private
 
     def card = @deck_card.card
+
+    def set_label = "#{card.set_name} #{card.set_number}"
+
+    # The set/number line doubles as the printing picker's trigger — but only where there is
+    # another printing to switch to, so a card the database holds once reads as plain text.
+    # The menu is filled in by the controller from the API, since what it lists depends on the
+    # user's collection and on this deck.
+    def printing_line
+      return span(class: "deck-card-set") { set_label } unless @swappable
+
+      div(
+        class: "deck-card-printing",
+        data: {
+          controller: "printing-picker",
+          printing_picker_deck_id_value: @deck_id,
+          printing_picker_card_id_value: card.id,
+          action: "click@document->printing-picker#closeOnOutsideClick"
+        }
+      ) do
+        button(
+          type: "button",
+          class: "deck-card-set deck-card-set-swap",
+          aria: { label: "Change printing", expanded: "false", haspopup: "true" },
+          data: { action: "printing-picker#toggle", printing_picker_target: "trigger" }
+        ) { "#{set_label} ▾" }
+        ul(class: "printing-picker-menu", hidden: true, data: { printing_picker_target: "menu" })
+      end
+    end
 
     # Real/proxy split, a stepper to adjust owned_copies (bounded 0..max_owned),
     # and an over-allocation marker. Physical decks only.
@@ -52,7 +81,9 @@ module Decks
         button(class: "qty-btn", data: { action: "deck-card-owned-copies#decrement" }) { "−" }
         span(class: "deck-card-alloc-label", data: { deck_card_owned_copies_target: "label" }) { alloc_label }
         button(class: "qty-btn", data: { action: "deck-card-owned-copies#increment" }) { "+" }
-        span(class: "deck-card-warning badge badge-warning") { "⚠ over-allocated" } if @over_allocated
+        # Always rendered: a printing swap moves the marker on or off this row without a reload,
+        # so the picker needs something to toggle rather than something to invent.
+        span(class: "deck-card-warning badge badge-warning", hidden: !@over_allocated) { "⚠ over-allocated" }
       end
     end
 

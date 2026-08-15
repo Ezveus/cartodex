@@ -48,6 +48,7 @@ module Styleguide
         form_section
         spotlight_section
         deck_card_section
+        printing_picker_section
         settings_section
         tokens_section
       end
@@ -241,6 +242,38 @@ module Styleguide
             energy_badge(archetype, type)
           end
           p(class: "deck-card-count") { "60 cards" }
+        end
+      end
+    end
+
+    def printing_picker_section
+      sg_section("Composants", "Sélecteur d'impression",
+              "Ligne set/numéro d'une carte de deck, là où une autre impression existe. Le menu, rempli à " \
+              "l'ouverture depuis l'API, annote chaque impression et prévient avant que l'échange ne " \
+              "transforme des exemplaires réels en proxies.") do
+        div(class: "sg-printing-demo") do
+          div(class: "deck-card-printing") do
+            button(type: "button", class: "deck-card-set deck-card-set-swap", aria: { expanded: "true" }) { "ASC 16 ▾" }
+            ul(class: "printing-picker-menu") do
+              printing_option("ASC 16", "2 owned · 2 free", current: true)
+              printing_option("JTG 56", "0 owned", warning: "⚠ 2 real copies become proxies")
+              printing_option("PRE 4", "3 owned · 1 free · 1 already in deck")
+            end
+          end
+        end
+      end
+    end
+
+    def printing_option(set, counts, current: false, warning: nil)
+      li do
+        button(
+          type: "button",
+          class: [ "printing-option", ("printing-option-current" if current) ].compact.join(" "),
+          disabled: current
+        ) do
+          span(class: "printing-option-set") { set }
+          span(class: "printing-option-counts") { counts }
+          span(class: "printing-option-warning") { warning } if warning
         end
       end
     end

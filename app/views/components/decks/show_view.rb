@@ -1,11 +1,13 @@
 module Decks
   class ShowView < ApplicationComponent
-    def initialize(deck:, editing: false, tournament_profiles: [], availability: {}, over_allocated_card_ids: [])
+    def initialize(deck:, editing: false, tournament_profiles: [], availability: {}, over_allocated_card_ids: [],
+                   swappable_card_ids: [])
       @deck = deck
       @editing = editing
       @tournament_profiles = tournament_profiles
       @availability = availability
       @over_allocated_card_ids = over_allocated_card_ids.to_set
+      @swappable_card_ids = swappable_card_ids.to_set
     end
 
     def view_template
@@ -164,7 +166,8 @@ module Decks
             deck_id: @deck.id,
             physical: @deck.physical?,
             max_owned: max_owned,
-            over_allocated: @over_allocated_card_ids.include?(dc.card_id)
+            over_allocated: @over_allocated_card_ids.include?(dc.card_id),
+            swappable: @swappable_card_ids.include?(dc.card_id)
           )
         end
       end

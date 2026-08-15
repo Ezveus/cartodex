@@ -401,7 +401,12 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     deck = @user.decks.create!(name: "Physical", physical: true)
     @user.collections.find_or_create_by!(card: cards(:honedge)) { |c| c.quantity = 0 }.update!(quantity: 4)
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
-    force_over_allocation(@user) # pins the OverAllocations branch across both measurements
+    # Both of these pin a branch across the two measurements: OverAllocations returns early when
+    # nothing is over-allocated, and Cards::Printings.swappable_card_ids returns early when no card
+    # on the page carries a fingerprint — and the cards the decklist grows by do carry one. Without
+    # them, a measurement that crossed either branch would report a growth that is not an N+1.
+    force_over_allocation(@user)
+    deck.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
 
     get deck_path(deck) # warm the session: the first request of a test also loads the Devise user
 
