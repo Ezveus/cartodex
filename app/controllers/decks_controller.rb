@@ -189,8 +189,8 @@ class DecksController < ApplicationController
     end
 
     case filters[:proxies]
-    when "with"    then scope = scope.where(has_proxies: true)
-    when "without" then scope = scope.where(has_proxies: false)
+    when "with"    then scope = scope.with_proxies
+    when "without" then scope = scope.without_proxies
     end
 
     if filters[:primary] || filters[:secondary]
@@ -203,6 +203,6 @@ class DecksController < ApplicationController
   end
 
   def deck_params
-    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :has_proxies, :archetype_id)
+    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :archetype_id)
   end
 end

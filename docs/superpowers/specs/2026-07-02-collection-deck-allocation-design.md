@@ -209,12 +209,16 @@ should be revisited — the equivalent there is pessimistic row locking (`SELECT
 
 ## Known seams
 
-- **`Deck#has_proxies` vs. `owned_copies`.** `has_proxies` is a manually-set, UI-surfaced boolean
+- **`Deck#has_proxies` vs. `owned_copies`.** ~~`has_proxies` is a manually-set, UI-surfaced boolean
   flag on `Deck` (predates this design), while proxy state is now also derivable per-card from
   `deck_cards.owned_copies` (`proxies = quantity - owned_copies`). These are two independent
   sources of truth that can diverge (e.g. a deck can have `has_proxies: false` while still holding
-  cards with `owned_copies < quantity`). Deriving `has_proxies` from `owned_copies` (and updating
-  the UI accordingly) is deferred to a future iteration.
+  cards with `owned_copies < quantity`).~~ **Closed (issue #56).** The `decks.has_proxies` column
+  was dropped; `Deck#has_proxies?` is now derived (`physical? &&` any `deck_card` with
+  `owned_copies < quantity`), with `Deck.with_proxies` / `Deck.without_proxies` as its SQL
+  counterpart for the deck-list filter. The form checkbox is gone. No backfill was run, so a
+  physical deck that was never allocated reads as fully proxied — which is what the allocation
+  model actually says about it.
 
 ## Testing
 

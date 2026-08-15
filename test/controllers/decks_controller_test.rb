@@ -66,7 +66,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   test "update persists the classification fields" do
     patch deck_path(@deck), params: { deck: {
       name: "Classified", physical: "1", tcg_live: "1",
-      format: "expanded", has_proxies: "1"
+      format: "expanded"
     } }
 
     assert_response :success
@@ -74,7 +74,6 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert @deck.physical?
     assert @deck.tcg_live?
     assert @deck.expanded?
-    assert @deck.has_proxies?
   end
 
   test "index filters decks by format" do
@@ -89,7 +88,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index filters decks by support and proxies" do
-    @deck.update!(physical: true, has_proxies: true)
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
     live = @user.decks.create!(name: "Live deck", tcg_live: true)
 
     get decks_path(support: "physical", proxies: "with")
@@ -97,6 +97,23 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#deck-#{@deck.id}"
     assert_select "#deck-#{live.id}", false
+  end
+
+  # The "without" half is not the complement of a stored flag any more but of a subquery, so it
+  # gets its own coverage: a fully-backed physical deck and a TCG Live deck both belong here.
+  test "index filters decks without proxies" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
+    backed = @user.decks.create!(name: "Backed deck", physical: true)
+    backed.deck_cards.create!(card: cards(:honedge), quantity: 1, owned_copies: 1)
+    live = @user.decks.create!(name: "Live deck", tcg_live: true)
+
+    get decks_path(proxies: "without")
+
+    assert_response :success
+    assert_select "#deck-#{backed.id}"
+    assert_select "#deck-#{live.id}"
+    assert_select "#deck-#{@deck.id}", false
   end
 
   test "index filters decks by primary Pokémon" do

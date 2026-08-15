@@ -13,10 +13,11 @@ class Decks::Duplicator < ApplicationService
         physical: @deck.physical,
         tcg_live: @deck.tcg_live,
         format: @deck.format,
-        other_format_name: @deck.other_format_name,
-        has_proxies: @deck.has_proxies
+        other_format_name: @deck.other_format_name
       )
 
+      # owned_copies deliberately stays at 0: the real cards are still committed to the source
+      # deck, so the copy starts out fully proxied and the user allocates it themselves.
       @deck.deck_cards.find_each do |dc|
         new_deck.deck_cards.create!(card_id: dc.card_id, quantity: dc.quantity)
       end

@@ -1,7 +1,10 @@
 module Decks
-  # Shared classification inputs (support, format, proxies) reused by the
-  # new-deck form and the inline header edit form. The companion Stimulus
-  # controller `deck-classification` toggles the conditional fields.
+  # Shared classification inputs (support, format) reused by the new-deck form
+  # and the inline header edit form. The companion Stimulus controller
+  # `deck-classification` toggles the conditional fields.
+  #
+  # There is no proxy input: whether a deck holds proxies is derived from its
+  # cards' owned_copies, adjusted per card on the deck page.
   class ClassificationFields < ApplicationComponent
     def initialize(form:, deck:)
       @form = form
@@ -11,7 +14,6 @@ module Decks
     def view_template
       div(class: "deck-classification-fields", data: { controller: "deck-classification" }) do
         support_fieldset
-        proxies_field
         format_group
         other_format_field
         render Decks::ArchetypeField.new(form: @form, deck: @deck)
@@ -24,24 +26,12 @@ module Decks
       fieldset(class: "form-fieldset") do
         legend(class: "form-label") { "Support" }
         label(class: "form-check") do
-          @form.check_box :physical, data: {
-            deck_classification_target: "physical",
-            action: "deck-classification#toggleProxies"
-          }
+          @form.check_box :physical
           plain "Physical deck"
         end
         label(class: "form-check") do
           @form.check_box :tcg_live
           plain "TCG Live deck"
-        end
-      end
-    end
-
-    def proxies_field
-      div(class: "deck-proxies-field", data: { deck_classification_target: "proxiesField" }, style: hidden_unless(@deck.physical?)) do
-        label(class: "form-check") do
-          @form.check_box :has_proxies
-          plain "With proxies"
         end
       end
     end

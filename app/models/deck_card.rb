@@ -8,6 +8,11 @@ class DeckCard < ApplicationRecord
   validate :owned_copies_within_quantity
   validate :owned_copies_zero_unless_physical
 
+  # Rows holding at least one copy that no owned card backs. Says nothing about the deck being
+  # physical — on its own it matches every card of a TCG Live deck, which sits at owned_copies 0
+  # by construction. Deck.with_proxies is what adds that half of the condition.
+  scope :with_proxies, -> { where("owned_copies < quantity") }
+
   # Copies in this deck not backed by an owned card. Derived, never stored.
   def proxies
     quantity.to_i - owned_copies.to_i

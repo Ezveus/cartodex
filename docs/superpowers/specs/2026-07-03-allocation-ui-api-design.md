@@ -128,5 +128,7 @@ existing controllers' error handling.
 
 - The collection index issues one `Allocations::Availability` call per card (N+1) — acceptable this
   iteration, tracked in #59.
-- `has_proxies` and per-card `owned_copies`-derived proxy state remain two independent sources of
-  truth; this feature reads from `owned_copies` and leaves the flag alone (#56).
+- ~~`has_proxies` and per-card `owned_copies`-derived proxy state remain two independent sources of
+  truth; this feature reads from `owned_copies` and leaves the flag alone (#56).~~ **Closed:** the
+  `decks.has_proxies` column was dropped and `Deck#has_proxies?` is now derived from
+  `owned_copies`, so the badge and the deck-list filter read from the same source as this feature.
