@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashNotice, flashResponseError } from "helpers/flash"
 
 export default class extends Controller {
   static targets = ["qty", "counter", "addButton"]
@@ -19,7 +20,7 @@ export default class extends Controller {
       credentials: "same-origin",
       body: JSON.stringify({ collection: { card_id: this.cardIdValue, quantity: 1 } })
     })
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Couldn't add this card to your collection")
 
     const data = await response.json()
     const previous = this.quantityValue
@@ -39,7 +40,7 @@ export default class extends Controller {
       credentials: "same-origin",
       body: JSON.stringify({ collection: { quantity: newQuantity } })
     })
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Couldn't update this card's quantity")
 
     this.quantityValue = newQuantity
     this.#refreshUi()
@@ -53,7 +54,7 @@ export default class extends Controller {
       headers: this.#headers(),
       credentials: "same-origin"
     })
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Couldn't remove this card from your collection")
 
     const detail = { delta: -previous, removed: true, added: false }
     if (this.hasAddButtonTarget) {
@@ -86,12 +87,7 @@ export default class extends Controller {
 
   #maybeFlash(message) {
     if (!this.flashOnChangeValue) return
-    const container = document.getElementById("flash-messages")
-    if (!container) return
-    const div = document.createElement("div")
-    div.className = "flash flash-notice"
-    div.dataset.controller = "flash"
-    div.textContent = message
-    container.appendChild(div)
+
+    flashNotice(message)
   }
 }

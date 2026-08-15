@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashResponseError } from "helpers/flash"
 
 // Adjusts a deck card's real (owned-backed) copy count via the deck-card API.
 export default class extends Controller {
@@ -23,7 +24,7 @@ export default class extends Controller {
       credentials: "same-origin",
       body: JSON.stringify({ deck_card: { owned_copies: newOwned } })
     })
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Couldn't update this card's real copies")
 
     const data = await response.json()
     this.ownedValue = data.owned_copies

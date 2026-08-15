@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashResponseError } from "helpers/flash"
 
 export default class extends Controller {
   static targets = ["input", "results"]
@@ -37,11 +38,11 @@ export default class extends Controller {
       body: JSON.stringify({ deck_card: { card_id: cardId, quantity: 1 } })
     })
 
-    if (response.ok) {
-      this.inputTarget.value = ""
-      this.resultsTarget.innerHTML = ""
-      window.Turbo.visit(window.location.href, { action: "replace" })
-    }
+    if (!response.ok) return flashResponseError(response, "Couldn't add the card to this deck")
+
+    this.inputTarget.value = ""
+    this.resultsTarget.innerHTML = ""
+    window.Turbo.visit(window.location.href, { action: "replace" })
   }
 
   async #fetchResults(query) {
@@ -51,7 +52,7 @@ export default class extends Controller {
       credentials: "same-origin"
     })
 
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Card search failed")
 
     const cards = await response.json()
     this.#renderResults(cards)

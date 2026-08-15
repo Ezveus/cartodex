@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { flashResponseError } from "helpers/flash"
 
 export default class extends Controller {
   static values = { deckId: Number, cardId: Number, quantity: Number }
@@ -22,7 +23,7 @@ export default class extends Controller {
       body: JSON.stringify({ deck_card: { quantity: newQuantity } })
     })
 
-    if (!response.ok) return
+    if (!response.ok) return flashResponseError(response, "Couldn't update this card's quantity")
 
     const delta = newQuantity - this.quantityValue
     this.quantityValue = newQuantity
