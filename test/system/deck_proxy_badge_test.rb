@@ -1,4 +1,5 @@
 require "application_system_test_case"
+require_relative "../support/deck_card_rows"
 
 # Locks down the one thing about the derived "Proxies" badge that no request test can see: that it
 # keeps up with the steppers on the same page.
@@ -9,6 +10,8 @@ require "application_system_test_case"
 # deck-wide state and `deck-proxies` relays it. A request test sees each response alone and would
 # stay green with the relay ripped out.
 class DeckProxyBadgeTest < ApplicationSystemTestCase
+  include DeckCardRows
+
   setup do
     @user = users(:one)
     @user.collections.find_or_initialize_by(card: cards(:honedge)).update!(quantity: 3)
@@ -44,7 +47,7 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
     visit deck_path(@deck)
     assert_proxies_badge # the unbacked Doublade puts the deck in proxy territory
 
-    within_row_of("Doublade") { click_on "-" }
+    within_quantity_of("Doublade") { click_on "-" }
 
     assert_no_selector "li.deck-card-item", text: "Doublade"
     assert_no_proxies_badge
@@ -58,7 +61,7 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
     visit deck_path(@deck)
     assert_no_proxies_badge
 
-    within_row_of("Honedge") { click_on "+" }
+    within_quantity_of("Honedge") { click_on "+" }
 
     assert_selector ".deck-card-qty", text: "3"
     assert_proxies_badge
@@ -75,19 +78,5 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
 
   def assert_no_proxies_badge
     assert_no_selector "turbo-frame#deck-header .badge-warning", text: "Proxies"
-  end
-
-  # The real/proxy stepper, whose "−" is a minus sign — distinct from the quantity stepper's ASCII
-  # hyphen, and the reason these two scopes exist rather than one.
-  def within_allocation_of(card_name, &block)
-    within(row_of(card_name)) { within(".deck-card-alloc", &block) }
-  end
-
-  def within_row_of(card_name, &block)
-    within(row_of(card_name)) { within(".deck-card-qty-controls", &block) }
-  end
-
-  def row_of(card_name)
-    find("li.deck-card-item", text: card_name)
   end
 end
