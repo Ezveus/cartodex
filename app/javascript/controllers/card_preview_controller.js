@@ -26,8 +26,16 @@ export default class extends Controller {
   // so pressing "+" both changed the card and opened the viewer on top of it. Anything already
   // interactive keeps its own click: a rule rather than a list of the controls that exist today,
   // since the row is where new ones get added.
+  //
+  // data-action is in the list because most clickable things here are not native controls — this
+  // app writes them as a <div> or <span> with an action on it. Two bounds on that: the row itself
+  // carries one, so it has to be excluded or the viewer would never open again, and closest()
+  // climbs past the row, so an ancestor <a> or <label> would otherwise disable the viewer
+  // page-wide.
   #fromControl(event) {
-    return Boolean(event.target.closest("button, a, input, select, textarea, label"))
+    const control = event.target.closest("button, a, input, select, textarea, label, [data-action]")
+
+    return Boolean(control) && control !== event.currentTarget && event.currentTarget.contains(control)
   }
 
   open(event) {
