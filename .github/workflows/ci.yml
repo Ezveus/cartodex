@@ -90,8 +90,43 @@ jobs:
           path: ${{ github.workspace }}/tmp/screenshots
           if-no-files-found: ignore
 
+  # The system tests again, below the app's 768px breakpoint — where a whole modal, a hamburger menu
+  # and three blocks of layout live that the job above cannot see. Its own job rather than a second
+  # step of that one: the unit suite does not need running twice, and a failure here should be
+  # reported on its own rather than hidden behind a desktop failure that stopped the job first.
+  system_test_mobile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git pkg-config google-chrome-stable
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Run system tests below the breakpoint
+        env:
+          RAILS_ENV: test
+          SYSTEM_TEST_VIEWPORT: mobile
+        run: bin/rails db:test:prepare test:system
+
+      - name: Keep screenshots from failed system tests
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          # Distinct from the desktop job's: same path, and two artifacts of one name collide.
+          name: screenshots-mobile
+          path: ${{ github.workspace }}/tmp/screenshots
+          if-no-files-found: ignore
+
   deploy:
-    needs: [ scan_ruby, scan_js, lint, test ]
+    needs: [ scan_ruby, scan_js, lint, test, system_test_mobile ]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     concurrency:

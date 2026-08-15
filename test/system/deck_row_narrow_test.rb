@@ -1,9 +1,9 @@
 require "application_system_test_case"
 
 # A deck row at a phone's width — 344px, what the browser that reported the bug renders at. The
-# rest of the suite runs at 1400px and `resize_to` bottoms out at 500, so none of this was
-# reachable: the picker's menu hangs 42px off the left edge here, and 10px off it even at 500 —
-# barely visible there, which is how it shipped.
+# sweep's mobile half bottoms out at 500 (Chrome's floor), so none of this is reachable from it:
+# the picker's menu hangs 42px off the left edge here, and 10px off it even at 500 — barely visible
+# there, which is how it shipped. This is the case `drive_at` exists for, as opposed to the sweep.
 #
 # The row's own squeeze — set label and real/proxy label each wrapping mid-word, the last button cut
 # off — was reported from a phone and does *not* reproduce here: headless Chrome lays the row out
@@ -12,7 +12,8 @@ require "application_system_test_case"
 # gets a line of its own, deterministically, rather than when the browser happens to run out of
 # room) instead of "nothing is clipped" — which passes here either way and would prove nothing.
 #
-# Widening the whole suite to both viewports is #98; this class declares its own until then.
+# The sweep runs every other test on both sides of the breakpoint; this class pins its own width
+# because its assertions are about that width, and so it runs on the mobile half only.
 class DeckRowNarrowTest < ApplicationSystemTestCase
   drive_at 344, 780
 
