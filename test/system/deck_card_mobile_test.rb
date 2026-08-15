@@ -7,17 +7,11 @@ require_relative "../support/deck_card_rows"
 # above the breakpoint, and every other system test runs at 1400×1400, so the desktop side has been
 # swallowing the same bubbled click silently for as long as it has existed.
 #
-# Widening the suite to both viewports properly is #98; this file resizes on its own until then.
+# Widening the suite to both viewports properly is #98; this file declares its own until then.
 class DeckCardMobileTest < ApplicationSystemTestCase
   include DeckCardRows
 
-  # Asked for, not obtained: headless Chrome floors the window width, and the page actually renders
-  # at innerWidth 500. Comfortably below 768, so these tests test what they claim — but a test that
-  # asserted something specific to a phone's width would not be running at one. `screen_size:` and
-  # `--window-size` hit the same floor (both measured); `ApplicationSystemTestCase.drive_at` gets
-  # past it through CDP, and DeckRowNarrowTest uses it.
-  MOBILE = [ 390, 844 ].freeze
-  DESKTOP = [ 1400, 1400 ].freeze
+  drive_at 390, 844
 
   setup do
     @user = users(:one)
@@ -26,12 +20,7 @@ class DeckCardMobileTest < ApplicationSystemTestCase
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
 
     login_as @user, scope: :user
-    resize_to(*MOBILE)
   end
-
-  # Selenium keeps one browser for the whole run, so a width left behind here would quietly move
-  # every later test to the mobile side of the breakpoint.
-  teardown { resize_to(*DESKTOP) }
 
   test "the quantity stepper adjusts the card without opening the viewer" do
     visit deck_path(@deck)
@@ -77,11 +66,5 @@ class DeckCardMobileTest < ApplicationSystemTestCase
     within(row_of("Honedge")) { find(".deck-card-name").click }
 
     assert_selector "dialog.card-preview-modal"
-  end
-
-  private
-
-  def resize_to(width, height)
-    page.driver.browser.manage.window.resize_to(width, height)
   end
 end
