@@ -36,9 +36,20 @@ function appendFlash(message, modifier) {
   const container = document.getElementById(CONTAINER_ID)
   if (!container) return
 
+  // One flash per message at a time. Repeated failures are common — a debounced
+  // search retries on every pause in typing, and a dead session fails all of
+  // them — and each copy would stack for five seconds in a block-level
+  // container, pushing the page down under a wall of the same sentence.
+  const shown = Array.from(container.children).some((child) => child.textContent === message)
+  if (shown) return
+
   const flash = document.createElement("div")
   flash.className = `flash ${modifier}`
   flash.dataset.controller = "flash"
+  // Announced to screen readers, which otherwise never learn that the action
+  // failed: nothing else on the page changes when a write is refused.
+  flash.setAttribute("role", "status")
+  flash.setAttribute("aria-live", "polite")
   flash.textContent = message
   container.appendChild(flash)
 }

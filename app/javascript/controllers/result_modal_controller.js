@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = [
@@ -87,54 +88,40 @@ export default class extends Controller {
       if (!archetypeId) return
     }
 
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    const body = {
-      deck_result: {
-        result,
-        match_format: this.#fieldValue("match_format"),
-        score: this.#fieldValue("score") || null,
-        archetype_id: archetypeId || null,
-        tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
-        notes: this.notesInputTarget.value,
-        played_at: new Date().toISOString()
-      }
-    }
-
-    const response = await fetch(`/api/decks/${this.deckIdValue}/results`, {
+    const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify(body)
+      body: {
+        deck_result: {
+          result,
+          match_format: this.#fieldValue("match_format"),
+          score: this.#fieldValue("score") || null,
+          archetype_id: archetypeId || null,
+          tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
+          notes: this.notesInputTarget.value,
+          played_at: new Date().toISOString()
+        }
+      },
+      failure: "Couldn't log this result"
     })
+    if (!data) return
 
-    if (response.ok) {
-      const data = await response.json()
-      this.close()
-      this.#updateStats(data.deck_stats)
-    }
+    this.close()
+    this.#updateStats(data.deck_stats)
   }
 
   // --- Private ---
 
   async #createArchetype() {
-    const token = document.querySelector('meta[name="csrf-token"]').content
-    const body = {
-      primary_pokemon_id: this.primaryIdTarget.value,
-      secondary_pokemon_id: this.secondaryIdTarget.value || null
-    }
-
-    const response = await fetch("/api/archetypes", {
+    const archetype = await requestJson("/api/archetypes", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      credentials: "same-origin",
-      body: JSON.stringify(body)
+      body: {
+        primary_pokemon_id: this.primaryIdTarget.value,
+        secondary_pokemon_id: this.secondaryIdTarget.value || null
+      },
+      failure: "Couldn't create the archetype"
     })
 
-    if (response.ok || response.status === 201) {
-      const archetype = await response.json()
-      return archetype.id
-    }
-    return null
+    return archetype ? archetype.id : null
   }
 
   async #fetchArchetypes(query) {
