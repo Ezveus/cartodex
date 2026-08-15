@@ -3,11 +3,11 @@ require_relative "../support/deck_card_rows"
 
 # Below 768px the card preview stops being a hover pane and becomes a full-screen <dialog>, opened
 # by a click handler on the whole deck row — and the quantity and allocation steppers sit inside
-# that row. None of this is reachable from the rest of the suite: `card-preview#open` early-returns
-# above the breakpoint, and every other system test runs at 1400×1400, so the desktop side has been
-# swallowing the same bubbled click silently for as long as it has existed.
+# that row. `card-preview#open` early-returns above the breakpoint, so the desktop half of the sweep
+# swallows the same bubbled click silently and cannot see any of this.
 #
-# Widening the suite to both viewports properly is #98; this file declares its own until then.
+# The sweep runs every other test on both sides; this file pins 390px because it is about the phone
+# layout specifically, and so it runs on the mobile half only.
 class DeckCardMobileTest < ApplicationSystemTestCase
   include DeckCardRows
 
