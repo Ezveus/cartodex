@@ -12,10 +12,10 @@ class DeckCardMobileTest < ApplicationSystemTestCase
   include DeckCardRows
 
   # Asked for, not obtained: headless Chrome floors the window width, and the page actually renders
-  # at innerWidth 500. Comfortably below 768, so these tests test what they claim — but a later test
-  # that asserted something specific to a phone's width would not be running at one. #98 should set
-  # the viewport through `driven_by screen_size:`, which is applied when the browser is created and
-  # is not subject to this floor.
+  # at innerWidth 500. Comfortably below 768, so these tests test what they claim — but a test that
+  # asserted something specific to a phone's width would not be running at one. `screen_size:` and
+  # `--window-size` hit the same floor (both measured); `ApplicationSystemTestCase.drive_at` gets
+  # past it through CDP, and DeckRowNarrowTest uses it.
   MOBILE = [ 390, 844 ].freeze
   DESKTOP = [ 1400, 1400 ].freeze
 

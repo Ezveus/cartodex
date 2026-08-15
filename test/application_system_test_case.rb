@@ -24,9 +24,32 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # Capybara; on here so tests can address inputs the way a screen reader does.
   Capybara.enable_aria_label = true
 
-  if ENV["CAPYBARA_SERVER_PORT"]
-    served_by host: "rails-app", port: ENV["CAPYBARA_SERVER_PORT"]
+  served_by host: "rails-app", port: ENV["CAPYBARA_SERVER_PORT"] if ENV["CAPYBARA_SERVER_PORT"]
 
+  # The viewport a test class runs at, for the classes that test something specific to a narrow
+  # screen. Chrome will not give a window narrower than 500px — not through `screen_size:`, not
+  # through `--window-size`, not through `manage.window.resize_to` — so a test that asked for a
+  # phone's width silently got 500 and passed on layout the phone never renders. This overrides the
+  # viewport through CDP instead, which is not subject to that floor.
+  #
+  # `mobile: false`: only the width is being emulated here. Touch and a mobile user agent would
+  # change how clicks are delivered, and nothing in this app keys off either.
+  #
+  # Widening the whole suite to both viewports is #98.
+  def self.drive_at(width, height)
+    setup do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride",
+        width: width, height: height, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    # The browser is shared by the whole run, so an override left behind would move every later
+    # test to a viewport it never asked for.
+    teardown { page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride") }
+  end
+
+  if ENV["CAPYBARA_SERVER_PORT"]
     driven_by :selenium, using: :headless_chrome, screen_size: [ 1400, 1400 ], options: {
       browser: :remote,
       url: "http://#{ENV["SELENIUM_HOST"]}:4444"

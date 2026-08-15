@@ -2252,6 +2252,7 @@ textarea.form-input {
     display: none;
   }
 
+
   .deck-compare-content {
     flex-direction: column;
   }
@@ -2870,4 +2871,46 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .spotlight-empty {
   padding: 0.75rem;
   color: var(--ink-500);
+}
+
+/* — The deck row on a phone —
+   Deliberately last in the file: the row's and the picker's own rules live in the override layer
+   above, at the same specificity, so a media block placed higher up would lose the cascade to them
+   however narrow the screen got. */
+@media (max-width: 768px) {
+  /* A deck row holds a quantity stepper, a name, a set/number and — on a physical deck — an
+     allocation stepper, on one flex line at every width. On a phone that is more than fits: the set
+     label and the real/proxy label each wrap mid-word and the last button falls off the edge. The
+     allocation stepper takes a line of its own instead.
+
+     Deterministically, not "when the browser runs out of room": how much room that is depends on
+     how large the browser draws text, which is why this showed up on a phone and not in a headless
+     Chrome at the same width. */
+  .deck-card-item {
+    flex-wrap: wrap;
+    position: relative; /* the printing picker's menu anchors to the row here — see below */
+  }
+
+  .deck-card-name {
+    min-width: 0; /* a long card name has to be allowed to shrink, or it pushes the row wider */
+  }
+
+  .deck-card-alloc {
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  /* Anchored to the set/number label — a narrow element sitting mid-row — a menu wide enough to
+     read hangs off the left of a phone screen. Dropping that anchor lets it resolve against the
+     row instead, where it fits by construction. */
+  .deck-card-printing {
+    position: static;
+  }
+
+  .printing-picker-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
 }
