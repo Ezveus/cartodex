@@ -2781,10 +2781,11 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   min-height: 4rem;
 }
 
-/* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in. */
+/* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in —
+   enough for the narrowest screen, where each option's counts and warning wrap onto more lines. */
 .sg-printing-demo {
   position: relative;
-  min-height: 11rem;
+  min-height: 13rem;
   margin-top: 1rem;
 }
 
@@ -2870,4 +2871,49 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .spotlight-empty {
   padding: 0.75rem;
   color: var(--ink-500);
+}
+
+/* — The deck row on a phone —
+   Every selector here is scoped to the deck list, and that is load-bearing twice over. The rules
+   these override live in the layer above at single-class specificity, and a media query adds none:
+   an unscoped copy of this block would win only by sitting later in the file, which the next
+   trailing layer — this file has grown three of them — would silently undo. And the picker's
+   re-anchoring below is written in terms of the deck row, so it must not reach the styleguide,
+   which renders the same component standalone inside a box sized to hold its menu. */
+@media (max-width: 768px) {
+  /* A deck row holds a quantity stepper, a name, a set/number and — on a physical deck — an
+     allocation stepper, on one flex line at every width. On a phone that is more than fits: the set
+     label and the real/proxy label each wrap mid-word and the last button falls off the edge. The
+     allocation stepper takes a line of its own instead.
+
+     Deterministically, not "when the browser runs out of room": how much room that is depends on
+     how large the browser draws text, which is why this showed up on a phone and not in a headless
+     Chrome at the same width. */
+  .deck-card-list .deck-card-item {
+    flex-wrap: wrap;
+    position: relative; /* the printing picker's menu anchors to the row here — see below */
+  }
+
+  .deck-card-list .deck-card-name {
+    min-width: 0; /* a long card name has to be allowed to shrink, or it pushes the row wider */
+  }
+
+  .deck-card-list .deck-card-alloc {
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  /* Anchored to the set/number label — a narrow element sitting mid-row — a menu wide enough to
+     read hangs off the left of a phone screen. Dropping that anchor lets it resolve against the
+     row instead, where it fits by construction. */
+  .deck-card-list .deck-card-printing {
+    position: static;
+  }
+
+  .deck-card-list .printing-picker-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
 }
