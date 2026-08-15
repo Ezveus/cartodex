@@ -39,6 +39,7 @@ class ApplicationServiceTest < ActiveSupport::TestCase
     read_at = statements.index { |sql| sql.match?(/FROM "decks"/) }
 
     assert began_at, "expected a BEGIN, got: #{statements.inspect}"
+    assert read_at, "expected the block's read, got: #{statements.inspect}"
     assert_match(/\ABEGIN IMMEDIATE TRANSACTION/i, statements[began_at])
     assert_operator began_at, :<, read_at
   end
