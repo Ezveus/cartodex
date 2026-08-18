@@ -172,7 +172,7 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
-    mcp (1.1.0)
+    mcp (1.2.0)
       json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.6)
@@ -438,7 +438,7 @@ DEPENDENCIES
   importmap-rails
   jbuilder
   kamal
-  mcp (~> 1.1)
+  mcp (~> 1.2)
   minitest (~> 6.0)
   mission_control-jobs
   phlex-rails (~> 2.2)
