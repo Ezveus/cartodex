@@ -71,5 +71,30 @@ module Collections
         "sanity: the service must now see four owned printings"
       assert_equal one, many, "query count grew with the number of owned printings: #{one} -> #{many}"
     end
+    # One row stopped meaning one printing the moment a printing could be owned
+    # in several variants. Listing it twice, each entry claiming a fraction of
+    # the total, is the failure #89 asks this service to stop having.
+    test "reports one entry per printing, summing its variants" do
+      # setup leaves budew_pre at quantity 2 in the unknown variant.
+      @user.collections.create!(card: @pre, quantity: 3, language: "fr", finish: "reverse_holo")
+
+      result = Collections::OwnedEquivalents.call(user: @user, card: @asc)
+      entries = result.select { |e| e[:card_id] == @pre.id }
+
+      assert_equal 1, entries.size, "a printing owned in two variants must be listed once"
+      assert_equal 5, entries.first[:owned], "owned is the printing's total across its variants"
+      assert_equal 5, entries.first[:available]
+    end
+
+    test "a printing owned only in a non-default variant is still listed" do
+      @user.collections.find_by!(card: @pre).update!(quantity: 0)
+      @user.collections.create!(card: @pre, quantity: 2, language: "fr")
+
+      result = Collections::OwnedEquivalents.call(user: @user, card: @asc)
+
+      entry = result.find { |e| e[:card_id] == @pre.id }
+      assert_not_nil entry
+      assert_equal 2, entry[:owned]
+    end
   end
 end
