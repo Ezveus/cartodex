@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_18_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_18_090100) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -94,12 +94,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_090000) do
   create_table "collections", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
-    t.boolean "foil"
+    t.string "finish", default: "unknown", null: false
+    t.string "language", default: "unknown", null: false
     t.integer "quantity"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["card_id"], name: "index_collections_on_card_id"
-    t.index ["user_id", "card_id"], name: "index_collections_on_user_id_and_card_id", unique: true
+    t.index ["user_id", "card_id", "language", "finish"], name: "index_collections_on_user_card_and_variant", unique: true
     t.index ["user_id"], name: "index_collections_on_user_id"
   end
 
