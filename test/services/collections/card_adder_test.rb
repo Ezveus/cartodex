@@ -49,6 +49,21 @@ module Collections
       assert_equal 3, user.collections.where(card: card).sum(:quantity), "the owned total must be the sum of the variants"
     end
 
+    # Every other variant test here also varies the language, so `finish` never
+    # has to discriminate anything: dropping it from the upsert key left the file
+    # green.
+    test "finish alone distinguishes two rows of one printing" do
+      user = users(:two)
+      card = cards(:trainer_card)
+      Collections::CardAdder.call(user: user, card: card, quantity: 1)
+
+      collection = Collections::CardAdder.call(user: user, card: card, quantity: 2, finish: "reverse_holo")
+
+      assert_equal 2, collection.quantity
+      assert_equal 2, user.collections.where(card: card).count
+      assert_equal 1, user.collections.find_by!(card: card, finish: "unknown").quantity
+    end
+
     test "increments the matching variant rather than creating a second row for it" do
       user = users(:two)
       card = cards(:trainer_card)

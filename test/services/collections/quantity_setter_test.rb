@@ -43,15 +43,22 @@ module Collections
       assert_equal [ "unknown", "unknown" ], [ collection.language, collection.finish ]
     end
 
+    # Targets the "unknown" variant while a "fr" row exists, and asserts the whole
+    # post-state. Both halves are load-bearing: the widened unique index orders
+    # rows by (language, finish), and every real variant of an international set
+    # sorts before "unknown" — so a service that dropped the variant from its
+    # lookup would land on "fr", and a test targeting "fr" would call that
+    # correct.
     test "sets one variant without touching the others" do
       user = users(:one)
       card = cards(:honedge) # fixture: quantity 1, unknown/unknown
       Collections::CardAdder.call(user: user, card: card, quantity: 4, language: "fr")
 
-      collection = Collections::QuantitySetter.call(user: user, card: card, quantity: 2, language: "fr")
+      collection = Collections::QuantitySetter.call(user: user, card: card, quantity: 2)
 
       assert_equal 2, collection.quantity
-      assert_equal 1, user.collections.find_by!(card: card, language: "unknown", finish: "unknown").quantity
+      assert_equal [ [ "fr", "unknown", 4 ], [ "unknown", "unknown", 2 ] ],
+        user.collections.where(card: card).order(:language, :finish).pluck(:language, :finish, :quantity)
     end
   end
 end

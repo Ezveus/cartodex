@@ -88,10 +88,8 @@ class CollectionTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:user_id], "already has this printing in this variant"
   end
 
-  # The index, not the validation — and the reason both columns are null: false.
-  # SQLite treats two NULLs as distinct in a unique index, so with nullable
-  # columns (user, card, NULL, NULL) would insert twice and the uniqueness would
-  # protect nothing. The sentinel holds the invariant, not the index alone.
+  # The index, not the validation: a model-only test would pass against the old
+  # (user_id, card_id) index and say nothing about the one that widened.
   test "the database itself refuses a second row for one printing in one variant" do
     @user.collections.create!(card: @international, quantity: 1)
 
@@ -106,5 +104,18 @@ class CollectionTest < ActiveSupport::TestCase
     assert_nothing_raised do
       @user.collections.new(card: @international, quantity: 1, language: "fr").save!(validate: false)
     end
+  end
+
+  # This is what makes the sentinel an invariant rather than a convention, and
+  # the uniqueness test above cannot say it: that one inserts a row taking the
+  # column default, so it exercises the index and would stay green with both
+  # columns nullable. SQLite treats two NULLs as distinct in a unique index, so
+  # nullable columns would let (user, card, NULL, NULL) insert twice and the
+  # widened uniqueness would protect nothing.
+  test "the database refuses a NULL variant on either column" do
+    collection = @user.collections.create!(card: @international, quantity: 1)
+
+    assert_raises(ActiveRecord::NotNullViolation) { collection.update_column(:language, nil) }
+    assert_raises(ActiveRecord::NotNullViolation) { collection.update_column(:finish, nil) }
   end
 end
