@@ -300,8 +300,12 @@ itself.
 Two database-level tests assert choices rather than behaviour, and are the reason those choices are
 safe:
 
-- two rows `(user, card, "unknown", "unknown")` must be **rejected**. This is what justifies
-  `null: false`: with nullable columns it would pass green while leaving uniqueness inoperative.
+- two rows `(user, card, "unknown", "unknown")` must be **rejected**, which pins the widened index.
+  It does **not** pin `null: false`, contrary to what an earlier draft of this spec said: the row it
+  inserts takes the column default, so it stays green with both columns nullable. The sentinel needs
+  its own test — a NULL written past the validations, expecting `ActiveRecord::NotNullViolation` —
+  because SQLite treats two NULLs as distinct in a unique index and would let
+  `(user, card, NULL, NULL)` insert twice.
 - two `CardSet`s sharing a `code` in different regions must **coexist**, and be rejected within the
   same region.
 

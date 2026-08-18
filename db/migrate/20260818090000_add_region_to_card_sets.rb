@@ -6,7 +6,9 @@ class AddRegionToCardSets < ActiveRecord::Migration[8.1]
   # by code, and codes collide across them (XY7 is a Japanese set; the XY era has
   # international codes too). Kept global, the first Japanese import would die on
   # an incomprehensible uniqueness error. Strictly equivalent while only
-  # international sets exist.
+  # international sets exist — including on the way back, since the inverse
+  # re-creates the global unique index and can only fail once two regions share a
+  # code, which is #111's world and not this one.
   def change
     add_column :card_sets, :region, :string, null: false, default: "international"
 
