@@ -36,5 +36,22 @@ module Collections
       collection = Collections::QuantitySetter.call(user: user, card: card, quantity: 2)
       assert_equal 2, collection.quantity
     end
+
+    test "defaults to the unknown variant" do
+      collection = Collections::QuantitySetter.call(user: users(:two), card: cards(:trainer_card), quantity: 3)
+
+      assert_equal [ "unknown", "unknown" ], [ collection.language, collection.finish ]
+    end
+
+    test "sets one variant without touching the others" do
+      user = users(:one)
+      card = cards(:honedge) # fixture: quantity 1, unknown/unknown
+      Collections::CardAdder.call(user: user, card: card, quantity: 4, language: "fr")
+
+      collection = Collections::QuantitySetter.call(user: user, card: card, quantity: 2, language: "fr")
+
+      assert_equal 2, collection.quantity
+      assert_equal 1, user.collections.find_by!(card: card, language: "unknown", finish: "unknown").quantity
+    end
   end
 end
