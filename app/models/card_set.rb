@@ -8,13 +8,13 @@ class CardSet < ApplicationRecord
   # set releases, so hanging `ja` off a western collector number would assert a
   # printing that does not exist.
   REGION_LANGUAGES = {
-    "international" => %w[en fr de es it pt],
-    "japan"         => %w[ja],
-    "korea"         => %w[ko],
-    "taiwan"        => %w[zh-Hant],
-    "china"         => %w[zh-Hans],
-    "thailand"      => %w[th],
-    "indonesia"     => %w[id]
+    "international" => %w[en fr de es it pt].freeze,
+    "japan"         => %w[ja].freeze,
+    "korea"         => %w[ko].freeze,
+    "taiwan"        => %w[zh-Hant].freeze,
+    "china"         => %w[zh-Hans].freeze,
+    "thailand"      => %w[th].freeze,
+    "indonesia"     => %w[id].freeze
   }.freeze
 
   validates :code, presence: true, uniqueness: { scope: :region }
@@ -23,5 +23,8 @@ class CardSet < ApplicationRecord
 
   scope :by_release, -> { order(release_date: :desc) }
 
+  # Deliberately strict: `region` is constrained by a validation, so a value that
+  # is not a key can only come from raw SQL or update_column, and that is a bug
+  # worth surfacing rather than papering over with a default nobody asked for.
   def allowed_languages = REGION_LANGUAGES.fetch(region)
 end

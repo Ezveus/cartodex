@@ -20,6 +20,13 @@ class CardSetTest < ActiveSupport::TestCase
     assert_equal %w[zh-Hant], CardSet.new(region: "taiwan").allowed_languages
   end
 
+  # allowed_languages hands the caller the constant's own array, and stage 2 will
+  # feed it straight into a language <select>. A << or sort! there would corrupt
+  # the validation vocabulary for the rest of the process.
+  test "the language lists cannot be mutated through allowed_languages" do
+    assert_raises(FrozenError) { CardSet.new(region: "japan").allowed_languages << "xx" }
+  end
+
   # Limitless disambiguates its two trees by path, not by code (/cards/SVI against
   # /cards/jp/M6), and codes do collide: XY7 is a Japanese set and the XY era has
   # international codes too.

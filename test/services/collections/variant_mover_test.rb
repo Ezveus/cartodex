@@ -91,6 +91,63 @@ module Collections
       end
     end
 
+    # The service writes the target first, so "a rejected move leaves the source
+    # untouched" is carried by the write *order*, not by the transaction — which
+    # left the transaction, the service's whole stated reason to exist, with no
+    # test at all. This is the one that fails without it. The invalid source row
+    # is a state the app can genuinely reach: a row stays in the database when
+    # its set's region changes under it.
+    test "a failure on the source rolls the target write back" do
+      @source.update_column(:language, "ja") # honedge's set is international
+
+      assert_raises(ActiveRecord::RecordInvalid) do
+        Collections::VariantMover.call(
+          user: @user, card: @card, quantity: 1,
+          from_language: "ja", from_finish: "unknown",
+          to_language: "fr", to_finish: "unknown"
+        )
+      end
+
+      assert_nil @user.collections.find_by(card: @card, language: "fr"), "the target write must not survive"
+      assert_equal 4, @source.reload.quantity
+    end
+
+    # The guard on the arguments compares them as given; both lookups compare
+    # them type-cast. Anything casting to the source's own values — a Symbol is
+    # enough — used to resolve to the source row itself, which the service then
+    # incremented and decremented through two stale instances, losing copies with
+    # no error at all.
+    test "refuses a target that resolves to the source row, whatever its type" do
+      assert_raises(ArgumentError) do
+        Collections::VariantMover.call(
+          user: @user, card: @card, quantity: 1,
+          from_language: "unknown", from_finish: "unknown",
+          to_language: :unknown, to_finish: :unknown
+        )
+      end
+
+      assert_equal 1, @user.collections.where(card: @card).count
+      assert_equal 4, @user.collections.where(card: @card).sum(:quantity), "no copy may go missing"
+    end
+
+    # source.quantity still reads the pre-move value on the frozen record, so a
+    # caller reporting "what is left" cannot read it off the row.
+    test "reports what the source has left, including when it was removed" do
+      assert_equal 3, move(quantity: 1).remaining_quantity
+
+      @user.collections.find_by!(card: @card, language: "unknown").update!(quantity: 2)
+
+      assert_equal 0, move(quantity: 2, to_language: "de").remaining_quantity
+    end
+
+    test "treats a NULL owned quantity as zero rather than crashing" do
+      @source.update_column(:quantity, nil)
+
+      error = assert_raises(ArgumentError) { move(quantity: 1) }
+
+      assert_match(/only 0/, error.message)
+    end
+
     test "refuses a target language the card's set is not printed in" do
       assert_raises(ActiveRecord::RecordInvalid) { move(quantity: 1, to_language: "ja") }
       assert_equal 4, @source.reload.quantity, "the rejected move must not have decremented the source"
