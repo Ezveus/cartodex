@@ -2,22 +2,29 @@ one:
   user: one
   card: honedge
   quantity: 1
-  foil: false
 
 two:
   user: two
   card: doublade
   quantity: 1
-  foil: false
+
+# A printing owned in two variants at fixture-load time, so the whole suite runs
+# against the case the widened unique index exists for. Placed on (two, doublade)
+# because no test asserts that couple's owned total — user two's only allocation
+# assertions are on froakie_cri.
+two_doublade_french:
+  user: two
+  card: doublade
+  quantity: 1
+  language: fr
+  finish: reverse_holo
 
 budew_pre_one:
   user: one
   card: budew_pre
   quantity: 0
-  foil: false
 
 budew_asc_one:
   user: one
   card: budew_asc
   quantity: 0
-  foil: false
