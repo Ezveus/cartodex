@@ -623,6 +623,14 @@ textarea.form-input {
 
 /* Result modal */
 .result-modal {
+  /* The UA stylesheet only centers a modal dialog on the block axis (inset-block: 0 + margin:
+     auto); the inline axis is left at its DOM static position, so a wide ancestor (.deck-show-
+     container is centered with its own auto margins) can leave the dialog hugging that offset
+     instead of the viewport center. Setting inset-inline: 0 too makes the auto-margin centering
+     trick apply on both axes, independent of where the dialog sits in the DOM. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
   border: none;
   border-radius: 12px;
   padding: 2rem;
