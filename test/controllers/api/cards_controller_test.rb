@@ -55,6 +55,76 @@ class Api::CardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [], JSON.parse(response.body)
   end
 
+  # The 20 rows this endpoint returns used to be filtered down by its callers —
+  # the archetype pickers asked only for Pokémon, then collapsed printings by
+  # name — so the missing ORDER BY never showed. Now that a picker designates an
+  # exact printing, every printing competes for those slots and rowid order would
+  # decide which ones the user never sees.
+  test "index orders by set release date, newest first, sets it does not know last" do
+    # A third Budew, in POR (2026-01-16) — newer than budew_asc's ASC
+    # (2025-11-07). budew_pre's PRE is not an imported set at all.
+    Card.create!(name: "Budew", card_type: "Pokémon", card_set: card_sets(:por),
+      set_name: "POR", set_number: "5", rarity: "Common",
+      hp: 30, stage: "Basic", type_symbol: "Grass", retreat_cost: 1)
+
+    get api_cards_path, params: { q: "budew" }, as: :json
+
+    assert_response :success
+    printings = JSON.parse(response.body).map { |c| [ c["set_name"], c["set_number"] ] }
+    assert_equal [ [ "POR", "5" ], [ "ASC", "16" ], [ "PRE", "4" ] ], printings
+  end
+
+  test "index keeps a card whose set was never imported" do
+    get api_cards_path, params: { q: "boss" }, as: :json
+
+    assert_response :success
+    # Neither Boss's Orders printing has a card_set; the LEFT JOIN must not drop them.
+    printings = JSON.parse(response.body).map { |c| c["set_name"] }.sort
+    assert_equal [ "MEG", "PAL" ], printings
+  end
+
+  test "index reports each card's type, now that types share one list" do
+    get api_cards_path, params: { q: "budew asc" }, as: :json
+
+    assert_response :success
+    assert_equal "Pokémon", JSON.parse(response.body).first["card_type"]
+  end
+
+  # Every printing of every type now competes for the same 20 slots, so without a
+  # per-name cap one heavily reprinted card takes all of them and a differently
+  # named card the user is actually after is unreachable no matter what they type.
+  test "index caps how many printings of one name can take the 20 slots" do
+    25.times do |i|
+      Card.create!(name: "Ultra Ball", card_type: "Trainer", card_set: card_sets(:por),
+        set_name: "POR", set_number: (100 + i).to_s, rarity: "Common")
+    end
+    Card.create!(name: "Ultra Space", card_type: "Trainer", card_set: card_sets(:twm),
+      set_name: "TWM", set_number: "200", rarity: "Common")
+
+    get api_cards_path, params: { q: "ultra" }, as: :json
+
+    assert_response :success
+    names = JSON.parse(response.body).map { |c| c["name"] }
+    assert_equal Api::CardsController::PRINTINGS_PER_NAME, names.count("Ultra Ball")
+    assert_includes names, "Ultra Space",
+      "a card whose printings are all older must still be reachable"
+  end
+
+  # The cap keeps the newest printings, the ones a deck builder means; an older
+  # one is reached by naming its set, which the query parser already supports.
+  test "the printings a name keeps are its newest" do
+    %w[POR ASC TWM].each_with_index do |code, i|
+      Card.create!(name: "Ultra Ball", card_type: "Trainer", card_set: card_sets(code.downcase.to_sym),
+        set_name: code, set_number: (50 + i).to_s, rarity: "Common")
+    end
+    Card.create!(name: "Ultra Ball", card_type: "Trainer", set_name: "PRE", set_number: "60", rarity: "Common")
+
+    get api_cards_path, params: { q: "ultra ball" }, as: :json
+
+    assert_response :success
+    assert_equal [ "POR", "ASC", "TWM" ], JSON.parse(response.body).map { |c| c["set_name"] }
+  end
+
   test "index requires authentication" do
     sign_out @user
     get api_cards_path, params: { q: "budew" }, as: :json

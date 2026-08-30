@@ -3,7 +3,7 @@ module Admin
     before_action :set_archetype, only: [ :show, :edit, :update, :destroy ]
 
     def index
-      @archetypes = Archetype.includes(:primary_pokemon, :secondary_pokemon, :parent, :children).order(:name)
+      @archetypes = Archetype.includes(:primary_card, :secondary_card, :parent, :children).order(:name)
     end
 
     def show; end
@@ -47,7 +47,7 @@ module Admin
     end
 
     def archetype_params
-      params.require(:archetype).permit(:name, :primary_pokemon_id, :secondary_pokemon_id, :parent_id)
+      params.require(:archetype).permit(:name, :primary_card_id, :secondary_card_id, :parent_id)
     end
   end
 end

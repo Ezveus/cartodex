@@ -11,11 +11,11 @@ module Admin
 
           render Ui::FormGroup.new do
             f.label :name, "Name (leave blank for auto-generated)", class: "form-label"
-            f.text_field :name, class: "form-input", placeholder: "Auto-generated from Pokémon names"
+            f.text_field :name, class: "form-input", placeholder: "Auto-generated from card names"
           end
 
-          pokemon_autocomplete(f, :primary_pokemon_id, "Primary Pokémon", @archetype.primary_pokemon)
-          pokemon_autocomplete(f, :secondary_pokemon_id, "Secondary Pokémon (optional)", @archetype.secondary_pokemon)
+          card_autocomplete(f, :primary_card_id, "Primary card", @archetype.primary_card)
+          card_autocomplete(f, :secondary_card_id, "Secondary card (optional)", @archetype.secondary_card)
 
           render Ui::FormGroup.new do
             f.label :parent_id, "Parent Archetype (optional)", class: "form-label"
@@ -31,15 +31,15 @@ module Admin
       end
       private
 
-      def pokemon_autocomplete(f, field, label_text, current_pokemon)
-        render Ui::PokemonSelect.new(
+      def card_autocomplete(f, field, label_text, current_card)
+        render Ui::CardSelect.new(
           label: label_text,
-          current_value: current_pokemon&.name,
-          wrapper_data: { controller: "pokemon-select" },
-          input_data:   { pokemon_select_target: "input", action: "input->pokemon-select#search" },
-          results_data: { pokemon_select_target: "results" }
+          current_value: current_card&.printing_label,
+          wrapper_data: { controller: "card-select" },
+          input_data:   { card_select_target: "input", action: "input->card-select#search" },
+          results_data: { card_select_target: "results" }
         ) do
-          f.hidden_field field, data: { pokemon_select_target: "hiddenField" }
+          f.hidden_field field, data: { card_select_target: "hiddenField" }
         end
       end
     end

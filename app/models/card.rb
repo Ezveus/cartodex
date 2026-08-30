@@ -44,6 +44,14 @@ class Card < ApplicationRecord
     validates :retreat_cost, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   end
 
+  # Which printing this row is: "Boss's Orders (PAL 172)". Several cards share a
+  # name, and an archetype designates one of them, so every surface where that
+  # choice is made or inspected names the printing rather than the card. Both
+  # halves are validated present, so there is no partial form to fall back to.
+  def printing_label
+    "#{name} (#{set_name} #{set_number})"
+  end
+
   # CSS class slug for this card's energy type, e.g. "fire" or "lightning".
   def type_slug
     type_symbol&.downcase

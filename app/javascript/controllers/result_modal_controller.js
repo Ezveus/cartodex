@@ -6,7 +6,7 @@ export default class extends Controller {
     "dialog", "archetypeInput", "archetypeId", "archetypeResults",
     "notesInput", "createSection", "primaryInput", "primaryId",
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
-    "tournamentSelect"
+    "tournamentSelect", "submitButton"
   ]
   static values = { deckId: Number }
 
@@ -50,63 +50,77 @@ export default class extends Controller {
     this.#hideCreateSection()
   }
 
-  // --- Pokemon search for create ---
+  // --- Card search for create ---
 
   searchPrimary() {
-    this.#searchPokemon(this.primaryInputTarget, this.primaryResultsTarget, "primary")
+    this.#searchCard(this.primaryInputTarget, this.primaryResultsTarget, "primary")
   }
 
   searchSecondary() {
-    this.#searchPokemon(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
+    this.#searchCard(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
   }
 
   selectPrimary(event) {
     this.primaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.primaryInputTarget.value = event.currentTarget.dataset.cardName
+    // The printing, not the bare name: several cards share one, and the input
+    // must say which of them the hidden id now holds.
+    this.primaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.primaryResultsTarget.innerHTML = ""
   }
 
   selectSecondary(event) {
     this.secondaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.secondaryInputTarget.value = event.currentTarget.dataset.cardName
+    this.secondaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.secondaryResultsTarget.innerHTML = ""
   }
 
   // --- Submit ---
 
+  // Disabled for the length of the submission. Nothing identifies two logged
+  // results as a duplicate — two matches with the same score on the same day is
+  // an ordinary evening — so a second POST is a second row, and the modal only
+  // closes once the first answer is back. The button is what has to say no.
   async submit(event) {
     event.preventDefault()
 
     const result = this.#fieldValue("result")
-    if (!result) return
+    if (!result || this.submitButtonTarget.disabled) return
+    this.submitButtonTarget.disabled = true
 
-    let archetypeId = this.archetypeIdTarget.value
+    try {
+      let archetypeId = this.archetypeIdTarget.value
 
-    // If create section is visible and no archetype selected, create one first
-    if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
-      archetypeId = await this.#createArchetype()
-      if (!archetypeId) return
+      // If create section is visible and no archetype selected, create one first
+      if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
+        archetypeId = await this.#createArchetype()
+        if (!archetypeId) return
+      }
+
+      const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
+        method: "POST",
+        body: {
+          deck_result: {
+            result,
+            match_format: this.#fieldValue("match_format"),
+            score: this.#fieldValue("score") || null,
+            archetype_id: archetypeId || null,
+            tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
+            notes: this.notesInputTarget.value,
+            played_at: new Date().toISOString()
+          }
+        },
+        failure: "Couldn't log this result"
+      })
+      if (!data) return
+
+      this.close()
+      this.#updateStats(data.deck_stats)
+    } finally {
+      // finally, not after the await: every failure requestJson reports comes
+      // back as null and returns early, and a button left disabled on the way
+      // out cannot be used to retry.
+      this.submitButtonTarget.disabled = false
     }
-
-    const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
-      method: "POST",
-      body: {
-        deck_result: {
-          result,
-          match_format: this.#fieldValue("match_format"),
-          score: this.#fieldValue("score") || null,
-          archetype_id: archetypeId || null,
-          tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
-          notes: this.notesInputTarget.value,
-          played_at: new Date().toISOString()
-        }
-      },
-      failure: "Couldn't log this result"
-    })
-    if (!data) return
-
-    this.close()
-    this.#updateStats(data.deck_stats)
   }
 
   // --- Private ---
@@ -115,8 +129,8 @@ export default class extends Controller {
     const archetype = await requestJson("/api/archetypes", {
       method: "POST",
       body: {
-        primary_pokemon_id: this.primaryIdTarget.value,
-        secondary_pokemon_id: this.secondaryIdTarget.value || null
+        primary_card_id: this.primaryIdTarget.value,
+        secondary_card_id: this.secondaryIdTarget.value || null
       },
       failure: "Couldn't create the archetype"
     })
@@ -141,7 +155,7 @@ export default class extends Controller {
            data-archetype-id="${a.id}"
            data-archetype-name="${this.#escape(a.name)}">
         <strong>${this.#escape(a.name)}</strong>
-        <span class="archetype-search-pokemon">${this.#escape(a.primary_pokemon)}${a.secondary_pokemon ? ' / ' + this.#escape(a.secondary_pokemon) : ''}</span>
+        <span class="archetype-search-pokemon">${this.#formatCard(a.primary_card)}${a.secondary_card ? ' / ' + this.#formatCard(a.secondary_card) : ''}</span>
       </div>
     `).join("")
 
@@ -155,7 +169,7 @@ export default class extends Controller {
     this.archetypeResultsTarget.innerHTML = html
   }
 
-  #searchPokemon(inputTarget, resultsTarget, prefix) {
+  #searchCard(inputTarget, resultsTarget, prefix) {
     clearTimeout(this[`${prefix}Timeout`])
     const query = inputTarget.value.trim()
 
@@ -165,26 +179,21 @@ export default class extends Controller {
     }
 
     this[`${prefix}Timeout`] = setTimeout(async () => {
-      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}&type=Pokémon`, {
+      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}`, {
         credentials: "same-origin"
       })
       if (!response.ok) return
+      // Every type, and every printing: an archetype may designate a Trainer, and
+      // which printing it designates is the user's choice to see.
       const cards = await response.json()
 
-      const seen = new Set()
-      const unique = cards.filter(c => {
-        if (seen.has(c.name)) return false
-        seen.add(c.name)
-        return true
-      })
-
-      resultsTarget.innerHTML = unique.map(card => `
+      resultsTarget.innerHTML = cards.map(card => `
         <div class="archetype-search-item"
              data-action="click->result-modal#select${prefix === 'primary' ? 'Primary' : 'Secondary'}"
              data-card-id="${card.id}"
-             data-card-name="${this.#escape(card.name)}">
+             data-card-label="${this.#formatCard(card)}">
           <strong>${this.#escape(card.name)}</strong>
-          <span class="archetype-search-pokemon">${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
+          <span class="archetype-search-pokemon">${this.#escape(card.card_type)} · ${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
         </div>
       `).join("")
     }, 300)
@@ -237,5 +246,11 @@ export default class extends Controller {
     const div = document.createElement("div")
     div.textContent = text || ""
     return div.innerHTML
+  }
+
+  // An archetype now designates a printing, not just a name: show the set and
+  // number alongside it so the picker matches what was actually chosen.
+  #formatCard(card) {
+    return `${this.#escape(card.name)} (${this.#escape(card.set_name)} ${this.#escape(card.set_number)})`
   }
 }

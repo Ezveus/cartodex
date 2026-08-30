@@ -36,9 +36,9 @@ module Decks
       ) { "Proxies" }
     end
 
-    # The archetype badge is tinted by its lead Pokémon's energy type, with a
+    # The archetype badge is tinted by its lead card's energy type, with a
     # colour pip. Falls back to the neutral archetype style when the type is
-    # unknown.
+    # unknown — which is always true of a Trainer lead, since it has no energy type.
     def archetype_badge
       slug = @deck.archetype.primary_energy_type&.downcase
 

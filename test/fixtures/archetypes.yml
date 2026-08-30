@@ -1,18 +1,23 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 #
-# NOTE: archetypes hold a foreign key to cards (primary/secondary Pokémon), so
-# only reference cards that are not destroyed by other tests (e.g. avoid honedge).
+# NOTE: archetypes hold a foreign key to cards (their member cards), so only
+# reference cards that are not destroyed by other tests (e.g. avoid honedge).
 #
-# Fixtures skip callbacks, so name_normalized is spelled out by hand; ArchetypeTest asserts it
-# stays in step with name.
+# Fixtures skip callbacks, so name_normalized and the denormalised fingerprint pair are
+# spelled out by hand; ArchetypeTest asserts both stay in step. A missing secondary is the
+# empty string, never NULL — see the migration for why.
 
 ogerpon:
-  primary_pokemon: teal_mask_ogerpon_ex
+  primary_card: teal_mask_ogerpon_ex
+  primary_fingerprint: ogerpon_shared
+  secondary_fingerprint: ""
   name: "Teal Mask Ogerpon ex"
   name_normalized: "teal mask ogerpon ex"
 
 budew_ogerpon:
-  primary_pokemon: budew_pre
-  secondary_pokemon: teal_mask_ogerpon_ex
+  primary_card: budew_pre
+  secondary_card: teal_mask_ogerpon_ex
+  primary_fingerprint: budew_shared
+  secondary_fingerprint: ogerpon_shared
   name: "Budew / Teal Mask Ogerpon ex"
   name_normalized: "budew / teal mask ogerpon ex"

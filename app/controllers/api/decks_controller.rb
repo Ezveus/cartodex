@@ -43,11 +43,11 @@ module Api
 
       if detection.matched?
         render json: { matched: true, archetype: archetype_json(detection.archetype) }
-      elsif detection.primary
+      elsif detection.suggested_primary
         render json: {
           matched: false,
-          primary_pokemon: pokemon_json(detection.primary),
-          secondary_pokemon: pokemon_json(detection.secondary)
+          suggested_primary: card_json(detection.suggested_primary),
+          suggested_secondary: card_json(detection.suggested_secondary)
         }
       else
         render json: { matched: false }
@@ -69,15 +69,15 @@ module Api
       {
         id: archetype.id,
         name: archetype.name,
-        primary_pokemon: archetype.primary_pokemon.name,
-        secondary_pokemon: archetype.secondary_pokemon&.name
+        primary_card: card_json(archetype.primary_card),
+        secondary_card: card_json(archetype.secondary_card)
       }
     end
 
-    def pokemon_json(card)
+    def card_json(card)
       return nil if card.nil?
 
-      { id: card.id, name: card.name }
+      { id: card.id, name: card.name, set_name: card.set_name, set_number: card.set_number }
     end
 
     def deck_params

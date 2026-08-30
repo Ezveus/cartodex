@@ -3,7 +3,7 @@ class DeckResultsController < ApplicationController
   before_action :set_result, only: [ :edit, :update, :destroy ]
 
   def index
-    @results = @deck.deck_results.includes(archetype: :primary_pokemon).order(played_at: :desc)
+    @results = @deck.deck_results.includes(archetype: :primary_card).order(played_at: :desc)
   end
 
   def edit; end

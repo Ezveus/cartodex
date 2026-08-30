@@ -7,7 +7,7 @@ import { requestJson } from "helpers/api"
 // the deck form.
 export default class extends Controller {
   static targets = [
-    "input", "archetypeId", "results", "createSection",
+    "input", "archetypeId", "results", "createSection", "createButton",
     "primaryInput", "primaryId", "primaryResults",
     "secondaryInput", "secondaryId", "secondaryResults"
   ]
@@ -69,49 +69,64 @@ export default class extends Controller {
       this.inputTarget.value = data.archetype.name
       this.resultsTarget.innerHTML = ""
       this.#hideCreateSection()
-    } else if (data.primary_pokemon) {
-      this.#prefillCreate(data.primary_pokemon, data.secondary_pokemon)
+    } else if (data.suggested_primary) {
+      this.#prefillCreate(data.suggested_primary, data.suggested_secondary)
     }
   }
 
-  // --- Pokemon search for create ---
+  // --- Card search for create ---
 
   searchPrimary() {
-    this.#searchPokemon(this.primaryInputTarget, this.primaryResultsTarget, "primary")
+    this.#searchCard(this.primaryInputTarget, this.primaryResultsTarget, "primary")
   }
 
   searchSecondary() {
-    this.#searchPokemon(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
+    this.#searchCard(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
   }
 
   selectPrimary(event) {
     this.primaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.primaryInputTarget.value = event.currentTarget.dataset.cardName
+    // The printing, not the bare name: several cards share one, and the input
+    // must say which of them the hidden id now holds.
+    this.primaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.primaryResultsTarget.innerHTML = ""
   }
 
   selectSecondary(event) {
     this.secondaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.secondaryInputTarget.value = event.currentTarget.dataset.cardName
+    this.secondaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.secondaryResultsTarget.innerHTML = ""
   }
 
+  // Disabled for the length of the request, both to say that the click landed —
+  // nothing else here changes until the answer comes back — and to spend one
+  // POST instead of one per impatient click. The endpoint is idempotent on the
+  // fingerprint pair, so a second create would answer with the same archetype;
+  // this is about the silence, not about the row.
   async createArchetype() {
-    if (!this.primaryIdTarget.value) return
+    if (!this.primaryIdTarget.value || this.createButtonTarget.disabled) return
+    this.createButtonTarget.disabled = true
 
-    const archetype = await requestJson("/api/archetypes", {
-      method: "POST",
-      body: {
-        primary_pokemon_id: this.primaryIdTarget.value,
-        secondary_pokemon_id: this.secondaryIdTarget.value || null
-      },
-      failure: "Couldn't create the archetype"
-    })
-    if (!archetype) return
+    try {
+      const archetype = await requestJson("/api/archetypes", {
+        method: "POST",
+        body: {
+          primary_card_id: this.primaryIdTarget.value,
+          secondary_card_id: this.secondaryIdTarget.value || null
+        },
+        failure: "Couldn't create the archetype"
+      })
+      if (!archetype) return
 
-    this.archetypeIdTarget.value = archetype.id
-    this.inputTarget.value = archetype.name
-    this.#hideCreateSection()
+      this.archetypeIdTarget.value = archetype.id
+      this.inputTarget.value = archetype.name
+      this.#hideCreateSection()
+    } finally {
+      // finally, not after the await: requestJson answers null on every failure
+      // it reports, and a button left disabled on the way out of one of those
+      // returns is dead for the life of the page.
+      this.createButtonTarget.disabled = false
+    }
   }
 
   // --- Private ---
@@ -119,10 +134,10 @@ export default class extends Controller {
   #prefillCreate(primary, secondary) {
     this.showCreateForm()
     this.primaryIdTarget.value = primary.id
-    this.primaryInputTarget.value = primary.name
+    this.primaryInputTarget.value = this.#cardLabel(primary)
     if (secondary) {
       this.secondaryIdTarget.value = secondary.id
-      this.secondaryInputTarget.value = secondary.name
+      this.secondaryInputTarget.value = this.#cardLabel(secondary)
     }
   }
 
@@ -142,7 +157,7 @@ export default class extends Controller {
            data-archetype-id="${a.id}"
            data-archetype-name="${this.#escape(a.name)}">
         <strong>${this.#escape(a.name)}</strong>
-        <span class="archetype-search-pokemon">${this.#escape(a.primary_pokemon)}${a.secondary_pokemon ? ' / ' + this.#escape(a.secondary_pokemon) : ''}</span>
+        <span class="archetype-search-pokemon">${this.#formatCard(a.primary_card)}${a.secondary_card ? ' / ' + this.#formatCard(a.secondary_card) : ''}</span>
       </div>
     `).join("")
 
@@ -156,7 +171,7 @@ export default class extends Controller {
     this.resultsTarget.innerHTML = html
   }
 
-  #searchPokemon(inputTarget, resultsTarget, prefix) {
+  #searchCard(inputTarget, resultsTarget, prefix) {
     clearTimeout(this[`${prefix}Timeout`])
     const query = inputTarget.value.trim()
 
@@ -166,27 +181,22 @@ export default class extends Controller {
     }
 
     this[`${prefix}Timeout`] = setTimeout(async () => {
-      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}&type=Pokémon`, {
+      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}`, {
         credentials: "same-origin"
       })
       if (!response.ok) return
+      // Every type, and every printing: an archetype may designate a Trainer, and
+      // which printing it designates is the user's choice to see.
       const cards = await response.json()
 
-      const seen = new Set()
-      const unique = cards.filter(c => {
-        if (seen.has(c.name)) return false
-        seen.add(c.name)
-        return true
-      })
-
       const action = prefix === "primary" ? "selectPrimary" : "selectSecondary"
-      resultsTarget.innerHTML = unique.map(card => `
+      resultsTarget.innerHTML = cards.map(card => `
         <div class="archetype-search-item"
              data-action="click->archetype-picker#${action}"
              data-card-id="${card.id}"
-             data-card-name="${this.#escape(card.name)}">
+             data-card-label="${this.#formatCard(card)}">
           <strong>${this.#escape(card.name)}</strong>
-          <span class="archetype-search-pokemon">${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
+          <span class="archetype-search-pokemon">${this.#escape(card.card_type)} · ${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
         </div>
       `).join("")
     }, 300)
@@ -212,5 +222,19 @@ export default class extends Controller {
     const div = document.createElement("div")
     div.textContent = text || ""
     return div.innerHTML
+  }
+
+  // An archetype now designates a printing, not just a name: show the set and
+  // number alongside it so the picker matches what was actually chosen. Mirrors
+  // Card#printing_label on the Ruby side.
+  #cardLabel(card) {
+    return `${card.name} (${card.set_name} ${card.set_number})`
+  }
+
+  // The same label for a markup context. Escaping belongs to that path only:
+  // assigned straight to an input's value it would show the entities literally,
+  // which is why #prefillCreate uses #cardLabel and the dropdown uses this.
+  #formatCard(card) {
+    return this.#escape(this.#cardLabel(card))
   }
 }
