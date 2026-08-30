@@ -14,8 +14,8 @@ module Admin
             f.text_field :name, class: "form-input", placeholder: "Auto-generated from Pokémon names"
           end
 
-          pokemon_autocomplete(f, :primary_pokemon_id, "Primary Pokémon", @archetype.primary_pokemon)
-          pokemon_autocomplete(f, :secondary_pokemon_id, "Secondary Pokémon (optional)", @archetype.secondary_pokemon)
+          pokemon_autocomplete(f, :primary_card_id, "Primary Pokémon", @archetype.primary_card)
+          pokemon_autocomplete(f, :secondary_card_id, "Secondary Pokémon (optional)", @archetype.secondary_card)
 
           render Ui::FormGroup.new do
             f.label :parent_id, "Parent Archetype (optional)", class: "form-label"

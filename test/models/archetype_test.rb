@@ -27,7 +27,7 @@ class ArchetypeTest < ActiveSupport::TestCase
   end
 
   # Drift protection for the third column of the scope: name_normalized is read off
-  # secondary_pokemons_archetypes (the join alias), not primary_pokemons_archetypes or
+  # secondary_cards_archetypes (the join alias), not primary_cards_archetypes or
   # archetypes itself. Both the archetype's own name and the primary Pokémon's name are renamed
   # away from the query so a match can only come through the secondary Pokémon's column. The
   # secondary is swapped to a card no other archetype fixture references (teal_mask_ogerpon_ex is
@@ -35,12 +35,12 @@ class ArchetypeTest < ActiveSupport::TestCase
   test "search matches on the secondary Pokémon's name" do
     archetype = archetypes(:budew_ogerpon)
     secondary = cards(:froakie_cri)
-    archetype.update!(secondary_pokemon: secondary, name: "Mystery Box", custom_name: "1")
+    archetype.update!(secondary_card: secondary, name: "Mystery Box", custom_name: "1")
     secondary.update!(name: "Flittle")
 
     assert_includes Archetype.search("Flittle"), archetype
 
-    archetype.update!(secondary_pokemon: nil, custom_name: "1")
+    archetype.update!(secondary_card: nil, custom_name: "1")
     assert_empty Archetype.search("Flittle"),
       "must not match without the secondary Pokémon: the archetype's own name and the primary's are both unrelated to the query"
   end
@@ -58,5 +58,14 @@ class ArchetypeTest < ActiveSupport::TestCase
       assert_equal archetype.name.downcase, archetype.name_normalized,
         "#{archetype.name.inspect} fixture is out of step"
     end
+  end
+
+  # The `search` scope spells its second join alias by hand, and Rails derives
+  # that alias from the association name — so renaming the association breaks
+  # the scope at query time, not at load time. These two run the SQL.
+  test "search runs against the renamed associations" do
+    assert_respond_to archetypes(:ogerpon), :primary_card
+    assert_respond_to archetypes(:ogerpon), :secondary_card
+    assert_nothing_raised { Archetype.search("Ogerpon").to_a }
   end
 end

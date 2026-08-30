@@ -11,8 +11,8 @@ module Ui
   #
   #   render Ui::PokemonSelect.new(
   #     label: "Primary Pokémon",
-  #     hidden_field_name: "archetype[primary_pokemon_id]",
-  #     current_value: @archetype.primary_pokemon&.name
+  #     hidden_field_name: "archetype[primary_card_id]",
+  #     current_value: @archetype.primary_card&.name
   #   )
   #
   # ## Embedded mode (parent Stimulus controller provides targets)
@@ -38,7 +38,7 @@ module Ui
   #     results_data: { pokemon_select_target: "results" },
   #     wrapper_data: { controller: "pokemon-select" }
   #   ) do
-  #     f.hidden_field :primary_pokemon_id, data: { pokemon_select_target: "hiddenField" }
+  #     f.hidden_field :primary_card_id, data: { pokemon_select_target: "hiddenField" }
   #   end
   class PokemonSelect < ApplicationComponent
     STANDALONE_INPUT_DATA = { pokemon_select_target: "input", action: "input->pokemon-select#search" }.freeze

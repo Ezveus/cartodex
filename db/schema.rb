@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_30_083445) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_30_123053) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -26,11 +26,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_083445) do
     t.string "name", null: false
     t.string "name_normalized"
     t.integer "parent_id"
-    t.integer "primary_pokemon_id", null: false
-    t.integer "secondary_pokemon_id"
+    t.integer "primary_card_id", null: false
+    t.integer "secondary_card_id"
     t.datetime "updated_at", null: false
     t.index ["parent_id"], name: "index_archetypes_on_parent_id"
-    t.index ["primary_pokemon_id", "secondary_pokemon_id"], name: "idx_on_primary_pokemon_id_secondary_pokemon_id_2a04cf9ccd", unique: true
+    t.index ["primary_card_id", "secondary_card_id"], name: "index_archetypes_on_card_pair", unique: true
   end
 
   create_table "attacks", force: :cascade do |t|
@@ -266,8 +266,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_083445) do
 
   add_foreign_key "abilities", "cards"
   add_foreign_key "archetypes", "archetypes", column: "parent_id"
-  add_foreign_key "archetypes", "cards", column: "primary_pokemon_id"
-  add_foreign_key "archetypes", "cards", column: "secondary_pokemon_id"
+  add_foreign_key "archetypes", "cards", column: "primary_card_id"
+  add_foreign_key "archetypes", "cards", column: "secondary_card_id"
   add_foreign_key "attacks", "cards"
   add_foreign_key "cards", "card_sets"
   add_foreign_key "cards", "pokemon_subtypes"

@@ -19,8 +19,8 @@ module Admin
 
           table(class: "detail-table") do
             tbody do
-              info_row("Primary Pokémon", @archetype.primary_pokemon.name)
-              info_row("Secondary Pokémon", @archetype.secondary_pokemon&.name || "\u2014")
+              info_row("Primary Pokémon", @archetype.primary_card.name)
+              info_row("Secondary Pokémon", @archetype.secondary_card&.name || "\u2014")
               info_row("Parent", @archetype.parent&.name || "\u2014")
               info_row("Results", @archetype.deck_results.count.to_s)
             end
@@ -29,11 +29,11 @@ module Admin
           if @archetype.children.any?
             h2 { "Sub-archetypes" }
             render Ui::DataTable.new(columns: %w[Name Primary Secondary]) do |t|
-              @archetype.children.includes(:primary_pokemon, :secondary_pokemon).each do |child|
+              @archetype.children.includes(:primary_card, :secondary_card).each do |child|
                 t.row do
                   t.cell { link_to child.name, admin_archetype_path(child) }
-                  t.cell { child.primary_pokemon.name }
-                  t.cell { child.secondary_pokemon&.name || "\u2014" }
+                  t.cell { child.primary_card.name }
+                  t.cell { child.secondary_card&.name || "\u2014" }
                 end
               end
             end

@@ -5,21 +5,21 @@ module Api
     def index
       q = params[:q].to_s.strip
       archetypes = if q.present?
-        Archetype.search(q).includes(:primary_pokemon, :secondary_pokemon).limit(10)
+        Archetype.search(q).includes(:primary_card, :secondary_card).limit(10)
       else
-        Archetype.includes(:primary_pokemon, :secondary_pokemon).order(:name).limit(10)
+        Archetype.includes(:primary_card, :secondary_card).order(:name).limit(10)
       end
 
       render json: archetypes.map { |a| archetype_json(a) }
     end
 
     def create
-      primary = Card.where(card_type: "Pokémon").find(params[:primary_pokemon_id])
-      secondary = params[:secondary_pokemon_id].present? ? Card.where(card_type: "Pokémon").find(params[:secondary_pokemon_id]) : nil
+      primary = Card.where(card_type: "Pokémon").find(params[:primary_card_id])
+      secondary = params[:secondary_card_id].present? ? Card.where(card_type: "Pokémon").find(params[:secondary_card_id]) : nil
 
       archetype = Archetype.find_or_initialize_by(
-        primary_pokemon: primary,
-        secondary_pokemon: secondary
+        primary_card: primary,
+        secondary_card: secondary
       )
 
       if archetype.new_record?
@@ -40,8 +40,8 @@ module Api
       {
         id: a.id,
         name: a.name,
-        primary_pokemon: a.primary_pokemon.name,
-        secondary_pokemon: a.secondary_pokemon&.name,
+        primary_card: a.primary_card.name,
+        secondary_card: a.secondary_card&.name,
         parent_id: a.parent_id
       }
     end

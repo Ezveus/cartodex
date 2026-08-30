@@ -4,7 +4,7 @@ class DecksController < ApplicationController
   def index
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
     # the ones it just showed — it orders by name too.
-    @decks = filter_decks(current_user.decks.order(:name).includes(:deck_cards, :deck_results, archetype: [ :primary_pokemon, :secondary_pokemon ]))
+    @decks = filter_decks(current_user.decks.order(:name).includes(:deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ]))
     @filters = filter_params
 
     # Needed even for a frame request: the deck cards inside the frame flag their own
@@ -44,7 +44,7 @@ class DecksController < ApplicationController
 
   def stats
     @deck = current_user.decks.includes(:archetype).find(params[:id])
-    @results = @deck.deck_results.includes(archetype: [ :parent, :primary_pokemon, :secondary_pokemon ])
+    @results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ])
   end
 
   # Aggregated matchup breakdown grouped by the player's own deck archetype:
@@ -53,7 +53,7 @@ class DecksController < ApplicationController
   def matchups
     decks = current_user.decks
       .where.not(archetype_id: nil)
-      .includes(:archetype, deck_results: { archetype: [ :parent, :primary_pokemon, :secondary_pokemon ] })
+      .includes(:archetype, deck_results: { archetype: [ :parent, :primary_card, :secondary_card ] })
 
     @matchup_groups = decks.group_by(&:archetype).map { |archetype, group|
       results = group.flat_map(&:deck_results)
@@ -164,12 +164,12 @@ class DecksController < ApplicationController
 
   # Primary Pokémon of the archetypes used by the current user's decks, for the filter bar.
   def primary_filter_options
-    pokemon_filter_options(:primary_pokemon_id)
+    pokemon_filter_options(:primary_card_id)
   end
 
   # Secondary Pokémon of the archetypes used by the current user's decks, for the filter bar.
   def secondary_filter_options
-    pokemon_filter_options(:secondary_pokemon_id)
+    pokemon_filter_options(:secondary_card_id)
   end
 
   def pokemon_filter_options(column)
@@ -199,8 +199,8 @@ class DecksController < ApplicationController
 
     if filters[:primary] || filters[:secondary]
       scope = scope.joins(:archetype)
-      scope = scope.where(archetypes: { primary_pokemon_id: filters[:primary] }) if filters[:primary]
-      scope = scope.where(archetypes: { secondary_pokemon_id: filters[:secondary] }) if filters[:secondary]
+      scope = scope.where(archetypes: { primary_card_id: filters[:primary] }) if filters[:primary]
+      scope = scope.where(archetypes: { secondary_card_id: filters[:secondary] }) if filters[:secondary]
     end
 
     scope

@@ -51,10 +51,10 @@ class Decks::ArchetypeDetector < ApplicationService
     names = candidates.map(&:name)
 
     Archetype
-      .joins(:primary_pokemon)
-      .left_joins(:secondary_pokemon)
+      .joins(:primary_card)
+      .left_joins(:secondary_card)
       .where(cards: { name: names })
-      .includes(:primary_pokemon, :secondary_pokemon)
+      .includes(:primary_card, :secondary_card)
       .map { |archetype| [ archetype, score_archetype(archetype, names) ] }
       .select { |(_, score)| score.positive? }
       .max_by { |(_, score)| score }
@@ -64,7 +64,7 @@ class Decks::ArchetypeDetector < ApplicationService
   # A two-Pokémon archetype scores higher than a single-Pokémon one, but only
   # when both of its Pokémon are present in the deck; otherwise it is disqualified.
   def score_archetype(archetype, names)
-    secondary_name = archetype.secondary_pokemon&.name
+    secondary_name = archetype.secondary_card&.name
     return 0 if secondary_name && names.exclude?(secondary_name)
 
     secondary_name ? 2 : 1

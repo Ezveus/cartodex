@@ -102,8 +102,8 @@ export default class extends Controller {
     const archetype = await requestJson("/api/archetypes", {
       method: "POST",
       body: {
-        primary_pokemon_id: this.primaryIdTarget.value,
-        secondary_pokemon_id: this.secondaryIdTarget.value || null
+        primary_card_id: this.primaryIdTarget.value,
+        secondary_card_id: this.secondaryIdTarget.value || null
       },
       failure: "Couldn't create the archetype"
     })
@@ -142,7 +142,7 @@ export default class extends Controller {
            data-archetype-id="${a.id}"
            data-archetype-name="${this.#escape(a.name)}">
         <strong>${this.#escape(a.name)}</strong>
-        <span class="archetype-search-pokemon">${this.#escape(a.primary_pokemon)}${a.secondary_pokemon ? ' / ' + this.#escape(a.secondary_pokemon) : ''}</span>
+        <span class="archetype-search-pokemon">${this.#escape(a.primary_card)}${a.secondary_card ? ' / ' + this.#escape(a.secondary_card) : ''}</span>
       </div>
     `).join("")
 

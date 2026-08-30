@@ -69,8 +69,8 @@ module Api
       {
         id: archetype.id,
         name: archetype.name,
-        primary_pokemon: archetype.primary_pokemon.name,
-        secondary_pokemon: archetype.secondary_pokemon&.name
+        primary_card: archetype.primary_card.name,
+        secondary_card: archetype.secondary_card&.name
       }
     end
 
