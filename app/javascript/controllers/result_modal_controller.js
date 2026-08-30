@@ -141,7 +141,7 @@ export default class extends Controller {
            data-archetype-id="${a.id}"
            data-archetype-name="${this.#escape(a.name)}">
         <strong>${this.#escape(a.name)}</strong>
-        <span class="archetype-search-pokemon">${this.#escape(a.primary_card)}${a.secondary_card ? ' / ' + this.#escape(a.secondary_card) : ''}</span>
+        <span class="archetype-search-pokemon">${this.#formatCard(a.primary_card)}${a.secondary_card ? ' / ' + this.#formatCard(a.secondary_card) : ''}</span>
       </div>
     `).join("")
 
@@ -237,5 +237,11 @@ export default class extends Controller {
     const div = document.createElement("div")
     div.textContent = text || ""
     return div.innerHTML
+  }
+
+  // An archetype now designates a printing, not just a name: show the set and
+  // number alongside it so the picker matches what was actually chosen.
+  #formatCard(card) {
+    return `${this.#escape(card.name)} (${this.#escape(card.set_name)} ${this.#escape(card.set_number)})`
   }
 }

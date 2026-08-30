@@ -14,36 +14,54 @@ module Api
     end
 
     def create
-      primary = Card.where(card_type: "Pokémon").find(params[:primary_card_id])
-      secondary = params[:secondary_card_id].present? ? Card.where(card_type: "Pokémon").find(params[:secondary_card_id]) : nil
+      primary = Card.find(params[:primary_card_id])
+      secondary = params[:secondary_card_id].present? ? Card.find(params[:secondary_card_id]) : nil
 
-      archetype = Archetype.find_or_initialize_by(
-        primary_card: primary,
-        secondary_card: secondary
-      )
-
-      if archetype.new_record?
-        archetype.parent_id = params[:parent_id]
-        archetype.save!
-      end
+      archetype = existing(primary, secondary) || build(primary, secondary)
+      archetype.save! if archetype.new_record?
 
       render json: archetype_json(archetype), status: :created
     rescue ActiveRecord::RecordNotFound
-      render json: { error: "Pokemon not found" }, status: :not_found
+      render json: { error: "Card not found" }, status: :not_found
     rescue ActiveRecord::RecordInvalid => e
       render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
     end
 
     private
 
+    # Identity is the fingerprint pair, not the pair of card ids: designating a
+    # different printing of the same card is the same archetype. Looking up by id
+    # would miss it, go to save!, and be refused by the unique index — a 500 for
+    # what the user experiences as a no-op.
+    def existing(primary, secondary)
+      return nil if primary.fingerprint.blank?
+
+      Archetype.find_by(
+        primary_fingerprint: primary.fingerprint,
+        secondary_fingerprint: secondary&.fingerprint.to_s
+      )
+    end
+
+    def build(primary, secondary)
+      Archetype.new(primary_card: primary, secondary_card: secondary, parent_id: params[:parent_id])
+    end
+
     def archetype_json(a)
       {
         id: a.id,
         name: a.name,
-        primary_card: a.primary_card.name,
-        secondary_card: a.secondary_card&.name,
+        primary_card: card_json(a.primary_card),
+        secondary_card: card_json(a.secondary_card),
         parent_id: a.parent_id
       }
+    end
+
+    # The printing, not a bare name: several cards share a name, and which one an
+    # archetype designates is now the user's choice to make and to see.
+    def card_json(card)
+      return nil if card.nil?
+
+      { id: card.id, name: card.name, set_name: card.set_name, set_number: card.set_number }
     end
   end
 end
