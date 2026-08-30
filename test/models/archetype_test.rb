@@ -68,4 +68,82 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_respond_to archetypes(:ogerpon), :secondary_card
     assert_nothing_raised { Archetype.search("Ogerpon").to_a }
   end
+
+  # --- Fingerprint identity ---
+
+  test "the fingerprint pair is filled from the member cards on save" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), secondary_card: cards(:bosss_orders_meg))
+
+    assert_equal "doublade_fp", archetype.primary_fingerprint
+    assert_equal "bosss_orders_meg_fp", archetype.secondary_fingerprint
+  end
+
+  # The empty string, never NULL: SQLite treats NULLs as distinct, so a nullable
+  # column would let two single-member archetypes through the unique index —
+  # exactly the hole the card-id index left open.
+  test "a missing secondary is stored as the empty string" do
+    archetype = Archetype.create!(primary_card: cards(:doublade))
+
+    assert_equal "", archetype.secondary_fingerprint
+  end
+
+  # The pair is spelled out rather than left to sync_fingerprints: `validate: false`
+  # skips before_validation too, so the callback would not run and the row would
+  # die on NOT NULL instead of reaching the index this test is about.
+  test "the database refuses two single-member archetypes on the same fingerprint" do
+    duplicate = Archetype.new(primary_card: cards(:teal_mask_ogerpon_ex), name: "Ogerpon again",
+      primary_fingerprint: "ogerpon_shared", secondary_fingerprint: "")
+
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save(validate: false) }
+  end
+
+  # Identity is the fingerprint pair, so a different printing of the same card is
+  # the same archetype — this is what makes the printing a display reference.
+  test "the database refuses a second archetype built from another printing of the same card" do
+    reprint = cards(:froakie_cri)
+    reprint.update_column(:fingerprint, "ogerpon_shared")
+    duplicate = Archetype.new(primary_card: reprint, name: "Ogerpon reprint",
+      primary_fingerprint: "ogerpon_shared", secondary_fingerprint: "")
+
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save(validate: false) }
+  end
+
+  test "a card with no fingerprint cannot be designated" do
+    archetype = Archetype.new(primary_card: cards(:trainer_card), name: "Boss")
+
+    assert_not archetype.valid?
+    assert_includes archetype.errors[:primary_fingerprint], "can't be blank"
+  end
+
+  # The migration refuses to add the index when a duplicate pair exists, and names
+  # the offenders rather than deleting one — decks and deck_results point at these
+  # rows. Once the index is in place a duplicate cannot be created, so the only way
+  # to exercise the query is to drop the index for the length of this test. The
+  # suite's transactional fixtures roll the DDL back.
+  test "the migration's duplicate detection names the offenders" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_fingerprints_to_archetypes')}")
+
+    connection = ActiveRecord::Base.connection
+    connection.remove_index :archetypes, name: "index_archetypes_on_fingerprint_pair"
+    Archetype.insert_all([
+      { name: "Clone A", name_normalized: "clone a", primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "clone_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current },
+      { name: "Clone B", name_normalized: "clone b", primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "clone_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    duplicates = AddFingerprintsToArchetypes.new.duplicate_pairs
+
+    assert_equal 1, duplicates.size
+    assert_match "Clone A / Clone B", duplicates.first["names"]
+  end
+
+  private
+
+  def migration_filename(suffix)
+    Dir.children(Rails.root.join("db/migrate")).find { |f| f.end_with?("_#{suffix}.rb") } ||
+      raise("no migration ending in _#{suffix}.rb")
+  end
 end

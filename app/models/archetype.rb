@@ -9,8 +9,15 @@ class Archetype < ApplicationRecord
   has_many :decks, dependent: :nullify
 
   validates :name, presence: true
-  validates :primary_card_id, uniqueness: { scope: :secondary_card_id }
+  # These two are denormalised copies of the member cards' fingerprints, and they
+  # back the unique index — identity is the fingerprint pair, not the card-id
+  # pair, so designating another printing of the same card is the same archetype.
+  # The presence check turns "this card has never been scraped" into a readable
+  # error instead of a NOT NULL violation.
+  validates :primary_fingerprint, presence: true
+  validates :primary_fingerprint, uniqueness: { scope: :secondary_fingerprint }
 
+  before_validation :sync_fingerprints
   before_validation :auto_generate_name, unless: :custom_name?
 
   scope :roots, -> { where(parent_id: nil) }
@@ -50,5 +57,15 @@ class Archetype < ApplicationRecord
   def auto_generate_name
     parts = [ primary_card&.name, secondary_card&.name ].compact
     self.name = parts.join(" / ") if parts.any?
+  end
+
+  # A missing secondary is the empty string, never nil: SQLite treats NULLs as
+  # distinct, so a nil would let the pair index accept duplicate single-member
+  # archetypes. Nothing *decides* anything from these columns — detection joins
+  # `cards` and reads the live fingerprint — so drift after a re-scrape is
+  # harmless, and Archetypes::FingerprintSync is what brings them back in step.
+  def sync_fingerprints
+    self.primary_fingerprint = primary_card&.fingerprint
+    self.secondary_fingerprint = secondary_card&.fingerprint.to_s
   end
 end

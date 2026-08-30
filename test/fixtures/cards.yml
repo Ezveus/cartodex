@@ -15,6 +15,7 @@ honedge:
   retreat_cost: 2
   weakness: Fire
   resistance: Grass
+  fingerprint: honedge_fp
 
 doublade:
   name: Doublade
@@ -31,6 +32,7 @@ doublade:
   evolves_from: Honedge
   weakness: Fire
   resistance: Grass
+  fingerprint: doublade_fp
 
 trainer_card:
   name: Boss's Orders
@@ -103,6 +105,7 @@ bosss_orders_meg:
   set_number: "114"
   rarity: Uncommon
   cardmarket_url: https://www.cardmarket.com/en/Pokemon/Products/Singles/Mega-Evolution/Bosss-Orders-V2-MEG114
+  fingerprint: bosss_orders_meg_fp
 
 basic_psychic_energy:
   name: Psychic Energy
@@ -111,6 +114,7 @@ basic_psychic_energy:
   subtype: Basic Energy
   set_name: SVE
   set_number: "5"
+  fingerprint: basic_psychic_energy_fp
 
 teal_mask_ogerpon_ex:
   name: Teal Mask Ogerpon ex
@@ -124,6 +128,7 @@ teal_mask_ogerpon_ex:
   type_symbol: Grass
   retreat_cost: 2
   weakness: Fire
+  fingerprint: ogerpon_shared
 
 special_prism_energy_asc:
   name: Prism Energy
