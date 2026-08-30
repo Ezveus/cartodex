@@ -51,7 +51,8 @@ module Decks
         card_search_group(label_text: "Primary card", target: "primary")
         card_search_group(label_text: "Secondary card (optional)", target: "secondary")
         div(class: "form-actions") do
-          button(type: "button", class: "btn btn-primary btn-sm", data: { action: "archetype-picker#createArchetype" }) { "Create & select" }
+          button(type: "button", class: "btn btn-primary btn-sm",
+            data: { action: "archetype-picker#createArchetype", archetype_picker_target: "createButton" }) { "Create & select" }
           button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "archetype-picker#cancelCreate" }) { "Cancel" }
         end
       end

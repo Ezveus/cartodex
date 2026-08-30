@@ -73,7 +73,7 @@ module Decks
 
     def actions
       div(class: "form-actions result-modal-actions") do
-        button(class: "btn btn-primary", data: { action: "result-modal#submit" }) { "Save" }
+        button(class: "btn btn-primary", data: { action: "result-modal#submit", result_modal_target: "submitButton" }) { "Save" }
         button(class: "btn btn-secondary", type: "button", data: { action: "result-modal#close" }) { "Cancel" }
       end
     end

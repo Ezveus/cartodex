@@ -6,7 +6,7 @@ export default class extends Controller {
     "dialog", "archetypeInput", "archetypeId", "archetypeResults",
     "notesInput", "createSection", "primaryInput", "primaryId",
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
-    "tournamentSelect"
+    "tournamentSelect", "submitButton"
   ]
   static values = { deckId: Number }
 
@@ -76,39 +76,51 @@ export default class extends Controller {
 
   // --- Submit ---
 
+  // Disabled for the length of the submission. Nothing identifies two logged
+  // results as a duplicate — two matches with the same score on the same day is
+  // an ordinary evening — so a second POST is a second row, and the modal only
+  // closes once the first answer is back. The button is what has to say no.
   async submit(event) {
     event.preventDefault()
 
     const result = this.#fieldValue("result")
-    if (!result) return
+    if (!result || this.submitButtonTarget.disabled) return
+    this.submitButtonTarget.disabled = true
 
-    let archetypeId = this.archetypeIdTarget.value
+    try {
+      let archetypeId = this.archetypeIdTarget.value
 
-    // If create section is visible and no archetype selected, create one first
-    if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
-      archetypeId = await this.#createArchetype()
-      if (!archetypeId) return
+      // If create section is visible and no archetype selected, create one first
+      if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
+        archetypeId = await this.#createArchetype()
+        if (!archetypeId) return
+      }
+
+      const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
+        method: "POST",
+        body: {
+          deck_result: {
+            result,
+            match_format: this.#fieldValue("match_format"),
+            score: this.#fieldValue("score") || null,
+            archetype_id: archetypeId || null,
+            tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
+            notes: this.notesInputTarget.value,
+            played_at: new Date().toISOString()
+          }
+        },
+        failure: "Couldn't log this result"
+      })
+      if (!data) return
+
+      this.close()
+      this.#updateStats(data.deck_stats)
+    } finally {
+      // finally, not after the await: every failure requestJson reports comes
+      // back as null and returns early, and a button left disabled on the way
+      // out cannot be used to retry.
+      this.submitButtonTarget.disabled = false
     }
-
-    const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
-      method: "POST",
-      body: {
-        deck_result: {
-          result,
-          match_format: this.#fieldValue("match_format"),
-          score: this.#fieldValue("score") || null,
-          archetype_id: archetypeId || null,
-          tournament_id: this.hasTournamentSelectTarget ? (this.tournamentSelectTarget.value || null) : null,
-          notes: this.notesInputTarget.value,
-          played_at: new Date().toISOString()
-        }
-      },
-      failure: "Couldn't log this result"
-    })
-    if (!data) return
-
-    this.close()
-    this.#updateStats(data.deck_stats)
   }
 
   // --- Private ---

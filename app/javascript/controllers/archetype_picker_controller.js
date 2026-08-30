@@ -7,7 +7,7 @@ import { requestJson } from "helpers/api"
 // the deck form.
 export default class extends Controller {
   static targets = [
-    "input", "archetypeId", "results", "createSection",
+    "input", "archetypeId", "results", "createSection", "createButton",
     "primaryInput", "primaryId", "primaryResults",
     "secondaryInput", "secondaryId", "secondaryResults"
   ]
@@ -98,22 +98,35 @@ export default class extends Controller {
     this.secondaryResultsTarget.innerHTML = ""
   }
 
+  // Disabled for the length of the request, both to say that the click landed —
+  // nothing else here changes until the answer comes back — and to spend one
+  // POST instead of one per impatient click. The endpoint is idempotent on the
+  // fingerprint pair, so a second create would answer with the same archetype;
+  // this is about the silence, not about the row.
   async createArchetype() {
-    if (!this.primaryIdTarget.value) return
+    if (!this.primaryIdTarget.value || this.createButtonTarget.disabled) return
+    this.createButtonTarget.disabled = true
 
-    const archetype = await requestJson("/api/archetypes", {
-      method: "POST",
-      body: {
-        primary_card_id: this.primaryIdTarget.value,
-        secondary_card_id: this.secondaryIdTarget.value || null
-      },
-      failure: "Couldn't create the archetype"
-    })
-    if (!archetype) return
+    try {
+      const archetype = await requestJson("/api/archetypes", {
+        method: "POST",
+        body: {
+          primary_card_id: this.primaryIdTarget.value,
+          secondary_card_id: this.secondaryIdTarget.value || null
+        },
+        failure: "Couldn't create the archetype"
+      })
+      if (!archetype) return
 
-    this.archetypeIdTarget.value = archetype.id
-    this.inputTarget.value = archetype.name
-    this.#hideCreateSection()
+      this.archetypeIdTarget.value = archetype.id
+      this.inputTarget.value = archetype.name
+      this.#hideCreateSection()
+    } finally {
+      // finally, not after the await: requestJson answers null on every failure
+      // it reports, and a button left disabled on the way out of one of those
+      // returns is dead for the life of the page.
+      this.createButtonTarget.disabled = false
+    }
   }
 
   // --- Private ---
