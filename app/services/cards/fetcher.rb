@@ -18,21 +18,47 @@ class Cards::Fetcher < ApplicationService
 
   def call
     card = Card.find_by(set_name: @set_name, set_number: @set_number)
-    return card if card && !@force && card.updated_at > 1.day.ago
+    # Card text is immutable once printed, so a printing we already hold is never
+    # worth a round trip. Prices and the Cardmarket link are the only volatile
+    # fields, and `force: true` is what refreshes them.
+    if card && !@force
+      link_card_set(card)
+      return card
+    end
 
     html = HttpFetcher.call(@url)
     doc = Nokogiri::HTML(html)
 
     card ||= Card.new(set_name: @set_name, set_number: @set_number)
     card.card_set ||= CardSet.find_by(code: @set_name)
-    assign_attributes(card, doc)
-    assign_attacks(card, doc)
-    assign_abilities(card, doc)
-    card.save!
+    # assign_attacks/assign_abilities destroy before they rebuild, and that
+    # destroy commits on its own — so without this transaction a save! that
+    # fails validation leaves the card stripped of its attacks, with only the
+    # `cards` row rolled back. Callers that rescue (CardSets::RescrapeJob logs
+    # and moves on) would never see it, and since a known card is no longer
+    # re-scraped, nothing would ever repair it.
+    serialized_transaction do
+      assign_attributes(card, doc)
+      assign_attacks(card, doc)
+      assign_abilities(card, doc)
+      card.save!
+    end
     card
   end
 
   private
+
+  # A card imported before its `CardSet` existed carries no association, and the
+  # skip path above is now what most cards go through — so the link has to be
+  # re-attempted there or it never happens at all. `update_column` is deliberate:
+  # `compute_fingerprint` runs on save, and re-deriving a card's identity is not
+  # this method's business. `db/seeds/card_sets.rb` links orphans the same way.
+  def link_card_set(card)
+    return if card.card_set_id
+
+    card_set = CardSet.find_by(code: @set_name)
+    card.update_column(:card_set_id, card_set.id) if card_set
+  end
 
   # Parse urls like https://limitlesstcg.com/cards/{set_name}/{set_number}
   def parse_url

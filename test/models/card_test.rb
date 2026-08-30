@@ -39,6 +39,23 @@ class CardTest < ActiveSupport::TestCase
     assert_not card.valid?
   end
 
+  test "rejects a second card with the same set and number" do
+    duplicate = cards(:honedge).dup
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:set_number], "has already been taken"
+  end
+
+  test "the database refuses a duplicate printing even with validations skipped" do
+    duplicate = cards(:honedge).dup
+
+    # The validation above is for the readable error; this index is the actual
+    # guarantee. Cards::Fetcher looks printings up by exactly this pair, so a
+    # duplicate would make that lookup arbitrary — and permanent, since a known
+    # printing is never re-scraped.
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save(validate: false) }
+  end
+
   test "requires hp for pokémon cards" do
     card = cards(:honedge)
     card.hp = nil
