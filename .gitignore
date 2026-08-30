@@ -32,3 +32,6 @@
 
 # Ignore master key for decrypting credentials and more.
 /config/master.key
+
+# Subagent-driven development scratch (ledgers, briefs, review packages)
+.superpowers/
