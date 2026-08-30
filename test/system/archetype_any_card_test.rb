@@ -1,0 +1,61 @@
+require "application_system_test_case"
+
+class ArchetypeAnyCardTest < ApplicationSystemTestCase
+  setup do
+    @user = users(:one)
+    login_as @user, scope: :user
+    @deck = @user.decks.create!(name: "Boss Box", physical: true)
+    @deck.deck_cards.create!(card: cards(:bosss_orders_meg), quantity: 4)
+  end
+
+  # A Trainer-led archetype has no energy type, so its badge falls back to the
+  # neutral style rather than a typed one. That fallback already existed; what is
+  # new is that an archetype can reach it at all.
+  test "a Trainer-led archetype renders with the neutral badge" do
+    # custom_name: "1" is required alongside name: — without it, auto_generate_name
+    # (unless: :custom_name?) overwrites the name with the primary card's name on
+    # create, since custom_name is a transient attr_accessor, not the name: kwarg.
+    archetype = Archetype.create!(primary_card: cards(:bosss_orders_meg), name: "Boss Box", custom_name: "1")
+    @deck.update!(archetype: archetype)
+
+    visit deck_path(@deck)
+
+    assert_selector ".badge.badge-archetype", text: "Boss Box"
+    assert_no_selector ".badge.badge-energy", text: "Boss Box"
+  end
+
+  test "the deck's archetype picker offers a Trainer and shows its printing" do
+    visit edit_deck_path(@deck)
+    click_button "Suggest" if page.has_button?("Suggest")
+
+    find("[data-archetype-picker-target='input']").fill_in with: "Boss"
+
+    find(".archetype-create-item", text: "Create new archetype").click
+
+    within(".create-archetype-section") do
+      find("[data-archetype-picker-target='primaryInput']").fill_in with: "Boss's Orders"
+      assert_selector ".archetype-search-item", text: "MEG 114"
+      find(".archetype-search-item", text: "MEG 114").click
+      click_button "Create & select"
+    end
+
+    assert_field(with: "Boss's Orders")
+  end
+
+  # Task 4 changed the archetype JSON so primary_card/secondary_card are objects
+  # ({ id, name, set_name, set_number }) rather than bare names, and
+  # archetype_picker_controller.js#formatCard renders "Name (SET NUMBER)" from
+  # that object. If the JSON ever reverted to a bare name, formatCard would
+  # render "undefined (undefined undefined)" instead — and nothing else in the
+  # repo would notice, since the card-search dropdown above builds its own
+  # "SET NUMBER" text directly from set_name/set_number rather than going
+  # through formatCard.
+  test "the archetype search dropdown shows an existing archetype's printing, not just its name" do
+    Archetype.create!(primary_card: cards(:bosss_orders_meg), name: "Boss Box", custom_name: "1")
+
+    visit edit_deck_path(@deck)
+    find("[data-archetype-picker-target='input']").fill_in with: "Boss"
+
+    assert_selector ".archetype-search-item .archetype-search-pokemon", text: "MEG 114"
+  end
+end
