@@ -27,7 +27,10 @@ export default class extends Controller {
 
   select(event) {
     this.hiddenFieldTarget.value = event.currentTarget.dataset.cardId
-    this.inputTarget.value = event.currentTarget.dataset.cardName
+    // The printing, not the bare name: the hidden field now holds one exact
+    // printing among several sharing a name, and an input showing only the name
+    // would not say which one — the same label the form pre-fills on edit.
+    this.inputTarget.value = event.currentTarget.dataset.cardLabel
     this.resultsTarget.innerHTML = ""
   }
 
@@ -52,11 +55,17 @@ export default class extends Controller {
       <div class="archetype-search-item"
            data-action="click->card-select#select"
            data-card-id="${card.id}"
-           data-card-name="${this.#escape(card.name)}">
+           data-card-label="${this.#formatCard(card)}">
         <strong>${this.#escape(card.name)}</strong>
         <span class="archetype-search-pokemon">${this.#escape(card.card_type)} · ${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
       </div>
     `).join("")
+  }
+
+  // Mirrors Card#printing_label on the Ruby side, and archetype_picker's own
+  // #formatCard: one card, one way of naming which printing it is.
+  #formatCard(card) {
+    return `${this.#escape(card.name)} (${this.#escape(card.set_name)} ${this.#escape(card.set_number)})`
   }
 
   #clickOutside(event) {

@@ -19,8 +19,8 @@ module Admin
 
           table(class: "detail-table") do
             tbody do
-              info_row("Primary card", @archetype.primary_card.name)
-              info_row("Secondary card", @archetype.secondary_card&.name || "\u2014")
+              info_row("Primary card", @archetype.primary_card.printing_label)
+              info_row("Secondary card", @archetype.secondary_card&.printing_label || "\u2014")
               info_row("Parent", @archetype.parent&.name || "\u2014")
               info_row("Results", @archetype.deck_results.count.to_s)
             end
@@ -32,8 +32,8 @@ module Admin
               @archetype.children.includes(:primary_card, :secondary_card).each do |child|
                 t.row do
                   t.cell { link_to child.name, admin_archetype_path(child) }
-                  t.cell { child.primary_card.name }
-                  t.cell { child.secondary_card&.name || "\u2014" }
+                  t.cell { child.primary_card.printing_label }
+                  t.cell { child.secondary_card&.printing_label || "\u2014" }
                 end
               end
             end

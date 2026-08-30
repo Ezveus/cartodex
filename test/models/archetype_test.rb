@@ -60,6 +60,20 @@ class ArchetypeTest < ActiveSupport::TestCase
     end
   end
 
+  # The other half of what the fixture file's comment promises. Fixtures skip
+  # callbacks, so the pair is spelled out by hand and nothing keeps it in step
+  # with cards.yml — edit a card's fingerprint and the archetype fixtures would
+  # silently describe a state sync_fingerprints can never produce, while the
+  # detector tests (which read the live card) keep passing.
+  test "every archetype fixture carries the fingerprint pair its member cards imply" do
+    Archetype.includes(:primary_card, :secondary_card).find_each do |archetype|
+      assert_equal archetype.primary_card.fingerprint, archetype.primary_fingerprint,
+        "#{archetype.name.inspect} fixture is out of step with its primary card"
+      assert_equal archetype.secondary_card&.fingerprint.to_s, archetype.secondary_fingerprint,
+        "#{archetype.name.inspect} fixture is out of step with its secondary card"
+    end
+  end
+
   # The `search` scope spells its second join alias by hand, and Rails derives
   # that alias from the association name — so renaming the association breaks
   # the scope at query time, not at load time. These two run the SQL.

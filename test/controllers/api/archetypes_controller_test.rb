@@ -118,6 +118,34 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
       "the race simulation must leave `build` private, or it leaks into every later test in this worker"
   end
 
+  # The *wider* half of the same race as the test above. The uniqueness
+  # validation runs its own SELECT, so a winner that commits between our
+  # `existing` lookup and that SELECT is caught by the validation, not by the
+  # index — RecordInvalid, not RecordNotUnique. Simulated by making `build`
+  # insert the winner and then leaving the loser's save! fully validated, which
+  # is what a real second request does.
+  test "resolves a concurrent create the uniqueness validation catches before the index does" do
+    primary = cards(:bosss_orders_meg)
+    original_build = Api::ArchetypesController.instance_method(:build)
+
+    Api::ArchetypesController.define_method(:build) do |primary_card, secondary_card|
+      Archetype.create!(primary_card: primary_card, secondary_card: secondary_card)
+      original_build.bind(self).call(primary_card, secondary_card)
+    end
+
+    begin
+      assert_difference "Archetype.count", 1 do
+        post api_archetypes_path, params: { primary_card_id: primary.id }, as: :json
+      end
+    ensure
+      Api::ArchetypesController.define_method(:build, original_build)
+      Api::ArchetypesController.send(:private, :build)
+    end
+
+    assert_response :created
+    assert_equal Archetype.find_by(primary_card: primary).id, JSON.parse(response.body)["id"]
+  end
+
   test "the index returns each member's printing, not a bare name" do
     get api_archetypes_path, params: { q: "Ogerpon" }
 

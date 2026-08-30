@@ -38,4 +38,22 @@ class Archetypes::FingerprintSyncTest < ActiveSupport::TestCase
     assert_equal "budew_shared", archetypes(:budew_ogerpon).reload.primary_fingerprint,
       "a colliding row must be reported, not written"
   end
+  # `archetypes.primary_fingerprint` is NOT NULL, so writing a nil through would
+  # not report anything — it would abort the run part-way, leaving the rows
+  # already written written and the rest untouched. Only a write that bypasses
+  # callbacks can produce a card with no fingerprint, and this service is the
+  # designated repair tool for exactly that kind of out-of-band state.
+  test "reports an archetype whose primary card has no fingerprint instead of dying on it" do
+    cards(:budew_pre).update_column(:fingerprint, nil)
+    cards(:teal_mask_ogerpon_ex).update_column(:fingerprint, "ogerpon_v2")
+
+    result = Archetypes::FingerprintSync.call
+
+    assert_equal [ archetypes(:budew_ogerpon) ], result.unfingerprinted
+    assert_equal "budew_shared", archetypes(:budew_ogerpon).reload.primary_fingerprint,
+      "an unfingerprinted row must be reported, not written"
+    # The rest of the run still happens: one bad row must not cost the others.
+    assert_equal "ogerpon_v2", archetypes(:ogerpon).reload.primary_fingerprint
+    assert_equal 1, result.updated
+  end
 end

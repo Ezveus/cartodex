@@ -34,7 +34,7 @@ module Admin
       def card_autocomplete(f, field, label_text, current_card)
         render Ui::CardSelect.new(
           label: label_text,
-          current_value: current_card&.name,
+          current_value: current_card&.printing_label,
           wrapper_data: { controller: "card-select" },
           input_data:   { card_select_target: "input", action: "input->card-select#search" },
           results_data: { card_select_target: "results" }

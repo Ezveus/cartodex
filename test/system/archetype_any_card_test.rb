@@ -43,6 +43,11 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
       assert_selector ".archetype-search-item", text: "PAL 172"
       assert_selector ".archetype-search-item", count: 2
       find(".archetype-search-item", text: "MEG 114").click
+      # The input must name the printing that was picked, not just the card: two
+      # printings share this name, and the hidden id now holds one of them — a
+      # bare name would not say which, and would read as the whole value on the
+      # admin form, where the same input is pre-filled for editing.
+      assert_field(with: "Boss's Orders (MEG 114)")
       click_button "Create & select"
     end
 

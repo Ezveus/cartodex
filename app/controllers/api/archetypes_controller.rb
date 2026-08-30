@@ -23,23 +23,39 @@ module Api
       render json: archetype_json(archetype), status: :created
     rescue ActiveRecord::RecordNotFound
       render json: { error: "Card not found" }, status: :not_found
+    # A concurrent create caught by the model's uniqueness *validation*: it runs
+    # its own SELECT, so a winner that commits between our `existing` lookup and
+    # that SELECT is refused here rather than by the index. The wider of the two
+    # race windows, and the likelier one — a double-click on "Create & select"
+    # sends two POSTs. Any other validation error is a genuine 422.
     rescue ActiveRecord::RecordInvalid => e
-      render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
-    # The model's uniqueness validation and the unique index are separated by a
-    # read-then-write window, so two concurrent creates can both pass validation
-    # and the loser takes the index in the face. That loser wants exactly what the
-    # winner just created — this endpoint is idempotent on the fingerprint pair —
-    # so re-read rather than reporting a failure the user cannot act on.
-    rescue ActiveRecord::RecordNotUnique
-      archetype = existing(primary, secondary)
-      if archetype
-        render json: archetype_json(archetype), status: :created
+      if e.record.errors.of_kind?(:primary_fingerprint, :taken)
+        render_race_winner(primary, secondary, e.record.errors.full_messages)
       else
-        render json: { errors: [ "Archetype already exists" ] }, status: :unprocessable_entity
+        render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
       end
+    # The narrower window: validation passed, and the winner committed before our
+    # INSERT reached the unique index.
+    rescue ActiveRecord::RecordNotUnique
+      render_race_winner(primary, secondary, [ "Archetype already exists" ])
     end
 
     private
+
+    # The loser of a create race wants exactly what the winner just created —
+    # this endpoint is idempotent on the fingerprint pair — so re-read rather
+    # than report a failure the user cannot act on. `errors` is the fallback for
+    # the case where the re-read finds nothing, which means the refusal was not
+    # the race it looked like.
+    def render_race_winner(primary, secondary, errors)
+      archetype = existing(primary, secondary)
+
+      if archetype
+        render json: archetype_json(archetype), status: :created
+      else
+        render json: { errors: errors }, status: :unprocessable_entity
+      end
+    end
 
     # Identity is the fingerprint pair, not the pair of card ids: designating a
     # different printing of the same card is the same archetype. Looking up by id

@@ -9,18 +9,27 @@
 # Running this afterwards brings the columns back in step instead, and names any
 # duplicate the drift has let through rather than picking one to overwrite.
 class Archetypes::FingerprintSync < ApplicationService
-  Result = Struct.new(:updated, :collisions, keyword_init: true)
+  Result = Struct.new(:updated, :collisions, :unfingerprinted, keyword_init: true)
 
   def call
     desired = Archetype.includes(:primary_card, :secondary_card).map { |archetype|
       [ archetype, archetype.primary_card&.fingerprint, archetype.secondary_card&.fingerprint.to_s ]
     }
 
-    collisions = colliding(desired)
-    updated = desired.reject { |(archetype, _, _)| collisions.include?(archetype) }
+    # `primary_fingerprint` is NOT NULL, so a member card that has never been
+    # scraped cannot be written — and writing it anyway would not report the
+    # problem, it would abort the run part-way, leaving the rows already written
+    # written and the rest untouched. Reported like a collision instead: named,
+    # skipped, and the rest of the repair still happens. They are also held out
+    # of the collision check, where a shared `nil` would read as a duplicate pair
+    # rather than as two rows with nothing to write.
+    unfingerprinted, writable = desired.partition { |(_, primary, _)| primary.blank? }
+
+    collisions = colliding(writable)
+    updated = writable.reject { |(archetype, _, _)| collisions.include?(archetype) }
       .count { |(archetype, primary, secondary)| write(archetype, primary, secondary) }
 
-    Result.new(updated: updated, collisions: collisions)
+    Result.new(updated: updated, collisions: collisions, unfingerprinted: unfingerprinted.map(&:first))
   end
 
   private

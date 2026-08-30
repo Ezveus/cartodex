@@ -86,13 +86,15 @@ export default class extends Controller {
 
   selectPrimary(event) {
     this.primaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.primaryInputTarget.value = event.currentTarget.dataset.cardName
+    // The printing, not the bare name: several cards share one, and the input
+    // must say which of them the hidden id now holds.
+    this.primaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.primaryResultsTarget.innerHTML = ""
   }
 
   selectSecondary(event) {
     this.secondaryIdTarget.value = event.currentTarget.dataset.cardId
-    this.secondaryInputTarget.value = event.currentTarget.dataset.cardName
+    this.secondaryInputTarget.value = event.currentTarget.dataset.cardLabel
     this.secondaryResultsTarget.innerHTML = ""
   }
 
@@ -179,7 +181,7 @@ export default class extends Controller {
         <div class="archetype-search-item"
              data-action="click->archetype-picker#${action}"
              data-card-id="${card.id}"
-             data-card-name="${this.#escape(card.name)}">
+             data-card-label="${this.#formatCard(card)}">
           <strong>${this.#escape(card.name)}</strong>
           <span class="archetype-search-pokemon">${this.#escape(card.card_type)} · ${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
         </div>
