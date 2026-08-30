@@ -33,8 +33,15 @@ module Api
     # different printing of the same card is the same archetype. Looking up by id
     # would miss it, go to save!, and be refused by the unique index — a 500 for
     # what the user experiences as a no-op.
+    #
+    # A card with no fingerprint has no place in that key, and that is true of the
+    # secondary too: `""` means "no secondary", so a *present* secondary that
+    # resolves to `""` would match a single-member archetype on the same primary
+    # and quietly drop the card the user chose. Both halves fall through to `build`,
+    # where the model's presence validations answer with a readable 422.
     def existing(primary, secondary)
       return nil if primary.fingerprint.blank?
+      return nil if secondary && secondary.fingerprint.blank?
 
       Archetype.find_by(
         primary_fingerprint: primary.fingerprint,

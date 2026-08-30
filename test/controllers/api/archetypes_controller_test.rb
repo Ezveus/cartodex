@@ -42,6 +42,32 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_includes JSON.parse(response.body)["errors"].join, "Primary fingerprint"
   end
 
+  # A present secondary that has never been scraped into a fingerprint resolves to
+  # "" via `secondary&.fingerprint.to_s` — the exact signature of "no secondary at
+  # all". Without a symmetric guard, this would match archetypes(:ogerpon) (a
+  # single-member archetype on this same primary) and silently drop the secondary
+  # the user chose, answering 201 with secondary_card: null instead of a 422.
+  test "answers 422 for a present secondary that has never been scraped into a fingerprint" do
+    assert_no_difference "Archetype.count" do
+      post api_archetypes_path, params: {
+        primary_card_id: cards(:teal_mask_ogerpon_ex).id,
+        secondary_card_id: cards(:trainer_card).id
+      }, as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body)["errors"].join, "Secondary fingerprint"
+  end
+
+  test "still returns the existing single-member archetype when no secondary is given" do
+    assert_no_difference "Archetype.count" do
+      post api_archetypes_path, params: { primary_card_id: cards(:teal_mask_ogerpon_ex).id }, as: :json
+    end
+
+    assert_response :created
+    assert_equal archetypes(:ogerpon).id, JSON.parse(response.body)["id"]
+  end
+
   test "answers 404 for an unknown card" do
     post api_archetypes_path, params: { primary_card_id: 0 }, as: :json
 
