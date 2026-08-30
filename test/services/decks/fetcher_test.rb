@@ -73,6 +73,31 @@ class Decks::FetcherTest < ActiveSupport::TestCase
       fetched_urls, "one fetch per printing, in order of first appearance"
   end
 
+  test "merges lines whose names differ only in case" do
+    decklist = "3 Honedge POR 56\n1 hOnEdGe POR 56\n"
+    record_fetched_urls
+
+    deck = Decks::Fetcher.call(decklist, @user, "Sloppy case")
+
+    assert_equal 1, deck.deck_cards.count
+    assert_equal 4, deck.deck_cards.first.quantity
+  end
+
+  # `ex` and `EX` are not a casing choice: `ex` marks a Ruby & Sapphire,
+  # Scarlet & Violet or Mega Evolution card and `EX` a Black & White or XY one,
+  # so these name two different cards and must not merge.
+  test "refuses to merge an ex card with an EX card" do
+    decklist = "3 Iron Hands ex POR 56\n1 Iron Hands EX POR 56\n"
+    record_fetched_urls
+
+    error = assert_raises(Decks::Fetcher::ParseError) do
+      Decks::Fetcher.call(decklist, @user, "ex vs EX")
+    end
+
+    assert_match "Iron Hands ex", error.message
+    assert_match "Iron Hands EX", error.message
+  end
+
   test "refuses to merge two lines that name different cards" do
     decklist = "4 Iron Hands ex POR 56\n2 Iron Thorns ex POR 56\n"
     fetched_urls = record_fetched_urls

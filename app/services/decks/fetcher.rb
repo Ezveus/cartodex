@@ -77,6 +77,13 @@ class Decks::Fetcher < ApplicationService
     }.values
   end
 
+  # The `ex` suffix carries meaning and its case is part of it: `ex` marks a
+  # Ruby & Sapphire, Scarlet & Violet or Mega Evolution card, `EX` a Black &
+  # White or XY one, and those are different cards. So the rest of the name
+  # folds case — a hand-typed `iron hands ex` is the same card as
+  # `Iron Hands ex` — but the suffix is compared exactly.
+  RULE_BOX_SUFFIX = /\s(ex|EX)\z/
+
   # Two lines may only be merged if they really name the same card. A set code
   # and number that repeat under two different names mean one of them carries a
   # typo — `2 Iron Thorns ex PAR 70` under `4 Iron Hands ex PAR 70` — and
@@ -84,10 +91,16 @@ class Decks::Fetcher < ApplicationService
   # signal available here: `call` builds its URL from the set code and number
   # alone, so a wrong number resolves to a real, wrong card without complaint.
   def reject_conflicting_names!(existing, entry)
-    return if existing[:card_name].casecmp?(entry[:card_name])
+    return if comparable_name(existing[:card_name]) == comparable_name(entry[:card_name])
 
     raise ParseError,
       "#{existing[:set_code]} #{existing[:card_number]} is named both " \
       "\"#{existing[:card_name]}\" and \"#{entry[:card_name]}\""
+  end
+
+  # Case-folded name paired with its rule-box suffix kept verbatim, so the two
+  # halves can be compared under different rules in one equality.
+  def comparable_name(name)
+    [ name.sub(RULE_BOX_SUFFIX, "").downcase, name[RULE_BOX_SUFFIX, 1] ]
   end
 end
