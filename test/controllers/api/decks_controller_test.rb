@@ -53,7 +53,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     json = JSON.parse(response.body)
     assert_not json["matched"]
-    assert_equal cards(:budew_pre).id, json["primary_pokemon"]["id"]
+    assert_equal cards(:budew_pre).id, json["suggested_primary"]["id"]
   end
 
   test "suggested_archetype is scoped to the current user" do

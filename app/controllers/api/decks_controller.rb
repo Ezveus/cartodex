@@ -43,11 +43,11 @@ module Api
 
       if detection.matched?
         render json: { matched: true, archetype: archetype_json(detection.archetype) }
-      elsif detection.primary
+      elsif detection.suggested_primary
         render json: {
           matched: false,
-          primary_pokemon: pokemon_json(detection.primary),
-          secondary_pokemon: pokemon_json(detection.secondary)
+          suggested_primary: pokemon_json(detection.suggested_primary),
+          suggested_secondary: pokemon_json(detection.suggested_secondary)
         }
       else
         render json: { matched: false }

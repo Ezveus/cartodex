@@ -69,8 +69,8 @@ export default class extends Controller {
       this.inputTarget.value = data.archetype.name
       this.resultsTarget.innerHTML = ""
       this.#hideCreateSection()
-    } else if (data.primary_pokemon) {
-      this.#prefillCreate(data.primary_pokemon, data.secondary_pokemon)
+    } else if (data.suggested_primary) {
+      this.#prefillCreate(data.suggested_primary, data.suggested_secondary)
     }
   }
 
