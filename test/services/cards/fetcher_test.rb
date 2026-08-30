@@ -55,6 +55,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "parses attacks for basic card" do
+    cards(:honedge).destroy # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
@@ -71,6 +72,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   # --- Stage 1 card (Doublade POR/57) ---
 
   test "parses stage 1 card with evolves_from" do
+    cards(:doublade).destroy # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/57", @doublade_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/57")
@@ -82,6 +84,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "parses attack with multiplier damage and effect" do
+    cards(:doublade).destroy # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/57", @doublade_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/57")
@@ -156,6 +159,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "regular pokemon has no pokemon_subtype" do
+    cards(:honedge).destroy # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
@@ -178,30 +182,49 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   # --- find_or_create behavior ---
 
   test "updates existing card instead of creating duplicate" do
+    cards(:honedge).destroy
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card1 = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
 
     assert_no_difference "Card.count" do
-      card2 = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
+      # force:, or the second call short-circuits on the row the first one just
+      # created and the update path this test is named for never runs.
+      card2 = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56", force: true)
       assert_equal card1.id, card2.id
     end
   end
 
   test "replaces attacks on re-fetch" do
+    cards(:honedge).destroy
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
 
     assert_no_difference "Attack.count" do
-      Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
+      Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56", force: true)
     end
+  end
+
+  test "a failed re-scrape leaves the card's attacks intact" do
+    card = cards(:honedge)
+    attacks_before = card.attacks.count
+    assert_operator attacks_before, :>, 0, "fixture must have attacks for this to mean anything"
+    # HP is required for a Pokémon, so stripping it makes save! fail — after
+    # assign_attacks has already destroyed the existing rows and committed that.
+    stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html.sub("70 HP", ""))
+
+    assert_raises(ActiveRecord::RecordInvalid) do
+      Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56", force: true)
+    end
+
+    assert_equal attacks_before, card.reload.attacks.count,
+      "the destroy that precedes the rebuild must roll back with the failed save"
   end
 
   # --- force option ---
 
-  test "skips HTTP fetch for fresh cards" do
-    cards(:honedge).touch
+  test "skips the HTTP fetch for a card already in the database" do
     HttpFetcher.define_singleton_method(:call) { |_| raise "should not have been called" }
 
     assert_nothing_raised do
@@ -209,8 +232,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     end
   end
 
-  test "force: true bypasses the freshness check" do
-    cards(:honedge).touch
+  test "force: true re-scrapes a card already in the database" do
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56", force: true)

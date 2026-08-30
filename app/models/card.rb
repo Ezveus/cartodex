@@ -30,7 +30,11 @@ class Card < ApplicationRecord
   validates :name, presence: true
   validates :card_type, presence: true, inclusion: { in: CARD_TYPES }
   validates :set_name, presence: true
-  validates :set_number, presence: true
+  # A printing is identified by its set and number — Cards::Fetcher looks cards
+  # up by exactly this pair, so two rows sharing it would make that lookup
+  # arbitrary. The unique index is the real guarantee; this is here for the
+  # readable error.
+  validates :set_number, presence: true, uniqueness: { scope: :set_name }
   validates :rarity, presence: true, unless: -> { subtype == "Basic Energy" }
 
   # Conditional validations for Pokémon cards
