@@ -50,14 +50,14 @@ export default class extends Controller {
     this.#hideCreateSection()
   }
 
-  // --- Pokemon search for create ---
+  // --- Card search for create ---
 
   searchPrimary() {
-    this.#searchPokemon(this.primaryInputTarget, this.primaryResultsTarget, "primary")
+    this.#searchCard(this.primaryInputTarget, this.primaryResultsTarget, "primary")
   }
 
   searchSecondary() {
-    this.#searchPokemon(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
+    this.#searchCard(this.secondaryInputTarget, this.secondaryResultsTarget, "secondary")
   }
 
   selectPrimary(event) {
@@ -155,7 +155,7 @@ export default class extends Controller {
     this.archetypeResultsTarget.innerHTML = html
   }
 
-  #searchPokemon(inputTarget, resultsTarget, prefix) {
+  #searchCard(inputTarget, resultsTarget, prefix) {
     clearTimeout(this[`${prefix}Timeout`])
     const query = inputTarget.value.trim()
 
@@ -165,20 +165,15 @@ export default class extends Controller {
     }
 
     this[`${prefix}Timeout`] = setTimeout(async () => {
-      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}&type=Pokémon`, {
+      const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}`, {
         credentials: "same-origin"
       })
       if (!response.ok) return
+      // Every type, and every printing: an archetype may designate a Trainer, and
+      // which printing it designates is the user's choice to see.
       const cards = await response.json()
 
-      const seen = new Set()
-      const unique = cards.filter(c => {
-        if (seen.has(c.name)) return false
-        seen.add(c.name)
-        return true
-      })
-
-      resultsTarget.innerHTML = unique.map(card => `
+      resultsTarget.innerHTML = cards.map(card => `
         <div class="archetype-search-item"
              data-action="click->result-modal#select${prefix === 'primary' ? 'Primary' : 'Secondary'}"
              data-card-id="${card.id}"

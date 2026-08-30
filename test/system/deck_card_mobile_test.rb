@@ -42,7 +42,7 @@ class DeckCardMobileTest < ApplicationSystemTestCase
 
   # The two steppers happen to be <button>s, but this codebase mostly writes clickable controls as a
   # <div> or <span> carrying data-action (archetype_picker_controller.js:141,
-  # result_modal_controller.js:140, pokemon_select_controller.js:61) — and #99 means to put a
+  # result_modal_controller.js:140, card_select_controller.js:53) — and #99 means to put a
   # printing picker on this row's set/number span. A guard that only knew native interactive
   # elements would let that one through and reopen this bug, so the rule is about carrying an
   # action, not about the tag. Simulated here rather than waiting for #99 to ship it.

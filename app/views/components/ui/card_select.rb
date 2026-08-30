@@ -1,16 +1,19 @@
 # frozen_string_literal: true
 
 module Ui
-  # Renders a Pokémon autocomplete group: a visible text input, an optional hidden ID
+  # Renders a card autocomplete group: a visible text input, an optional hidden ID
   # field, and a results dropdown — all wrapped in a `Ui::FormGroup`.
   #
-  # ## Standalone mode (own `pokemon-select` Stimulus controller)
+  # Searches every card type. Its only users are the archetype pickers, and an
+  # archetype may designate a Pokémon, a Trainer or an Energy.
+  #
+  # ## Standalone mode (own `card-select` Stimulus controller)
   #
   # Pass `hidden_field_name:` to render a plain hidden input owned by the
-  # `pokemon-select` controller. Use when there is no parent form builder.
+  # `card-select` controller. Use when there is no parent form builder.
   #
-  #   render Ui::PokemonSelect.new(
-  #     label: "Primary Pokémon",
+  #   render Ui::CardSelect.new(
+  #     label: "Primary card",
   #     hidden_field_name: "archetype[primary_card_id]",
   #     current_value: @archetype.primary_card&.name
   #   )
@@ -20,8 +23,8 @@ module Ui
   # Omit `hidden_field_name:`. Supply explicit `data:` hashes for each element.
   # Optionally yield a block to render a custom hidden field (e.g. from a form builder).
   #
-  #   render Ui::PokemonSelect.new(
-  #     label: "Primary Pokémon",
+  #   render Ui::CardSelect.new(
+  #     label: "Primary card",
   #     hidden_data: { result_modal_target: "primaryId" },
   #     input_data:  { result_modal_target: "primaryInput",
   #                    action: "input->result-modal#searchPrimary" },
@@ -30,20 +33,20 @@ module Ui
   #
   # ## Form-builder hidden field (block form)
   #
-  #   render Ui::PokemonSelect.new(
-  #     label: "Primary Pokémon",
-  #     current_value: pokemon&.name,
-  #     input_data:  { pokemon_select_target: "input",
-  #                    action: "input->pokemon-select#search" },
-  #     results_data: { pokemon_select_target: "results" },
-  #     wrapper_data: { controller: "pokemon-select" }
+  #   render Ui::CardSelect.new(
+  #     label: "Primary card",
+  #     current_value: card&.name,
+  #     input_data:  { card_select_target: "input",
+  #                    action: "input->card-select#search" },
+  #     results_data: { card_select_target: "results" },
+  #     wrapper_data: { controller: "card-select" }
   #   ) do
-  #     f.hidden_field :primary_card_id, data: { pokemon_select_target: "hiddenField" }
+  #     f.hidden_field :primary_card_id, data: { card_select_target: "hiddenField" }
   #   end
-  class PokemonSelect < ApplicationComponent
-    STANDALONE_INPUT_DATA = { pokemon_select_target: "input", action: "input->pokemon-select#search" }.freeze
-    STANDALONE_RESULTS_DATA = { pokemon_select_target: "results" }.freeze
-    STANDALONE_HIDDEN_DATA = { pokemon_select_target: "hiddenField" }.freeze
+  class CardSelect < ApplicationComponent
+    STANDALONE_INPUT_DATA = { card_select_target: "input", action: "input->card-select#search" }.freeze
+    STANDALONE_RESULTS_DATA = { card_select_target: "results" }.freeze
+    STANDALONE_HIDDEN_DATA = { card_select_target: "hiddenField" }.freeze
 
     # @param label             [String]       Label text shown above the input
     # @param placeholder       [String]       Placeholder for the text input
@@ -55,7 +58,7 @@ module Ui
     # @param wrapper_data      [Hash, nil]    data-* attrs for the FormGroup wrapper div
     def initialize(
       label:,
-      placeholder: "Search Pokémon...",
+      placeholder: "Search cards...",
       current_value: nil,
       hidden_field_name: nil,
       input_data: nil,
@@ -94,7 +97,7 @@ module Ui
 
     def effective_wrapper_data
       return @wrapper_data if @wrapper_data
-      return { controller: "pokemon-select" } if standalone?
+      return { controller: "card-select" } if standalone?
 
       nil
     end

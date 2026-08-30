@@ -50,14 +50,14 @@ module Decks
     def create_archetype_section
       div(class: "create-archetype-section", style: "display: none;", data: { result_modal_target: "createSection" }) do
         p(class: "form-label", style: "font-weight: 600; margin-bottom: 0.5rem;") { "New archetype" }
-        pokemon_search_group(label_text: "Primary Pokémon", target: "primary")
-        pokemon_search_group(label_text: "Secondary Pokémon (optional)", target: "secondary")
+        card_search_group(label_text: "Primary card", target: "primary")
+        card_search_group(label_text: "Secondary card (optional)", target: "secondary")
         button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "result-modal#cancelCreate" }) { "Cancel new archetype" }
       end
     end
 
-    def pokemon_search_group(label_text:, target:)
-      render Ui::PokemonSelect.new(
+    def card_search_group(label_text:, target:)
+      render Ui::CardSelect.new(
         label: label_text,
         hidden_data:  { result_modal_target: "#{target}Id" },
         input_data:   { result_modal_target: "#{target}Input", action: "input->result-modal#search#{target.capitalize}" },

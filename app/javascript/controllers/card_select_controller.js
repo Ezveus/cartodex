@@ -32,33 +32,25 @@ export default class extends Controller {
   }
 
   async #fetchResults(query) {
-    const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}&type=Pokémon`, {
+    const response = await fetch(`/api/cards?q=${encodeURIComponent(query)}`, {
       credentials: "same-origin"
     })
 
     if (!response.ok) return
-    const cards = await response.json()
-
-    // Deduplicate by name, keep first match
-    const seen = new Set()
-    const unique = cards.filter(c => {
-      if (seen.has(c.name)) return false
-      seen.add(c.name)
-      return true
-    })
-
-    this.#renderResults(unique)
+    // No deduplication by name: which printing an archetype designates is the
+    // user's choice, and collapsing them would hide every option but the first.
+    this.#renderResults(await response.json())
   }
 
   #renderResults(cards) {
     if (cards.length === 0) {
-      this.resultsTarget.innerHTML = '<div class="archetype-search-empty">No Pokémon found</div>'
+      this.resultsTarget.innerHTML = '<div class="archetype-search-empty">No cards found</div>'
       return
     }
 
     this.resultsTarget.innerHTML = cards.map(card => `
       <div class="archetype-search-item"
-           data-action="click->pokemon-select#select"
+           data-action="click->card-select#select"
            data-card-id="${card.id}"
            data-card-name="${this.#escape(card.name)}">
         <strong>${this.#escape(card.name)}</strong>
