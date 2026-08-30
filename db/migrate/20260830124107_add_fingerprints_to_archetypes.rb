@@ -56,15 +56,23 @@ class AddFingerprintsToArchetypes < ActiveRecord::Migration[8.1]
 
   private
 
+  # "" means "no secondary": a *present* secondary_card_id with a blank
+  # secondary_fingerprint is a card that has never been scraped, not a missing
+  # secondary, and must be caught here too — otherwise it migrates quietly into
+  # looking single-member and can collide with an unrelated single-member
+  # archetype on the same primary.
   def reject_unfingerprinted!
     orphans = select_all(<<~SQL).to_a
-      SELECT id, name FROM archetypes
+      SELECT id, name,
+        CASE WHEN primary_fingerprint IS NULL OR primary_fingerprint = '' THEN 'primary' ELSE 'secondary' END AS missing_half
+      FROM archetypes
       WHERE primary_fingerprint IS NULL OR primary_fingerprint = ''
+         OR (secondary_card_id IS NOT NULL AND secondary_fingerprint = '')
     SQL
     return if orphans.empty?
 
     raise "#{orphans.size} archetype(s) point at a card with no fingerprint and cannot be " \
-          "keyed on one — #{orphans.map { |row| "##{row['id']} #{row['name']}" }.join(', ')}. " \
+          "keyed on one — #{orphans.map { |row| "##{row['id']} #{row['name']} (#{row['missing_half']})" }.join(', ')}. " \
           "Re-scrape those cards from the admin panel first (Cards → Rescrape), which is what " \
           "computes a fingerprint."
   end

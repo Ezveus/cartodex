@@ -15,6 +15,11 @@ class Archetype < ApplicationRecord
   # The presence check turns "this card has never been scraped" into a readable
   # error instead of a NOT NULL violation.
   validates :primary_fingerprint, presence: true
+  # "" means "no secondary" — a *present* secondary card that resolves to "" has
+  # simply never been scraped, which is not the same state, and must not be
+  # silently treated as single-member (it would then be free to collide with an
+  # unrelated single-member archetype on the same primary).
+  validates :secondary_fingerprint, presence: true, if: -> { secondary_card_id.present? }
   validates :primary_fingerprint, uniqueness: { scope: :secondary_fingerprint }
 
   before_validation :sync_fingerprints

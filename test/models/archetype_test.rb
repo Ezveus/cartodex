@@ -115,6 +115,17 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_includes archetype.errors[:primary_fingerprint], "can't be blank"
   end
 
+  # "" means "no secondary": a present-but-unscraped secondary must not be
+  # silently treated as missing, or it could collide with an unrelated
+  # single-member archetype on the same primary.
+  test "an unfingerprinted secondary cannot be designated either" do
+    archetype = Archetype.new(primary_card: cards(:doublade), secondary_card: cards(:trainer_card),
+      name: "Doublade / Boss")
+
+    assert_not archetype.valid?
+    assert_includes archetype.errors[:secondary_fingerprint], "can't be blank"
+  end
+
   # The migration refuses to add the index when a duplicate pair exists, and names
   # the offenders rather than deleting one — decks and deck_results point at these
   # rows. Once the index is in place a duplicate cannot be created, so the only way
@@ -136,8 +147,57 @@ class ArchetypeTest < ActiveSupport::TestCase
 
     duplicates = AddFingerprintsToArchetypes.new.duplicate_pairs
 
+    # GROUP_CONCAT's element order is not guaranteed by SQLite, so assert on
+    # membership rather than on a joined string.
     assert_equal 1, duplicates.size
-    assert_match "Clone A / Clone B", duplicates.first["names"]
+    assert_includes duplicates.first["names"], "Clone A"
+    assert_includes duplicates.first["names"], "Clone B"
+  end
+
+  # The migration's refusal (raise, not a deleted row) is a global constraint —
+  # this exercises the actual raise, not just the query behind it.
+  test "the migration's reject_duplicates! actually raises and names the offenders" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_fingerprints_to_archetypes')}")
+
+    connection = ActiveRecord::Base.connection
+    connection.remove_index :archetypes, name: "index_archetypes_on_fingerprint_pair"
+    Archetype.insert_all([
+      { name: "Clone A", name_normalized: "clone a", primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "clone_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current },
+      { name: "Clone B", name_normalized: "clone b", primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "clone_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    error = assert_raises(RuntimeError) { AddFingerprintsToArchetypes.new.send(:reject_duplicates!) }
+
+    assert_match "Clone A", error.message
+    assert_match "Clone B", error.message
+  end
+
+  # Covers both halves: a blank primary_fingerprint, and a present secondary_card_id
+  # whose secondary_fingerprint is blank (an unscraped secondary, not a missing one).
+  test "the migration's reject_unfingerprinted! actually raises and names which half is missing" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_fingerprints_to_archetypes')}")
+
+    Archetype.insert_all([
+      { name: "No Primary Fingerprint", name_normalized: "no primary fingerprint",
+        primary_card_id: cards(:trainer_card).id, secondary_card_id: nil,
+        primary_fingerprint: "", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current },
+      { name: "No Secondary Fingerprint", name_normalized: "no secondary fingerprint",
+        primary_card_id: cards(:doublade).id, secondary_card_id: cards(:trainer_card).id,
+        primary_fingerprint: "doublade_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    error = assert_raises(RuntimeError) { AddFingerprintsToArchetypes.new.send(:reject_unfingerprinted!) }
+
+    assert_match "No Primary Fingerprint", error.message
+    assert_match "(primary)", error.message
+    assert_match "No Secondary Fingerprint", error.message
+    assert_match "(secondary)", error.message
   end
 
   private
