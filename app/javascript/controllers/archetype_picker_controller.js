@@ -121,10 +121,10 @@ export default class extends Controller {
   #prefillCreate(primary, secondary) {
     this.showCreateForm()
     this.primaryIdTarget.value = primary.id
-    this.primaryInputTarget.value = primary.name
+    this.primaryInputTarget.value = this.#cardLabel(primary)
     if (secondary) {
       this.secondaryIdTarget.value = secondary.id
-      this.secondaryInputTarget.value = secondary.name
+      this.secondaryInputTarget.value = this.#cardLabel(secondary)
     }
   }
 
@@ -212,8 +212,16 @@ export default class extends Controller {
   }
 
   // An archetype now designates a printing, not just a name: show the set and
-  // number alongside it so the picker matches what was actually chosen.
+  // number alongside it so the picker matches what was actually chosen. Mirrors
+  // Card#printing_label on the Ruby side.
+  #cardLabel(card) {
+    return `${card.name} (${card.set_name} ${card.set_number})`
+  }
+
+  // The same label for a markup context. Escaping belongs to that path only:
+  // assigned straight to an input's value it would show the entities literally,
+  // which is why #prefillCreate uses #cardLabel and the dropdown uses this.
   #formatCard(card) {
-    return `${this.#escape(card.name)} (${this.#escape(card.set_name)} ${this.#escape(card.set_number)})`
+    return this.#escape(this.#cardLabel(card))
   }
 }

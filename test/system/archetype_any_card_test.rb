@@ -54,6 +54,22 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
     assert_field(with: "Boss's Orders")
   end
 
+  # The other way the create form gets filled. Suggest writes the detector's
+  # candidate straight into the input, so it has to name the printing the same
+  # way picking from the dropdown does — otherwise the field says one thing
+  # before the user touches it and another after.
+  test "the Suggest prefill names the printing too" do
+    deck = @user.decks.create!(name: "Froakie Box", physical: true)
+    deck.deck_cards.create!(card: cards(:froakie_twm), quantity: 4)
+
+    visit edit_deck_path(deck)
+    click_button "Suggest"
+
+    within(".create-archetype-section") do
+      assert_field(with: "Froakie (TWM 56)")
+    end
+  end
+
   # Task 4 changed the archetype JSON so primary_card/secondary_card are objects
   # ({ id, name, set_name, set_number }) rather than bare names, and
   # archetype_picker_controller.js#formatCard renders "Name (SET NUMBER)" from
