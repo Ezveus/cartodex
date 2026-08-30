@@ -72,8 +72,8 @@ class Decks::ArchetypeDetector < ApplicationService
       .where(cards: { fingerprint: fingerprints })
       .preload(primary_card: :pokemon_subtype, secondary_card: :pokemon_subtype)
       .map { |archetype| [ archetype, score(archetype, fingerprints) ] }
-      .select { |(_, score)| score.positive? }
-      .max_by { |(archetype, score)| [ score, member_count(archetype) ] }
+      .select { |(_, points)| points.positive? }
+      .max_by { |(archetype, points)| [ points, member_count(archetype) ] }
       &.first
   end
 

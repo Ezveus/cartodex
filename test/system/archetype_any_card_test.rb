@@ -34,7 +34,13 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
 
     within(".create-archetype-section") do
       find("[data-archetype-picker-target='primaryInput']").fill_in with: "Boss's Orders"
+      # Both printings must be listed — that's what proves dedup-by-name is gone,
+      # not which one happens to render first. `/api/cards` has no ORDER BY, so
+      # asserting on a single printing's position would rest on fixture id order,
+      # not on the property actually at stake.
       assert_selector ".archetype-search-item", text: "MEG 114"
+      assert_selector ".archetype-search-item", text: "PAL 172"
+      assert_selector ".archetype-search-item", count: 2
       find(".archetype-search-item", text: "MEG 114").click
       click_button "Create & select"
     end

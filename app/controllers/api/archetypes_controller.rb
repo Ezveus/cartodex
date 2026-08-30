@@ -25,6 +25,18 @@ module Api
       render json: { error: "Card not found" }, status: :not_found
     rescue ActiveRecord::RecordInvalid => e
       render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+    # The model's uniqueness validation and the unique index are separated by a
+    # read-then-write window, so two concurrent creates can both pass validation
+    # and the loser takes the index in the face. That loser wants exactly what the
+    # winner just created — this endpoint is idempotent on the fingerprint pair —
+    # so re-read rather than reporting a failure the user cannot act on.
+    rescue ActiveRecord::RecordNotUnique
+      archetype = existing(primary, secondary)
+      if archetype
+        render json: archetype_json(archetype), status: :created
+      else
+        render json: { errors: [ "Archetype already exists" ] }, status: :unprocessable_entity
+      end
     end
 
     private

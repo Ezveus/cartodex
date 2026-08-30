@@ -74,6 +74,42 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # The model's uniqueness validation and the unique index are separated by a
+  # read-then-write window: two concurrent creates can both pass validation, and
+  # the loser takes the index in the face. Simulate that race in one thread by
+  # making `build` insert the "winner" archetype as a side effect, then forcing
+  # the "loser" record's save! to skip validation (so it does not simply raise
+  # RecordInvalid, which is already handled) and hit the real unique index —
+  # exactly what a genuinely concurrent second request would do.
+  test "resolves a concurrent create by returning the archetype the race winner created" do
+    primary = cards(:bosss_orders_meg)
+    original_build = Api::ArchetypesController.instance_method(:build)
+
+    Api::ArchetypesController.define_method(:build) do |primary_card, secondary_card|
+      winner = Archetype.create!(primary_card: primary_card, secondary_card: secondary_card)
+      loser = original_build.bind(self).call(primary_card, secondary_card)
+      # Populate name/fingerprints the same way a real save! would (their
+      # before_validation callbacks), without keeping the uniqueness check that
+      # would otherwise turn this into a RecordInvalid, not the RecordNotUnique
+      # a real race produces.
+      loser.valid?
+      loser.define_singleton_method(:save!) { save(validate: false) }
+      loser
+    end
+
+    begin
+      assert_difference "Archetype.count", 1 do
+        post api_archetypes_path, params: { primary_card_id: primary.id }, as: :json
+      end
+    ensure
+      Api::ArchetypesController.define_method(:build, original_build)
+    end
+
+    assert_response :created
+    json = JSON.parse(response.body)
+    assert_equal Archetype.find_by(primary_card: primary).id, json["id"]
+  end
+
   test "the index returns each member's printing, not a bare name" do
     get api_archetypes_path, params: { q: "Ogerpon" }
 

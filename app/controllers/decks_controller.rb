@@ -162,17 +162,17 @@ class DecksController < ApplicationController
     }
   end
 
-  # Primary Pokémon of the archetypes used by the current user's decks, for the filter bar.
+  # Primary card of the archetypes used by the current user's decks, for the filter bar.
   def primary_filter_options
-    pokemon_filter_options(:primary_card_id)
+    member_card_filter_options(:primary_card_id)
   end
 
-  # Secondary Pokémon of the archetypes used by the current user's decks, for the filter bar.
+  # Secondary card of the archetypes used by the current user's decks, for the filter bar.
   def secondary_filter_options
-    pokemon_filter_options(:secondary_card_id)
+    member_card_filter_options(:secondary_card_id)
   end
 
-  def pokemon_filter_options(column)
+  def member_card_filter_options(column)
     archetype_ids = current_user.decks.where.not(archetype_id: nil).select(:archetype_id)
     card_ids = Archetype.where(id: archetype_ids).select(column)
     Card.where(id: card_ids).order(:name).pluck(:name, :id)
