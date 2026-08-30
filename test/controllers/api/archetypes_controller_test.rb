@@ -103,11 +103,19 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
       end
     ensure
       Api::ArchetypesController.define_method(:build, original_build)
+      # `define_method` called on the class from out here defines a *public*
+      # method whatever the original's visibility, and restoring the
+      # implementation does not restore the `private`. Without this line `build`
+      # stays public for the rest of this worker process — a side effect that
+      # outlives the test that caused it.
+      Api::ArchetypesController.send(:private, :build)
     end
 
     assert_response :created
     json = JSON.parse(response.body)
     assert_equal Archetype.find_by(primary_card: primary).id, json["id"]
+    assert Api::ArchetypesController.private_method_defined?(:build),
+      "the race simulation must leave `build` private, or it leaks into every later test in this worker"
   end
 
   test "the index returns each member's printing, not a bare name" do

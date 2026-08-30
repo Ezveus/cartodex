@@ -54,7 +54,7 @@ export default class extends Controller {
            data-card-id="${card.id}"
            data-card-name="${this.#escape(card.name)}">
         <strong>${this.#escape(card.name)}</strong>
-        <span class="archetype-search-pokemon">${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
+        <span class="archetype-search-pokemon">${this.#escape(card.card_type)} · ${this.#escape(card.set_name)} ${this.#escape(card.set_number)}</span>
       </div>
     `).join("")
   }

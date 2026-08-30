@@ -34,10 +34,11 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
 
     within(".create-archetype-section") do
       find("[data-archetype-picker-target='primaryInput']").fill_in with: "Boss's Orders"
-      # Both printings must be listed — that's what proves dedup-by-name is gone,
-      # not which one happens to render first. `/api/cards` has no ORDER BY, so
-      # asserting on a single printing's position would rest on fixture id order,
-      # not on the property actually at stake.
+      # Both printings must be listed — that's what proves dedup-by-name is gone.
+      # Deliberately not asserting which renders first: neither of these two
+      # fixtures has an imported set, so `/api/cards`'s release-date ordering
+      # cannot separate them and their order rests on fixture ids. The property
+      # at stake is that neither printing is collapsed away.
       assert_selector ".archetype-search-item", text: "MEG 114"
       assert_selector ".archetype-search-item", text: "PAL 172"
       assert_selector ".archetype-search-item", count: 2
