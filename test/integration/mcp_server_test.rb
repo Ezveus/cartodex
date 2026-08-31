@@ -51,6 +51,25 @@ class McpServerTest < ActionDispatch::IntegrationTest
     assert_equal 2, @user.collections.find_by(card: @card).quantity
   end
 
+  # The SEP-2575 "modern" lifecycle arrived in mcp 1.2 and is served by default.
+  # `subscriptions/listen` is intercepted by the transport itself — it never
+  # reaches Server#handle — so declaring no resources does not put it out of
+  # reach, and the transport answers it with a Rack streaming body that responds
+  # to `call` and deliberately not to `each`. This controller buffers
+  # (`render body: Array(body).join`), which would turn that body into its own
+  # `#to_s` — an object inspection string served as a 200. The transport is
+  # therefore built with `serve_subscriptions_listen: false`, which drops the
+  # interception so the method falls through to the dispatcher as unimplemented.
+  test "refuses subscriptions/listen instead of answering a stream it cannot serve" do
+    post "/mcp", params: modern_listen_rpc, headers: modern_headers
+
+    body = JSON.parse(response.body)
+    assert_equal(-32601, body.dig("error", "code"),
+      "subscriptions/listen must be refused as unimplemented, got: #{response.body}")
+    refute_match(/ListenStreamBody|#<MCP/, response.body,
+      "a streaming body leaked into the buffered response")
+  end
+
   test "the Rails test host is not an allowed Host header in production" do
     # The mcp gem checks these against the request's Host header as DNS
     # rebinding protection. www.example.com is here purely so the integration
@@ -220,6 +239,30 @@ class McpServerTest < ActionDispatch::IntegrationTest
       params: rpc("list_decks", {}),
       headers: auth_headers(token: token),
       env: { "REMOTE_ADDR" => SOURCE_IP }
+  end
+
+  MODERN_PROTOCOL_VERSION = "2026-07-28"
+
+  # A minimal SEP-2575 modern request: the `_meta` envelope claims the modern
+  # lifecycle, and the mirror headers the modern path requires must agree with it.
+  def modern_listen_rpc
+    {
+      jsonrpc: "2.0", id: 1, method: "subscriptions/listen",
+      params: {
+        notifications: {},
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion" => MODERN_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientCapabilities" => {}
+        }
+      }
+    }.to_json
+  end
+
+  def modern_headers
+    auth_headers.merge(
+      "MCP-Protocol-Version" => MODERN_PROTOCOL_VERSION,
+      "Mcp-Method" => "subscriptions/listen"
+    )
   end
 
   # The test environment's cache store is :null_store (config/environments/test.rb),

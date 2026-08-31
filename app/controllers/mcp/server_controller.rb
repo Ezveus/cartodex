@@ -114,8 +114,18 @@ module Mcp
         tools: McpTool.permitted_for(TOOLS, @current_scopes),
         server_context: { user: @current_user }
       )
+      # `serve_subscriptions_listen: false` because this action buffers: it joins
+      # the body into a single `render`. The SEP-2575 `subscriptions/listen`
+      # stream (mcp 1.2) is intercepted by the transport rather than dispatched
+      # through the server, so declaring no resources does not put it out of
+      # reach, and it answers with a Rack streaming body that responds to `call`
+      # and not to `each` — which `Array(body).join` would serve as the object's
+      # own `#to_s`, a 200 carrying an inspection string. Declining the method
+      # makes it fall through to the dispatcher as unimplemented (-32601), the
+      # honest answer from a host that cannot hold an SSE response open.
       transport = MCP::Server::Transports::StreamableHTTPTransport.new(
-        server, stateless: true, allowed_hosts: ALLOWED_HOSTS
+        server, stateless: true, allowed_hosts: ALLOWED_HOSTS,
+        serve_subscriptions_listen: false
       )
       status, headers, body = transport.handle_request(request)
 
