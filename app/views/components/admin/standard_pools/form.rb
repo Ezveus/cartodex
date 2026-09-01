@@ -47,8 +47,9 @@ module Admin
         @card_sets ||= CardSet.by_release
       end
 
-      # The column is json; the input is text. Rendered joined so a round-trip
-      # through a failed validation shows what the user typed.
+      # The column is json; the input is text. What comes back after a failed
+      # validation is therefore the *parsed* value — split, stripped and upcased —
+      # re-joined for the input, not the raw string the user typed.
       def marks_value
         Array(@standard_pool.regulation_marks).join(", ")
       end

@@ -488,7 +488,7 @@ Three facts behind the two values in bold, all of them non-derivable — a futur
 
 1. **`J` starts at ASC, not at MEG.** The Mega Evolution block opens on the `I` mark — *Mega Lucario ex* is MEG 77 with an `I` — so MEG and PFL add no new mark, and `SVI-ASC` is the first pool to carry four.
 2. **ASC's legality is 2026-03-06, five weeks after release, not two.** *Ascended Heroes* shipped staggered: the ETB only arrived 2026-02-20, and Play! Pokémon pushed legality past the 2026-02-13 EUIC. This is exactly the case that makes `legal_on` a stored column rather than a computed one — derived, it would have claimed ASC was legal at a tournament where it was not.
-3. **A rotation-created pool has `released_on == legal_on == the rotation date.`** True of both `SVI-JTG` (2025-04-11) and `TEF-POR` (2026-04-10), because Play! Pokémon aligns each rotation with a set's legality date rather than with its release.
+3. **The rotation date is a pool's `legal_on`, and only sometimes its `released_on` too.** Play! Pokémon aligns each rotation with a set's legality date rather than with its release, so the rotation date is always the `legal_on`. `SVI-JTG` is the case where the two coincide (2025-04-11 for both), because no set released with it. `TEF-POR` is not: POR's cards existed on 2026-03-27 and only their *legality* waited for the 2026-04-10 rotation, which is why the table gives it `released_on` 2026-03-27 and `legal_on` 2026-04-10. Reading an equality into that row and "correcting" the seed to 2026-04-10 would make `StandardPool.current` two weeks late.
 
 Two more decisions this table encodes:
 
