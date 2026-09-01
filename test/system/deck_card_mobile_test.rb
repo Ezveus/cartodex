@@ -16,7 +16,7 @@ class DeckCardMobileTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     @user.collections.find_or_initialize_by(card: cards(:honedge)).update!(quantity: 3)
-    @deck = @user.decks.create!(name: "Pocket Deck", physical: true)
+    @deck = @user.decks.create!(name: "Pocket Deck", physical: true, standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
 
     login_as @user, scope: :user

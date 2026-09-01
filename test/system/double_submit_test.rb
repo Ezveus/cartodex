@@ -10,7 +10,7 @@ class DoubleSubmitTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     login_as @user, scope: :user
-    @deck = @user.decks.create!(name: "Froakie Box", physical: true)
+    @deck = @user.decks.create!(name: "Froakie Box", physical: true, standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: cards(:froakie_twm), quantity: 4)
   end
 

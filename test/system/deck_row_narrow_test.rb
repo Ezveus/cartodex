@@ -22,7 +22,7 @@ class DeckRowNarrowTest < ApplicationSystemTestCase
     @user = users(:one)
     @asc = cards(:budew_asc)
     @user.collections.find_by!(card: @asc).update!(quantity: 2)
-    @deck = @user.decks.create!(name: "Pocket", physical: true)
+    @deck = @user.decks.create!(name: "Pocket", physical: true, standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: @asc, quantity: 3, owned_copies: 2)
     # A real decklist is full of names like this one, and the row is a single flex line: the name
     # cannot shrink past its longest word, so it is what pushes the allocation stepper off screen.
