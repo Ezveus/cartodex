@@ -8,6 +8,19 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  # --- Create action ---
+
+  # The API cannot declare a format, so a deck created through it is always
+  # Standard by the column default; without an anchor it would be unsavable.
+  test "create anchors a new deck to the current standard pool" do
+    post api_decks_path, params: { deck: { name: "New Deck" } }, as: :json
+
+    assert_response :created
+    json = JSON.parse(response.body)
+    deck = Deck.find(json["id"])
+    assert_equal StandardPool.current, deck.standard_pool
+  end
+
   # --- Import action ---
 
   test "import enqueues Decks::ImportJob and returns 202" do

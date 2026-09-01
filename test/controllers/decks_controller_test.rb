@@ -76,6 +76,18 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert @deck.expanded?
   end
 
+  # The new-deck form is where a Standard deck's anchor is actually chosen; deck_params must
+  # permit it or every Standard deck created through the form would 422.
+  test "create persists an explicit standard pool" do
+    post decks_path, params: { deck: {
+      name: "New Standard Deck", format: "standard", standard_pool_id: standard_pools(:twm_asc).id
+    } }
+
+    new_deck = Deck.order(:id).last
+    assert_redirected_to deck_path(new_deck)
+    assert_equal standard_pools(:twm_asc), new_deck.standard_pool
+  end
+
   # On the show page the allocation steppers change what the badge derives from without a reload,
   # so the badge ships on every load and `deck-proxies` toggles it. It therefore has to be in the
   # markup — hidden — even for a deck that currently holds no proxy.

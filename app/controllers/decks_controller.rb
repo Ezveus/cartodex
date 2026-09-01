@@ -207,6 +207,8 @@ class DecksController < ApplicationController
   end
 
   def deck_params
-    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :archetype_id)
+    params.require(:deck).permit(
+      :name, :description, :physical, :tcg_live, :format, :other_format_name, :archetype_id, :standard_pool_id
+    )
   end
 end

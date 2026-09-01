@@ -75,6 +75,14 @@ class StandardPoolTest < ActiveSupport::TestCase
 
   # :nullify would leave the deck with a NULL anchor, which its own validation
   # then refuses on the next edit.
+  #
+  # This only isolates the :decks half because :decks is declared before
+  # :tournaments in the model: destroy runs dependent callbacks in declaration
+  # order and aborts on the first restriction, so the :tournaments callback
+  # (still restrict_with_error, no standard_pool_id column on tournaments yet)
+  # never runs. The declaration order is load-bearing until that column lands;
+  # once it does, this test exercises both callbacks and the order stops
+  # mattering.
   test "a pool holding decks refuses to be destroyed" do
     pool = standard_pools(:twm_por)
 
