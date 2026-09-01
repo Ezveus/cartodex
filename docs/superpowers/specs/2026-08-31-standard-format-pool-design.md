@@ -107,7 +107,9 @@ Three existing paths the validation would otherwise break, and which land in the
 
 The row set is derived mechanically rather than curated, so that "did we miss a pool?" has an answer: **one pool per pool-creating event, from the 2025 rotation onward** — every set release moves the upper bound, every rotation moves the lower bound. Two sets released the same day are one event and one pool, named per the Limitless convention (which also covers the energy subsets: SVI/SVE, MEG/MEE). A rotation that falls on a set's legality date, as 2026's did, is likewise one pool, not two.
 
-`legal_on` uses the officially announced date where one is sourced (rotation dates always are). Where only the release date is known, it is release + 14 days, and the seed marks those rows as approximate rather than presenting an inference as a fact.
+`legal_on` uses the officially announced date, per set. It is usually the second Friday after the US release, but it is **not a formula**, which is why it is stored rather than computed: *Ascended Heroes* shipped staggered — its ETB only arrived 2026-02-20 — so Play! Pokémon pushed its legality to 2026-03-06, five weeks after release and past the 2026-02-13 EUIC. Derived, `at(2026-02-13)` would have claimed ASC was legal at a tournament where it was not.
+
+Promo sets are out of this model on purpose: their legality is per-card, not per-set, and a promo enters a pool through its regulation mark like any other card. They are never a pool bound.
 
 **The seed data is the one place in this change where an error is silent.** The per-set release dates, the per-rotation legal marks and every `legal_on` will be sourced and submitted for review before the seed is committed.
 

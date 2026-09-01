@@ -467,29 +467,34 @@ Refs #122"
   { code: "PBL", name: "Pitch Black",                 block_name: "Mega Evolution", release_date: "2026-07-17" }
 ```
 
-- [ ] **Step 2: REVIEW GATE — submit the pool table for sign-off**
+- [ ] **Step 2: The pool table — SIGNED OFF, use these values verbatim**
 
-Print this table for the maintainer and **wait for explicit approval before writing the seed file**. Sourced values are marked; inferred ones are the ones to check hardest.
-
-`legal_on` is the announced date where one exists (rotations always announce one) and `released_on + 14` otherwise, because Play! Pokémon makes a new set tournament-legal about two weeks after release.
+This table was submitted to the maintainer and corrected by them. It is authoritative; do not re-derive any value in it.
 
 | Pool | Created by | `released_on` | `legal_on` | `regulation_marks` |
 |---|---|---|---|---|
-| `SVI-JTG` | 2025 rotation | 2025-04-11 | 2025-04-11 *(sourced)* | G, H, I |
-| `SVI-DRI` | DRI release | 2025-05-30 | 2025-06-13 *(inferred)* | G, H, I |
-| `SVI-BLK` | BLK + WHT release | 2025-07-18 | 2025-08-01 *(inferred)* | G, H, I |
-| `SVI-MEG` | MEG + MEE release | 2025-09-26 | 2025-10-10 *(inferred)* | G, H, I, J |
-| `SVI-PFL` | PFL release | 2025-11-14 | 2025-11-28 *(inferred)* | G, H, I, J |
-| `SVI-ASC` | ASC release | 2026-01-30 | 2026-02-13 *(inferred)* | G, H, I, J |
-| `TEF-POR` | 2026 rotation + POR release | 2026-03-27 | 2026-04-10 *(sourced)* | H, I, J |
-| `TEF-CRI` | CRI release | 2026-05-22 | 2026-06-05 *(inferred)* | H, I, J |
-| `TEF-PBL` | PBL release | 2026-07-17 | 2026-07-31 *(inferred)* | H, I, J |
+| `SVI-JTG` | 2025 rotation | 2025-04-11 | 2025-04-11 | G, H, I |
+| `SVI-DRI` | DRI release | 2025-05-30 | 2025-06-13 | G, H, I |
+| `SVI-BLK` | BLK + WHT release | 2025-07-18 | 2025-08-01 | G, H, I |
+| `SVI-MEG` | MEG + MEE release | 2025-09-26 | 2025-10-10 | G, H, I |
+| `SVI-PFL` | PFL release | 2025-11-14 | 2025-11-28 | G, H, I |
+| `SVI-ASC` | ASC release | 2026-01-30 | **2026-03-06** | G, H, I, **J** |
+| `TEF-POR` | 2026 rotation + POR release | 2026-03-27 | 2026-04-10 | H, I, J |
+| `TEF-CRI` | CRI release | 2026-05-22 | 2026-06-05 | H, I, J |
+| `TEF-PBL` | PBL release | 2026-07-17 | 2026-07-31 | H, I, J |
 
-Three things to flag when presenting it:
+Three facts behind the two values in bold, all of them non-derivable — a future maintainer who "corrects" either by re-applying the release + 14 rule will reintroduce a bug:
 
-1. **The single biggest uncertainty is which mark the Mega Evolution block carries.** The table assumes MEG onwards is `J`, which is what makes `SVI-MEG` gain a fourth mark. If MEG is not J, rows 4–6 are wrong.
-2. **`SVI-BLK`, not `SVI-BLK/WHT`** — BLK and WHT released the same day; the upper bound is single and follows the Limitless name, as decided.
-3. **The history starts at the 2025 rotation** because every earlier rotation has a Sword & Shield lower bound and no Sword & Shield set exists in `card_sets`.
+1. **`J` starts at ASC, not at MEG.** The Mega Evolution block opens on the `I` mark — *Mega Lucario ex* is MEG 77 with an `I` — so MEG and PFL add no new mark, and `SVI-ASC` is the first pool to carry four.
+2. **ASC's legality is 2026-03-06, five weeks after release, not two.** *Ascended Heroes* shipped staggered: the ETB only arrived 2026-02-20, and Play! Pokémon pushed legality past the 2026-02-13 EUIC. This is exactly the case that makes `legal_on` a stored column rather than a computed one — derived, it would have claimed ASC was legal at a tournament where it was not.
+3. **A rotation-created pool has `released_on == legal_on == the rotation date.`** True of both `SVI-JTG` (2025-04-11) and `TEF-POR` (2026-04-10), because Play! Pokémon aligns each rotation with a set's legality date rather than with its release.
+
+Two more decisions this table encodes:
+
+- **`SVI-BLK`, not `SVI-BLK/WHT`** — BLK and WHT released the same day; the upper bound is single and follows the Limitless name.
+- **The history starts at the 2025 rotation** because every earlier rotation has a Sword & Shield lower bound and no Sword & Shield set exists in `card_sets`.
+
+Promo sets (`SVP`, `MEP`) are deliberately absent: their legality is per-card, not per-set, and a promo reaches a pool through its regulation mark like any other card. They are never a pool bound.
 
 - [ ] **Step 3: Write the seed**
 
@@ -509,16 +514,22 @@ Create `db/seeds/standard_pools.rb`:
 # admin panel. It is keyed on the bound pair, which the unique index guarantees,
 # so re-running it after admin edits neither duplicates nor overwrites.
 #
-# legal_on is the officially announced date where there is one (rotations) and
-# released_on + 14 days otherwise — Play! Pokémon makes a new set tournament-legal
-# about two weeks after it releases.
+# legal_on is Play! Pokémon tournament legality, which is usually the second
+# Friday after the US release (release + 14) but is NOT a formula — see ASC below.
+# It is stored rather than computed precisely because of that.
+#
+# The J mark starts at ASC, not at MEG: the Mega Evolution block opens on I
+# (Mega Lucario ex is MEG 77, mark I), so MEG and PFL add no new mark.
 POOLS = [
   { first: "SVI", last: "JTG", marks: %w[G H I],   released_on: "2025-04-11", legal_on: "2025-04-11" },
   { first: "SVI", last: "DRI", marks: %w[G H I],   released_on: "2025-05-30", legal_on: "2025-06-13" },
   { first: "SVI", last: "BLK", marks: %w[G H I],   released_on: "2025-07-18", legal_on: "2025-08-01" },
-  { first: "SVI", last: "MEG", marks: %w[G H I J], released_on: "2025-09-26", legal_on: "2025-10-10" },
-  { first: "SVI", last: "PFL", marks: %w[G H I J], released_on: "2025-11-14", legal_on: "2025-11-28" },
-  { first: "SVI", last: "ASC", marks: %w[G H I J], released_on: "2026-01-30", legal_on: "2026-02-13" },
+  { first: "SVI", last: "MEG", marks: %w[G H I],   released_on: "2025-09-26", legal_on: "2025-10-10" },
+  { first: "SVI", last: "PFL", marks: %w[G H I],   released_on: "2025-11-14", legal_on: "2025-11-28" },
+  # ASC shipped staggered — the ETB only arrived 2026-02-20 — so Play! Pokémon
+  # pushed its legality to 2026-03-06, past the 2026-02-13 EUIC. Five weeks after
+  # release, not two: do not "fix" this back to the +14 rule.
+  { first: "SVI", last: "ASC", marks: %w[G H I J], released_on: "2026-01-30", legal_on: "2026-03-06" },
   { first: "TEF", last: "POR", marks: %w[H I J],   released_on: "2026-03-27", legal_on: "2026-04-10" },
   { first: "TEF", last: "CRI", marks: %w[H I J],   released_on: "2026-05-22", legal_on: "2026-06-05" },
   { first: "TEF", last: "PBL", marks: %w[H I J],   released_on: "2026-07-17", legal_on: "2026-07-31" }
