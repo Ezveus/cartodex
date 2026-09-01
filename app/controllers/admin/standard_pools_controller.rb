@@ -3,12 +3,12 @@ module Admin
     before_action :set_standard_pool, only: [ :edit, :update, :destroy ]
 
     def index
-      # decks and tournaments are eager-loaded because the index shows their
-      # counts: without them each row's `.size` would be its own COUNT query.
-      # Same trade-off Admin::CardSetsController makes with `includes(:cards)`.
-      @standard_pools = StandardPool
-        .includes(:first_card_set, :last_card_set, :decks, :tournaments)
-        .by_release
+      @standard_pools = StandardPool.named.by_release
+      # The index prints two integers per row. Eager-loading the associations kept the
+      # query count constant but materialised every anchored deck and tournament to do
+      # it; two grouped counts answer the same question in two queries and two hashes.
+      @deck_counts = Deck.where.not(standard_pool_id: nil).group(:standard_pool_id).count
+      @tournament_counts = Tournament.where.not(standard_pool_id: nil).group(:standard_pool_id).count
     end
 
     def new

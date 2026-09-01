@@ -1,8 +1,13 @@
 module Admin
   module StandardPools
     class IndexView < ApplicationComponent
-      def initialize(standard_pools:)
+      # The counts arrive as {standard_pool_id => n} hashes rather than being read off
+      # the associations: the index prints two integers per row, and loading every
+      # anchored deck and tournament to produce them is a payload nobody looks at.
+      def initialize(standard_pools:, deck_counts:, tournament_counts:)
         @standard_pools = standard_pools
+        @deck_counts = deck_counts
+        @tournament_counts = tournament_counts
         @current = StandardPool.current
       end
 
@@ -30,8 +35,8 @@ module Admin
           t.cell { pool.regulation_marks.join(", ") }
           t.cell { pool.released_on.strftime("%Y-%m-%d") }
           t.cell { pool.legal_on.strftime("%Y-%m-%d") }
-          t.cell { pool.decks.size.to_s }
-          t.cell { pool.tournaments.size.to_s }
+          t.cell { @deck_counts.fetch(pool.id, 0).to_s }
+          t.cell { @tournament_counts.fetch(pool.id, 0).to_s }
           t.cell do
             render Ui::AdminActions.new(
               edit_path: edit_admin_standard_pool_path(pool),

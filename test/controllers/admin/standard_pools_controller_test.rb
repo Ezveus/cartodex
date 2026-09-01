@@ -31,6 +31,22 @@ class Admin::StandardPoolsControllerTest < ActionDispatch::IntegrationTest
       "pools must be listed newest release first"
   end
 
+  # The counts come from two grouped queries rather than from the associations — loading
+  # every anchored deck and tournament to print two integers is a payload nobody reads —
+  # and a pool nothing points at must still show 0 rather than a blank cell.
+  test "the index counts the decks and tournaments anchored to each pool" do
+    get admin_standard_pools_path
+
+    rows = css_select(".data-table-row")
+    por = rows.find { |row| row.text.include?("TWM-POR") }
+    asc = rows.find { |row| row.text.include?("TWM-ASC") }
+
+    assert_equal "2", por.css("[data-label='Decks']").first.text
+    assert_equal "2", por.css("[data-label='Tournaments']").first.text
+    assert_equal "0", asc.css("[data-label='Decks']").first.text
+    assert_equal "0", asc.css("[data-label='Tournaments']").first.text
+  end
+
   # A set release moves only the upper bound, so the parts a human does not know
   # are pre-filled from the current pool. Typing them again is how a wrong pool
   # gets seeded.
