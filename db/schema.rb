@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_30_124107) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_01_085723) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -217,6 +217,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_124107) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "standard_pools", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "first_card_set_id", null: false
+    t.integer "last_card_set_id", null: false
+    t.date "legal_on", null: false
+    t.json "regulation_marks", null: false
+    t.date "released_on", null: false
+    t.datetime "updated_at", null: false
+    t.index ["first_card_set_id", "last_card_set_id"], name: "index_standard_pools_on_bounds", unique: true
+    t.index ["first_card_set_id"], name: "index_standard_pools_on_first_card_set_id"
+    t.index ["last_card_set_id"], name: "index_standard_pools_on_last_card_set_id"
+  end
+
   create_table "tournament_profiles", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.date "date_of_birth", null: false
@@ -285,6 +298,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_124107) do
   add_foreign_key "imports", "users"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
+  add_foreign_key "standard_pools", "card_sets", column: "first_card_set_id"
+  add_foreign_key "standard_pools", "card_sets", column: "last_card_set_id"
   add_foreign_key "tournament_profiles", "users"
   add_foreign_key "tournaments", "decks"
   add_foreign_key "tournaments", "tournament_profiles"
