@@ -6,9 +6,24 @@ if [ -z "${LD_PRELOAD+x}" ]; then
     export LD_PRELOAD
 fi
 
-# If running the rails server then create or migrate existing database
+# If running the rails server then create or migrate existing database, and make sure the
+# reference data the schema depends on is there before the server accepts any traffic.
+#
+# decks.standard_pool_id is required for a Standard deck, so an empty standard_pools table
+# makes deck creation and decklist import fail for every user. db:prepare only seeds a
+# database it has just created, so an existing one needs db:seed explicitly — and it has to
+# happen here, in the new image before boot, rather than in a post-deploy hook that would
+# leave the app serving in that state.
+#
+# Both are safe on every boot: the seeds fill missing values and never overwrite, and the
+# backfill is scoped to rows with no anchor, so after the first run it is two queries. The
+# backfill exits non-zero when it could write nothing, which fails the boot on purpose —
+# an app that starts with unanchored Standard decks 422s on every edit, and finding that out
+# at deploy time beats finding it out from users.
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
+  ./bin/rails db:seed
+  ./bin/rails standard_pools:backfill_anchors
 fi
 
 exec "${@}"

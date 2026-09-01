@@ -29,9 +29,30 @@ SETS = [
   { code: "PBL", name: "Pitch Black",                 block_name: "Mega Evolution", release_date: "2026-07-17" }
 ].freeze
 
+# Fills what is missing and overwrites nothing — the same `||=` guard CardSets::Importer
+# uses, and for the same reason. This seed used to `update!` unconditionally, so every run
+# reasserted the hardcoded name, block and release date over whatever was in the database,
+# reverting any correction made from the admin panel. That is what kept db:seed off the
+# deploy path; it now runs on every boot, so it must not fight the admin screen.
+#
+# Scoped by region as well as code: card_sets is UNIQUE on (region, code), not on code, so a
+# bare code lookup would find a Japanese set of the same code once #111 lands and rewrite it
+# with international data.
+created = 0
+filled = 0
+
 SETS.each do |attrs|
-  card_set = CardSet.find_or_initialize_by(code: attrs[:code])
-  card_set.update!(attrs)
+  card_set = CardSet.find_or_initialize_by(code: attrs[:code], region: "international")
+  was_new = card_set.new_record?
+
+  card_set.name ||= attrs[:name]
+  card_set.block_name ||= attrs[:block_name]
+  card_set.release_date ||= attrs[:release_date]
+
+  next unless card_set.changed?
+
+  card_set.save!
+  was_new ? created += 1 : filled += 1
 end
 
 # Link existing cards to their sets
@@ -40,4 +61,5 @@ Card.where(card_set_id: nil).find_each do |card|
   card.update_column(:card_set_id, card_set.id) if card_set
 end
 
-puts "Seeded #{CardSet.count} card sets, linked #{Card.where.not(card_set_id: nil).count} cards"
+puts "Card sets: #{created} created, #{filled} completed, #{CardSet.count} total; " \
+     "#{Card.where.not(card_set_id: nil).count} cards linked"
