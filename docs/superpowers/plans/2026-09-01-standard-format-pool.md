@@ -1389,38 +1389,9 @@ This form has **no** Stimulus toggling: it renders `other_format_name` unconditi
 - Consumes: `StandardPool.at(date)`, `StandardPool.current`, `Tournament#standard_pool_id` (Task 5).
 - Produces: the tournament form posts `tournament[standard_pool_id]`.
 
-- [ ] **Step 1: Write the failing test**
+**Already done in Task 5, do not redo:** `:standard_pool_id` is permitted in `TournamentsController#tournament_params`, and a test that posting an explicit `standard_pool_id` creates the tournament with that pool already exists. Both were pulled forward for the same reason as on the deck side — Task 5's validation would otherwise have left every tournament create and edit answering 422 until this task landed, with no test to catch it. This task owns the **form field only**.
 
-Append to `test/controllers/tournaments_controller_test.rb` (reuse its sign-in setup):
-
-```ruby
-  test "creating a tournament stores the chosen standard pool" do
-    assert_difference "Tournament.count", 1 do
-      post tournaments_path, params: { tournament: {
-        name: "Anchored Cup", date: "2026-02-10", deck_id: decks(:one).id,
-        tier: "league_cup", format: "standard",
-        standard_pool_id: standard_pools(:twm_por).id
-      } }
-    end
-
-    assert_equal standard_pools(:twm_por), Tournament.order(:created_at).last.standard_pool
-  end
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `bin/rails test test/controllers/tournaments_controller_test.rb`
-Expected: fails — `standard_pool_id` is not permitted, so the tournament is invalid and no row is created.
-
-- [ ] **Step 3: Permit the parameter**
-
-`app/controllers/tournaments_controller.rb:61`, add `:standard_pool_id` to the list:
-
-```ruby
-      :name, :date, :format, :other_format_name, :standard_pool_id, :tier, :deck_id, :tournament_profile_id,
-```
-
-- [ ] **Step 4: Add the field**
+- [ ] **Step 1: Add the field**
 
 In `app/views/components/tournaments/form.rb`, immediately after the `format` group and before the `other_format_name` group:
 
@@ -1451,16 +1422,16 @@ And in the private section:
 
 `StandardPool.at(nil)` would raise, so guard it if `@tournament.date` can be nil — `at` compares against the column, and `where(legal_on: ..nil)` yields an unbounded range that matches everything. Verify with `bin/rails runner 'p StandardPool.at(nil)&.name'`; if it does not return the newest pool, change `selected_standard_pool_id` to test `@tournament.date.present?` before calling `at`.
 
-- [ ] **Step 5: Run to verify it passes**
+- [ ] **Step 2: Run to verify it passes**
 
 Run: `bin/rails test`
 Expected: 0 failures.
 
-- [ ] **Step 6: Sabotage-verify**
+- [ ] **Step 3: Sabotage-verify**
 
-Remove `:standard_pool_id` from the `permit` list. The new test must fail. Revert.
+Remove the Standard `FormGroup` block from the form. The pool names must stop appearing in a `get edit_tournament_path(...)` body — add that assertion if none exists, confirm it goes red, then revert.
 
-- [ ] **Step 7: Rubocop and commit**
+- [ ] **Step 4: Rubocop and commit**
 
 ```bash
 bin/rubocop app/views/components/tournaments/form.rb app/controllers/tournaments_controller.rb
