@@ -65,4 +65,29 @@ class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
     assert_equal 0, result.decks
     assert_includes result.skipped.join, "no Standard pool"
   end
+
+  # The empty-table guard does not cover this: `oldest` is ordered by legal_on and is a
+  # real row, so the run proceeded and wrote StandardPool.current — nil — over every
+  # unanchored deck, while still returning the row count update_all touched. The task
+  # then printed "Anchored N deck(s)" having anchored none.
+  test "reports rather than blanks the decks when every pool is future-dated" do
+    StandardPool.update_all(released_on: Date.current + 30)
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal 0, result.decks
+    assert_nil decks(:one).reload.standard_pool_id
+    assert_includes result.skipped.join, "no Standard pool has released yet"
+  end
+
+  # Tournaments read legal_on, which a future released_on does not touch, so they are
+  # still anchorable in that state and must not be skipped along with the decks.
+  test "still anchors tournaments when every pool is future-dated" do
+    StandardPool.update_all(released_on: Date.current + 30)
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal 2, result.tournaments
+    assert_not_nil tournaments(:one).reload.standard_pool_id
+  end
 end

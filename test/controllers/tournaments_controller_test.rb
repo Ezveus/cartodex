@@ -260,4 +260,17 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     notice = css_select(".standard-pool-notice").first.text
     refute_match(/deck/i, notice, "the notice must not name a record type: it renders for tournaments too")
   end
+
+  # A failed update re-renders the form with whatever was submitted, so a blanked date
+  # gets there. StandardPool.at(nil) answers with the newest pool by legal_on rather than
+  # nothing, so an unguarded notice would compare the anchor against that and nag about a
+  # date the user just erased.
+  test "a rejected update that blanked the date is not nagged about the anchor" do
+    @tournament.update!(date: Date.new(2026, 2, 1), standard_pool: standard_pools(:twm_asc))
+
+    patch tournament_path(@tournament), params: { tournament: { date: "" } }
+
+    assert_response :unprocessable_entity
+    assert_select ".standard-pool-notice", count: 0
+  end
 end

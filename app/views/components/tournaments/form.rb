@@ -40,7 +40,7 @@ module Tournaments
           f.collection_select :standard_pool_id, standard_pools, :id, :name,
             { selected: selected_standard_pool_id }, class: "form-input"
           render Ui::StandardPoolNotice.new(
-            record: @tournament, expected: StandardPool.at(@tournament.date)
+            record: @tournament, expected: expected_standard_pool
           )
         end
 
@@ -83,6 +83,17 @@ module Tournaments
       @standard_pools ||= StandardPool.named.by_release
     end
 
+    # The pool the tournament's own date calls for, or nil when there is no date to ask
+    # about. Guarded and memoized because both the pre-selection and the stale-anchor
+    # notice need the same answer: unguarded, `at(nil)` returns the newest pool by
+    # legal_on, and the notice would then nag about a mismatch with nothing — which is
+    # exactly the state a failed update that blanked the date re-renders in.
+    def expected_standard_pool
+      return @expected_standard_pool if defined?(@expected_standard_pool)
+
+      @expected_standard_pool = @tournament.date.present? ? StandardPool.at(@tournament.date) : nil
+    end
+
     # A tournament is played under the format legal on its own date, not on "the newest pool
     # today" — a set becomes tournament-legal about two weeks after it ships, so defaulting to
     # StandardPool.current would pre-select a pool that was not yet legal when an older
@@ -91,8 +102,7 @@ module Tournaments
     def selected_standard_pool_id
       return @tournament.standard_pool_id if @tournament.standard_pool_id
 
-      pool = StandardPool.at(@tournament.date) if @tournament.date.present?
-      (pool || StandardPool.current)&.id
+      (expected_standard_pool || StandardPool.current)&.id
     end
 
     def top_cut_hint
