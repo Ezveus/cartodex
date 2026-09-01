@@ -274,4 +274,18 @@ class DeckTest < ActiveSupport::TestCase
 
     assert deck.valid?
   end
+
+  test "format_label names the standard pool the deck is anchored to" do
+    deck = Deck.new(user: users(:one), name: "Anchored", format: "standard",
+      standard_pool: standard_pools(:twm_por))
+
+    assert_equal "Standard (TWM-POR)", deck.format_label
+  end
+
+  # Pre-backfill rows and any row the anchor does not apply to.
+  test "format_label falls back to the bare format name without a pool" do
+    deck = Deck.new(user: users(:one), name: "Anchorless", format: "standard")
+
+    assert_equal "Standard", deck.format_label
+  end
 end

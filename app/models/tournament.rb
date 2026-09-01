@@ -79,12 +79,16 @@ class Tournament < ApplicationRecord
 
   before_validation :clear_inapplicable_classification
 
-  # Human-readable format label. For the "other" format the user-supplied
-  # name takes precedence when present.
+  # Human-readable format label. For the "other" format the user-supplied name
+  # takes precedence when present; for Standard the pool is named, since
+  # "Standard" alone does not identify a card pool.
   def format_label
     return other_format_name if other? && other_format_name.present?
 
-    FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    base = FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    return base unless standard? && standard_pool
+
+    "#{base} (#{standard_pool.name})"
   end
 
   def tier_label

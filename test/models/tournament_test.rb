@@ -117,6 +117,12 @@ class TournamentTest < ActiveSupport::TestCase
     end
   end
 
+  test "format_label names the standard pool the tournament was played under" do
+    tournament = build_tournament(format: "standard", standard_pool: standard_pools(:twm_por))
+
+    assert_equal "Standard (TWM-POR)", tournament.format_label
+  end
+
   private
 
   def build_tournament(attrs = {})
