@@ -67,8 +67,6 @@ module Admin
     end
 
     def parse_marks(value)
-      return value if value.is_a?(Array)
-
       value.to_s.split(",").map { |mark| mark.strip.upcase }.reject(&:empty?)
     end
   end
