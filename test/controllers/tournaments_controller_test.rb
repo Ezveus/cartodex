@@ -52,6 +52,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
           deck_id: @deck.id,
           tier: "league_cup",
           format: "standard",
+          standard_pool_id: standard_pools(:twm_por).id,
           participant_count: 20,
           placement: 2
         }
@@ -59,6 +60,22 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to tournament_path(Tournament.last)
+  end
+
+  test "create with an explicit standard_pool_id anchors the tournament to that pool" do
+    post tournaments_path, params: {
+      tournament: {
+        name: "City Championship",
+        date: "2026-05-01",
+        deck_id: @deck.id,
+        tier: "league_cup",
+        format: "standard",
+        standard_pool_id: standard_pools(:twm_asc).id
+      }
+    }
+
+    assert_redirected_to tournament_path(Tournament.last)
+    assert_equal standard_pools(:twm_asc), Tournament.last.standard_pool
   end
 
   test "create with invalid params re-renders the form" do
@@ -110,7 +127,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters tournaments by name" do
     @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
-                              format: "standard", tier: "league_cup")
+                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     get tournaments_path(q: "lyon")
 
@@ -145,9 +162,9 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   # The spotlight renders "See all N tournaments" from Search::Global; this page must then show N.
   test "index shows exactly as many tournaments as the spotlight's total promises" do
     @user.tournaments.create!(deck: @deck, name: "Ogerpon Cup", date: Date.new(2026, 5, 1),
-                              format: "standard", tier: "league_cup")
+                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
     @user.tournaments.create!(deck: @deck, name: "Ogerpon League", date: Date.new(2026, 5, 2),
-                              format: "standard", tier: "league_cup")
+                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     get tournaments_path(q: "ogerpon")
 
@@ -158,7 +175,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
   test "a q request renders the matching tournaments inside the turbo frame" do
     @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
-                              format: "standard", tier: "league_cup")
+                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     get tournaments_path(q: "lyon")
 

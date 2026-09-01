@@ -6,6 +6,7 @@ one:
   name_normalized: regional championship
   date: 2026-03-14
   format: standard
+  standard_pool: twm_por
   tier: regional
   participant_count: 512
   placement: 33
@@ -18,6 +19,7 @@ two:
   name_normalized: local league cup
   date: 2026-02-01
   format: standard
+  standard_pool: twm_por
   tier: league_cup
   participant_count: 12
   placement: 1

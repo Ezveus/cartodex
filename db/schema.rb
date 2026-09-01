@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_01_094530) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_01_100855) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -254,11 +254,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_094530) do
     t.string "other_format_name"
     t.integer "participant_count"
     t.integer "placement"
+    t.integer "standard_pool_id"
     t.string "tier", default: "regional", null: false
     t.integer "tournament_profile_id"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["deck_id"], name: "index_tournaments_on_deck_id"
+    t.index ["standard_pool_id"], name: "index_tournaments_on_standard_pool_id"
     t.index ["tournament_profile_id"], name: "index_tournaments_on_tournament_profile_id"
     t.index ["user_id"], name: "index_tournaments_on_user_id"
   end
@@ -305,6 +307,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_094530) do
   add_foreign_key "standard_pools", "card_sets", column: "last_card_set_id"
   add_foreign_key "tournament_profiles", "users"
   add_foreign_key "tournaments", "decks"
+  add_foreign_key "tournaments", "standard_pools"
   add_foreign_key "tournaments", "tournament_profiles"
   add_foreign_key "tournaments", "users"
 end

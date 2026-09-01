@@ -71,7 +71,8 @@ class Search::GlobalTest < ActiveSupport::TestCase
   test "excludes another user's decks and tournaments" do
     decks(:two).update!(user: users(:two), name: "Ogerpon Toolbox")
     users(:two).tournaments.create!(deck: decks(:two), name: "Ogerpon Open",
-                                    date: Date.new(2026, 4, 1), format: "standard", tier: "league_cup")
+                                    date: Date.new(2026, 4, 1), format: "standard",
+                                    standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     result = Search::Global.call(user: @user, query: "ogerpon")
 
@@ -88,7 +89,8 @@ class Search::GlobalTest < ActiveSupport::TestCase
 
   test "matches the user's own tournaments by name" do
     tournament = @user.tournaments.create!(deck: @deck, name: "Ogerpon Open",
-                                           date: Date.new(2026, 4, 1), format: "standard", tier: "league_cup")
+                                           date: Date.new(2026, 4, 1), format: "standard",
+                                           standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     result = Search::Global.call(user: @user, query: "ogerpon")
 
@@ -101,7 +103,8 @@ class Search::GlobalTest < ActiveSupport::TestCase
   # fills every non-empty group, which is what makes the extra queries appear.
   test "skips the total count for a group the cap did not truncate" do
     @user.tournaments.create!(deck: @deck, name: "Ogerpon Open",
-                              date: Date.new(2026, 4, 1), format: "standard", tier: "league_cup")
+                              date: Date.new(2026, 4, 1), format: "standard",
+                              standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     unfilled = count_queries { Search::Global.call(user: @user, query: "ogerpon", limit: 5) }
     filled   = count_queries { Search::Global.call(user: @user, query: "ogerpon", limit: 1) }

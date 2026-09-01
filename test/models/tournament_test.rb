@@ -69,6 +69,30 @@ class TournamentTest < ActiveSupport::TestCase
     assert_nil build_tournament(participant_count: nil).standard_top_cut
   end
 
+  test "requires a standard pool when the format is standard" do
+    tournament = build_tournament(format: "standard", standard_pool: nil)
+
+    assert_not tournament.valid?
+    assert_includes tournament.errors[:standard_pool], "can't be blank"
+  end
+
+  test "clears the standard pool when the format is not standard" do
+    tournament = build_tournament(format: "expanded", standard_pool: standard_pools(:twm_por))
+
+    tournament.validate
+
+    assert_nil tournament.standard_pool_id
+  end
+
+  # Distinct from the clearing test above: that one only checks the field gets nilled out, not
+  # that the record ends up valid. An unconditional presence validation would clear the field and
+  # still fail — this is what actually proves the "if: :standard?" guard is doing its job.
+  test "does not require a standard pool when the format is not standard" do
+    tournament = build_tournament(format: "expanded", standard_pool: nil)
+
+    assert tournament.valid?
+  end
+
   # Uppercase accented letter in the stored name on purpose — see the note in DeckTest: only
   # name_normalized can match a lowercase query against it.
   test "name_matching ignores case on accented letters" do
