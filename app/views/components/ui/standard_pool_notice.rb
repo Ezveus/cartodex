@@ -7,11 +7,13 @@ module Ui
   # `expected` is the pool the record would take if it were created now — the
   # current pool for a deck, the pool legal on its date for a tournament. Those
   # are different questions, and this component does not know which one it was
-  # handed: a deck's mismatch is always staleness (expected is always the newest
-  # pool the deck could have been anchored to), while a tournament's mismatch can
-  # go either way (a data-entry error, not staleness). The wording below is
-  # chosen by comparing the two pools' release dates rather than by asking what
-  # kind of record this is, so it reads correctly either way.
+  # handed — and neither branch's copy may name a record type or mention a date:
+  # a deck has no date, and a tournament's mismatch can go either direction (its
+  # anchor may be older *or* newer than the pool its date calls for). So every
+  # string this component can ever emit must read correctly for both a deck and
+  # a tournament. The branch below is decided purely by comparing the two
+  # StandardPool#released_on values it already holds, never by asking what kind
+  # of record this is.
   class StandardPoolNotice < ApplicationComponent
     def initialize(record:, expected:)
       @record = record
@@ -25,13 +27,11 @@ module Ui
         plain "Anchored to "
         strong { @record.standard_pool.name }
         plain ". "
+        strong { @expected.name }
         if stale?
-          strong { @expected.name }
-          plain " has released since — update it if you still play this deck."
+          plain " has released since — update the anchor if this is still current."
         else
-          plain "The pool for this date is "
-          strong { @expected.name }
-          plain " — check the anchor."
+          plain " is the pool that applies — check the anchor."
         end
       end
     end
@@ -49,6 +49,11 @@ module Ui
     # True when the expected pool released after the anchor's — the ordinary
     # "a newer Standard exists" case. False covers the other direction, which
     # only a tournament anchored to the wrong pool for its date can produce.
+    #
+    # Strict `>`: released_on carries no uniqueness constraint, so two pools
+    # sharing a release date would fall to the "else" branch instead of this
+    # one. Harmless — neither branch names a record type or a date, so both
+    # read correctly regardless of which one a same-day tie lands in.
     def stale?
       @expected.released_on > @record.standard_pool.released_on
     end

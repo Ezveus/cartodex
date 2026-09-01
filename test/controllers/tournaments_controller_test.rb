@@ -237,4 +237,19 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".standard-pool-notice", count: 0
   end
+
+  # The other direction from "disagrees with its date says so" above: there the
+  # anchor was newer than the date calls for (the "else"/non-stale branch).
+  # Here the anchor is older than the date calls for, which is the ordinary
+  # staleness branch — reachable for a tournament too, not just a deck, and it
+  # is exactly the branch whose copy previously named "this deck" by mistake.
+  test "editing a tournament anchored to an older pool than its date calls for is nagged" do
+    tournaments(:one).update!(date: Date.new(2026, 2, 1), standard_pool: standard_pools(:twm_asc))
+
+    get edit_tournament_path(tournaments(:one))
+
+    assert_response :success
+    assert_select ".standard-pool-notice", text: /TWM-POR/
+    assert_select ".standard-pool-notice", text: /released since/
+  end
 end

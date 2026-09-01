@@ -490,4 +490,23 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_no_match "released since", response.body
   end
+
+  # Isolates the "no anchor at all" guard from the "new record" guard: this deck
+  # is persisted (so @record.persisted? does not block it), it just has no
+  # standard_pool. Fixtures always ship with one, and the model validates its
+  # presence on a standard-format deck, so the only way to reach this state is
+  # to bypass validation the way the rest of the suite does (e.g.
+  # test/models/card_test.rb's save(validate: false)) — it is the pre-backfill
+  # state a real row could be left in, not something the form can produce.
+  test "a persisted deck with no anchor yet is not nagged" do
+    deck = decks(:one)
+    deck.format = "standard"
+    deck.standard_pool = nil
+    deck.save(validate: false)
+
+    get edit_deck_path(deck)
+
+    assert_response :success
+    assert_select ".standard-pool-notice", count: 0
+  end
 end
