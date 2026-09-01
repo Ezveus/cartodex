@@ -113,7 +113,9 @@ The row set is derived mechanically rather than curated, so that "did we miss a 
 
 ## Backfill
 
-The migration that adds `standard_pool_id` backfills both tables in the same change, since the validation makes an unanchored Standard record unsavable through any form.
+Both tables are backfilled in the same change, since the validation makes an unanchored Standard record unsavable through any form.
+
+**The backfill is a rake task, not part of the migration** — `bin/rails standard_pools:backfill_anchors`, behind `StandardPools::AnchorBackfill`, on the `archetypes:resync_fingerprints` precedent. A migration cannot do it: the pools it needs come from `db/seeds`, which runs *after* `db:migrate`, so a migration would find an empty table. The deploy order on an existing database is therefore `db:migrate` → `db:seed` → `standard_pools:backfill_anchors`, and the task is idempotent so a corrected seed can be re-applied.
 
 - **Tournaments** take `StandardPool.at(date)` — the date is real and the answer is exact.
 - **Decks** take `StandardPool.current`. `created_at` is not the date a deck was built (importing an old decklist today stamps today), so anchoring on it would fabricate a precision the column does not have. The current pool is visibly wrong for an old deck rather than plausibly wrong, and the stale-anchor nudge is what invites the user to fix it.
@@ -165,11 +167,13 @@ For a tournament the comparison is against `StandardPool.at(date)`, not `current
 - **The upper-bound convention is a judgement call** on a double release, inherited from Limitless. A future double release asks the same question again; the seed comment records the rule so the answer is not re-derived.
 - **`Tournament`'s anchor is not kept in sync with its `date`.** Change the date after saving and the anchor stays; the nudge surfaces the mismatch rather than fixing it.
 
+- **Between a set's release and its legality date, `current` and `at(Date.current)` disagree** — about two weeks a year. `current` already names the new pool, so a new deck is pre-anchored to a Standard that is not yet legal in an event, which is right for building and wrong for the tournament three days away. `current` is a pre-selection the user can change and `at(date)` is exact for tournaments, so this is a recorded imprecision, not a bug. Found while deriving the seed table, not while designing.
+
 ## Testing
 
 - **Model:** `#name`; `current` ignoring a pool whose `released_on` is in the future; `at(date)` on `legal_on`; the conditional presence validation and the clearing of the anchor on a format change — on `Deck` **and** `Tournament`.
 - **Services:** `Decks::Duplicator` preserves the anchor; `Decks::Fetcher` anchors to `current`; `CardSets::Importer` fills `release_date` and does not overwrite a seeded one.
 - **Admin:** the pool CRUD requires an admin (the `Admin::BaseController` guard); the new form pre-fills the lower bound and marks from the current pool; deleting a referenced pool is refused and says so, rather than nulling an anchor.
 - **System:** picking a pool when creating a deck and seeing it in the badge; the nudge present on a deck anchored to an older pool. Both viewports, as the repo requires.
-- **Not covered by a test, deliberately:** the migration's backfill. It runs once and the suite starts from `schema.rb`, so a test would assert against a fixture rather than against the data that matters. It is verified by hand on the development database, and the result reported.
+- **Backfill:** `StandardPools::AnchorBackfill` is a service, so it is tested like one — tournaments by `at(date)`, decks on `current`, non-Standard rows left alone, an event older than the whole history falling back to the oldest pool, idempotency, and the empty-database case reporting rather than writing. Moving the backfill out of the migration is what makes this testable at all. The run against the development database is still done by hand and its counts reported, since only that exercises the real rows.
 - Every new test is verified by breaking the implementation first — a test that has never been red proves nothing.
