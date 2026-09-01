@@ -251,5 +251,13 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".standard-pool-notice", text: /TWM-POR/
     assert_select ".standard-pool-notice", text: /released since/
+    # Guards the regression that actually shipped and was caught by a human, not by a
+    # test: this branch's copy used to read "update it if you still play this deck" on a
+    # page that has no deck on it. Both assertions above passed against that wording, so
+    # they proved the branch reachable and nothing more. These two only pass on copy that
+    # names no record type — which is the contract Ui::StandardPoolNotice documents.
+    assert_select ".standard-pool-notice", text: /update the anchor/
+    notice = css_select(".standard-pool-notice").first.text
+    refute_match(/deck/i, notice, "the notice must not name a record type: it renders for tournaments too")
   end
 end

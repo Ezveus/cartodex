@@ -114,6 +114,23 @@ class Admin::StandardPoolsControllerTest < ActionDispatch::IntegrationTest
     assert_match "deck", flash[:alert]
   end
 
+  # Delete is why the action exists: the refusal above only proves the guard, never that a
+  # pool nothing points at actually goes. twm_asc is referenced by no fixture — decks.yml
+  # and tournaments.yml both anchor on twm_por — so it is the one deletable pool.
+  test "deletes a pool nothing is anchored to" do
+    pool = standard_pools(:twm_asc)
+
+    assert_empty pool.decks
+    assert_empty pool.tournaments
+
+    assert_difference "StandardPool.count", -1 do
+      delete admin_standard_pool_path(pool)
+    end
+
+    assert_redirected_to admin_standard_pools_path
+    assert_equal "Standard pool deleted.", flash[:notice]
+  end
+
   test "requires an admin" do
     @admin.update!(admin: false)
 
