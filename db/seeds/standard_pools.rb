@@ -9,7 +9,8 @@
 #
 # This file is a bootstrap, not the source of truth: pools are maintained from the
 # admin panel. It is keyed on the bound pair, which the unique index guarantees,
-# so re-running it after admin edits neither duplicates nor overwrites.
+# so re-running it never duplicates a row — and an existing row is left exactly
+# as the maintainer has it, so re-running it after admin edits never overwrites.
 #
 # legal_on is Play! Pokémon tournament legality, which is usually the second
 # Friday after the US release (release + 14) but is NOT a formula — see ASC below.
@@ -33,6 +34,7 @@ POOLS = [
 ].freeze
 
 missing = []
+created = 0
 
 POOLS.each do |attrs|
   first_set = CardSet.find_by(code: attrs[:first])
@@ -46,11 +48,18 @@ POOLS.each do |attrs|
   end
 
   pool = StandardPool.find_or_initialize_by(first_card_set: first_set, last_card_set: last_set)
+
+  # A bootstrap, not the source of truth: pools are maintained from the admin panel,
+  # so a row that already exists is left exactly as the maintainer has it. Correcting
+  # seeded data after the fact is an admin edit, not a re-seed.
+  next unless pool.new_record?
+
   pool.regulation_marks = attrs[:marks]
   pool.released_on = attrs[:released_on]
   pool.legal_on = attrs[:legal_on]
   pool.save!
+  created += 1
 end
 
-puts "Seeded #{StandardPool.count} Standard pools; current is #{StandardPool.current&.name || 'none'}"
+puts "Seeded #{created} new Standard pool(s); #{StandardPool.count} total; current is #{StandardPool.current&.name || 'none'}"
 puts "Skipped (bound set missing): #{missing.join(', ')}" if missing.any?
