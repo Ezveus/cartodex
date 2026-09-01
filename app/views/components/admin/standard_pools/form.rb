@@ -11,12 +11,12 @@ module Admin
 
           render Ui::FormGroup.new(hint: "The oldest legal set — moved by the annual rotation") do
             f.label :first_card_set_id, "Lower bound", class: "form-label"
-            f.collection_select :first_card_set_id, card_sets, :id, :code, {}, class: "form-input"
+            f.select :first_card_set_id, card_set_options, {}, class: "form-input"
           end
 
           render Ui::FormGroup.new(hint: "The newest legal set — moved by every release") do
             f.label :last_card_set_id, "Upper bound", class: "form-label"
-            f.collection_select :last_card_set_id, card_sets, :id, :code, {}, class: "form-input"
+            f.select :last_card_set_id, card_set_options, {}, class: "form-input"
           end
 
           render Ui::FormGroup.new(hint: "Comma-separated, e.g. H, I, J") do
@@ -43,8 +43,14 @@ module Admin
 
       private
 
-      def card_sets
-        @card_sets ||= CardSet.by_release
+      # International only, and labelled by code *and* name. A Standard pool is a Play! Pokémon
+      # concept, and card_sets is UNIQUE on (region, code) rather than on code — so once Japanese
+      # sets land (#111, which CardSet#region already anticipates) an unfiltered picker would
+      # offer two indistinguishable SVI options and let a Standard pool be bound to a Japanese
+      # set with nothing on screen to show it.
+      def card_set_options
+        @card_set_options ||= CardSet.where(region: "international").by_release
+                                     .map { |set| [ "#{set.code} — #{set.name}", set.id ] }
       end
 
       # The column is json; the input is text. What comes back after a failed

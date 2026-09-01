@@ -22,8 +22,14 @@ class StandardPool < ApplicationRecord
   # Legality follows existence: a pool cannot be legal in an event before its cards
   # are printed. The admin screen can type either date, so the order is checked here.
   validate :legal_on_not_before_released_on
+  validate :bounds_in_release_order
 
-  scope :by_release, -> { order(released_on: :desc) }
+  # id as a tiebreaker, not decoration: released_on carries no uniqueness constraint and the
+  # admin screen is maintained by hand, so two pools can share a date. Without it `current`
+  # picks one arbitrarily and can pick the other on the next request — which would leave a
+  # deck form's pre-selection and the stale-anchor notice's `expected` disagreeing between
+  # two loads of the same page.
+  scope :by_release, -> { order(released_on: :desc, id: :desc) }
 
   # Exists because #name reads both bounds: rendering a pool's name without this
   # costs two extra queries per pool, which is how the deck list and the spotlight
@@ -42,9 +48,26 @@ class StandardPool < ApplicationRecord
 
   # The pool a tournament held on `date` was played under. Reads legal_on, since
   # a set is tournament-legal about two weeks after it releases.
-  def self.at(date) = where(legal_on: ..date).order(legal_on: :desc).first
+  def self.at(date) = where(legal_on: ..date).order(legal_on: :desc, id: :desc).first
 
   private
+
+  # The admin form lists the same CardSet collection in both selects, so inverting them is a
+  # one-click mistake that passes every other validation and produces a pool named PBL-TEF.
+  # If its released_on is recent it becomes StandardPool.current, and therefore the default
+  # anchor of every new deck and every import.
+  #
+  # Silent when either release date is unknown: a set imported before the importer learned to
+  # record one has a NULL date, and refusing the pool then would block a legitimate row over
+  # a fact we do not have.
+  def bounds_in_release_order
+    first_release = first_card_set&.release_date
+    last_release = last_card_set&.release_date
+    return if first_release.nil? || last_release.nil?
+    return if first_release <= last_release
+
+    errors.add(:last_card_set, "must not be released before the lower bound")
+  end
 
   def regulation_marks_are_single_letters
     marks = regulation_marks

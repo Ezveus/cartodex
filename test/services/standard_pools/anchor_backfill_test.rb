@@ -90,4 +90,28 @@ class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
     assert_equal 2, result.tournaments
     assert_not_nil tournaments(:one).reload.standard_pool_id
   end
+  # The fallback is a guess, and the scope filters on a NULL anchor — so seeding the missing
+  # older pool and re-running will never revisit it. Naming it is the only chance an operator
+  # gets to fix it by hand.
+  test "a tournament older than every pool is anchored and named as approximate" do
+    tournaments(:one).update_columns(date: Date.new(2019, 1, 1))
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal standard_pools(:twm_asc), tournaments(:one).reload.standard_pool
+    assert_equal 1, result.approximated.size
+    assert_match(/Regional Championship/, result.approximated.first)
+    assert_match(/2019-01-01/, result.approximated.first)
+  end
+
+  # The other half: a tournament whose date a pool genuinely covers is not reported, or the
+  # list would name every row and mean nothing.
+  test "a tournament a pool covers is not reported as approximate" do
+    tournaments(:one).update_columns(date: Date.new(2026, 2, 1))
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal standard_pools(:twm_por), tournaments(:one).reload.standard_pool
+    assert_empty result.approximated
+  end
 end

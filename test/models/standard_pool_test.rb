@@ -152,4 +152,66 @@ class StandardPoolTest < ActiveSupport::TestCase
     assert_includes pool.errors[:base].join, "decks"
     assert StandardPool.exists?(pool.id)
   end
+  # released_on carries no uniqueness constraint and the admin screen is maintained by hand, so
+  # two pools can share one. Without a tiebreaker `current` picks arbitrarily and can pick the
+  # other one on the next request, leaving a form's pre-selection and the stale-anchor notice
+  # disagreeing between two loads of the same page.
+  test "current is deterministic when two pools share a release date" do
+    tail = CardSet.create!(code: "ZZZ", name: "Zed Zone", release_date: Date.new(2026, 2, 1))
+    shared = { regulation_marks: %w[H I J], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15) }
+    a = StandardPool.create!(first_card_set: card_sets(:asc), last_card_set: tail, **shared)
+    b = StandardPool.create!(first_card_set: card_sets(:twm), last_card_set: tail, **shared)
+
+    winner = [ a, b ].max_by(&:id)
+
+    assert_equal winner, StandardPool.current
+    assert_equal winner, StandardPool.current # same answer twice, not a coin flip
+  end
+
+  test "at is deterministic when two pools share a legality date" do
+    tail = CardSet.create!(code: "ZZZ", name: "Zed Zone", release_date: Date.new(2026, 2, 1))
+    shared = { regulation_marks: %w[H I J], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15) }
+    a = StandardPool.create!(first_card_set: card_sets(:asc), last_card_set: tail, **shared)
+    b = StandardPool.create!(first_card_set: card_sets(:twm), last_card_set: tail, **shared)
+
+    winner = [ a, b ].max_by(&:id)
+
+    assert_equal winner, StandardPool.at(Date.new(2026, 3, 1))
+    assert_equal winner, StandardPool.at(Date.new(2026, 3, 1))
+  end
+
+  # The admin form lists the same collection in both selects, so inverting them is one click.
+  # The result passes every other validation and, if its released_on is recent, becomes
+  # StandardPool.current — the default anchor of every new deck and every import.
+  test "refuses bounds whose releases run backwards" do
+    inverted = StandardPool.new(
+      first_card_set: card_sets(:por), last_card_set: card_sets(:asc),
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15)
+    )
+
+    assert_not inverted.valid?
+    assert_includes inverted.errors[:last_card_set], "must not be released before the lower bound"
+  end
+
+  test "accepts bounds released on the same day" do
+    same_day = CardSet.create!(code: "ZZZ", name: "Zed Zone", release_date: card_sets(:asc).release_date)
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: same_day,
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15)
+    )
+
+    assert pool.valid?, pool.errors.full_messages.to_sentence
+  end
+
+  # A set imported before the importer learned to record a release date has a NULL one.
+  # Refusing the pool then would block a legitimate row over a fact we do not have.
+  test "stays silent when a bound has no release date" do
+    undated = CardSet.create!(code: "ZZZ", name: "Zed Zone")
+    pool = StandardPool.new(
+      first_card_set: undated, last_card_set: card_sets(:asc),
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15)
+    )
+
+    assert pool.valid?, pool.errors.full_messages.to_sentence
+  end
 end

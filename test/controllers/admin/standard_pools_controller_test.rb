@@ -198,4 +198,17 @@ class Admin::StandardPoolsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
   end
+  # card_sets is UNIQUE on (region, code), not on code, so codes repeat across regions. A
+  # Standard pool is a Play! Pokémon concept: an unfiltered picker would offer two
+  # indistinguishable TWM options once Japanese sets land, and let a pool be bound to one.
+  test "the form offers international sets only, labelled by code and name" do
+    CardSet.create!(code: "TWM", name: "Japanese Twilight", region: "japan",
+                    release_date: Date.new(2024, 4, 1))
+
+    get new_admin_standard_pool_path
+
+    assert_response :success
+    assert_match "TWM — Twilight Masquerade", response.body
+    assert_no_match "Japanese Twilight", response.body
+  end
 end
