@@ -41,6 +41,13 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_not_includes ids, decks(:two).id
   end
 
+  test "ListDecksTool names the Standard pool a deck is anchored to" do
+    response = ListDecksTool.call(server_context: @context)
+    deck = payload(response).find { |d| d["id"] == decks(:one).id }
+
+    assert_equal "TWM-POR", deck["standard_pool"]
+  end
+
   test "ListCollectionTool returns the user's collection entries" do
     response = ListCollectionTool.call(server_context: @context)
     card_ids = payload(response).map { |c| c["card_id"] }
