@@ -103,6 +103,23 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Renamed", @tournament.reload.name
   end
 
+  # format: "other" clears standard_pool_id (Tournament#clear_inapplicable_classification), so
+  # this tournament's selected pool can only come from the date-based default — never from a
+  # stored anchor. The date sits strictly inside twm_asc's window and before twm_por.legal_on,
+  # so a correct default differs from StandardPool.current (twm_por): this proves the form
+  # picks the pool legal on the tournament's own date, not merely the newest pool.
+  test "edit defaults the standard pool selection to the pool legal on the tournament's date" do
+    tournament = @user.tournaments.create!(
+      deck: @deck, name: "Cup Under An Older Pool", date: Date.new(2025, 12, 1),
+      format: "other", other_format_name: "Special Event", tier: "league_cup"
+    )
+
+    get edit_tournament_path(tournament)
+
+    assert_response :success
+    assert_select "select#tournament_standard_pool_id option[selected][value=?]", standard_pools(:twm_asc).id.to_s
+  end
+
   test "cannot update another user's tournament" do
     patch tournament_path(tournaments(:two)), params: { tournament: { name: "Hacked" } }
 

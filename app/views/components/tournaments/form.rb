@@ -35,6 +35,12 @@ module Tournaments
           f.select :format, Tournament::FORMAT_LABELS.map { |value, label| [ label, value ] }, {}, class: "form-input"
         end
 
+        render Ui::FormGroup.new(hint: "Only used when format is “Standard”") do
+          f.label :standard_pool_id, "Standard", class: "form-label"
+          f.collection_select :standard_pool_id, standard_pools, :id, :name,
+            { selected: selected_standard_pool_id }, class: "form-input"
+        end
+
         render Ui::FormGroup.new(hint: "Only used when format is “Other”") do
           f.label :other_format_name, "Format name", class: "form-label"
           f.text_field :other_format_name, class: "form-input", placeholder: "e.g. Pocket, Theme…"
@@ -69,6 +75,22 @@ module Tournaments
     end
 
     private
+
+    def standard_pools
+      @standard_pools ||= StandardPool.includes(:first_card_set, :last_card_set).by_release
+    end
+
+    # A tournament is played under the format legal on its own date, not on "the newest pool
+    # today" — a set becomes tournament-legal about two weeks after it ships, so defaulting to
+    # StandardPool.current would pre-select a pool that was not yet legal when an older
+    # tournament was played. Falls back to current only when there is no date to anchor on
+    # (a fresh, unsaved tournament, or one re-rendered after a validation failure).
+    def selected_standard_pool_id
+      return @tournament.standard_pool_id if @tournament.standard_pool_id
+
+      pool = StandardPool.at(@tournament.date) if @tournament.date.present?
+      (pool || StandardPool.current)&.id
+    end
 
     def top_cut_hint
       cut = @tournament.standard_top_cut
