@@ -8,7 +8,7 @@ class DeckCardTest < ActiveSupport::TestCase
   end
 
   test "owned_copies cannot exceed quantity" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     dc = deck.deck_cards.new(card: cards(:honedge), quantity: 2, owned_copies: 3)
     assert_not dc.valid?
     assert_includes dc.errors[:owned_copies], "cannot exceed quantity"
@@ -22,7 +22,7 @@ class DeckCardTest < ActiveSupport::TestCase
   end
 
   test "owned_copies is allowed on a physical deck" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     dc = deck.deck_cards.new(card: cards(:honedge), quantity: 2, owned_copies: 2)
     assert dc.valid?
   end
@@ -37,19 +37,19 @@ class DeckCardTest < ActiveSupport::TestCase
   end
 
   test "proxies is quantity minus owned_copies" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     dc = deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
     assert_equal 2, dc.proxies
   end
 
   test "proxies is zero when fully backed" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     dc = deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
     assert_equal 0, dc.proxies
   end
 
   test "with_proxies selects the rows carrying at least one proxy" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     proxied = deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
     backed = deck.deck_cards.create!(card: cards(:doublade), quantity: 2, owned_copies: 2)
 

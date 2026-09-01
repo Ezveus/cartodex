@@ -49,6 +49,7 @@ module Styleguide
         spotlight_section
         deck_card_section
         printing_picker_section
+        standard_pool_section
         settings_section
         tokens_section
       end
@@ -262,6 +263,46 @@ module Styleguide
           end
         end
       end
+    end
+
+    # Rendered from the real component rather than from hand-written markup, unlike the
+    # printing picker above: that one needs data the API supplies at runtime, whereas this one
+    # needs only two pools and something that answers `persisted?`. Rendering the real thing is
+    # what stops the styleguide drifting from it — and both branches are shown, because the
+    # component chooses between them by comparing the pools' release dates and neither string
+    # may name a record type.
+    def standard_pool_section
+      sg_section("Composants", "Ancre Standard périmée",
+              "Standard tourne, et l'ancre d'un deck est épinglée : rien ne la déplace tout seul. " \
+              "Ui::StandardPoolNotice est donc le seul moment où l'utilisateur apprend qu'un Standard " \
+              "plus récent existe. Purement informatif — aucun champ n'est écrit.") do
+        div(class: "sg-stack") do
+          render Ui::StandardPoolNotice.new(
+            record: notice_stand_in(pool(1, "TEF", "CRI", "2026-05-22")),
+            expected: pool(2, "TEF", "PBL", "2026-07-17")
+          )
+          render Ui::StandardPoolNotice.new(
+            record: notice_stand_in(pool(3, "TEF", "PBL", "2026-07-17")),
+            expected: pool(4, "SVI", "PFL", "2025-11-14")
+          )
+        end
+      end
+    end
+
+    def pool(id, first, last, released_on)
+      StandardPool.new(
+        id: id, released_on: released_on,
+        first_card_set: CardSet.new(code: first), last_card_set: CardSet.new(code: last)
+      )
+    end
+
+    # The notice refuses to render on an unsaved record — there is nothing to be stale about on
+    # a creation form — so a plain Deck.new would show nothing here.
+    def notice_stand_in(anchor)
+      Struct.new(:standard_pool) do
+        def persisted? = true
+        def standard_pool_id = standard_pool.id
+      end.new(anchor)
     end
 
     def printing_option(set, counts, current: false, warning: nil)

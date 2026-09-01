@@ -69,7 +69,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "AddCardToDeckTool backs reals on a physical deck" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_by(card: @card).update!(quantity: 2) # honedge owned 2
 
     AddCardToDeckTool.call(deck_id: physical.id, card_id: @card.id, quantity: 3, server_context: @context)
@@ -80,7 +80,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardOwnedCopiesTool adjusts the real/proxy split" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_by(card: @card).update!(quantity: 3)
     physical.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
 
@@ -91,8 +91,8 @@ class WriteToolsTest < ActiveSupport::TestCase
 
   test "ReallocateOwnedCopiesTool moves reals between physical decks" do
     @user.collections.find_by(card: @card).update!(quantity: 3)
-    a = @user.decks.create!(name: "A", physical: true)
-    b = @user.decks.create!(name: "B", physical: true)
+    a = @user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
+    b = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
     a.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
     b.deck_cards.create!(card: @card, quantity: 4, owned_copies: 0)
 
@@ -103,7 +103,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardQuantityTool removes the card when quantity is 0" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     physical.deck_cards.create!(card: @card, quantity: 2)
 
     SetDeckCardQuantityTool.call(deck_id: physical.id, card_id: @card.id, quantity: 0, server_context: @context)
@@ -112,7 +112,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardQuantityTool returns a clean error for non-integer quantity" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     physical.deck_cards.create!(card: @card, quantity: 2)
 
     response = SetDeckCardQuantityTool.call(deck_id: physical.id, card_id: @card.id, quantity: "abc", server_context: @context)
@@ -122,7 +122,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "AddCardToDeckTool suggests owned equivalents when a physical add makes proxies" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     # own an equivalent printing (budew_pre) but not the exact one (budew_asc)
     @user.collections.find_or_create_by!(card: cards(:budew_pre)).update!(quantity: 2)
 
@@ -133,7 +133,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardPrintingTool moves the slot to another printing" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     physical.deck_cards.create!(card: cards(:budew_asc), quantity: 3)
 
     response = SetDeckCardPrintingTool.call(
@@ -147,7 +147,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardPrintingTool refuses a card that is not another printing" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     physical.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
 
     response = SetDeckCardPrintingTool.call(
@@ -160,7 +160,7 @@ class WriteToolsTest < ActiveSupport::TestCase
   end
 
   test "SetDeckCardPrintingTool reports a card the deck does not hold" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
 
     response = SetDeckCardPrintingTool.call(
       deck_id: physical.id, card_id: cards(:budew_asc).id,

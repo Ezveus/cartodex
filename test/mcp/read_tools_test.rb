@@ -41,6 +41,13 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_not_includes ids, decks(:two).id
   end
 
+  test "ListDecksTool names the Standard pool a deck is anchored to" do
+    response = ListDecksTool.call(server_context: @context)
+    deck = payload(response).find { |d| d["id"] == decks(:one).id }
+
+    assert_equal "TWM-POR", deck["standard_pool"]
+  end
+
   test "ListCollectionTool returns the user's collection entries" do
     response = ListCollectionTool.call(server_context: @context)
     card_ids = payload(response).map { |c| c["card_id"] }
@@ -135,7 +142,7 @@ class ReadToolsTest < ActiveSupport::TestCase
   end
 
   test "ListDeckCardsTool exposes owned_copies and proxies" do
-    physical = @user.decks.create!(name: "Phys", physical: true)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)
     physical.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
 
@@ -150,7 +157,7 @@ class ReadToolsTest < ActiveSupport::TestCase
   test "ListCollectionTool exposes owned, committed and available" do
     card = cards(:honedge)
     @user.collections.find_or_create_by!(card: card).update!(quantity: 3)
-    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
 
     response = ListCollectionTool.call(server_context: @context)
@@ -164,7 +171,7 @@ class ReadToolsTest < ActiveSupport::TestCase
   test "ListOverAllocationsTool reports over-committed cards" do
     card = cards(:honedge)
     @user.collections.find_or_create_by!(card: card).update!(quantity: 1)
-    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
 
     response = ListOverAllocationsTool.call(server_context: @context)
@@ -191,7 +198,7 @@ class ReadToolsTest < ActiveSupport::TestCase
   end
 
   test "ListPrintingsTool projects the swap against a deck when given one" do
-    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:budew_asc), quantity: 3)
 
     response = ListPrintingsTool.call(card_id: cards(:budew_asc).id, deck_id: deck.id, server_context: @context)

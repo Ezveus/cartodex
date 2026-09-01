@@ -15,6 +15,7 @@ module Decks
       div(class: "deck-classification-fields", data: { controller: "deck-classification" }) do
         support_fieldset
         format_group
+        standard_pool_field
         other_format_field
         render Decks::ArchetypeField.new(form: @form, deck: @deck)
       end
@@ -43,8 +44,27 @@ module Decks
           {},
           class: "form-input",
           id: "deck_format",
-          data: { deck_classification_target: "format", action: "deck-classification#toggleOther" }
+          data: { deck_classification_target: "format", action: "deck-classification#toggle" }
       end
+    end
+
+    # Standard rotates, so a deck has to say which Standard. Conditional on the
+    # format for the same reason other_format_name is: the other three formats are
+    # eternal and have no pool.
+    def standard_pool_field
+      div(class: "form-group deck-standard-pool-field",
+          data: { deck_classification_target: "standardField" },
+          style: hidden_unless(@deck.standard?)) do
+        label(class: "form-label", for: "deck_standard_pool_id") { "Standard" }
+        @form.collection_select :standard_pool_id, pools, :id, :name,
+          { selected: @deck.standard_pool_id || StandardPool.current&.id },
+          class: "form-input", id: "deck_standard_pool_id"
+        render Ui::StandardPoolNotice.new(record: @deck, expected: StandardPool.current)
+      end
+    end
+
+    def pools
+      @pools ||= StandardPool.named.by_release
     end
 
     def other_format_field

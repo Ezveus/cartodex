@@ -24,7 +24,10 @@ class Decks::Fetcher < ApplicationService
     # not because it changes the locking, which a top-level ActiveRecord
     # transaction already takes in immediate mode (see ApplicationService).
     serialized_transaction do
-      deck = Deck.create!(user: @user, name: @name)
+      # The import never asks for a format, so the deck takes the "standard"
+      # column default. Anchor it to the current pool rather than leave it
+      # unsavable; the deck form is where the user corrects it.
+      deck = Deck.create!(user: @user, name: @name, standard_pool: StandardPool.current)
 
       card_entries.each do |entry|
         url = "#{LIMITLESS_BASE_URL}/#{entry[:set_code]}/#{entry[:card_number]}"

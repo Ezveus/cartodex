@@ -6,7 +6,7 @@ module Allocations
       user = users(:one)
       card = cards(:honedge)
       user.collections.find_or_create_by!(card: card).update!(quantity: 2)
-      deck = user.decks.create!(name: "A", physical: true)
+      deck = user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: card, quantity: 3, owned_copies: 3) # committed 3 > owned 2
 
       report = Allocations::OverAllocations.call(user: user)
@@ -28,9 +28,9 @@ module Allocations
       second = cards(:doublade)
       user.collections.find_or_create_by!(card: first).update!(quantity: 1)
       user.collections.create!(card: second, quantity: 1)
-      deck_a = user.decks.create!(name: "A", physical: true)
-      deck_b = user.decks.create!(name: "B", physical: true)
-      proxy_only = user.decks.create!(name: "Proxies", physical: true)
+      deck_a = user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
+      deck_b = user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
+      proxy_only = user.decks.create!(name: "Proxies", physical: true, standard_pool: standard_pools(:twm_por))
       deck_a.deck_cards.create!(card: first, quantity: 2, owned_copies: 2)
       deck_b.deck_cards.create!(card: first, quantity: 1, owned_copies: 1)
       deck_a.deck_cards.create!(card: second, quantity: 2, owned_copies: 2)
@@ -53,13 +53,13 @@ module Allocations
       one_card_user = users(:two)
       card = cards(:froakie_cri)
       one_card_user.collections.create!(card: card, quantity: 0)
-      deck = one_card_user.decks.create!(name: "Solo", physical: true)
+      deck = one_card_user.decks.create!(name: "Solo", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: card, quantity: 1, owned_copies: 1)
 
       one = count_queries { Allocations::OverAllocations.call(user: one_card_user) }
 
       many_user = users(:one)
-      many_deck = many_user.decks.create!(name: "Many", physical: true)
+      many_deck = many_user.decks.create!(name: "Many", physical: true, standard_pool: standard_pools(:twm_por))
       [ :honedge, :doublade, :trainer_card, :budew_pre, :budew_asc ].each do |name|
         c = cards(name)
         many_user.collections.find_or_create_by!(card: c) { |col| col.quantity = 0 }.update!(quantity: 0)

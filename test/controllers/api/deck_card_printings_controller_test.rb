@@ -9,7 +9,7 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
     @asc = cards(:budew_asc)
     @pre = cards(:budew_pre)
-    @deck = @user.decks.create!(name: "Phys", physical: true)
+    @deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
   end
 
   test "index lists every printing of the card, annotated for this deck" do
@@ -30,7 +30,7 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index is scoped to the signed-in user's decks" do
-    other_deck = users(:two).decks.create!(name: "Theirs")
+    other_deck = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
     other_deck.deck_cards.create!(card: @asc, quantity: 1)
 
     get api_deck_card_printings_path(other_deck, @asc)
@@ -83,7 +83,7 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
     # Another deck holds two real copies of a printing the user owns one of: the swap cannot fix
     # that, and the row it lands on has to show the marker the page would render on a reload.
     @user.collections.find_by!(card: @pre).update!(quantity: 1)
-    other = @user.decks.create!(name: "Other", physical: true)
+    other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
     other.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 2)
     @deck.deck_cards.create!(card: @asc, quantity: 1)
 
@@ -107,7 +107,7 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
   test "update on a non-physical deck answers with no backing to speak of" do
     # A TCG Live deck consumes no collection, so its rows sit at owned_copies 0 by construction and
     # the page renders no allocation stepper for the picker to re-bound.
-    live = @user.decks.create!(name: "Live", physical: false)
+    live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
     live.deck_cards.create!(card: @asc, quantity: 2)
     @user.collections.find_by!(card: @pre).update!(quantity: 4)
 

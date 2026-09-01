@@ -21,6 +21,12 @@ class Decks::FetcherTest < ActiveSupport::TestCase
     assert_equal @user, deck.user
   end
 
+  test "anchors an imported deck to the current standard pool" do
+    deck = Decks::Fetcher.call(@decklist, @user, "Imported")
+
+    assert_equal StandardPool.current, deck.standard_pool
+  end
+
   test "creates deck_cards for all card lines" do
     deck = Decks::Fetcher.call(@decklist, @user, "Doublade Dudunsparce")
 

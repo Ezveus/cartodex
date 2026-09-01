@@ -6,8 +6,8 @@ module Decks
       @user = users(:one)
       @card = cards(:honedge)
       @user.collections.find_or_create_by!(card: @card).update!(quantity: 3)
-      @deck_a = @user.decks.create!(name: "A", physical: true)
-      @deck_b = @user.decks.create!(name: "B", physical: true)
+      @deck_a = @user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
+      @deck_b = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
       @a = @deck_a.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
       @b = @deck_b.deck_cards.create!(card: @card, quantity: 4, owned_copies: 0)
     end
@@ -36,7 +36,7 @@ module Decks
     end
 
     test "rejects a non-physical deck" do
-      live = @user.decks.create!(name: "Live", physical: false)
+      live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       live.deck_cards.create!(card: @card, quantity: 4)
       assert_raises(Decks::OwnedCopiesReallocator::NotPhysicalError) do
         Decks::OwnedCopiesReallocator.call(from_deck: @deck_a, to_deck: live, card: @card, quantity: 1)

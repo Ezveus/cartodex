@@ -35,7 +35,7 @@ class CardPreviewModalTest < ApplicationSystemTestCase
     @doublade = cards(:doublade)
     [ @honedge, @doublade ].each { |card| card.update!(image_url: "#{page.server.base_url}/icon.png") }
 
-    @deck = @user.decks.create!(name: "Pocket Deck", physical: false)
+    @deck = @user.decks.create!(name: "Pocket Deck", physical: false, standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: @honedge, quantity: 2)
     @deck.deck_cards.create!(card: @doublade, quantity: 1)
 

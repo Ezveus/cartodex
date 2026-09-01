@@ -13,7 +13,12 @@ module Api
     end
 
     def create
-      deck = current_user.decks.build(deck_params)
+      # The API cannot declare a format (deck_params permits neither :format nor
+      # :standard_pool_id), so a deck created through it is always Standard by the
+      # column default. Anchor it to the current pool rather than leave it
+      # unsavable: the API has no business choosing which Standard, only whether
+      # one gets picked for it.
+      deck = current_user.decks.build(deck_params.reverse_merge(standard_pool: StandardPool.current))
 
       if deck.save
         render json: deck_json(deck), status: :created

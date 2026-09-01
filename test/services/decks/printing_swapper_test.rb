@@ -7,7 +7,7 @@ module Decks
       @user = users(:one)
       @asc = cards(:budew_asc)
       @pre = cards(:budew_pre)
-      @deck = @user.decks.create!(name: "Physical", physical: true)
+      @deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
     end
 
     test "moves the slot to the target printing, keeping its quantity" do
@@ -41,7 +41,7 @@ module Decks
 
     test "never backs more copies than the target printing leaves available to this deck" do
       @user.collections.find_by!(card: @pre).update!(quantity: 3)
-      other = @user.decks.create!(name: "Other", physical: true)
+      other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
       other.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 2)
       @deck.deck_cards.create!(card: @asc, quantity: 4)
 
@@ -97,7 +97,7 @@ module Decks
     end
 
     test "leaves a non-physical deck's row unbacked" do
-      live = @user.decks.create!(name: "Live", physical: false)
+      live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       live.deck_cards.create!(card: @asc, quantity: 2)
       @user.collections.find_by!(card: @pre).update!(quantity: 4)
 

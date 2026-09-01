@@ -53,7 +53,7 @@ module ActiveSupport
     # that is a branch change, not the N+1 the test is looking for.
     def force_over_allocation(user, card: cards(:teal_mask_ogerpon_ex))
       user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }
-      deck = user.decks.create!(name: "Over-allocated", physical: true)
+      deck = user.decks.create!(name: "Over-allocated", physical: true, standard_pool: StandardPool.current)
       deck.deck_cards.create!(card: card, quantity: 1, owned_copies: 1)
       deck
     end

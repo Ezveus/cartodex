@@ -13,7 +13,8 @@ class Decks::Duplicator < ApplicationService
         physical: @deck.physical,
         tcg_live: @deck.tcg_live,
         format: @deck.format,
-        other_format_name: @deck.other_format_name
+        other_format_name: @deck.other_format_name,
+        standard_pool_id: @deck.standard_pool_id
       )
 
       # owned_copies deliberately stays at 0: the real cards are still committed to the source

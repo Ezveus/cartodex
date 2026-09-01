@@ -9,7 +9,7 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
     @user = users(:one)
     @asc = cards(:budew_asc)
     @pre = cards(:budew_pre)
-    @deck = @user.decks.create!(name: "Printing Watch", physical: true)
+    @deck = @user.decks.create!(name: "Printing Watch", physical: true, standard_pool: standard_pools(:twm_por))
 
     login_as @user, scope: :user
   end

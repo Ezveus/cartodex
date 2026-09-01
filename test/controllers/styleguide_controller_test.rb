@@ -58,4 +58,23 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal ids.uniq, ids, "duplicate option ids: #{ids.inspect}"
   end
+
+  # The stale-anchor notice refuses to render on an unsaved record, so a plain Deck.new shows
+  # nothing and the section would have looked like a styleguide entry while documenting an empty
+  # div. Both branches are asserted because the component picks between them by comparing the
+  # pools' release dates, and neither string may name a record type — a defect that shipped once.
+  test "the styleguide renders both branches of the stale-anchor notice" do
+    get styleguide_path
+
+    assert_response :success
+    notices = css_select(".standard-pool-notice")
+
+    assert_equal 2, notices.size, "expected the stale branch and the wrong-pool branch"
+    assert_match(/released since/, notices.first.text)
+    assert_match(/is the pool that applies/, notices.last.text)
+    notices.each do |notice|
+      assert_no_match(/deck|tournament/i, notice.text,
+        "the notice is shared by decks and tournaments, so it may not name either")
+    end
+  end
 end

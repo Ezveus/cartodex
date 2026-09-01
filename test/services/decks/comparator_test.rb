@@ -4,8 +4,8 @@ module Decks
   class ComparatorTest < ActiveSupport::TestCase
     setup do
       @user = users(:one)
-      @deck_a = @user.decks.create!(name: "A")
-      @deck_b = @user.decks.create!(name: "B")
+      @deck_a = @user.decks.create!(name: "A", standard_pool: standard_pools(:twm_por))
+      @deck_b = @user.decks.create!(name: "B", standard_pool: standard_pools(:twm_por))
     end
 
     test "groups cards by type with per-deck quantities, subtotals and totals" do

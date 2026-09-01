@@ -4,7 +4,7 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     login_as @user, scope: :user
-    @deck = @user.decks.create!(name: "Boss Box", physical: true)
+    @deck = @user.decks.create!(name: "Boss Box", physical: true, standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: cards(:bosss_orders_meg), quantity: 4)
   end
 
@@ -59,7 +59,7 @@ class ArchetypeAnyCardTest < ApplicationSystemTestCase
   # way picking from the dropdown does — otherwise the field says one thing
   # before the user touches it and another after.
   test "the Suggest prefill names the printing too" do
-    deck = @user.decks.create!(name: "Froakie Box", physical: true)
+    deck = @user.decks.create!(name: "Froakie Box", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:froakie_twm), quantity: 4)
 
     visit edit_deck_path(deck)

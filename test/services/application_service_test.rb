@@ -23,7 +23,7 @@ class ApplicationServiceTest < ActiveSupport::TestCase
 
     def call
       serialized_transaction do
-        @deck_id = @user.decks.create!(name: "Nested work").id
+        @deck_id = @user.decks.create!(name: "Nested work", standard_pool: StandardPool.current).id
         raise "nested failure"
       end
     end
@@ -52,7 +52,7 @@ class ApplicationServiceTest < ActiveSupport::TestCase
     caller_deck = nil
 
     ActiveRecord::Base.transaction do
-      caller_deck = users(:one).decks.create!(name: "Caller's own work")
+      caller_deck = users(:one).decks.create!(name: "Caller's own work", standard_pool: standard_pools(:twm_por))
       assert_raises(RuntimeError) { probe.call }
 
       # Both asserted before the caller's own rollback, which would otherwise

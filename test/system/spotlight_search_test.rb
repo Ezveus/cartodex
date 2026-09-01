@@ -10,7 +10,7 @@ class SpotlightSearchTest < ApplicationSystemTestCase
     # Pins the tournaments group as the last one in the panel, so "the last option" is a fixed
     # address rather than whatever the card fixtures happen to match.
     @user.tournaments.create!(deck: @deck, name: "Ogerpon Open", date: Date.new(2026, 4, 1),
-                              format: "standard", tier: "league_cup")
+                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     login_as @user, scope: :user
     visit dashboard_path

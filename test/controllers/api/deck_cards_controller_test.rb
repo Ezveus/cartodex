@@ -8,7 +8,7 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
     @card = cards(:honedge)
     @user.collections.find_or_initialize_by(card: @card).update!(quantity: 3)
-    @deck = @user.decks.create!(name: "Phys", physical: true)
+    @deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
   end
 
   test "deck_card_json includes owned_copies and proxies" do

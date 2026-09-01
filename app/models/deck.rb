@@ -3,6 +3,9 @@ class Deck < ApplicationRecord
 
   belongs_to :user
   belongs_to :archetype, optional: true
+  # Which Standard the deck was built for. Standard rotates, so its name alone
+  # does not identify a card pool; every other format is eternal and has no anchor.
+  belongs_to :standard_pool, optional: true
   has_many :deck_cards, dependent: :destroy
   has_many :cards, through: :deck_cards
   has_many :deck_results, dependent: :destroy
@@ -19,6 +22,7 @@ class Deck < ApplicationRecord
 
   validates :name, presence: true
   validates :other_format_name, presence: true, if: :other?
+  validates :standard_pool, presence: true, if: :standard?
 
   before_validation :clear_inapplicable_classification
   after_update :release_owned_copies_if_not_physical
@@ -37,12 +41,16 @@ class Deck < ApplicationRecord
   scope :with_proxies, -> { where(physical: true, id: DeckCard.with_proxies.select(:deck_id)) }
   scope :without_proxies, -> { where.not(id: Deck.with_proxies.select(:id)) }
 
-  # Human-readable format label. For the "other" format the user-supplied
-  # name takes precedence when present.
+  # Human-readable format label. For the "other" format the user-supplied name
+  # takes precedence when present; for Standard the pool is named, since
+  # "Standard" alone does not identify a card pool.
   def format_label
     return other_format_name if other? && other_format_name.present?
 
-    FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    base = FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    return base unless standard? && standard_pool
+
+    "#{base} (#{standard_pool.name})"
   end
 
   # Whether the deck is played with any proxy, derived from the per-card real/proxy split rather
@@ -113,6 +121,7 @@ class Deck < ApplicationRecord
   # custom format name once the format is no longer "other".
   def clear_inapplicable_classification
     self.other_format_name = nil unless other?
+    self.standard_pool_id = nil unless standard?
   end
 
   def merge_counts!(target, source)

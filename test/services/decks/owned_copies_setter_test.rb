@@ -6,7 +6,7 @@ module Decks
       @user = users(:one)
       @card = cards(:honedge)
       @user.collections.find_or_create_by!(card: @card).update!(quantity: 3)
-      @deck = @user.decks.create!(name: "A", physical: true)
+      @deck = @user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
       @deck_card = @deck.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
     end
 
@@ -22,7 +22,7 @@ module Decks
     end
 
     test "rejects exceeding availability (cannot create over-allocation)" do
-      other = @user.decks.create!(name: "B", physical: true)
+      other = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
       other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2) # only 1 free for @deck
 
       assert_raises(ArgumentError) do
@@ -31,7 +31,7 @@ module Decks
     end
 
     test "rejects a non-physical deck" do
-      live = @user.decks.create!(name: "Live", physical: false)
+      live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       live.deck_cards.create!(card: @card, quantity: 2)
 
       assert_raises(Decks::OwnedCopiesSetter::NotPhysicalError) do

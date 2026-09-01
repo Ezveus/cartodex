@@ -8,6 +8,19 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  # --- Create action ---
+
+  # The API cannot declare a format, so a deck created through it is always
+  # Standard by the column default; without an anchor it would be unsavable.
+  test "create anchors a new deck to the current standard pool" do
+    post api_decks_path, params: { deck: { name: "New Deck" } }, as: :json
+
+    assert_response :created
+    json = JSON.parse(response.body)
+    deck = Deck.find(json["id"])
+    assert_equal StandardPool.current, deck.standard_pool
+  end
+
   # --- Import action ---
 
   test "import enqueues Decks::ImportJob and returns 202" do
@@ -33,7 +46,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   # --- Suggested archetype action ---
 
   test "suggested_archetype returns a matching archetype" do
-    deck = @user.decks.create!(name: "Ogerpon")
+    deck = @user.decks.create!(name: "Ogerpon", standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
 
     get suggested_archetype_api_deck_path(deck)
@@ -45,7 +58,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "suggested_archetype returns candidate Pokémon when nothing matches" do
-    deck = @user.decks.create!(name: "Budew pile")
+    deck = @user.decks.create!(name: "Budew pile", standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
 
     get suggested_archetype_api_deck_path(deck)
@@ -57,7 +70,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "suggested_archetype is scoped to the current user" do
-    other = users(:two).decks.create!(name: "Theirs")
+    other = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
 
     get suggested_archetype_api_deck_path(other)
 
@@ -65,7 +78,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "deck_json includes physical, tcg_live and per-card allocation" do
-    deck = @user.decks.create!(name: "Phys", physical: true, tcg_live: false)
+    deck = @user.decks.create!(name: "Phys", physical: true, tcg_live: false, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 2)
 
     get api_deck_path(deck)

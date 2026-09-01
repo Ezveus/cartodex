@@ -4,7 +4,13 @@ class DecksController < ApplicationController
   def index
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
     # the ones it just showed — it orders by name too.
-    @decks = filter_decks(current_user.decks.order(:name).includes(:deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ]))
+    # standard_pool's two bounds are preloaded because the format badge names the pool,
+    # and StandardPool#name reads both of them: without this each Standard deck on the
+    # page costs three extra queries.
+    @decks = filter_decks(current_user.decks.order(:name).includes(
+      :deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ],
+      standard_pool: [ :first_card_set, :last_card_set ]
+    ))
     @filters = filter_params
 
     # Needed even for a frame request: the deck cards inside the frame flag their own
@@ -207,6 +213,8 @@ class DecksController < ApplicationController
   end
 
   def deck_params
-    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :archetype_id)
+    params.require(:deck).permit(
+      :name, :description, :physical, :tcg_live, :format, :other_format_name, :archetype_id, :standard_pool_id
+    )
   end
 end

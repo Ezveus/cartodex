@@ -6,7 +6,7 @@ module Decks
       @user = users(:one)
       @card = cards(:honedge)
       @user.collections.find_or_create_by!(card: @card).update!(quantity: 3)
-      @deck = @user.decks.create!(name: "A", physical: true)
+      @deck = @user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
       @deck.deck_cards.create!(card: @card, quantity: 4, owned_copies: 3)
     end
 

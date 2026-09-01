@@ -1,0 +1,28 @@
+# regulation_marks is a json column. Written as a plain YAML array rather than a
+# JSON string literal: the fixture loader passes YAML scalars through unparsed for
+# a json column, so a quoted JSON string round-trips as a String, not an Array.
+#
+# Both pools are deliberately in the past: StandardPool.current must resolve to
+# twm_por in every test. A pool with a future released_on is built inside the one
+# test that needs it, rather than fixtured, so it cannot rot.
+
+twm_asc:
+  first_card_set: twm
+  last_card_set: asc
+  regulation_marks:
+    - G
+    - H
+    - I
+  released_on: 2025-11-07
+  legal_on: 2025-11-21
+
+twm_por:
+  first_card_set: twm
+  last_card_set: por
+  regulation_marks:
+    - G
+    - H
+    - I
+    - J
+  released_on: 2026-01-16
+  legal_on: 2026-01-30

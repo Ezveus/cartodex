@@ -7,7 +7,11 @@ module Tournaments
     end
 
     def view_template
-      form_with(model: @tournament, class: "deck-form") do |f|
+      form_with(model: @tournament, class: "deck-form", data: {
+        controller: "tournament-standard-pool",
+        tournament_standard_pool_pools_value: pool_calendar_json,
+        tournament_standard_pool_fallback_id_value: StandardPool.current&.id.to_i
+      }) do |f|
         render Ui::FormErrors.new(resource: @tournament)
 
         render Ui::FormGroup.new do
@@ -17,7 +21,14 @@ module Tournaments
 
         render Ui::FormGroup.new do
           f.label :date, class: "form-label"
-          f.date_field :date, class: "form-input"
+          f.date_field :date, class: "form-input",
+            data: {
+              tournament_standard_pool_target: "date",
+              # `input` as well as `change`: a date input does not fire change until it loses
+              # focus, so change alone leaves the select stale for as long as the user stays in
+              # the field — and invisible to a test that never blurs it.
+              action: "input->tournament-standard-pool#syncFromDate change->tournament-standard-pool#syncFromDate"
+            }
         end
 
         render Ui::FormGroup.new do
@@ -33,6 +44,20 @@ module Tournaments
         render Ui::FormGroup.new do
           f.label :format, class: "form-label"
           f.select :format, Tournament::FORMAT_LABELS.map { |value, label| [ label, value ] }, {}, class: "form-input"
+        end
+
+        render Ui::FormGroup.new(hint: "Only used when format is “Standard”") do
+          f.label :standard_pool_id, "Standard", class: "form-label"
+          f.collection_select :standard_pool_id, standard_pools, :id, :name,
+            { selected: selected_standard_pool_id },
+            class: "form-input",
+            data: {
+              tournament_standard_pool_target: "pool",
+              action: "change->tournament-standard-pool#markOverridden"
+            }
+          render Ui::StandardPoolNotice.new(
+            record: @tournament, expected: expected_standard_pool
+          )
         end
 
         render Ui::FormGroup.new(hint: "Only used when format is “Other”") do
@@ -69,6 +94,40 @@ module Tournaments
     end
 
     private
+
+    def standard_pools
+      @standard_pools ||= StandardPool.named.by_release
+    end
+
+    # Every pool's legality date, for the Stimulus controller that keeps the select in step
+    # with the date field. Only `legal_on` travels: the client mirrors StandardPool.at, which
+    # is the only question the date can answer, and shipping `released_on` too would invite a
+    # second, wrong rule client-side.
+    def pool_calendar_json
+      standard_pools.map { |pool| { id: pool.id, legal_on: pool.legal_on.iso8601 } }.to_json
+    end
+
+    # The pool the tournament's own date calls for, or nil when there is no date to ask
+    # about. Guarded and memoized because both the pre-selection and the stale-anchor
+    # notice need the same answer: unguarded, `at(nil)` returns the newest pool by
+    # legal_on, and the notice would then nag about a mismatch with nothing — which is
+    # exactly the state a failed update that blanked the date re-renders in.
+    def expected_standard_pool
+      return @expected_standard_pool if defined?(@expected_standard_pool)
+
+      @expected_standard_pool = @tournament.date.present? ? StandardPool.at(@tournament.date) : nil
+    end
+
+    # A tournament is played under the format legal on its own date, not on "the newest pool
+    # today" — a set becomes tournament-legal about two weeks after it ships, so defaulting to
+    # StandardPool.current would pre-select a pool that was not yet legal when an older
+    # tournament was played. Falls back to current only when there is no date to anchor on
+    # (a fresh, unsaved tournament, or one re-rendered after a validation failure).
+    def selected_standard_pool_id
+      return @tournament.standard_pool_id if @tournament.standard_pool_id
+
+      (expected_standard_pool || StandardPool.current)&.id
+    end
 
     def top_cut_hint
       cut = @tournament.standard_top_cut

@@ -4,6 +4,10 @@ class Tournament < ApplicationRecord
   belongs_to :user
   belongs_to :deck
   belongs_to :tournament_profile, optional: true
+  # A tournament is played under the format legal on its date, which is not the
+  # same as "the newest set exists" — a set is tournament-legal about two weeks
+  # after release. The form pre-fills this from the date; it stays editable.
+  belongs_to :standard_pool, optional: true
   has_many :deck_results, dependent: :nullify
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
@@ -65,6 +69,7 @@ class Tournament < ApplicationRecord
   validates :name, presence: true
   validates :date, presence: true
   validates :other_format_name, presence: true, if: :other?
+  validates :standard_pool, presence: true, if: :standard?
   validates :participant_count, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :placement, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :championship_points, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
@@ -74,12 +79,16 @@ class Tournament < ApplicationRecord
 
   before_validation :clear_inapplicable_classification
 
-  # Human-readable format label. For the "other" format the user-supplied
-  # name takes precedence when present.
+  # Human-readable format label. For the "other" format the user-supplied name
+  # takes precedence when present; for Standard the pool is named, since
+  # "Standard" alone does not identify a card pool.
   def format_label
     return other_format_name if other? && other_format_name.present?
 
-    FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    base = FORMAT_LABELS.fetch(format, format.to_s.humanize)
+    return base unless standard? && standard_pool
+
+    "#{base} (#{standard_pool.name})"
   end
 
   def tier_label
@@ -105,6 +114,7 @@ class Tournament < ApplicationRecord
 
   def clear_inapplicable_classification
     self.other_format_name = nil unless other?
+    self.standard_pool_id = nil unless standard?
   end
 
   def placement_within_participant_count

@@ -6,7 +6,7 @@ class Api::DeckResultsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @user = users(:one)
     sign_in @user
-    @deck = @user.decks.create!(name: "My Deck")
+    @deck = @user.decks.create!(name: "My Deck", standard_pool: standard_pools(:twm_por))
   end
 
   test "create stores match format and derives result from a bo3 score" do

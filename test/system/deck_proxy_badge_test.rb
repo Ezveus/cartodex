@@ -15,7 +15,7 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     @user.collections.find_or_initialize_by(card: cards(:honedge)).update!(quantity: 3)
-    @deck = @user.decks.create!(name: "Proxy Watch", physical: true)
+    @deck = @user.decks.create!(name: "Proxy Watch", physical: true, standard_pool: standard_pools(:twm_por))
 
     login_as @user, scope: :user
   end

@@ -44,4 +44,15 @@ class Decks::DuplicatorTest < ActiveSupport::TestCase
 
     assert_equal 0, new_deck.deck_cards.count
   end
+
+  # A duplicate of a TEF-CRI deck is still a TEF-CRI deck; it must not slide onto
+  # whatever pool happens to be current.
+  test "the copy keeps the source deck's standard pool" do
+    source = decks(:one)
+    source.update!(format: "standard", standard_pool: standard_pools(:twm_asc))
+
+    copy = Decks::Duplicator.call(source)
+
+    assert_equal standard_pools(:twm_asc), copy.standard_pool
+  end
 end

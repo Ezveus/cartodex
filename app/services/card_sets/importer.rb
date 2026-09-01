@@ -3,6 +3,13 @@ require "nokogiri"
 class CardSets::Importer < ApplicationService
   BASE_URL = "https://limitlesstcg.com"
 
+  # Limitless prints the release date as the first segment of the infobox line
+  # under the set heading: "22nd May 2026 • 122 Cards • $641.12 • 578.42€".
+  # An unreleased set omits it and the line starts with the card count, which is
+  # why this matches an explicit ordinal date instead of handing the whole line
+  # to Date.parse — that would read "122 Cards" as a day of the current month.
+  RELEASE_DATE = /\b\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]+\s+\d{4}\b/
+
   def initialize(url)
     @url = url
     @set_code = url.split("/").last
@@ -31,6 +38,7 @@ class CardSets::Importer < ApplicationService
     card_set = CardSet.find_or_initialize_by(code: @set_code)
     card_set.name ||= parse_set_name(doc)
     card_set.logo_url ||= parse_logo_url(doc)
+    card_set.release_date ||= parse_release_date(doc)
     card_set.save!
     card_set
   end
@@ -44,6 +52,15 @@ class CardSets::Importer < ApplicationService
 
   def parse_logo_url(doc)
     doc.at_css("img[src*='/sets/']")&.attr("src")
+  end
+
+  def parse_release_date(doc)
+    match = doc.at_css(".infobox .infobox-line")&.text&.match(RELEASE_DATE)
+    return if match.nil?
+
+    Date.parse(match[0])
+  rescue Date::Error
+    nil
   end
 
   def extract_card_urls(doc)
