@@ -39,6 +39,9 @@ module Tournaments
           f.label :standard_pool_id, "Standard", class: "form-label"
           f.collection_select :standard_pool_id, standard_pools, :id, :name,
             { selected: selected_standard_pool_id }, class: "form-input"
+          render Ui::StandardPoolNotice.new(
+            record: @tournament, expected: StandardPool.at(@tournament.date)
+          )
         end
 
         render Ui::FormGroup.new(hint: "Only used when format is “Other”") do

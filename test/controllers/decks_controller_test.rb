@@ -439,4 +439,55 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_match "TWM-POR", response.body
     assert_match "TWM-ASC", response.body
   end
+
+  # There is nothing to be stale about on a creation form — a new deck has no
+  # anchor yet to compare against StandardPool.current.
+  test "the new deck form shows no stale-anchor notice" do
+    get new_deck_path
+
+    assert_response :success
+    assert_select ".standard-pool-notice", count: 0
+  end
+
+  # A rejected create re-renders :new with an unsaved Deck that already carries
+  # whatever standard_pool_id was submitted — unlike a bare `get new_deck_path`,
+  # this record is not anchor-less, so it is the one real path that isolates the
+  # "never on a creation form" guard from the "no anchor at all" guard: without
+  # the persisted? check, this deck would get nagged about a pool choice it
+  # hasn't even saved yet.
+  test "a rejected new deck is not nagged about its unsaved pool choice" do
+    post decks_path, params: {
+      deck: { name: "", format: "standard", standard_pool_id: standard_pools(:twm_asc).id }
+    }
+
+    assert_response :unprocessable_entity
+    assert_select ".standard-pool-notice", count: 0
+  end
+
+  # Pinned means pinned: nothing moves the anchor on its own, so the only way a
+  # user learns a newer Standard exists is being told while editing.
+  #
+  # ClassificationFields only renders inside the header's edit form, which the
+  # show action never puts on the page (@editing is false there) — only the
+  # edit action does (@editing is true, rendering the :show template). Hence
+  # edit_deck_path, not deck_path.
+  test "editing a deck anchored to an older pool invites an update" do
+    decks(:one).update!(format: "standard", standard_pool: standard_pools(:twm_asc))
+
+    get edit_deck_path(decks(:one))
+
+    assert_response :success
+    assert_match "TWM-ASC", response.body
+    assert_match "TWM-POR", response.body
+    assert_match "released since", response.body
+  end
+
+  test "a deck on the current pool is not nagged" do
+    decks(:one).update!(format: "standard", standard_pool: StandardPool.current)
+
+    get edit_deck_path(decks(:one))
+
+    assert_response :success
+    assert_no_match "released since", response.body
+  end
 end

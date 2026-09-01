@@ -200,4 +200,41 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#tournament_results .data-table-row", text: /League Cup Lyon/
     assert_select "turbo-frame#tournament_results .data-table-row", count: 1
   end
+
+  # For a tournament the comparison is the pool legal on its date, not the newest
+  # one: a March 2026 event anchored to the latest pool is a data-entry error, not
+  # a deck to refresh.
+  #
+  # Scoped with assert_select rather than assert_match on the raw body: the pool
+  # picker's own <select> already lists every pool by name (including TWM-ASC), so
+  # a plain substring match would pass even without the notice rendering at all.
+  test "editing a tournament whose anchor disagrees with its date says so" do
+    tournaments(:one).update!(date: Date.new(2026, 1, 20), standard_pool: standard_pools(:twm_por))
+
+    get edit_tournament_path(tournaments(:one))
+
+    assert_response :success
+    assert_select ".standard-pool-notice", text: /TWM-ASC/
+  end
+
+  test "a tournament correctly anchored for its date is not nagged" do
+    tournaments(:one).update!(date: Date.new(2026, 3, 14), standard_pool: standard_pools(:twm_por))
+
+    get edit_tournament_path(tournaments(:one))
+
+    assert_response :success
+    assert_select ".standard-pool-notice", count: 0
+  end
+
+  # No pool was legal yet on this date (StandardPool.at returns nil), so there is
+  # nothing to compare the anchor against — the tournament predates the pool
+  # calendar this app tracks, not a data-entry error.
+  test "a tournament dated before any tracked pool is not nagged despite carrying an anchor" do
+    tournaments(:one).update!(date: Date.new(2020, 1, 1), standard_pool: standard_pools(:twm_por))
+
+    get edit_tournament_path(tournaments(:one))
+
+    assert_response :success
+    assert_select ".standard-pool-notice", count: 0
+  end
 end

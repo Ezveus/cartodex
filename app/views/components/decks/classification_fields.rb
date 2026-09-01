@@ -59,6 +59,7 @@ module Decks
         @form.collection_select :standard_pool_id, pools, :id, :name,
           { selected: @deck.standard_pool_id || StandardPool.current&.id },
           class: "form-input", id: "deck_standard_pool_id"
+        render Ui::StandardPoolNotice.new(record: @deck, expected: StandardPool.current)
       end
     end
 
