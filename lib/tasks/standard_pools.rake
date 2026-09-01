@@ -6,7 +6,7 @@ namespace :standard_pools do
     puts "Anchored #{result.decks} deck(s) and #{result.tournaments} tournament(s)."
 
     if result.skipped.any?
-      puts "\nNothing was written:"
+      puts "\nSkipped:"
       result.skipped.each { |reason| puts "  #{reason}" }
       exit 1
     end

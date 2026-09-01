@@ -48,7 +48,7 @@ module Admin
       end
 
       # The column is json; the input is text. What comes back after a failed
-      # validation is therefore the *parsed* value — split, stripped and upcased —
+      # validation is therefore the *parsed* value — split and upcased —
       # re-joined for the input, not the raw string the user typed.
       def marks_value
         Array(@standard_pool.regulation_marks).join(", ")

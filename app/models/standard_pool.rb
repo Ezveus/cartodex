@@ -27,8 +27,9 @@ class StandardPool < ApplicationRecord
 
   # Exists because #name reads both bounds: rendering a pool's name without this
   # costs two extra queries per pool, which is how the deck list and the spotlight
-  # search each grew an N+1 the day format_label started naming the pool. Every
-  # site that renders a pool's name should read through it.
+  # search each grew an N+1 the day format_label started naming the pool. Use it for
+  # a direct query on StandardPool; a nested `includes(standard_pool: …)` cannot call
+  # a scope on the association and has to spell the same two bounds by hand.
   scope :named, -> { includes(:first_card_set, :last_card_set) }
 
   # The oldest legal set, then the newest — the name players already use.
