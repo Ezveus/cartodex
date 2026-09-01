@@ -431,4 +431,12 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
+
+  test "the new deck form offers the standard pools, current one selected" do
+    get new_deck_path
+
+    assert_response :success
+    assert_match "TWM-POR", response.body
+    assert_match "TWM-ASC", response.body
+  end
 end
