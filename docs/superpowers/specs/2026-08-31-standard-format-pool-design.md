@@ -10,7 +10,7 @@ Players already name these pools by their two bounds: the oldest legal set and t
 
 ## Scope
 
-**In:** the pool model, its seeded history, the anchor on `Deck` and `Tournament`, the form field, the label, the "a newer pool exists" nudge, and the `CardSets::Importer` fix that any date-driven rule depends on.
+**In:** the pool model, its seeded history, the anchor on `Deck` and `Tournament`, the form field, the label, the "a newer pool exists" nudge, admin CRUD for pools, and the `CardSets::Importer` fix that any date-driven rule depends on.
 
 **Out:** reading the pool for anything. No legality checking, no card-search filtering, no deck-size or copy-limit enforcement. The pool carries the regulation marks so that #27, #61 and #125 can read them without remodelling; this change never reads them itself.
 
@@ -26,6 +26,8 @@ Players already name these pools by their two bounds: the oldest legal set and t
 8. **The numeric construction limits stay out of the database.** Deck size, max-copies, the GLC singleton rule and the basic-energy exception go in a Ruby constant keyed by the existing `format` enum, the day #61 decides hard-block vs advisory. This change does not introduce them.
 
    Scoped deliberately to the *numeric* limits. A per-format **banlist** is data with a lifecycle — cards get banned mid-season — and belongs in a table, not a constant; so does a per-format block floor if it is ever edited without a deploy. Neither is in this change, and the requirements for both are recorded on #61 rather than here.
+
+9. **Pools are maintained from the admin panel**, not only by the seed. A pool is created roughly every seven weeks — 18 pool-creating events between SVI and PBL, over 40 months — and without an admin screen each one needs a code change, a deploy and a `db:seed` on production before anyone can anchor a deck to the current Standard. The admin panel already imports the set itself, so the flow would break exactly in the middle.
 
 ## Facts established before designing (measured, not assumed)
 
@@ -54,11 +56,18 @@ One row per period of the Standard calendar.
 Unique index on `(first_card_set_id, last_card_set_id)`: that pair *is* the pool's name, and two rows must not claim it.
 
 ```ruby
+belongs_to :first_card_set, class_name: "CardSet"
+belongs_to :last_card_set,  class_name: "CardSet"
+has_many :decks,       dependent: :restrict_with_error
+has_many :tournaments, dependent: :restrict_with_error
+
 def name = "#{first_card_set.code}-#{last_card_set.code}"   # "TEF-PBL"
 
 def self.current      = where(released_on: ..Date.current).order(released_on: :desc).first
 def self.at(date)     = where(legal_on: ..date).order(legal_on: :desc).first
 ```
+
+`restrict_with_error` rather than the `:nullify` that `Archetype has_many :decks` uses, and the difference is not stylistic: an archetype is a tag, so dropping it is harmless, whereas a NULL anchor on a Standard deck is unsavable on its next edit. A referenced pool is corrected, never deleted.
 
 Two design points worth stating, because both look like redundancy:
 
@@ -129,6 +138,18 @@ For a tournament the comparison is against `StandardPool.at(date)`, not `current
 
 **MCP.** `ListDecksTool` returns `format: "standard"` — the ambiguity this issue exists to remove. It gains `standard_pool: deck.standard_pool&.name`.
 
+## Admin panel
+
+`resources :standard_pools` under `namespace :admin`, full CRUD, following the `resources :archetypes` precedent — a small reference table maintained by hand — plus an entry in `Ui::AdminNavbar` beside "Archetypes".
+
+**The form pre-fills everything that does not change.** A set release moves only the upper bound, so `first_card_set_id` and `regulation_marks` come from `StandardPool.current` and `legal_on` is proposed as `released_on + 14 days`. What is left to type is the new set and its release date — exactly the part a human knows and the schema does not. The annual rotation is the one case where the lower bound and the marks are touched, and it is the one case worth typing in full.
+
+**The index** lists pools by `released_on` descending: name, marks, both dates, which one is current, and the number of decks and tournaments anchored to each. The count is what makes a deletion attempt legible before it is refused.
+
+**Consequence: the seed becomes a bootstrap, not the source of truth.** It stays idempotent on the natural key `(first_card_set_id, last_card_set_id)`, which the unique index already guarantees, so re-running it after admin edits neither duplicates nor overwrites.
+
+**Not added:** a "create the pool" action on the card-set import page. The pre-filled form covers the same need without a second path to maintain.
+
 ## Out of scope
 
 - Legality checking of any kind, including the card-search filter in the deck builder (#27) and deck size / copy limits (#61, #125).
@@ -139,7 +160,7 @@ For a tournament the comparison is against `StandardPool.at(date)`, not `current
 
 ## Known seams
 
-- **`StandardPool.current` returning nil** on a database with no seeded pools makes every Standard deck unsavable. Seeds are part of setup, but a fresh deploy that skips them fails loudly rather than quietly — acceptable, and worth an explicit test.
+- **`StandardPool.current` returning nil** on a database with no pools makes every Standard deck unsavable. Seeds are part of setup, so a fresh deploy that skips them fails loudly rather than quietly — and with the admin screen the fix no longer needs a deploy. Acceptable, and worth an explicit test.
 - **The pool history stops at the 2025 rotation.** A deck genuinely built under a 2024 Standard cannot be anchored truthfully; it will be backfilled onto the current pool like every other existing deck.
 - **The upper-bound convention is a judgement call** on a double release, inherited from Limitless. A future double release asks the same question again; the seed comment records the rule so the answer is not re-derived.
 - **`Tournament`'s anchor is not kept in sync with its `date`.** Change the date after saving and the anchor stays; the nudge surfaces the mismatch rather than fixing it.
@@ -148,6 +169,7 @@ For a tournament the comparison is against `StandardPool.at(date)`, not `current
 
 - **Model:** `#name`; `current` ignoring a pool whose `released_on` is in the future; `at(date)` on `legal_on`; the conditional presence validation and the clearing of the anchor on a format change — on `Deck` **and** `Tournament`.
 - **Services:** `Decks::Duplicator` preserves the anchor; `Decks::Fetcher` anchors to `current`; `CardSets::Importer` fills `release_date` and does not overwrite a seeded one.
+- **Admin:** the pool CRUD requires an admin (the `Admin::BaseController` guard); the new form pre-fills the lower bound and marks from the current pool; deleting a referenced pool is refused and says so, rather than nulling an anchor.
 - **System:** picking a pool when creating a deck and seeing it in the badge; the nudge present on a deck anchored to an older pool. Both viewports, as the repo requires.
 - **Not covered by a test, deliberately:** the migration's backfill. It runs once and the suite starts from `schema.rb`, so a test would assert against a fixture rather than against the data that matters. It is verified by hand on the development database, and the result reported.
 - Every new test is verified by breaking the implementation first — a test that has never been red proves nothing.
