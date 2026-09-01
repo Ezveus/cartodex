@@ -1244,7 +1244,9 @@ Refs #122"
 - Consumes: `StandardPool.by_release` (Task 2), `Deck#standard_pool_id` (Task 4).
 - Produces: the deck form posts `deck[standard_pool_id]`. The Stimulus controller `deck-classification` exposes a single `toggle` action driving two conditional fields, with targets `format`, `otherField` and `standardField`.
 
-- [ ] **Step 1: Write the failing controller tests**
+**Already done in Task 4, do not redo:** `:standard_pool_id` is permitted in `DecksController#deck_params`, and a test that posting an explicit `standard_pool_id` creates the deck with that pool already exists in `test/controllers/decks_controller_test.rb`. Both were pulled forward because Task 4's validation left every HTML deck edit answering 422, and no task should end with the branch in that state. This task therefore owns the **form field and the Stimulus controller only**.
+
+- [ ] **Step 1: Write the failing controller test**
 
 Append to `test/controllers/decks_controller_test.rb` (reuse that file's existing sign-in setup):
 
@@ -1256,33 +1258,14 @@ Append to `test/controllers/decks_controller_test.rb` (reuse that file's existin
     assert_match "TWM-POR", response.body
     assert_match "TWM-ASC", response.body
   end
-
-  test "creating a deck stores the chosen standard pool" do
-    assert_difference "Deck.count", 1 do
-      post decks_path, params: { deck: {
-        name: "Anchored", format: "standard",
-        standard_pool_id: standard_pools(:twm_asc).id
-      } }
-    end
-
-    assert_equal standard_pools(:twm_asc), Deck.order(:created_at).last.standard_pool
-  end
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [ ] **Step 2: Run to verify it fails**
 
 Run: `bin/rails test test/controllers/decks_controller_test.rb`
-Expected: the first fails because the form has no pool select; the second fails because `standard_pool_id` is not permitted, so the deck is invalid and no row is created.
+Expected: fails because the form has no pool select, so neither pool name appears in the body.
 
-- [ ] **Step 3: Permit the parameter**
-
-`app/controllers/decks_controller.rb:210`:
-
-```ruby
-    params.require(:deck).permit(:name, :description, :physical, :tcg_live, :format, :other_format_name, :standard_pool_id, :archetype_id)
-```
-
-- [ ] **Step 4: Add the field to the Phlex component**
+- [ ] **Step 3: Add the field to the Phlex component**
 
 In `app/views/components/decks/classification_fields.rb`, render the new field between `format_group` and `other_format_field`:
 
@@ -1328,7 +1311,7 @@ Add the field itself, plus the pool list. `StandardPool.current` is the pre-sele
 
 The `includes` is not decoration: `#name` reads both bounds' codes, so without it the select costs two queries per pool.
 
-- [ ] **Step 5: Generalise the Stimulus controller**
+- [ ] **Step 4: Generalise the Stimulus controller**
 
 Replace `app/javascript/controllers/deck_classification_controller.js` entirely:
 
@@ -1366,16 +1349,16 @@ The old action name `toggleOther` is gone, so grep for it and fix every caller:
 grep -rn "toggleOther" app test
 ```
 
-- [ ] **Step 6: Run to verify they pass**
+- [ ] **Step 5: Run to verify they pass**
 
 Run: `bin/rails test`
 Expected: 0 failures.
 
-- [ ] **Step 7: Sabotage-verify**
+- [ ] **Step 6: Sabotage-verify**
 
-Remove `:standard_pool_id` from the `permit` list. `creating a deck stores the chosen standard pool` must fail. Revert.
+Remove the `standard_pool_field` call from `view_template`. `the new deck form offers the standard pools` must fail. Revert. Then break the Stimulus `toggle` so it never shows `standardField`, and confirm Task 13's system test catches it later — note it, do not run the system suite here.
 
-- [ ] **Step 8: Rubocop and commit**
+- [ ] **Step 7: Rubocop and commit**
 
 ```bash
 bin/rubocop app/views/components/decks/classification_fields.rb app/controllers/decks_controller.rb
