@@ -23,7 +23,9 @@ Players already name these pools by their two bounds: the oldest legal set and t
 5. **A pool is named by its two bounds**, and the upper bound is a single set. When two sets release the same day, follow Limitless's naming: the 2025-07-18 pool is `SVI-BLK`, not `SVI-BLK/WHT`.
 6. **Two dates per pool.** `released_on` (the cards exist) drives `current`, i.e. what a new deck is pre-anchored to; `legal_on` (Play! Pokémon tournament legality) drives `at(date)`, i.e. what a tournament on a given day was played under.
 7. **Backfill:** tournaments by their `date`; decks onto the current pool.
-8. **Deck-construction rules stay out of the database.** Deck size, max-copies, the GLC singleton rule and the basic-energy exception go in a Ruby constant keyed by the existing `format` enum, the day #61 decides hard-block vs advisory. This change does not introduce them.
+8. **The numeric construction limits stay out of the database.** Deck size, max-copies, the GLC singleton rule and the basic-energy exception go in a Ruby constant keyed by the existing `format` enum, the day #61 decides hard-block vs advisory. This change does not introduce them.
+
+   Scoped deliberately to the *numeric* limits. A per-format **banlist** is data with a lifecycle — cards get banned mid-season — and belongs in a table, not a constant; so does a per-format block floor if it is ever edited without a deploy. Neither is in this change, and the requirements for both are recorded on #61 rather than here.
 
 ## Facts established before designing (measured, not assumed)
 
