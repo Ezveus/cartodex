@@ -2137,7 +2137,31 @@ In the **Bin Scripts** section, add:
 
 In the **Key services** list, amend the `CardSets::Importer` entry to record that it now writes `release_date` (guarded by `||=`, so a hand-seeded date wins), since the entry currently says it sets only `code`, `name` and `logo_url`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Add the admin screen to the Controllers paragraph**
+
+The **Controllers** paragraph lists what the admin panel covers: "dashboard, card sets (with import), cards (with rescrape), users (with toggle_admin), decks, archetypes (CRUD), and imports". Add standard pools (CRUD, no show page), and record the reason the screen exists rather than just its existence:
+
+```markdown
+…archetypes (CRUD), standard pools (CRUD, no show page — a pool is five fields and the index shows all of them), and imports (list with error display, delete, retry).
+```
+
+- [ ] **Step 5: Record that the seed is a bootstrap, not the source of truth**
+
+This is the consequence most likely to be forgotten and most costly to rediscover. Wherever the `StandardPool` paragraph from Step 1 ends, add:
+
+```markdown
+`db/seeds/standard_pools.rb` is a **bootstrap, not the source of truth**: pools are maintained from the admin panel, so the seed is keyed on the bound pair and **skips any row that already exists** rather than reasserting its values — otherwise every `db:seed` would silently revert an admin correction. Two of its values are not derivable and carry comments saying so: the `J` regulation mark starts at ASC, not MEG (the Mega Evolution block opens on `I` — *Mega Lucario ex* is MEG 77), and ASC's `legal_on` is 2026-03-06, five weeks after release rather than the usual two, because it shipped staggered and Play! Pokémon pushed legality past the 2026-02-13 EUIC. Re-deriving either with the two-week rule reintroduces a bug.
+```
+
+- [ ] **Step 6: Note the notice component**
+
+In the **Frontend** or design-system area, alongside the existing note about `Ui::CardSelect`, record:
+
+```markdown
+`Ui::StandardPoolNotice` tells a user their deck or tournament is anchored to a Standard pool other than the expected one, and is **informative only** — the anchor is pinned by design and nothing moves it automatically. It lives under `Ui::` because both the deck and tournament forms render it, and **no string it emits may name a record type or mention a date**: a deck has no date, and a tournament's mismatch can run in either direction (its anchor may be older *or* newer than the pool its date calls for). The `expected` pool it is handed differs by caller — `StandardPool.current` for a deck, `StandardPool.at(date)` for a tournament — because those are different questions: a deck's mismatch is staleness, a tournament's is a data-entry error.
+```
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add CLAUDE.md
