@@ -58,4 +58,18 @@ class StandardPoolTest < ActiveSupport::TestCase
   test "regulation_marks round-trips as an array of strings" do
     assert_equal %w[G H I J], standard_pools(:twm_por).regulation_marks
   end
+
+  # Within one rotation era the lower bound is constant and the upper bound only
+  # advances, and each rotation changes the lower bound — which is what makes the
+  # bound pair a safe unique key across the whole history.
+  test "a pool with a lower bound the seed has no card set for cannot be written" do
+    orphan = StandardPool.new(
+      first_card_set: nil, last_card_set: card_sets(:por),
+      regulation_marks: %w[H I J],
+      released_on: Date.new(2026, 3, 27), legal_on: Date.new(2026, 4, 10)
+    )
+
+    assert_not orphan.valid?
+    assert_includes orphan.errors[:first_card_set], "must exist"
+  end
 end

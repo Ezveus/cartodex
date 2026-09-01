@@ -4,6 +4,10 @@ SETS = [
   { code: "SVI", name: "Scarlet & Violet",        block_name: "Scarlet & Violet", release_date: "2023-03-31" },
   { code: "SVE", name: "Scarlet & Violet Energy",  block_name: "Scarlet & Violet", release_date: "2023-03-31" },
   { code: "PAL", name: "Paldea Evolved",            block_name: "Scarlet & Violet", release_date: "2023-06-09" },
+  { code: "OBF", name: "Obsidian Flames",           block_name: "Scarlet & Violet", release_date: "2023-08-11" },
+  { code: "MEW", name: "151",                        block_name: "Scarlet & Violet", release_date: "2023-09-22" },
+  { code: "PAR", name: "Paradox Rift",               block_name: "Scarlet & Violet", release_date: "2023-11-03" },
+  { code: "PAF", name: "Paldean Fates",              block_name: "Scarlet & Violet", release_date: "2024-01-26" },
   { code: "TEF", name: "Temporal Forces",            block_name: "Scarlet & Violet", release_date: "2024-03-22" },
   { code: "TWM", name: "Twilight Masquerade",        block_name: "Scarlet & Violet", release_date: "2024-05-24" },
   { code: "SFA", name: "Shrouded Fable",             block_name: "Scarlet & Violet", release_date: "2024-08-02" },
@@ -21,7 +25,8 @@ SETS = [
   { code: "PFL", name: "Phantasmal Flames",            block_name: "Mega Evolution", release_date: "2025-11-14" },
   { code: "ASC", name: "Ascended Heroes",             block_name: "Mega Evolution", release_date: "2026-01-30" },
   { code: "POR", name: "Perfect Order",               block_name: "Mega Evolution", release_date: "2026-03-27" },
-  { code: "CRI", name: "Chaos Rising", block_name: "Mega Evolution", release_date: "2026-05-22" }
+  { code: "CRI", name: "Chaos Rising", block_name: "Mega Evolution", release_date: "2026-05-22" },
+  { code: "PBL", name: "Pitch Black",                 block_name: "Mega Evolution", release_date: "2026-07-17" }
 ].freeze
 
 SETS.each do |attrs|
