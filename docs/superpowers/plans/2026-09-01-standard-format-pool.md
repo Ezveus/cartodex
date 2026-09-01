@@ -2059,12 +2059,19 @@ class StandardPoolsTest < ApplicationSystemTestCase
     assert_selector "#deck_standard_pool_id", visible: false
   end
 
+  # The classification form is rendered only by DecksController#edit, which sets
+  # @editing and re-renders :show — deck_path never reaches it. Established in
+  # Task 10, whose own tests hit the same path.
   test "a deck anchored to an older Standard is invited to update" do
     decks(:one).update!(format: "standard", standard_pool: standard_pools(:twm_asc))
 
-    visit deck_path(decks(:one))
+    visit edit_deck_path(decks(:one))
 
-    assert_text "released since"
+    # Scoped to the notice: the pool name alone also appears in the select's
+    # options, so an unscoped assertion would pass with no notice rendered at all.
+    within ".standard-pool-notice" do
+      assert_text "TWM-POR"
+    end
   end
 end
 ```
