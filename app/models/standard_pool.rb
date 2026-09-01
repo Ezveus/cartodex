@@ -18,6 +18,12 @@ class StandardPool < ApplicationRecord
 
   scope :by_release, -> { order(released_on: :desc) }
 
+  # Exists because #name reads both bounds: rendering a pool's name without this
+  # costs two extra queries per pool, which is how the deck list and the spotlight
+  # search each grew an N+1 the day format_label started naming the pool. Every
+  # site that renders a pool's name should read through it.
+  scope :named, -> { includes(:first_card_set, :last_card_set) }
+
   # The oldest legal set, then the newest — the name players already use.
   def name = "#{first_card_set.code}-#{last_card_set.code}"
 
@@ -29,4 +35,5 @@ class StandardPool < ApplicationRecord
   # The pool a tournament held on `date` was played under. Reads legal_on, since
   # a set is tournament-legal about two weeks after it releases.
   def self.at(date) = where(legal_on: ..date).order(legal_on: :desc).first
+
 end

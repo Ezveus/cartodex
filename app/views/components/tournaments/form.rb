@@ -80,7 +80,7 @@ module Tournaments
     private
 
     def standard_pools
-      @standard_pools ||= StandardPool.includes(:first_card_set, :last_card_set).by_release
+      @standard_pools ||= StandardPool.named.by_release
     end
 
     # A tournament is played under the format legal on its own date, not on "the newest pool

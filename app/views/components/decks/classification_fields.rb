@@ -64,7 +64,7 @@ module Decks
     end
 
     def pools
-      @pools ||= StandardPool.includes(:first_card_set, :last_card_set).by_release
+      @pools ||= StandardPool.named.by_release
     end
 
     def other_format_field

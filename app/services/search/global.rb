@@ -38,7 +38,11 @@ module Search
     def call
       return empty_result if @query.length < MIN_QUERY_LENGTH
 
-      decks = deck_scope.order(:name).limit(@limit).includes(:archetype).to_a
+      # standard_pool's bounds ride along because a result row renders the deck's
+      # format badge, which names the pool from both of them — three extra queries per
+      # Standard deck, on every keystroke, without this.
+      decks = deck_scope.order(:name).limit(@limit)
+        .includes(:archetype, standard_pool: [ :first_card_set, :last_card_set ]).to_a
       cards = card_scope.order(:name, :set_name).limit(@limit).to_a
       tournaments = tournament_scope.order(date: :desc).limit(@limit).to_a
 

@@ -432,6 +432,26 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
 
+  # The format badge names the deck's Standard pool, and StandardPool#name reads both of
+  # the pool's card-set bounds — so an unpreloaded index cost three extra queries per
+  # Standard deck. Each deck gets a pool of its own on purpose: decks sharing a pool id
+  # issue identical SQL, which the per-request query cache serves and count_queries does
+  # not count, hiding the very N+1 this guards.
+  test "index issues a constant number of queries regardless of how many decks" do
+    2.times { |i| @user.decks.create!(name: "Extra #{i}", standard_pool: pool_of_its_own(i)) }
+
+    get decks_path # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get decks_path }
+
+    (2..7).each { |i| @user.decks.create!(name: "Extra #{i}", standard_pool: pool_of_its_own(i)) }
+
+    large = count_queries { get decks_path }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the deck count: #{small} -> #{large}"
+  end
+
   test "the new deck form offers the standard pools, current one selected" do
     get new_deck_path
 
@@ -508,5 +528,17 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".standard-pool-notice", count: 0
+  end
+
+  private
+
+  # A pool nothing else shares, so that a page rendering N decks has N pool names to
+  # resolve. Dated well before twm_por, so StandardPool.current is untouched.
+  def pool_of_its_own(index)
+    set = CardSet.create!(code: "Q#{index}", name: "Quiet Set #{index}", release_date: Date.new(2025, 1, 1))
+    StandardPool.create!(
+      first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
+      released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
   end
 end
