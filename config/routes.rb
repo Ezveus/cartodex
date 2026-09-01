@@ -93,6 +93,9 @@ Rails.application.routes.draw do
         post :retry, on: :member
       end
       resources :archetypes
+      # No show action: a pool is five fields and the index already lists all of
+      # them, so a show page would only restate the row.
+      resources :standard_pools, except: [ :show ]
     end
 
     # API endpoints
