@@ -17,6 +17,7 @@
 - `bin/rubocop` (rubocop-rails-omakase) must pass before every commit.
 - `bin/rails test` must be green before every commit.
 - System tests must pass at **both** viewports: `bin/rails test:system` and `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system`. Never click a nav link directly — use `click_nav_link`.
+- **A task whose diff touches a model validation or shared test setup runs `bin/rails test:system` (desktop side) before committing, not just `bin/rails test`.** Deferring all system-suite verification to the last task let Task 4's new `Deck` validation break eight system tests undetected across two tasks and four review seats: `bin/rails test` does not run `test/system/`, and the system suite creates its own decks.
 - **Sabotage-verify every new test**: before implementing, run the test and see it fail for the stated reason. After implementing, break the implementation once and confirm the test goes red. A test that has never been red proves nothing.
 - Services inherit from `ApplicationService` and expose `.call`.
 - `app/mcp/` is an autoloaded root, so its classes are **top-level constants** (`ListDecksTool`, not `Mcp::ListDecksTool`).
