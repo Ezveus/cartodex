@@ -7,7 +7,11 @@ module Tournaments
     end
 
     def view_template
-      form_with(model: @tournament, class: "deck-form") do |f|
+      form_with(model: @tournament, class: "deck-form", data: {
+        controller: "tournament-standard-pool",
+        tournament_standard_pool_pools_value: pool_calendar_json,
+        tournament_standard_pool_fallback_id_value: StandardPool.current&.id.to_i
+      }) do |f|
         render Ui::FormErrors.new(resource: @tournament)
 
         render Ui::FormGroup.new do
@@ -17,7 +21,14 @@ module Tournaments
 
         render Ui::FormGroup.new do
           f.label :date, class: "form-label"
-          f.date_field :date, class: "form-input"
+          f.date_field :date, class: "form-input",
+            data: {
+              tournament_standard_pool_target: "date",
+              # `input` as well as `change`: a date input does not fire change until it loses
+              # focus, so change alone leaves the select stale for as long as the user stays in
+              # the field — and invisible to a test that never blurs it.
+              action: "input->tournament-standard-pool#syncFromDate change->tournament-standard-pool#syncFromDate"
+            }
         end
 
         render Ui::FormGroup.new do
@@ -38,7 +49,12 @@ module Tournaments
         render Ui::FormGroup.new(hint: "Only used when format is “Standard”") do
           f.label :standard_pool_id, "Standard", class: "form-label"
           f.collection_select :standard_pool_id, standard_pools, :id, :name,
-            { selected: selected_standard_pool_id }, class: "form-input"
+            { selected: selected_standard_pool_id },
+            class: "form-input",
+            data: {
+              tournament_standard_pool_target: "pool",
+              action: "change->tournament-standard-pool#markOverridden"
+            }
           render Ui::StandardPoolNotice.new(
             record: @tournament, expected: expected_standard_pool
           )
@@ -81,6 +97,14 @@ module Tournaments
 
     def standard_pools
       @standard_pools ||= StandardPool.named.by_release
+    end
+
+    # Every pool's legality date, for the Stimulus controller that keeps the select in step
+    # with the date field. Only `legal_on` travels: the client mirrors StandardPool.at, which
+    # is the only question the date can answer, and shipping `released_on` too would invite a
+    # second, wrong rule client-side.
+    def pool_calendar_json
+      standard_pools.map { |pool| { id: pool.id, legal_on: pool.legal_on.iso8601 } }.to_json
     end
 
     # The pool the tournament's own date calls for, or nil when there is no date to ask
