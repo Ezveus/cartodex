@@ -1,0 +1,68 @@
+require "test_helper"
+
+class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
+  setup do
+    # The fixtures are already anchored, which is the post-migration state. Undo
+    # that to reproduce the pre-migration one.
+    Deck.update_all(standard_pool_id: nil)
+    Tournament.update_all(standard_pool_id: nil)
+  end
+
+  # created_at is not the date a deck was built — importing an old decklist today
+  # stamps today — so anchoring on it would fabricate a precision the column has
+  # not got. The current pool is visibly wrong for an old deck rather than
+  # plausibly wrong, and the stale-anchor nudge invites the user to fix it.
+  test "anchors standard decks to the current pool" do
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal StandardPool.current, decks(:one).reload.standard_pool
+    assert_equal 2, result.decks
+  end
+
+  test "anchors tournaments to the pool legal on their date" do
+    tournaments(:one).update_columns(date: Date.new(2026, 1, 20))
+
+    StandardPools::AnchorBackfill.call
+
+    # 2026-01-20 is after twm_por released but before it was legal.
+    assert_equal standard_pools(:twm_asc), tournaments(:one).reload.standard_pool
+  end
+
+  # NULL is unsavable on the next edit, so an event older than the whole seeded
+  # history falls back to the oldest pool rather than staying empty.
+  test "a tournament older than the oldest pool falls back to the oldest" do
+    tournaments(:one).update_columns(date: Date.new(2019, 1, 1))
+
+    StandardPools::AnchorBackfill.call
+
+    assert_equal standard_pools(:twm_asc), tournaments(:one).reload.standard_pool
+  end
+
+  test "leaves rows whose format is not standard alone" do
+    decks(:one).update_columns(format: "glc")
+
+    StandardPools::AnchorBackfill.call
+
+    assert_nil decks(:one).reload.standard_pool_id
+  end
+
+  test "is idempotent and does not move an anchor already set" do
+    decks(:one).update_columns(standard_pool_id: standard_pools(:twm_asc).id)
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal standard_pools(:twm_asc), decks(:one).reload.standard_pool
+    assert_equal 1, result.decks
+  end
+
+  test "reports rather than writes when there is no pool at all" do
+    Deck.update_all(standard_pool_id: nil)
+    Tournament.update_all(standard_pool_id: nil)
+    StandardPool.delete_all
+
+    result = StandardPools::AnchorBackfill.call
+
+    assert_equal 0, result.decks
+    assert_includes result.skipped.join, "no Standard pool"
+  end
+end
