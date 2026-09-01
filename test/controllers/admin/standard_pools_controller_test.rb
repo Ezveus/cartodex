@@ -131,6 +131,50 @@ class Admin::StandardPoolsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Standard pool deleted.", flash[:notice]
   end
 
+  # "H I J" with no commas is a plausible paste from an announcement. Splitting on commas
+  # alone made it the single mark "H I J", and nothing reads the marks yet, so it would
+  # have sat there until #27 or #61 read it.
+  test "marks pasted without commas are still parsed as separate marks" do
+    post admin_standard_pools_path, params: { standard_pool: {
+      first_card_set_id: card_sets(:asc).id,
+      last_card_set_id: card_sets(:por).id,
+      regulation_marks: "H I J",
+      released_on: "2026-06-01",
+      legal_on: "2026-06-15"
+    } }
+
+    assert_redirected_to admin_standard_pools_path
+    assert_equal %w[H I J], StandardPool.order(:created_at).last.regulation_marks
+  end
+
+  test "rejects a mark that is not a single letter" do
+    assert_no_difference "StandardPool.count" do
+      post admin_standard_pools_path, params: { standard_pool: {
+        first_card_set_id: card_sets(:asc).id,
+        last_card_set_id: card_sets(:por).id,
+        regulation_marks: "H, IJ",
+        released_on: "2026-06-01",
+        legal_on: "2026-06-15"
+      } }
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "rejects a pool legal before its cards are released" do
+    assert_no_difference "StandardPool.count" do
+      post admin_standard_pools_path, params: { standard_pool: {
+        first_card_set_id: card_sets(:asc).id,
+        last_card_set_id: card_sets(:por).id,
+        regulation_marks: "H, I, J",
+        released_on: "2026-06-01",
+        legal_on: "2026-05-15"
+      } }
+    end
+
+    assert_response :unprocessable_entity
+  end
+
   test "requires an admin" do
     @admin.update!(admin: false)
 

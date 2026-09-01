@@ -59,6 +59,70 @@ class StandardPoolTest < ActiveSupport::TestCase
     assert_equal %w[G H I J], standard_pools(:twm_por).regulation_marks
   end
 
+  # Nothing reads the marks yet, which is the whole reason the shape is enforced here:
+  # a "H I J" that slipped through the admin screen's parser would sit unnoticed until
+  # #27 or #61 read it, and would then be wrong somewhere far from where it was typed.
+  test "a mark that is not a single uppercase letter is refused" do
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: [ "H", "I J" ],
+      released_on: Date.new(2026, 6, 1), legal_on: Date.new(2026, 6, 15)
+    )
+
+    assert_not pool.valid?
+    assert_includes pool.errors[:regulation_marks].join, "single uppercase letter"
+  end
+
+  test "a marks value that is not a list at all is refused" do
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: "H",
+      released_on: Date.new(2026, 6, 1), legal_on: Date.new(2026, 6, 15)
+    )
+
+    assert_not pool.valid?
+    assert_includes pool.errors[:regulation_marks].join, "list of single-letter marks"
+  end
+
+  # Legality follows existence. The admin screen can type either date, and the pair is
+  # nonsense a future legality consumer would trust: at(date) would name a pool whose
+  # cards did not exist on that date.
+  test "a pool legal before its cards released is refused" do
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: %w[H I J],
+      released_on: Date.new(2026, 6, 1), legal_on: Date.new(2026, 5, 15)
+    )
+
+    assert_not pool.valid?
+    assert_includes pool.errors[:legal_on].join, "before the release date"
+  end
+
+  # A pool born from a rotation with no set release is legal the day its cards are
+  # already out — SVI-JTG is exactly that — so equality has to pass.
+  test "a pool legal on its release date is accepted" do
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: %w[H I J],
+      released_on: Date.new(2026, 6, 1), legal_on: Date.new(2026, 6, 1)
+    )
+
+    assert_predicate pool, :valid?
+  end
+
+  # Future-dated on purpose: a pool announced before its cards exist is legitimate, and
+  # `current` is what keeps it from becoming the default anchor. A "no future dates"
+  # validation would forbid the seed's own forward-looking rows.
+  test "a future-dated pool is valid" do
+    pool = StandardPool.new(
+      first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: %w[H I J],
+      released_on: Date.current + 30, legal_on: Date.current + 44
+    )
+
+    assert_predicate pool, :valid?
+  end
+
   # Within one rotation era the lower bound is constant and the upper bound only
   # advances, and each rotation changes the lower bound — which is what makes the
   # bound pair a safe unique key across the whole history.

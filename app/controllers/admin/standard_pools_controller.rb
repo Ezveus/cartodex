@@ -66,8 +66,11 @@ module Admin
       permitted.merge(regulation_marks: parse_marks(permitted[:regulation_marks]))
     end
 
+    # Splits on commas *and* whitespace: "H I J" is a plausible paste, and splitting on
+    # commas alone turned it into the single mark "H I J" — a value nothing reads today,
+    # so it would have sat unnoticed until #27 or #61 read it.
     def parse_marks(value)
-      value.to_s.split(",").map { |mark| mark.strip.upcase }.reject(&:empty?)
+      value.to_s.split(/[,\s]+/).map(&:upcase).reject(&:empty?)
     end
   end
 end
