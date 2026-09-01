@@ -52,7 +52,7 @@ class Search::GlobalTest < ActiveSupport::TestCase
   end
 
   test "caps each group and still reports the full total" do
-    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}") }
+    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}", standard_pool: standard_pools(:twm_por)) }
 
     result = Search::Global.call(user: @user, query: "ogerpon", limit: 5)
 
@@ -113,7 +113,7 @@ class Search::GlobalTest < ActiveSupport::TestCase
   # The short-circuit above must not cost the truncated case its real total: "See all 5 decks"
   # when there are 8 is the bug it would introduce.
   test "still reports the real total when the cap truncated a group" do
-    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}") }
+    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}", standard_pool: standard_pools(:twm_por)) }
 
     result = Search::Global.call(user: @user, query: "ogerpon")
 

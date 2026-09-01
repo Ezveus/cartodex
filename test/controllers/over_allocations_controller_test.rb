@@ -21,7 +21,7 @@ class OverAllocationsControllerTest < ActionDispatch::IntegrationTest
 
   test "offers the decks with proxy slots left as reallocation targets" do
     over_allocate(cards(:honedge), owned: 0, committed: 1)
-    target = @user.decks.create!(name: "Target", physical: true)
+    target = @user.decks.create!(name: "Target", physical: true, standard_pool: standard_pools(:twm_por))
     target.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
 
     get over_allocations_path
@@ -55,7 +55,7 @@ class OverAllocationsControllerTest < ActionDispatch::IntegrationTest
   # user owns — the state a collection decrease leaves behind.
   def over_allocate(card, owned:, committed:)
     @user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: owned)
-    @user.decks.create!(name: "Deck #{card.id}", physical: true).tap do |deck|
+    @user.decks.create!(name: "Deck #{card.id}", physical: true, standard_pool: standard_pools(:twm_por)).tap do |deck|
       deck.deck_cards.create!(card: card, quantity: committed, owned_copies: committed)
     end
   end

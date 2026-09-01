@@ -120,7 +120,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters decks by format" do
     @deck.update!(format: "expanded")
-    other = @user.decks.create!(name: "Std deck", format: "standard")
+    other = @user.decks.create!(name: "Std deck", format: "standard", standard_pool: standard_pools(:twm_por))
 
     get decks_path(format: "expanded")
 
@@ -135,7 +135,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # nothing else — otherwise the test would pass against a scope that ignores owned_copies.
     @deck.deck_cards.update_all(owned_copies: 1)
     @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
-    live = @user.decks.create!(name: "Live deck", tcg_live: true)
+    live = @user.decks.create!(name: "Live deck", tcg_live: true, standard_pool: standard_pools(:twm_por))
 
     get decks_path(support: "physical", proxies: "with")
 
@@ -149,11 +149,11 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   test "index filters decks without proxies" do
     @deck.update!(physical: true)
     @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 1)
-    backed = @user.decks.create!(name: "Backed deck", physical: true)
+    backed = @user.decks.create!(name: "Backed deck", physical: true, standard_pool: standard_pools(:twm_por))
     backed.deck_cards.create!(card: cards(:honedge), quantity: 1, owned_copies: 1)
     # Unbacked cards on purpose: a TCG Live deck's cards always sit at owned_copies 0, so this is
     # what a scope missing its `physical` half would wrongly file under "with proxies".
-    live = @user.decks.create!(name: "Live deck", tcg_live: true)
+    live = @user.decks.create!(name: "Live deck", tcg_live: true, standard_pool: standard_pools(:twm_por))
     live.deck_cards.create!(card: cards(:doublade), quantity: 2)
 
     get decks_path(proxies: "without")
@@ -166,7 +166,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters decks by primary Pokémon" do
     @deck.update!(archetype: archetypes(:budew_ogerpon))
-    other = @user.decks.create!(name: "No archetype")
+    other = @user.decks.create!(name: "No archetype", standard_pool: standard_pools(:twm_por))
 
     get decks_path(primary: cards(:budew_pre).id)
 
@@ -177,7 +177,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters decks by secondary Pokémon" do
     @deck.update!(archetype: archetypes(:budew_ogerpon))
-    other = @user.decks.create!(name: "Primary only", archetype: archetypes(:ogerpon))
+    other = @user.decks.create!(name: "Primary only", archetype: archetypes(:ogerpon), standard_pool: standard_pools(:twm_por))
 
     get decks_path(secondary: cards(:teal_mask_ogerpon_ex).id)
 
@@ -187,7 +187,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "compare renders a comparison of the selected decks" do
-    other = @user.decks.create!(name: "Other")
+    other = @user.decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
     other.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1)
 
@@ -273,7 +273,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "index filters decks by name" do
     @deck.update!(name: "Ogerpon Toolbox")
-    other = @user.decks.create!(name: "Charizard Pidgeot")
+    other = @user.decks.create!(name: "Charizard Pidgeot", standard_pool: standard_pools(:twm_por))
 
     get decks_path(q: "ogerpon")
 
@@ -320,7 +320,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # The spotlight renders "See all N decks" from Search::Global; this page must then show N.
   test "index shows exactly as many decks as the spotlight's total promises" do
     @deck.update!(name: "Ogerpon Toolbox")
-    @user.decks.create!(name: "Ogerpon Build")
+    @user.decks.create!(name: "Ogerpon Build", standard_pool: standard_pools(:twm_por))
 
     get decks_path(q: "ogerpon")
 
@@ -331,7 +331,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "a q request renders the matching decks inside the turbo frame" do
     @deck.update!(name: "Ogerpon Toolbox")
-    other = @user.decks.create!(name: "Charizard Pidgeot")
+    other = @user.decks.create!(name: "Charizard Pidgeot", standard_pool: standard_pools(:twm_por))
 
     get decks_path(q: "ogerpon")
 
@@ -344,8 +344,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # with the same rows — creation order would show the user a different five.
   test "index lists decks in the order the spotlight promised" do
     @deck.update!(name: "Zoroark Toolbox")
-    @user.decks.create!(name: "Ancient Toolbox")
-    @user.decks.create!(name: "Miraidon Toolbox")
+    @user.decks.create!(name: "Ancient Toolbox", standard_pool: standard_pools(:twm_por))
+    @user.decks.create!(name: "Miraidon Toolbox", standard_pool: standard_pools(:twm_por))
 
     get decks_path(q: "toolbox")
 
@@ -371,7 +371,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   test "a frame request still renders the filtered grid" do
     @deck.update!(name: "Ogerpon Toolbox")
-    other = @user.decks.create!(name: "Charizard Pidgeot")
+    other = @user.decks.create!(name: "Charizard Pidgeot", standard_pool: standard_pools(:twm_por))
 
     get decks_path(q: "ogerpon"), headers: { "Turbo-Frame" => "deck_results" }
 
@@ -398,7 +398,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # The deck show page ran one Availability lookup per deck card, with
   # excluding_deck set, so its cost grew with the decklist.
   test "show issues a constant number of queries regardless of decklist size" do
-    deck = @user.decks.create!(name: "Physical", physical: true)
+    deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_or_create_by!(card: cards(:honedge)) { |c| c.quantity = 0 }.update!(quantity: 4)
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
     # Both of these pin a branch across the two measurements: OverAllocations returns early when

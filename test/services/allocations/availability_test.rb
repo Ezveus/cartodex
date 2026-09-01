@@ -6,8 +6,8 @@ module Allocations
       @user = users(:one)
       @card = cards(:honedge)
       @user.collections.find_or_create_by!(card: @card).update!(quantity: 3)
-      @deck_a = @user.decks.create!(name: "A", physical: true)
-      @deck_b = @user.decks.create!(name: "B", physical: true)
+      @deck_a = @user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
+      @deck_b = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
     end
 
     test "available equals owned when nothing is committed" do
@@ -35,7 +35,7 @@ module Allocations
     end
 
     test "non-physical decks do not count toward committed" do
-      live = @user.decks.create!(name: "Live", physical: false)
+      live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       live.deck_cards.create!(card: @card, quantity: 4) # owned_copies forced 0
 
       result = Allocations::Availability.call(user: @user, card: @card)

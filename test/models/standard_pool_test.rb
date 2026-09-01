@@ -72,4 +72,14 @@ class StandardPoolTest < ActiveSupport::TestCase
     assert_not orphan.valid?
     assert_includes orphan.errors[:first_card_set], "must exist"
   end
+
+  # :nullify would leave the deck with a NULL anchor, which its own validation
+  # then refuses on the next edit.
+  test "a pool holding decks refuses to be destroyed" do
+    pool = standard_pools(:twm_por)
+
+    assert_not pool.destroy
+    assert_includes pool.errors[:base].join, "decks"
+    assert StandardPool.exists?(pool.id)
+  end
 end

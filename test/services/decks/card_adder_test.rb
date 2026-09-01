@@ -26,7 +26,7 @@ module Decks
       user = users(:one)
       card = cards(:honedge)
       user.collections.find_or_create_by!(card: card).update!(quantity: 3)
-      deck = user.decks.create!(name: "A", physical: true)
+      deck = user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
 
       deck_card = Decks::CardAdder.call(deck: deck, card: card, quantity: 4)
 
@@ -38,8 +38,8 @@ module Decks
       user = users(:one)
       card = cards(:honedge)
       user.collections.find_or_create_by!(card: card).update!(quantity: 3)
-      deck_a = user.decks.create!(name: "A", physical: true)
-      deck_b = user.decks.create!(name: "B", physical: true)
+      deck_a = user.decks.create!(name: "A", physical: true, standard_pool: standard_pools(:twm_por))
+      deck_b = user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
       Decks::CardAdder.call(deck: deck_a, card: card, quantity: 4) # takes all 3 reals
 
       deck_card_b = Decks::CardAdder.call(deck: deck_b, card: card, quantity: 4)
@@ -52,7 +52,7 @@ module Decks
       user = users(:one)
       card = cards(:honedge)
       user.collections.find_or_create_by!(card: card).update!(quantity: 3)
-      deck = user.decks.create!(name: "Live", physical: false)
+      deck = user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
 
       deck_card = Decks::CardAdder.call(deck: deck, card: card, quantity: 2)
 

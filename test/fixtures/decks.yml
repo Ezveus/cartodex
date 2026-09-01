@@ -8,9 +8,11 @@ one:
   name: MyString
   name_normalized: mystring
   description: MyText
+  standard_pool: twm_por
 
 two:
   user: two
   name: MyString
   name_normalized: mystring
   description: MyText
+  standard_pool: twm_por

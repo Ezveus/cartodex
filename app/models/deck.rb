@@ -3,6 +3,9 @@ class Deck < ApplicationRecord
 
   belongs_to :user
   belongs_to :archetype, optional: true
+  # Which Standard the deck was built for. Standard rotates, so its name alone
+  # does not identify a card pool; every other format is eternal and has no anchor.
+  belongs_to :standard_pool, optional: true
   has_many :deck_cards, dependent: :destroy
   has_many :cards, through: :deck_cards
   has_many :deck_results, dependent: :destroy
@@ -19,6 +22,7 @@ class Deck < ApplicationRecord
 
   validates :name, presence: true
   validates :other_format_name, presence: true, if: :other?
+  validates :standard_pool, presence: true, if: :standard?
 
   before_validation :clear_inapplicable_classification
   after_update :release_owned_copies_if_not_physical
@@ -113,6 +117,7 @@ class Deck < ApplicationRecord
   # custom format name once the format is no longer "other".
   def clear_inapplicable_classification
     self.other_format_name = nil unless other?
+    self.standard_pool_id = nil unless standard?
   end
 
   def merge_counts!(target, source)

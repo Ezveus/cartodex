@@ -85,7 +85,7 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "the group header reports the total when the cap truncated it" do
-    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}") }
+    7.times { |i| @user.decks.create!(name: "Ogerpon Build #{i}", standard_pool: standard_pools(:twm_por)) }
 
     get search_path(q: "ogerpon")
 

@@ -33,7 +33,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   # --- Suggested archetype action ---
 
   test "suggested_archetype returns a matching archetype" do
-    deck = @user.decks.create!(name: "Ogerpon")
+    deck = @user.decks.create!(name: "Ogerpon", standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
 
     get suggested_archetype_api_deck_path(deck)
@@ -45,7 +45,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "suggested_archetype returns candidate Pokémon when nothing matches" do
-    deck = @user.decks.create!(name: "Budew pile")
+    deck = @user.decks.create!(name: "Budew pile", standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
 
     get suggested_archetype_api_deck_path(deck)
@@ -57,7 +57,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "suggested_archetype is scoped to the current user" do
-    other = users(:two).decks.create!(name: "Theirs")
+    other = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
 
     get suggested_archetype_api_deck_path(other)
 
@@ -65,7 +65,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "deck_json includes physical, tcg_live and per-card allocation" do
-    deck = @user.decks.create!(name: "Phys", physical: true, tcg_live: false)
+    deck = @user.decks.create!(name: "Phys", physical: true, tcg_live: false, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 2)
 
     get api_deck_path(deck)

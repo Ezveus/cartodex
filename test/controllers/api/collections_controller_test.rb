@@ -11,7 +11,7 @@ class Api::CollectionsControllerTest < ActionDispatch::IntegrationTest
 
   test "collection_json includes owned/committed/available" do
     @user.collections.find_or_initialize_by(card: @card).update!(quantity: 4)
-    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
 
     get api_collections_path
@@ -59,7 +59,7 @@ class Api::CollectionsControllerTest < ActionDispatch::IntegrationTest
   test "index still reports owned, committed and available per row" do
     card = cards(:honedge)
     @user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: 3)
-    deck = @user.decks.create!(name: "Phys", physical: true)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: card, quantity: 2, owned_copies: 2)
 
     get api_collections_path

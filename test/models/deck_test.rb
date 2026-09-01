@@ -63,27 +63,27 @@ class DeckTest < ActiveSupport::TestCase
   test "clears the format name when leaving the other format" do
     deck = Deck.create!(user: users(:one), name: "Other", format: "other", other_format_name: "Pocket")
 
-    deck.update!(format: "standard")
+    deck.update!(format: "standard", standard_pool: standard_pools(:twm_por))
 
     assert_nil deck.other_format_name
   end
 
   test "has_proxies? is false when every card on a physical deck is fully backed" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
 
     assert_not deck.has_proxies?
   end
 
   test "has_proxies? is true when a card on a physical deck is not fully backed" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
 
     assert deck.has_proxies?
   end
 
   test "has_proxies? is false for an empty physical deck" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
 
     assert_not deck.has_proxies?
   end
@@ -91,14 +91,14 @@ class DeckTest < ActiveSupport::TestCase
   # A non-physical deck never consumes the collection, so its cards sit at owned_copies 0 by
   # construction. That is not the same thing as playing proxies, and must not raise the badge.
   test "has_proxies? is false for a non-physical deck holding cards" do
-    deck = users(:one).decks.create!(name: "Live", tcg_live: true)
+    deck = users(:one).decks.create!(name: "Live", tcg_live: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2)
 
     assert_not deck.has_proxies?
   end
 
   test "has_proxies? drops when the deck stops being physical" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
     assert deck.has_proxies?, "sanity: the deck starts out holding a proxy"
 
@@ -108,9 +108,9 @@ class DeckTest < ActiveSupport::TestCase
   end
 
   test "with_proxies selects physical decks holding an unbacked card" do
-    proxied = users(:one).decks.create!(name: "Proxied", physical: true)
+    proxied = users(:one).decks.create!(name: "Proxied", physical: true, standard_pool: standard_pools(:twm_por))
     proxied.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 1)
-    backed = users(:one).decks.create!(name: "Backed", physical: true)
+    backed = users(:one).decks.create!(name: "Backed", physical: true, standard_pool: standard_pools(:twm_por))
     backed.deck_cards.create!(card: cards(:doublade), quantity: 1, owned_copies: 1)
 
     assert_includes Deck.with_proxies, proxied
@@ -122,7 +122,7 @@ class DeckTest < ActiveSupport::TestCase
   # The same rows that has_proxies? clears in Ruby, the scope must clear in SQL: a non-physical
   # deck's cards are all at owned_copies 0, which the bare `owned_copies < quantity` test matches.
   test "with_proxies ignores non-physical decks" do
-    live = users(:one).decks.create!(name: "Live", tcg_live: true)
+    live = users(:one).decks.create!(name: "Live", tcg_live: true, standard_pool: standard_pools(:twm_por))
     live.deck_cards.create!(card: cards(:honedge), quantity: 2)
 
     assert_not_includes Deck.with_proxies, live
@@ -130,7 +130,7 @@ class DeckTest < ActiveSupport::TestCase
   end
 
   test "without_proxies covers a physical deck with no cards at all" do
-    empty = users(:one).decks.create!(name: "Empty", physical: true)
+    empty = users(:one).decks.create!(name: "Empty", physical: true, standard_pool: standard_pools(:twm_por))
 
     assert_includes Deck.without_proxies, empty
     assert_not_includes Deck.with_proxies, empty
@@ -149,7 +149,7 @@ class DeckTest < ActiveSupport::TestCase
   end
 
   test "flipping physical to false releases owned copies" do
-    deck = users(:one).decks.create!(name: "Phys", physical: true)
+    deck = users(:one).decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
 
     deck.update!(physical: false)
@@ -247,5 +247,31 @@ class DeckTest < ActiveSupport::TestCase
 
     assert_includes results, decks(:one)
     assert_not_includes results, decks(:two)
+  end
+
+  test "requires a standard pool when the format is standard" do
+    deck = Deck.new(user: users(:one), name: "Anchorless", format: "standard")
+
+    assert_not deck.valid?
+    assert_includes deck.errors[:standard_pool], "can't be blank"
+  end
+
+  # Only Standard rotates. An anchor left behind by a format change would claim a
+  # card pool that the new format does not have.
+  test "clears the standard pool when the format is not standard" do
+    deck = Deck.create!(
+      user: users(:one), name: "Was standard", format: "standard",
+      standard_pool: standard_pools(:twm_por)
+    )
+
+    deck.update!(format: "glc")
+
+    assert_nil deck.reload.standard_pool_id
+  end
+
+  test "accepts a standard pool being absent on an eternal format" do
+    deck = Deck.new(user: users(:one), name: "Singleton", format: "glc")
+
+    assert deck.valid?
   end
 end

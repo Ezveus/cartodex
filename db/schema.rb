@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_01_085723) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_01_094530) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -144,10 +144,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_085723) do
     t.string "name_normalized"
     t.string "other_format_name"
     t.boolean "physical", default: false, null: false
+    t.integer "standard_pool_id"
     t.boolean "tcg_live", default: false, null: false
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["archetype_id"], name: "index_decks_on_archetype_id"
+    t.index ["standard_pool_id"], name: "index_decks_on_standard_pool_id"
     t.index ["user_id"], name: "index_decks_on_user_id"
   end
 
@@ -294,6 +296,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_085723) do
   add_foreign_key "deck_results", "decks"
   add_foreign_key "deck_results", "tournaments"
   add_foreign_key "decks", "archetypes"
+  add_foreign_key "decks", "standard_pools"
   add_foreign_key "decks", "users"
   add_foreign_key "imports", "users"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"

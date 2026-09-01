@@ -18,7 +18,7 @@ module Cards
 
     test "annotates each printing with owned and available counts" do
       @user.collections.find_by!(card: @pre).update!(quantity: 2)
-      other = @user.decks.create!(name: "Other", physical: true)
+      other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
       other.deck_cards.create!(card: @pre, quantity: 1, owned_copies: 1)
 
       entry = Cards::Printings.call(user: @user, card: @asc).find { |p| p[:card_id] == @pre.id }
@@ -55,7 +55,7 @@ module Cards
     end
 
     test "reports how many copies of each printing the deck already holds" do
-      deck = @user.decks.create!(name: "Physical", physical: true)
+      deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 3)
       deck.deck_cards.create!(card: @pre, quantity: 1)
 
@@ -67,7 +67,7 @@ module Cards
 
     test "projects the real/proxy split a swap to each printing would produce" do
       @user.collections.find_by!(card: @asc).update!(quantity: 2)
-      deck = @user.decks.create!(name: "Physical", physical: true)
+      deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 3, owned_copies: 2)
 
       result = Cards::Printings.call(user: @user, card: @asc, deck: deck)
@@ -85,7 +85,7 @@ module Cards
 
     test "folds an existing row for the target printing into the projection" do
       @user.collections.find_by!(card: @pre).update!(quantity: 4)
-      deck = @user.decks.create!(name: "Physical", physical: true)
+      deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 2)
       deck.deck_cards.create!(card: @pre, quantity: 1, owned_copies: 1)
 
@@ -98,9 +98,9 @@ module Cards
 
     test "caps the projection at what the collection leaves available to this deck" do
       @user.collections.find_by!(card: @pre).update!(quantity: 3)
-      other = @user.decks.create!(name: "Other", physical: true)
+      other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
       other.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 2)
-      deck = @user.decks.create!(name: "Physical", physical: true)
+      deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 4)
 
       pre = Cards::Printings.call(user: @user, card: @asc, deck: deck).find { |p| p[:card_id] == @pre.id }
@@ -110,7 +110,7 @@ module Cards
     end
 
     test "leaves the projection out for a non-physical deck" do
-      deck = @user.decks.create!(name: "Live", physical: false)
+      deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 2)
 
       result = Cards::Printings.call(user: @user, card: @asc, deck: deck)
@@ -126,7 +126,7 @@ module Cards
     end
 
     test "issues a constant number of queries regardless of how many printings exist" do
-      deck = @user.decks.create!(name: "Physical", physical: true)
+      deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 2)
 
       few = count_queries { Cards::Printings.call(user: @user, card: @asc, deck: deck) }
