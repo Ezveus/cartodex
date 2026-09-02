@@ -77,8 +77,11 @@ module Search
 
     # `search` is applied before any `includes`: it uses #or, which refuses to merge relations
     # that don't carry the same includes.
+    #
+    # A nil user is a visitor: nothing personal is searched, and nothing personal is queried
+    # either — Deck.none and Tournament.none never touch the database.
     def deck_scope
-      @deck_scope ||= @user.decks.search(@query)
+      @deck_scope ||= @user ? @user.decks.search(@query) : Deck.none
     end
 
     def card_scope
@@ -86,7 +89,7 @@ module Search
     end
 
     def tournament_scope
-      @tournament_scope ||= @user.tournaments.name_matching(@query)
+      @tournament_scope ||= @user ? @user.tournaments.name_matching(@query) : Tournament.none
     end
   end
 end

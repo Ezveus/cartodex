@@ -2,10 +2,14 @@
 # carries the frame and nothing else — no layout, no navbar.
 class SearchController < ApplicationController
   include Searchable
+  include PubliclyReachable
+
+  publicly_reachable :show
 
   layout false
 
   def show
+    authorize :dashboard, :show?
     @results = search_results
   end
 end

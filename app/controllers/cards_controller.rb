@@ -1,9 +1,13 @@
 class CardsController < ApplicationController
   include CardSearchable
+  include PubliclyReachable
+
+  publicly_reachable :index, :show, :image
 
   PER_PAGE = 48
 
   def index
+    authorize Card, :index?
     @blocks = CardSet.by_release
                      .includes(:cards)
                      .group_by(&:block_name)
@@ -36,14 +40,16 @@ class CardsController < ApplicationController
 
   def show
     @card = Card.includes(:attacks, :abilities, :pokemon_subtype).find(params[:id])
+    authorize @card
     @alt_printings = Card.where(name: @card.name, fingerprint: @card.fingerprint)
                          .where.not(id: @card.id)
                          .order(:set_name)
-    @collection_quantity = current_user.collections.find_by(card_id: @card.id)&.quantity.to_i
+    @collection_quantity = current_user&.collections&.find_by(card_id: @card.id)&.quantity.to_i
   end
 
   def image
     card = Card.find(params[:id])
+    authorize card, :image?
     return head :not_found if card.image_url.blank?
 
     begin

@@ -1,7 +1,15 @@
 class DecksController < ApplicationController
   include Searchable
+  include PubliclyReachable
+
+  # :shared is not yet an action — Task 7 adds it. Rails raises
+  # (config.action_controller.raise_on_missing_callback_actions) for a skip_before_action
+  # `only:` naming an action the controller does not define, so it cannot be listed ahead of
+  # that task; Task 7 adds it here too.
+  publicly_reachable :show, :export
 
   def index
+    authorize Deck, :index?
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
     # the ones it just showed — it orders by name too.
     # standard_pool's two bounds are preloaded because the format badge names the pool,
@@ -44,6 +52,7 @@ class DecksController < ApplicationController
 
   def stats
     @deck = current_user.decks.includes(:archetype).find_by!(key: params[:id])
+    authorize @deck
     @results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ])
   end
 
@@ -51,6 +60,7 @@ class DecksController < ApplicationController
   # for each archetype, all results across the user's decks of that archetype,
   # split by the opposing archetype.
   def matchups
+    authorize Deck, :index?
     decks = current_user.decks
       .where.not(archetype_id: nil)
       .includes(:archetype, deck_results: { archetype: [ :parent, :primary_card, :secondary_card ] })
@@ -68,6 +78,7 @@ class DecksController < ApplicationController
   end
 
   def compare
+    authorize Deck, :index?
     keys = Array(params[:ids]).map(&:to_s).uniq
     decks = current_user.decks.where(key: keys).includes(deck_cards: :card)
     decks = decks.sort_by { |deck| keys.index(deck.key) }
@@ -104,10 +115,12 @@ class DecksController < ApplicationController
 
   def new
     @deck = Deck.new
+    authorize @deck
   end
 
   def create
     @deck = current_user.decks.build(deck_params)
+    authorize @deck
 
     if @deck.save
       redirect_to @deck, notice: "Deck created."
@@ -118,6 +131,7 @@ class DecksController < ApplicationController
 
   def edit
     @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find_by!(key: params[:id])
+    authorize @deck
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
     render :show
@@ -126,6 +140,7 @@ class DecksController < ApplicationController
   def update
     # The re-rendered header carries the proxy badge, which reads the deck's cards.
     @deck = current_user.decks.includes(:deck_cards).find_by!(key: params[:id])
+    authorize @deck
 
     if @deck.update(deck_params)
       @editing = false
@@ -138,24 +153,19 @@ class DecksController < ApplicationController
 
   def destroy
     deck = current_user.decks.find_by!(key: params[:id])
+    authorize deck
     deck.destroy
     redirect_to decks_path, notice: "Deck deleted."
   end
 
   def duplicate
     source = current_user.decks.find_by!(key: params[:id])
+    authorize source
     new_deck = Decks::Duplicator.call(source)
     redirect_to new_deck, notice: "Deck duplicated."
   end
 
-  # Moves into PubliclyReachable in the next task, which is where the reasoning lives.
-  rescue_from Pundit::NotAuthorizedError, with: :not_found
-
   private
-
-  def not_found
-    render file: Rails.public_path.join("404.html"), status: :not_found, layout: false
-  end
 
   # `includes` cannot be chained onto a `find_by!`, so each branch reloads with the preloads
   # it needs. The alternative was to load the owner's preloads up front, which would make a

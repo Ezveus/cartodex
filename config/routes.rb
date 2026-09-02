@@ -38,27 +38,34 @@ Rails.application.routes.draw do
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
+  # Outside `authenticate :user`: these controllers straddle the session boundary and gate
+  # themselves through PubliclyReachable. Note that `resources :decks` carries its nested
+  # deck_results routes out with it — DeckResultsController deliberately does not include the
+  # concern and keeps ApplicationController's before_action as its only gate.
+  get "dashboard", to: "home#dashboard"
+  get "search", to: "search#show"
+
+  resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
+    get :matchups, on: :collection
+    get :compare, on: :collection
+    get :export, on: :member
+    get :stats, on: :member
+    post :duplicate, on: :member
+    resources :deck_results, only: [ :index, :edit, :update, :destroy ]
+  end
+
+  resources :cards, only: [ :index, :show ] do
+    get :image, on: :member
+  end
+
   # Authenticated routes
   authenticate :user do
-    get "dashboard", to: "home#dashboard"
-    get "search", to: "search#show"
     resource :settings, only: [ :show ]
     resource :mcp_token, only: [ :create, :destroy ]
     resources :connected_apps, only: [ :destroy ]
 
     # Living design-system reference. Not exposed in production.
     get "styleguide", to: "styleguide#show" unless Rails.env.production?
-    resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
-      get :matchups, on: :collection
-      get :compare, on: :collection
-      get :export, on: :member
-      get :stats, on: :member
-      post :duplicate, on: :member
-      resources :deck_results, only: [ :index, :edit, :update, :destroy ]
-    end
-    resources :cards, only: [ :index, :show ] do
-      get :image, on: :member
-    end
     resources :collections, only: [ :index ]
     resources :over_allocations, only: [ :index ] do
       post :reallocate, on: :collection

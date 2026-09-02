@@ -7,7 +7,11 @@ module Home
 
     def view_template
       div(class: "dashboard-container", data: { controller: "decks" }) do
-        h1 { "Welcome, #{@current_user.email}" }
+        # Minimal nil guard: /dashboard becomes publicly reachable in this task, and this view
+        # otherwise still assumes a signed-in visitor. Task 11 replaces this whole view with a
+        # real visitor layout (showcase, no email, no owner-only controls); this keeps a
+        # visitor's request from 500ing in the meantime.
+        h1 { @current_user ? "Welcome, #{@current_user.email}" : "Welcome" }
 
         render Search::Spotlight.new
 

@@ -10,13 +10,9 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
-  test "requires authentication" do
-    sign_out @user
-
-    get search_path(q: "ogerpon")
-
-    assert_redirected_to new_user_session_path
-  end
+  # /search is public — its reachability without a session is covered by
+  # test/controllers/public_access_test.rb, along with every other action that left the
+  # `authenticate :user` block.
 
   test "renders the frame with a group per matching type" do
     get search_path(q: "ogerpon")
