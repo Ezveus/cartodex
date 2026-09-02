@@ -23,10 +23,9 @@ module Layouts
         body do
           if user_signed_in?
             turbo_stream_from(current_user, :notifications)
-            render Ui::AppNavbar.new(
-              current_user: current_user,
-              active_controller: controller_name
-            )
+            render Ui::AppNavbar.new(current_user: current_user, active_controller: controller_name)
+          else
+            render Ui::PublicNavbar.new(active_controller: controller_name)
           end
           render Ui::FlashMessages.new
           yield
