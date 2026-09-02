@@ -227,6 +227,37 @@ body {
   margin-top: 1rem;
 }
 
+.dashboard-showcase {
+  margin-top: 2.5rem;
+}
+
+.dashboard-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.dashboard-showcase-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: var(--e1);
+  color: inherit;
+  text-decoration: none;
+}
+
+.dashboard-showcase-deck:hover {
+  box-shadow: var(--e2);
+}
+
+.dashboard-showcase-deck-name {
+  font-weight: 600;
+}
+
 /* Scanner Modal */
 .modal {
   display: none;

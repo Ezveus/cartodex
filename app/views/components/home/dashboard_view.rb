@@ -58,7 +58,10 @@ module Home
         h2 { "Recently shared decks" }
         div(class: "dashboard-showcase-grid") do
           @shared_decks.each do |deck|
-            link_to deck.name, deck_path(deck), class: "dashboard-showcase-deck"
+            link_to deck_path(deck), class: "dashboard-showcase-deck" do
+              span(class: "dashboard-showcase-deck-name") { deck.name }
+              render Decks::PublicBadges.new(deck: deck)
+            end
           end
         end
         link_to "See all shared decks", shared_decks_path, class: "btn btn-secondary btn-sm"

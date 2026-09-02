@@ -38,8 +38,41 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     # as an after_action, and an after_action does not run when a before_action halted.
     owner_only_gets.each do |label, path|
       get path
-      assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
+
+      if label == "deck compare"
+        # Fewer than two decks resolve for a single id, so #compare redirects rather than
+        # rendering — that is #compare authorizing and behaving, not a failure to authorize.
+        assert_response :redirect, "expected #{label} to answer for its owner, got #{response.status}"
+        assert_redirected_to decks_path
+      else
+        assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
+      end
     end
+  end
+
+  test "the owner-only writes send a visitor to sign in" do
+    name_was = @deck.name
+    shared_was = @deck.shared
+
+    post decks_path, params: { deck: { name: "x" } }
+    assert_redirected_to new_user_session_path
+
+    patch deck_path(@deck), params: { deck: { name: "x" } }
+    assert_redirected_to new_user_session_path
+
+    post duplicate_deck_path(@deck)
+    assert_redirected_to new_user_session_path
+
+    patch share_deck_path(@deck), params: { shared: "1" }
+    assert_redirected_to new_user_session_path
+
+    delete deck_path(@deck)
+    assert_redirected_to new_user_session_path
+
+    @deck.reload
+    assert_equal name_was, @deck.name
+    assert_equal shared_was, @deck.shared
+    assert_equal 2, Deck.count
   end
 
   test "an unknown key, a private deck and a stranger are indistinguishable" do
@@ -70,8 +103,17 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
     assert_select "meta[name=robots][content=?]", "noindex, nofollow"
 
-    # The header covers what has no <head> at all: JSON and the image proxy.
-    get cards_path
+    # Warden's own sign-in redirect: authenticate_user! throws before any controller code
+    # runs, so a before_action never gets a turn at it. The default_headers mechanism does,
+    # because it applies to the response regardless of who built it.
+    get edit_deck_path(@deck)
+    assert_redirected_to new_user_session_path
+    assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
+
+    # The header covers what has no <head> at all: JSON (the export endpoint) and the image
+    # proxy.
+    sign_in @user
+    get export_deck_path(@deck)
     assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
 
     # And robots.txt must NOT disallow: a path a crawler may not fetch is a path whose
@@ -104,6 +146,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "deck stats" => stats_deck_path(@deck),
       "deck matchups" => matchups_decks_path,
       "deck results" => deck_deck_results_path(@deck),
+      "deck compare" => compare_decks_path(ids: [ @deck.key ]),
       "collections" => collections_path
     }
   end

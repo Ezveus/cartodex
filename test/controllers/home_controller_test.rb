@@ -49,7 +49,8 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".spotlight"
-    assert_select ".dashboard-showcase a", text: "Showcased"
+    assert_select ".dashboard-showcase-deck-name", text: "Showcased"
+    assert_select ".dashboard-showcase .badge-format"
     assert_select "a[href=?]", new_user_session_path
     assert_select ".dashboard-card", count: 0
     assert_select "#scanner-modal", count: 0
@@ -64,7 +65,7 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
 
     get dashboard_path
 
-    assert_select ".dashboard-showcase a", text: "Private", count: 0
+    assert_select ".dashboard-showcase-deck-name", text: "Private", count: 0
   end
 
   test "root is the dashboard for everyone" do
