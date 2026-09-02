@@ -48,6 +48,12 @@ class Deck < ApplicationRecord
   scope :with_proxies, -> { where(physical: true, id: DeckCard.with_proxies.select(:deck_id)) }
   scope :without_proxies, -> { where.not(id: Deck.with_proxies.select(:id)) }
 
+  # Written by hand, not generated: Active Record refuses to define a scope named `public`
+  # or `private`, since both are Module methods. `shared`/`unshared` is also the vocabulary
+  # the Share modal and the badge use, so the column, the scopes and the UI agree.
+  scope :shared, -> { where(shared: true) }
+  scope :unshared, -> { where(shared: false) }
+
   # Human-readable format label. For the "other" format the user-supplied name
   # takes precedence when present; for Standard the pool is named, since
   # "Standard" alone does not identify a card pool.

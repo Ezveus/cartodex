@@ -328,4 +328,23 @@ class DeckTest < ActiveSupport::TestCase
       Deck.where(id: decks(:two).id).update_all(key: decks(:one).key)
     end
   end
+
+  test "a deck is private until it is shared" do
+    deck = users(:one).decks.create!(name: "Fresh", standard_pool: standard_pools(:twm_por))
+
+    refute_predicate deck, :shared?
+    assert_includes Deck.unshared, deck
+    refute_includes Deck.shared, deck
+  end
+
+  test "duplicating a shared deck produces a private copy" do
+    source = decks(:one)
+    source.update!(shared: true)
+
+    copy = Decks::Duplicator.call(source)
+
+    # Duplicator copies an explicit attribute allowlist, so `shared` is excluded by
+    # construction. The test guards the next person who reaches for `dup` instead.
+    refute_predicate copy, :shared?
+  end
 end

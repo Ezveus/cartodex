@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_02_155700) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -145,12 +145,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155700) do
     t.string "name_normalized"
     t.string "other_format_name"
     t.boolean "physical", default: false, null: false
+    t.boolean "shared", default: false, null: false
     t.integer "standard_pool_id"
     t.boolean "tcg_live", default: false, null: false
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["archetype_id"], name: "index_decks_on_archetype_id"
     t.index ["key"], name: "index_decks_on_key", unique: true
+    t.index ["shared", "created_at"], name: "index_decks_on_shared_and_created_at"
     t.index ["standard_pool_id"], name: "index_decks_on_standard_pool_id"
     t.index ["user_id"], name: "index_decks_on_user_id"
   end
