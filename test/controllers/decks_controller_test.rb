@@ -10,6 +10,54 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  test "a signed-in stranger sees a shared deck's decklist and none of its owner controls" do
+    @deck.update!(shared: true)
+    # Fixtures carry no image_url, so data-card-preview-url would otherwise be nil on every row
+    # (Phlex omits a nil data attribute) and the DOM-contract assertion below would prove nothing.
+    cards(:doublade).update!(image_url: "https://example.test/doublade.png")
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 2, owned_copies: 0)
+    sign_in users(:two)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "h1", text: @deck.name
+    assert_select ".deck-card-item", count: 2
+
+    # The DOM contract the image export depends on — the export is public, so these are
+    # requirements, not incidental markup.
+    assert_select ".deck-show-header h1"
+    assert_select ".deck-card-item[data-card-preview-url]"
+    assert_select ".deck-card-item .deck-card-qty"
+
+    # Absence assertions: the whole point of a separate view is that it cannot render these.
+    assert_select ".deck-card-alloc", count: 0
+    assert_select ".deck-card-set-swap", count: 0
+    assert_select ".deck-badges .badge", text: "Proxies", count: 0
+    assert_select "a[href=?]", edit_deck_path(@deck), count: 0
+    assert_select "button", text: "Log Result", count: 0
+    assert_select ".deck-card-search", count: 0
+  end
+
+  test "a signed-in stranger cannot see an unshared deck" do
+    sign_in users(:two)
+
+    get deck_path(@deck)
+
+    assert_response :not_found
+  end
+
+  test "a stranger may export a shared deck but not its tournament pdf" do
+    @deck.update!(shared: true)
+    sign_in users(:two)
+
+    get export_deck_path(@deck)
+    assert_response :success
+
+    get export_deck_path(@deck, style: "tournament_pdf", profile_id: 1)
+    assert_response :not_found
+  end
+
   test "edit renders the show page with the edit frame" do
     get edit_deck_path(@deck)
 

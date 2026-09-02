@@ -15,7 +15,7 @@ module Decks
     def view_template
       div(class: "deck-badges") do
         span(class: "badge badge-format") { @deck.format_label }
-        archetype_badge if @deck.archetype
+        render Ui::ArchetypeBadge.new(archetype: @deck.archetype) if @deck.archetype
         span(class: "badge") { "Physical" } if @deck.physical?
         span(class: "badge") { "TCG Live" } if @deck.tcg_live?
         proxies_badge
@@ -34,22 +34,6 @@ module Decks
         hidden: !has_proxies,
         data: @live ? { deck_proxies_target: "badge" } : nil
       ) { "Proxies" }
-    end
-
-    # The archetype badge is tinted by its lead card's energy type, with a
-    # colour pip. Falls back to the neutral archetype style when the type is
-    # unknown — which is always true of a Trainer lead, since it has no energy type.
-    def archetype_badge
-      slug = @deck.archetype.primary_energy_type&.downcase
-
-      if slug
-        span(class: "badge badge-energy badge-#{slug}") do
-          span(class: "badge-pip")
-          plain @deck.archetype.name
-        end
-      else
-        span(class: "badge badge-archetype") { @deck.archetype.name }
-      end
     end
   end
 end

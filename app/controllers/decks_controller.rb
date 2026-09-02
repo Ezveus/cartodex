@@ -30,21 +30,15 @@ class DecksController < ApplicationController
   end
 
   def show
-    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find_by!(key: params[:id])
-    @tournament_profiles = current_user.tournament_profiles.order(:player_name)
-    @editing = false
-    # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
-    # what every export prints, which is reason enough on a TCG Live deck.
-    @swappable_card_ids = Cards::Printings.swappable_card_ids(@deck.deck_cards.map(&:card))
+    # The only unscoped deck lookup in the app that this feature creates. `authorize` is the
+    # next line for that reason, and nothing else loads until it has run.
+    @deck = Deck.find_by!(key: params[:id])
+    authorize @deck
 
-    if @deck.physical?
-      @availability = Allocations::Availability.for_cards(
-        user: current_user, cards: @deck.deck_cards.map(&:card), excluding_deck: @deck
-      )
-      @over_allocated_card_ids = Allocations::OverAllocations.call(user: current_user).map { |o| o[:card_id] }.to_set
+    if @deck.user_id == current_user&.id
+      owner_show
     else
-      @availability = {}
-      @over_allocated_card_ids = Set.new
+      public_show
     end
   end
 
@@ -86,10 +80,15 @@ class DecksController < ApplicationController
   end
 
   def export
-    deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find_by!(key: params[:id])
+    @deck = Deck.find_by!(key: params[:id])
+    authorize @deck, :export?
+
+    deck = Deck.includes(deck_cards: { card: [ :attacks, :abilities ] }).find(@deck.id)
 
     case params[:style]
     when "tournament_pdf"
+      # Reads one of the owner's profiles, so it is a stricter question than :export?.
+      authorize @deck, :tournament_pdf?
       profile = current_user.tournament_profiles.find(params[:profile_id])
       pdf = Decks::TournamentPdfExporter.call(deck, profile)
       send_data pdf,
@@ -149,7 +148,48 @@ class DecksController < ApplicationController
     redirect_to new_deck, notice: "Deck duplicated."
   end
 
+  # Moves into PubliclyReachable in the next task, which is where the reasoning lives.
+  rescue_from Pundit::NotAuthorizedError, with: :not_found
+
   private
+
+  def not_found
+    render file: Rails.public_path.join("404.html"), status: :not_found, layout: false
+  end
+
+  # `includes` cannot be chained onto a `find_by!`, so each branch reloads with the preloads
+  # it needs. The alternative was to load the owner's preloads up front, which would make a
+  # visitor's request load deck_results and tournaments — exactly what the public view exists
+  # to avoid. One extra query is the price of authorizing before loading anything else.
+  def owner_show
+    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(@deck.id)
+    @tournament_profiles = current_user.tournament_profiles.order(:player_name)
+    @editing = false
+    # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
+    # what every export prints, which is reason enough on a TCG Live deck.
+    @swappable_card_ids = Cards::Printings.swappable_card_ids(@deck.deck_cards.map(&:card))
+
+    if @deck.physical?
+      @availability = Allocations::Availability.for_cards(
+        user: current_user, cards: @deck.deck_cards.map(&:card), excluding_deck: @deck
+      )
+      @over_allocated_card_ids = Allocations::OverAllocations.call(user: current_user).map { |o| o[:card_id] }.to_set
+    else
+      @availability = {}
+      @over_allocated_card_ids = Set.new
+    end
+
+    render :show
+  end
+
+  def public_show
+    @deck = Deck.includes(deck_cards: :card).find(@deck.id)
+    # Devise only remembers a location when authenticate_user! bounces a request, so without
+    # this a visitor who clicks Sign in here lands on the dashboard and has to find the deck
+    # again.
+    store_location_for(:user, request.fullpath)
+    render :public_show
+  end
 
   # True when Turbo is refreshing just the deck grid (the filter form targets it) rather than
   # loading the whole page.
