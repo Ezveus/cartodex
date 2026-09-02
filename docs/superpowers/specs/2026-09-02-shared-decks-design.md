@@ -306,7 +306,7 @@ Every other action keeps `authenticate_user!` and calls `authorize`. Which form 
 - record actions — `edit`, `update`, `destroy`, `duplicate`, `stats`, `share` — find through `current_user.decks.find_by!(key: …)` and call `authorize @deck`;
 - record-less actions — `index`, `new`, `create`, `matchups`, `compare` — call `authorize Deck, :index?` / `:create?` on the class, since there is no record yet to reason about.
 
-`#share` (`PATCH`) authorizes `:share?` and writes `shared` from `ActiveModel::Type::Boolean.new.cast(params[:shared])` — the toggle posts `"0"`/`"1"`, which is truthy either way if assigned raw. It answers with a Turbo Stream re-rendering the modal so the link appears in place.
+`#share` (`PATCH`) authorizes `:share?` and writes `shared` from `ActiveModel::Type::Boolean.new.cast(params[:shared])`. The checkbox form carries a hidden `"0"` field because an unchecked bare checkbox posts nothing at all, and `nil` against the `NOT NULL` column would raise — the explicit cast plus `|| false` in the action is the belt behind that hidden field, not a defense against `"0"` itself (Active Record already casts `"0"` to `false` for a boolean attribute). It answers with a Turbo Stream re-rendering the modal so the link appears in place.
 
 ### `CardsController`
 

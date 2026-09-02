@@ -2059,9 +2059,12 @@ In `DecksController`:
     @deck = current_user.decks.find_by!(key: params[:id])
     authorize @deck, :share?
 
-    # The checkbox posts "0" or "1", both truthy if assigned raw — hence the cast. And an
-    # unchecked box with no hidden field posts nothing at all, which casts to nil against a
-    # NOT NULL column — hence `|| false`. The form carries the hidden field; this is the belt.
+    # An unchecked bare checkbox posts no `shared` param at all, and `nil` against a NOT NULL
+    # column raises — hence `|| false`. The form carries the hidden "0" field so that case
+    # cannot happen from the browser; this is the belt. The explicit cast is not doing work
+    # against "0" itself — Active Record already casts a boolean column's incoming "0"/"1" on
+    # its own — it exists so `|| false` has a real `nil`/`false` to fall back from rather than
+    # a truthy string.
     @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
     render :share, layout: false
   end
@@ -2237,7 +2240,7 @@ In `Decks::ClassificationBadges#view_template`, after the format badge:
 
 Run: `bin/rails test test/controllers/decks_controller_test.rb` and `bin/rails test:system test/system/deck_sharing_test.rb` at both viewports.
 
-Sabotage 1: change the action to `@deck.update!(shared: params[:shared])`. The unshare test must FAIL, because `"0"` is truthy. Restore.
+Sabotage 1: change the action to `@deck.update!(shared: params[:shared])`. This does **not** go red on the `"0"`/`"1"` unshare test — Active Record casts a boolean column's incoming string itself, so `"0"` still becomes `false` — it exists for the absent-param case: the "parameter missing altogether" test must FAIL, because raw `nil` now reaches `update!` and trips the `NOT NULL` constraint. Restore.
 Sabotage 2: drop the `hidden_field_tag` from `ShareFrame` **and** the `|| false` from the action. The system test must FAIL on the un-share half (a 500 behind the `uncheck`), and the "parameter missing altogether" controller test must FAIL with `NotNullViolation`. Restore both — then drop only the hidden field: the controller test passes (the belt holds) and the system test must still pass. If the system test fails here, the belt is not wired.
 Sabotage 3: make `share.turbo_stream.erb` render `Decks::ShareModal` instead of `ShareFrame`. The "not a second dialog" test must FAIL, and the system test must FAIL on `assert_field "share-url"` — the field is inside a closed nested dialog, which Capybara does not see. Restore.
 

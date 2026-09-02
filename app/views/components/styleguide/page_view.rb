@@ -48,6 +48,7 @@ module Styleguide
         form_section
         spotlight_section
         deck_card_section
+        sharing_section
         printing_picker_section
         standard_pool_section
         settings_section
@@ -145,13 +146,21 @@ module Styleguide
     end
 
     def badges_section
-      sg_section("Composants", "Badges") do
+      sg_section("Composants", "Badges", "Deux rangées de badges, pas une seule : " \
+              "Decks::ClassificationBadges (dont « Shared ») est réservé aux vues du " \
+              "propriétaire ; Decks::PublicBadges — format et archétype seulement — est ce " \
+              "qu'une surface publique montre.") do
         div(class: "sg-row") do
           span(class: "badge badge-format") { "Standard" }
           energy_badge("Charizard ex", "Fire")
           span(class: "badge badge-archetype") { "Archétype (repli sans type)" }
           span(class: "badge badge-warning") { "Proxies" }
+          span(class: "badge") { "Shared" }
         end
+        p(class: "sg-eyebrow", style: "margin-top: 1.5rem") { "Ui::ArchetypeBadge" }
+        div(class: "sg-row") { render Ui::ArchetypeBadge.new(archetype: sg_sample_archetype) }
+        p(class: "sg-eyebrow", style: "margin-top: 1.5rem") { "Decks::PublicBadges" }
+        div(class: "sg-row") { render Decks::PublicBadges.new(deck: sg_sample_deck) }
       end
     end
 
@@ -251,6 +260,33 @@ module Styleguide
           p(class: "deck-card-count") { "60 cards" }
         end
       end
+    end
+
+    # Ui::ArchetypeBadge and Decks::PublicBadges above render a sample deck outside a full share
+    # flow; this section shows the flow itself — the form Decks::ShareFrame renders and the
+    # readonly link it reveals once shared. Wrapped disabled/inert like the MCP token panels
+    # below: the form posts to a real route, and the sample deck is not a row this page may
+    # accidentally write to.
+    def sharing_section
+      sg_section("Composants", "Partage",
+              "Decks::ShareFrame : le contenu du dialogue de partage, et ce que PATCH " \
+              "/decks/:key/share re-rend une fois le deck partagé.") do
+        settings_panel do
+          render Decks::ShareFrame.new(deck: sg_sample_deck)
+        end
+      end
+    end
+
+    def sg_sample_archetype
+      Archetype.new(name: "Charizard ex", primary_card: Card.new(type_symbol: "Fire"))
+    end
+
+    # Unpersisted, like every other stand-in on this page, but carries a key — the styleguide's
+    # sample decks have done so since Stage 1, and both Decks::PublicBadges' link target and
+    # Decks::ShareFrame's share_deck_path/deck_url need one to build from.
+    def sg_sample_deck
+      Deck.new(id: 99, key: "sg-share-sample", name: "Charizard ex — Pidgeot", format: "standard",
+               shared: true, archetype: sg_sample_archetype)
     end
 
     def printing_picker_section
