@@ -64,13 +64,19 @@ class DeckPolicyTest < ActiveSupport::TestCase
     mine_private = @deck
     theirs_shared = decks(:two)
     theirs_shared.update!(user: @stranger, shared: true)
+    # A deck owned by neither party, and unshared: without it the fixture set holds only
+    # decks that both assert_includes below already cover, so a Scope that resolved to
+    # scope.all for any signed-in user would pass unnoticed.
+    theirs_private = @stranger.decks.create!(name: "Theirs, private", standard_pool: standard_pools(:twm_por))
 
     signed_in = DeckPolicy::Scope.new(@owner, Deck).resolve
     assert_includes signed_in, mine_private
     assert_includes signed_in, theirs_shared
+    refute_includes signed_in, theirs_private
 
     visitor = DeckPolicy::Scope.new(nil, Deck).resolve
     refute_includes visitor, mine_private
     assert_includes visitor, theirs_shared
+    refute_includes visitor, theirs_private
   end
 end
