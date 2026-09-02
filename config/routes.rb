@@ -127,5 +127,8 @@ Rails.application.routes.draw do
   end
 
   # Root path
-  root "home#welcome"
+  # The visitor dashboard carries the Sign in / Sign up buttons, so the old welcome page said
+  # nothing the dashboard does not. `/dashboard` stays alongside it: the navbar brand and
+  # existing bookmarks name it, and two routes onto one action cost nothing.
+  root "home#dashboard"
 end

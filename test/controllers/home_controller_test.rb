@@ -39,4 +39,42 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "[data-dashboard-search-min-length-value=?]", Search::Global::MIN_QUERY_LENGTH.to_s
   end
+
+  test "a visitor gets search, a showcase and a way in — and nothing personal" do
+    sign_out @user
+    shared = decks(:two)
+    shared.update!(user: users(:two), shared: true, name: "Showcased")
+
+    get dashboard_path
+
+    assert_response :success
+    assert_select ".spotlight"
+    assert_select ".dashboard-showcase a", text: "Showcased"
+    assert_select "a[href=?]", new_user_session_path
+    assert_select ".dashboard-card", count: 0
+    assert_select "#scanner-modal", count: 0
+    assert_select "h1", text: /@/, count: 0
+    # The decks Stimulus controller fetches /api/decks on connect; a visitor must not carry it.
+    assert_select "[data-controller~=decks]", count: 0
+  end
+
+  test "the showcase never lists a private deck" do
+    sign_out @user
+    decks(:two).update!(user: users(:two), shared: false, name: "Private")
+
+    get dashboard_path
+
+    assert_select ".dashboard-showcase a", text: "Private", count: 0
+  end
+
+  test "root is the dashboard for everyone" do
+    sign_out @user
+    get root_path
+    assert_response :success
+
+    sign_in users(:one)
+    get root_path
+    assert_response :success
+    assert_select ".dashboard-card"
+  end
 end
