@@ -215,7 +215,12 @@ module Styleguide
         tournaments: [
           Tournament.new(id: 1, name: "Ogerpon Open", date: Date.new(2026, 4, 12), tier: "league_cup")
         ],
-        tournament_total: 1
+        tournament_total: 1,
+        shared_decks: [
+          Deck.new(id: 3, key: "sg-zoroark-box", name: "Zoroark Box", format: "standard",
+                   archetype: Archetype.new(name: "Zoroark Control"))
+        ],
+        shared_deck_total: 1
       )
     end
 

@@ -12,7 +12,8 @@ module Search
     DEFAULT_LIMIT = 5
 
     Result = Data.define(
-      :query, :decks, :deck_total, :cards, :card_total, :tournaments, :tournament_total
+      :query, :decks, :deck_total, :cards, :card_total, :tournaments, :tournament_total,
+      :shared_decks, :shared_deck_total
     ) do
       # True when the query was too short to run — the caller renders nothing at all, as opposed
       # to "searched and found nothing".
@@ -25,7 +26,7 @@ module Search
       end
 
       def total
-        deck_total + card_total + tournament_total
+        deck_total + card_total + tournament_total + shared_deck_total
       end
     end
 
@@ -45,6 +46,8 @@ module Search
         .includes(:archetype, standard_pool: [ :first_card_set, :last_card_set ]).to_a
       cards = card_scope.order(:name, :set_name).limit(@limit).to_a
       tournaments = tournament_scope.order(date: :desc).limit(@limit).to_a
+      shared_decks = shared_deck_scope.order(:name).limit(@limit)
+        .includes(:archetype, standard_pool: [ :first_card_set, :last_card_set ]).to_a
 
       Result.new(
         query: @query,
@@ -53,7 +56,9 @@ module Search
         cards: cards,
         card_total: total_for(card_scope, cards),
         tournaments: tournaments,
-        tournament_total: total_for(tournament_scope, tournaments)
+        tournament_total: total_for(tournament_scope, tournaments),
+        shared_decks: shared_decks,
+        shared_deck_total: total_for(shared_deck_scope, shared_decks)
       )
     end
 
@@ -71,7 +76,7 @@ module Search
     def empty_result
       Result.new(
         query: @query, decks: [], deck_total: 0, cards: [], card_total: 0,
-        tournaments: [], tournament_total: 0
+        tournaments: [], tournament_total: 0, shared_decks: [], shared_deck_total: 0
       )
     end
 
@@ -90,6 +95,17 @@ module Search
 
     def tournament_scope
       @tournament_scope ||= @user ? @user.tournaments.name_matching(@query) : Tournament.none
+    end
+
+    # Excluding the searcher's own decks is what keeps one deck out of two groups of the same
+    # result list — and Search::ResultsList derives its option ids from the deck, so a
+    # duplicate would emit one DOM id twice.
+    def shared_deck_scope
+      @shared_deck_scope ||= begin
+        scope = Deck.shared
+        scope = scope.where.not(user: @user) if @user
+        scope.search(@query)
+      end
     end
   end
 end
