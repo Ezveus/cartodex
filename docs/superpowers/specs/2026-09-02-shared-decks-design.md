@@ -10,7 +10,7 @@ This change gives a deck two states, private and shared, and moves three surface
 
 ## Scope
 
-**In:** the `key` that addresses a deck, the `shared` flag and its Share control, the public deck view, the shared-deck index, the visitor dashboard, the public navbar, the card catalog without a session, the fourth search group, a Pundit policy layer for the new boundary, and the identity change rippling through the API, the Stimulus controllers and the MCP tools.
+**In:** the `key` that addresses a deck, the `shared` flag and its Share control, the public deck view, the shared-deck index, the visitor dashboard, the public navbar, the card catalog without a session, the fourth search group, a Pundit policy layer for the new boundary, `noindex` on the two public surfaces, per-IP rate limits on the three endpoints that open, the `/cards` sidebar count that makes one of them affordable, and the identity change rippling through the API, the Stimulus controllers and the MCP tools.
 
 **Out — all of it on #142, none of it specified:** author attribution, public results/stats/tournaments, any public view of a collection, copying someone else's shared deck, comments/likes/counters, sitemap and Open Graph metadata, revoking a link that has already been passed around, and an MCP tool that shares a deck.
 
@@ -27,6 +27,13 @@ This change gives a deck two states, private and shared, and moves three surface
 9. **Sharing is a "Share" entry in the deck's Actions dropdown**, opening a modal that carries both the private/shared toggle and the link to copy.
 10. **Architecture: separate public views *and* a Pundit policy layer.** The read-only view is a different file, not a flag on the owner's view; the rules live in policies rather than in controller conditionals.
 
+### Added after the review of this document
+
+11. **`/decks/compare?ids[]=…` converts to keys.** A URL still carrying numeric deck ids after this change is the incoherence decision 1 exists to prevent, and it costs three lines.
+12. **Shared pages are `noindex` for now.** Un-sharing takes a deck off Cartodex at once; it would not take it out of a search engine for weeks. Opening to indexing becomes a deliberate decision when #142's SEO work is specified.
+13. **All three newly public endpoints are rate-limited, and `/cards` is made cheap first.** Rationing an endpoint that loads the whole catalog would ration an amplifier instead of removing it.
+14. **A visitor who signs in from a shared deck returns to it** (`store_location_for`), rather than landing on the dashboard.
+
 ## Facts established before designing (measured, not assumed)
 
 - **`enum :visibility, { private: …, public: … }` will not load.** `ActiveRecord::Base.dangerous_class_method?` is `true` for both `:public` and `:private`, so the scopes the enum generates are refused. An *attribute* named `public` is fine (`dangerous_attribute_method?(:public)` is `false`), and so is `key`. The column is therefore a boolean and the scopes are written by hand — as `shared` / `unshared`, which also matches the "Share" verb in the UI.
@@ -39,6 +46,18 @@ This change gives a deck two states, private and shared, and moves three surface
 - **The admin panel has its own gate.** `Admin::BaseController#require_admin!` redirects unless `current_user&.admin?`, independently of the routes' `authenticate` block, so the admin surface is unaffected by anything below.
 - **There is no pagination gem.** `CardsController` hand-rolls `PER_PAGE` with `offset`/`limit` and computes `@pages`. `/decks/shared` follows that, rather than introducing a dependency.
 - **`resources :decks` has `deck_results` nested inside it.** Moving the deck resource out of the `authenticate` block takes the nested result routes with it — see "The guard that moves" below.
+
+Added after a review pass over this document, each verified in the branch:
+
+- **`HomeController#dashboard` calls `authenticate_user!` in its own body** (`home_controller.rb:9`), on top of the app-wide `before_action`. A `skip_before_action` does not touch it.
+- **A halting `before_action` skips the `after_action` too**, so `verify_authorized` cannot observe a missing `authorize` on a signed-out request to an owner-only action.
+- **An unknown key and a private deck raise different exceptions** — `ActiveRecord::RecordNotFound` and `Pundit::NotAuthorizedError` — and therefore reach different renderers unless both are rescued.
+- **`/decks/compare` carries numeric deck ids in its query string**: `decks_controller.rb:77`, `decks/deck_card.rb:22` (`value: @deck.id`), `deck_compare_controller.js:41`.
+- **`/cards` instantiates the whole catalog to print set counts.** `CardSet.by_release.includes(:cards)` (`cards_controller.rb:7`) exists only so the sidebar can render `card_set.cards.size` (`cards/index_view.rb:93`).
+- **`Home::DashboardView` prints the user's email** in its `h1` (`dashboard_view.rb:10`) — the only email on the page.
+- **`Decks::Duplicator` copies an explicit attribute allowlist**, so a new column can never leak through it.
+- **`test/fixtures/decks.yml` has two rows**, and one test builds a deck URL by hand (`test/controllers/api/deck_results_controller_test.rb`, private `deck_results_path`).
+- **`Search::ResultsList` derives its option ids from `deck.id`** (`results_list.rb:35`), so one deck rendered in two groups emits one DOM id twice.
 
 ## Data model
 
@@ -78,9 +97,11 @@ scope :shared,   -> { where(shared: true) }
 scope :unshared, -> { where(shared: false) }
 ```
 
-Written by hand because Active Record refuses a `public` or `private` scope, and named `shared`/`unshared` so that the column, the scopes, the modal, the badge and the URL all use one word. Partial index `WHERE shared = 1`, which is what the showcase, the index and the search group all read.
+Written by hand because Active Record refuses a `public` or `private` scope, and named `shared`/`unshared` so that the column, the scopes, the modal, the badge and the URL all use one word.
 
-Existing decks come out of the migration private. **`Decks::Duplicator` must not carry `shared` over**: duplicating a shared deck produces a private copy, or a user publishes something by pressing Duplicate.
+The index is `add_index :decks, [:shared, :created_at]`, **not** a partial index on `shared` alone. Two of the three readers order by `created_at` — the showcase (`limit(6)`) and the paginated index — and an index on a single-valued boolean only enumerates rows, it does not serve a sort. The third reader is the search group's `LIKE '%…%'`, which stays a scan whatever we index: the composite index narrows the row set it scans, and nothing more. Any claim that the pattern itself is "bounded by the index" would be false.
+
+Existing decks come out of the migration private. **`Decks::Duplicator` already cannot carry `shared` over** — it builds the copy from an explicit attribute allowlist, so a new column is excluded by construction. Nothing to change there; the invariant is worth a test precisely because the next person to add a column may reach for `dup` instead.
 
 ### The identity rule
 
@@ -94,10 +115,11 @@ This is what keeps a change that mechanically touches every deck lookup in the a
 
 #### Blast radius (counted, not estimated)
 
-- **14 lookups in 7 files** switch from an id to a key: `DecksController` (8), `DeckResultsController` (1), `Api::DecksController` (1), `Api::DeckResultsController` (1), `DeckCardPayload` (1), `Admin::DecksController` (1), `McpTool#find_deck!` (1).
+- **13 lookups in 7 files** switch from an id to a key: `DecksController` (7 — lines 33, 52, 89, 121, 129, 141, 147), `DeckResultsController` (1), `Api::DecksController` (1), `Api::DeckResultsController` (1), `DeckCardPayload` (1), `Admin::DecksController` (1), `McpTool#find_deck!` (1).
+- **A 14th deck identifier lives in a URL and is not a lookup**: `/decks/compare?ids[]=…`. `DecksController#compare` does `Array(params[:ids]).map(&:to_i)`, `Decks::DeckCard`'s checkbox carries `value: @deck.id`, and `deck_compare_controller.js` appends those to the query string. It converts to keys — `map(&:to_s)`, `where(key: ids)`, and the result re-sorted by `ids.index(deck.key)`. Three lines, and it makes `deck_compare_controller.js` the **8th** Stimulus controller to touch.
 - **2 deliberately stay numeric**: `OverAllocationsController#reallocate`'s `from_deck_id` and `to_deck_id` come from a `<select>` of the user's decks, so they reference rows, not addresses.
 - **35 path-helper call sites** (`deck_path`, `deck_url`, `export_deck_path`, …) change what they emit without being edited at all — that is the whole point of `to_param`, and it is also why a half-finished migration is invisible until a request 404s. Hence the `to_param` test in family 6.
-- **7 Stimulus controllers** and **7 MCP tool schemas** change explicitly.
+- **8 Stimulus controllers** and **7 MCP tool schemas** change explicitly. One test builds a deck URL by hand and must follow: `test/controllers/api/deck_results_controller_test.rb`'s private `deck_results_path`.
 - **1 unscoped lookup** is created, in `DecksController`, and it is the only one.
 
 Owner-only actions still call `authorize @deck` after the scoped find. The redundancy is deliberate: it makes the policy the single readable statement of the rules, and it is what will make it safe the day somebody replaces a scoped find with a bare one.
@@ -127,7 +149,20 @@ No `user.admin?` clause. Adding one would let an admin open any private deck at 
 
 ### The 404, and why it is not a 403
 
-`rescue_from Pundit::NotAuthorizedError` renders **404**, and renders it identically whether the key is unknown, the deck is private, or the viewer is a signed-in stranger. The key *is* the sharing secret: a 403 on `/decks/:key` would confirm that this key names a real deck, turning an unguessable address into an oracle. "There is no deck at this address for you" is the only honest answer, and it is what `current_user.decks.find` already says today.
+The response is **404**, and it is byte-identical whether the key is unknown, the deck is private, or the viewer is a signed-in stranger.
+
+What must not leak is the existence of **private** decks. A 403 on `/decks/:key` would say "this key names a real deck, you may not see it", so a scan of random keys would separate "no such deck" from "a private deck lives here" — an unguessable address turned into an existence oracle. It is not that the key is a secret: decision 6 lists every *shared* deck at `/decks/shared`, so sharing here means publishing, not sending a confidential link. The secrecy that matters belongs to the decks nobody shared.
+
+**Two exceptions have to land on the same renderer, and by default they do not.** An unknown key raises `ActiveRecord::RecordNotFound` from `find_by!` and gets Rails' own 404; a private deck raises `Pundit::NotAuthorizedError` and gets ours. Test family 2 compares the responses, not just the statuses, so the concern rescues both:
+
+```ruby
+included do
+  after_action :verify_authorized
+  rescue_from ActiveRecord::RecordNotFound, Pundit::NotAuthorizedError, with: :not_found
+end
+```
+
+Rescuing `RecordNotFound` in these controllers also preserves today's behaviour, where `current_user.decks.find` on somebody else's deck is already a 404. The alternative — `find_by` and then authorize the `nil` — does not work: Pundit cannot route `nil` to a policy.
 
 ### The guard that moves
 
@@ -136,16 +171,18 @@ Four entries leave `authenticate :user`: `get "dashboard"`, `get "search"`, `res
 The concern that keeps the two halves inseparable:
 
 ```ruby
-# A controller reachable without a session. The two things it does must never be
-# separated: it drops the app-wide Devise gate for the actions it names, and it
-# makes Pundit's verify_authorized mandatory on *every* action of the controller.
-# A publicly reachable action that forgets to authorize is the exact bug this
-# feature can introduce, and the after_action is what turns it into a test
-# failure instead of a leak.
+# A controller reachable without a session. The three things it does must never
+# be separated: it drops the app-wide Devise gate for the actions it names, it
+# makes Pundit's verify_authorized mandatory on *every* action of the
+# controller, and it routes both "you may not" exceptions onto one renderer so
+# an unknown key and a private deck are indistinguishable.
 module PubliclyReachable
   extend ActiveSupport::Concern
 
-  included { after_action :verify_authorized }
+  included do
+    after_action :verify_authorized
+    rescue_from ActiveRecord::RecordNotFound, Pundit::NotAuthorizedError, with: :not_found
+  end
 
   class_methods do
     def publicly_reachable(*actions)
@@ -157,7 +194,11 @@ end
 
 In a controller that includes it, **every** action calls `authorize` — index-shaped actions call `authorize Deck, :shared_index?` alongside `policy_scope`, rather than relying on `verify_policy_scoped`. One rule to re-read instead of two.
 
-`verify_authorized` is deliberately *not* installed application-wide. Exactly five of the 39 controllers in `app/controllers` are affected by the routing change — `HomeController`, `SearchController`, `DecksController`, `CardsController` and, by nesting, `DeckResultsController`. Every other one is scoped by association and would need a `skip_after_action` for no gain. The residual risk — a controller moved out of the block in six months without including the concern — is a deliberate, reviewable act, and `DeckResultsController` is the immediate example: its routes are now outside the block, it does not include the concern, and it relies on `ApplicationController`'s `before_action :authenticate_user!`. A request test per action is what holds that.
+**`verify_authorized` catches less than the comment above promises, and the test plan has to make up the difference.** A `before_action` that halts the chain skips the remaining callbacks *and* the `after_action`, so on a signed-out request to an owner-only action, `authenticate_user!` redirects and `verify_authorized` never runs. A missing `authorize` on `edit`, `update`, `destroy`, `duplicate`, `stats` or `share` is therefore invisible to a signed-out test. Test family 1 adds a **signed-in** request per action for exactly this reason.
+
+`verify_authorized` is deliberately *not* installed application-wide. Exactly five of the 39 controllers in `app/controllers` are affected by the routing change — `HomeController`, `SearchController`, `DecksController`, `CardsController` and, by nesting, `DeckResultsController`. Every other one is scoped by association and would need a `skip_after_action` for no gain. The residual risk — a controller moved out of the block in six months without including the concern — is a deliberate, reviewable act.
+
+`DeckResultsController` is the immediate case, and it is the one place where the two halves come apart on purpose. Its routes leave the block by nesting, but it is **not** publicly reachable: it does not include the concern, it keeps `ApplicationController`'s `before_action :authenticate_user!` as its only gate, and it therefore gets no `verify_authorized`. It still calls `authorize @deck, :results?` after its `current_user.decks.find_by!(key: …)` — nothing enforces that call, which is why family 1 tests it signed in as well as signed out.
 
 ## Routing
 
@@ -193,10 +234,14 @@ include PubliclyReachable
 publicly_reachable :dashboard
 ```
 
+**Delete the `authenticate_user!` call inside `#dashboard`.** The action carries one today (`home_controller.rb:9`) on top of the app-wide `before_action`, left over from when `welcome` was the only skipped action. `publicly_reachable` issues a `skip_before_action`, which does nothing about a call inside the method body: leave it and the visitor dashboard redirects to sign-in with no visible cause. This is the kind of line that survives a mechanical edit, which is why it is written down.
+
 `#dashboard` authorizes `:dashboard, :show?`, then:
 
 - signed in: today's page, unchanged, plus the showcase;
 - signed out: `@pending_deck_imports = []`, no collection or deck card, no import panel, no scanner modal.
+
+The `h1` currently reads `"Welcome, #{@current_user.email}"` (`dashboard_view.rb:10`). It is the only place on the dashboard that prints an email, and decision 7 forbids one on a public surface — so it lives in `signed_in_grid`'s branch, not above it.
 
 The showcase is `Deck.shared.order(created_at: :desc).limit(6)`, preloading `archetype: [:primary_card, :secondary_card]` and `standard_pool: [:first_card_set, :last_card_set]` — the format badge names the pool and reads both bounds, which is three extra queries per Standard deck otherwise.
 
@@ -214,7 +259,9 @@ publicly_reachable :show, :export, :shared
 
 `#export` authorizes `:export?`; its `tournament_pdf` branch authorizes `:tournament_pdf?` first.
 
-`#shared` authorizes `Deck, :shared_index?` and renders `Deck.shared`, newest first, hand-paginated at `PER_PAGE = 24`. Filters are the query, the format and the archetype. Not `physical`, not `tcg_live`, not `proxies` — none of them means anything without a collection to compare against.
+`#shared` authorizes `Deck, :shared_index?` and renders `Deck.shared`, newest first, hand-paginated at `PER_PAGE = 24`, with the **same preloads as the showcase** — 24 rows each rendering `Decks::PublicBadges` → `format_label` → `StandardPool#name` → its two bounds is 72 avoidable queries a page. Filters are the query, the format and the archetype. Not `physical`, not `tcg_live`, not `proxies` — none of them means anything without a collection to compare against.
+
+`#show`, when it renders the public view, calls `store_location_for(:user, request.fullpath)`. Devise only remembers a location when `authenticate_user!` bounces a request, so without this a visitor who clicks Sign in on a shared deck lands on the dashboard and has to find the deck again.
 
 Every other action keeps `authenticate_user!` and calls `authorize`. Which form it takes is not left to taste, because `verify_authorized` applies to every action of this controller:
 
@@ -232,12 +279,15 @@ publicly_reachable :index, :show, :image
 
 `@collection_quantity` becomes `current_user&.collections&.find_by(card_id: @card.id)&.quantity.to_i`, and `Cards::ShowView` takes a `signed_in:` argument that gates `collection_control` — the only owner-facing block in the card views.
 
-### The image proxy becomes an open proxy
+### What it costs to open three endpoints
 
-`/cards/:id/image` fetches from limitlesstcg.com on a miss and is now reachable without a session. Two measures, both required:
+Three unauthenticated endpoints do real work per request, and each needs its own answer. `RATE_LIMIT_STORE` — the `Module.new` proxying to `Rails.cache` at call time, currently copy-pasted in `Mcp::ServerController` and `Oauth::RegistrationsController` — is extracted into one shared constant here, so the marginal cost of each limiter below is a single `rate_limit` line. All of them are per-IP and `unless: -> { user_signed_in? }`, so an authenticated user never spends a visitor's budget, and all pass an explicit `name:` so their cache keys stay distinct.
 
-- `expires_in 30.days, public: true` instead of `public: false`. A Pokémon card image is not a secret, and letting a shared cache absorb the traffic is the actual protection.
-- a per-IP `rate_limit` on `image` alone, applied only when nobody is signed in, following the two existing limiters exactly: explicit `name:`, and a `store:` that proxies to `Rails.cache` at call time so tests can exercise the throttle. `RATE_LIMIT_STORE` is extracted out of `Mcp::ServerController` and `Oauth::RegistrationsController` into one shared constant as part of this change.
+**`/cards/:id/image`** fetches from limitlesstcg.com on a miss, which makes it an open image proxy. `expires_in 30.days, public: true` instead of `public: false` — a Pokémon card image is not a secret, and letting a shared cache absorb the traffic is the real protection — plus a limiter on `image` alone.
+
+**`/cards`** loads the entire catalog on every request, signed in or not: `CardSet.by_release.includes(:cards)` instantiates every `Card` in the database, and the only thing the view does with them is print `card_set.cards.size` in the sidebar. That `includes` becomes a grouped count (`Card.group(:card_set_id).count`, read by code and passed to `Cards::IndexView` alongside `@blocks`) **and** the action gets a limiter. Both, because they solve different problems: the limiter bounds how often a visitor can ask, the count fix is what stops each ask from being expensive. Rate-limiting an endpoint that loads the whole database is rationing an amplifier rather than removing it.
+
+**`/search`** answers one `LIKE '%…%'` over the whole card catalog per keystroke, plus — now — one over the shared decks. `MIN_QUERY_LENGTH = 2` and `NameNormalizable::MAX_QUERY_LENGTH = 100` bound the pattern, nothing bounds the rate. It gets a limiter too.
 
 ## Views
 
@@ -252,13 +302,17 @@ publicly_reachable :index, :show, :image
 | `Decks::PublicShowView` | new: header, card-count stat, grouped card list, preview pane, export dropdown minus the tournament PDF |
 | `Decks::PublicDeckCardItem` | new, ~25 lines: quantity as text, name, `SET NUMBER` as plain text, preview hooks |
 | `Decks::SharedIndexView` | new: the shared index, deck cards with `Decks::PublicBadges` and no actions dropdown |
-| `Decks::ShareModal` | new: the toggle, and when shared `deck_url(@deck)` in a readonly field with a `clipboard`-controller copy button |
+| `Decks::ShareModal` | new: the toggle, and when shared `deck_url(@deck)` in a readonly field with a `clipboard`-controller copy button — plus the sentence below |
 | `Decks::ActionsDropdown` | gains "Share…" |
 | `Cards::ShowView` | `signed_in:` gates `collection_control` |
 | `Search::ResultsList` | gains the "Shared decks" group |
 | `Home::WelcomeView` | deleted |
 
 **No proxy badge and no "To review" badge on any public surface.** Both report what the owner does or does not own, which is collection data reached through a deck.
+
+**The share modal says "publish", not "here is a link".** Decision 6 lists every shared deck at `/decks/shared`, so offering only a link to copy would misdescribe what the toggle does. The modal must state that the deck will be **listed publicly**, and name what becomes visible: the deck's name, its **description** — free text often written while the deck was private — its format, its archetype and its card list. Nothing about results, collection or proxies.
+
+**Shared pages carry `<meta name="robots" content="noindex">`** — the public deck view and `/decks/shared`. Sharing is publishing to the app, not to search engines: un-sharing takes a deck off Cartodex immediately, and it would not take it out of a search engine's cache for weeks. #142 defers the SEO work; this keeps the promise honest until that decision is made deliberately, and it is one line to undo.
 
 The public card row must keep the class `deck-card-item`, the `data-card-preview-url` attribute and a `.deck-card-qty` element, and the public header must keep its `h1` inside `.deck-show-header`. Those four are the contract `deck_image_export_controller.js` reads, and the image export is in the public scope.
 
@@ -293,11 +347,11 @@ def tournament_scope
 end
 ```
 
-`where.not(user: @user)` is load-bearing: without it a user's own shared deck appears in both deck groups of the same result list.
+`where.not(user: @user)` is load-bearing for two reasons, not one. The obvious one is that a user's own shared deck would otherwise appear in both deck groups of the same result list. The other is that `Search::ResultsList` builds its option ids as `"spotlight-option-deck-#{deck.id}"`, so the same deck in two groups emits the same DOM id twice, and the keyboard navigation reads whichever the browser hands it.
 
-`Deck.search` composes correctly on top of a filtered scope — its internal `#or` evaluates both sides against the current scope, so each branch carries the `shared` and the `where.not`. The existing constraint still holds: `search` before any `includes`, because `#or` refuses relations that do not carry the same includes.
+`Deck.search` composes correctly on top of a filtered scope — its internal `#or` evaluates both sides against the current scope, so each branch carries the `shared` and the `where.not`. The existing constraint still holds: `search` before any `includes`, because `#or` refuses relations that do not carry the same includes. The shared group then takes the **same preloads the "My decks" group already has** (`:archetype`, `standard_pool: [:first_card_set, :last_card_set]`); its rows render the format badge exactly as the other group's do.
 
-Cost is one more `LIKE` scan per keystroke, bounded by the `WHERE shared = 1` partial index, so cheaper than the full-catalog card scan already on that path. Below `MIN_QUERY_LENGTH` nothing touches the database, unchanged.
+Cost is one more `LIKE` scan per keystroke. The `[:shared, :created_at]` index narrows the rows that scan visits; it does nothing for the pattern itself, and no index would. Below `MIN_QUERY_LENGTH` nothing touches the database, unchanged. `/search` is also rate-limited per IP for visitors — see "What it costs to open three endpoints".
 
 The "Shared decks" group's "See all" points at `shared_decks_path(q: …)`, and its rows render `Decks::PublicBadges`.
 
@@ -319,22 +373,30 @@ No MCP tool shares or unshares a deck (#142).
 
 ## Migration and deploy
 
-One migration: add `key` (string) and `shared` (boolean, `NOT NULL`, default `false`), backfill a key per existing row, then add the `NOT NULL` constraint and the UNIQUE index on `key` plus the partial index on `shared`.
+One migration: add `key` (string) and `shared` (boolean, `NOT NULL`, default `false`), backfill a key per existing row, then add the `NOT NULL` constraint and the UNIQUE index on `key`, plus `[:shared, :created_at]`.
 
 Backfill inside the migration rather than in a rake task: `bin/docker-entrypoint` runs `db:prepare` before the server accepts traffic, so there is no window in which a keyless deck is served. The order matters for the same reason it does for `standard_pool_id` — the constraint and the data must land in one step.
 
-`test/fixtures/decks.yml` gains a literal `key` on every row.
+**The backfill must not go through the model.** `Deck#update!` would run `validates :standard_pool, presence: true, if: :standard?`, and any pre-#122 Standard deck that slipped through without an anchor would abort the migration halfway. Use `reset_column_information` and then `update_column`, or raw SQL: the migration's job is to fill a column, not to re-validate history.
+
+`test/fixtures/decks.yml` gains a literal `key` on each of its two rows — fixtures skip callbacks, as the file's own note about `name_normalized` already says.
 
 ## Testing plan
 
 Six families. Three of them exist specifically to catch what this change can break.
 
-1. **The guard that moved, action by action.** A request test per action of `DecksController`, `CardsController` and `DeckResultsController`, signed out: owner-only actions redirect to sign-in, publicly reachable ones return 200. Per action, not per controller — an over-broad `skip_before_action` is precisely the bug.
-2. **The indistinguishable 404.** Visitor on a private deck's key, visitor on an unknown key, signed-in stranger on a private deck: all three 404, and the test compares the responses rather than asserting the same status three times.
+1. **The guard that moved, action by action — twice per action.** A request test per action of the five affected controllers (`HomeController`, `SearchController`, `DecksController`, `CardsController`, `DeckResultsController`), **signed out**: owner-only actions redirect to sign-in, publicly reachable ones return 200. Per action, not per controller — an over-broad `skip_before_action` is precisely the bug.
+
+   And a **signed-in** request per action, because that is the only way `verify_authorized` can fire at all: a halting `before_action` skips the `after_action` too, so the signed-out half of this family cannot see a missing `authorize` on `edit`, `update`, `destroy`, `duplicate`, `stats` or `share`.
+
+   This family also carries the JS identity assertions. The existing system suite happens to exercise `printing_picker`, `deck_card_quantity` and `deck_card_owned_copies` (via `deck_printing_swap_test`, `deck_proxy_badge_test`, `deck_card_mobile_test`) and the spotlight, but nothing covers `result_modal`, `archetype_picker`, `card_search`, `tournament_pdf` or `deck_compare`. A renamed value that misses its controller fails silently — `deckKey` arriving at a controller still declaring `deckId: Number` yields `/api/decks/NaN/…`, and the reverse yields `/api/decks//…` — so those five get an assertion that the rendered attribute is the key.
+2. **The indistinguishable 404.** Visitor on a private deck's key, visitor on an unknown key, signed-in stranger on a private deck: all three 404, and the test compares the response **bodies**, not just the statuses — the two exceptions reach that renderer by different routes, and only the concern's double `rescue_from` makes them converge.
 3. **The leak test.** A shared deck's public page does *not* contain the allocation steppers, the printing picker, "Log Result", the edit link, or the Proxies badge — explicit absence assertions. This one gets sabotage-verified by making the action render `Decks::ShowView` instead: an absence test that cannot fail proves nothing.
 4. **`DeckPolicy` unit tests**: owner / other signed-in user / visitor × shared / unshared × every query.
 5. **`Search::Global`**: with `user: nil` (no decks, no tournaments, cards and shared decks populated) and with a signed-in user, asserting that a shared deck belonging to the searcher appears exactly once.
-6. **Identity**: key assigned on create, unchanged by an update, UNIQUE index raising on a duplicate, `shared` false by default, `Decks::Duplicator` producing an unshared copy, `to_param` returning the key, and every fixture row carrying one.
+6. **Identity**: key assigned on create, unchanged by an update, UNIQUE index raising on a duplicate, `shared` false by default, `Decks::Duplicator` producing an unshared copy (an invariant its attribute allowlist already gives us — the test guards the next person who reaches for `dup`), `to_param` returning the key, and both fixture rows carrying one.
+
+   Write this family **first**. It is what makes the 35 path-helper call sites that change without being edited visible at all; run against a half-finished migration they fail, and run last they hide behind everything else.
 
 Plus system tests **at both viewports**, since the repo requires every system test to pass on each side of the 768px breakpoint: a visitor opens a shared link and sees the decklist; the owner opens the Share modal, flips the toggle, and the URL appears. Known hazard on the mobile half — below the breakpoint the card preview becomes a `<dialog>` whose backdrop swallows subsequent clicks.
 
