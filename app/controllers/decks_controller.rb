@@ -2,11 +2,9 @@ class DecksController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  # :shared is not yet an action — Task 7 adds it. Rails raises
-  # (config.action_controller.raise_on_missing_callback_actions) for a skip_before_action
-  # `only:` naming an action the controller does not define, so it cannot be listed ahead of
-  # that task; Task 7 adds it here too.
-  publicly_reachable :show, :export
+  publicly_reachable :show, :export, :shared
+
+  SHARED_PER_PAGE = 24
 
   def index
     authorize Deck, :index?
@@ -35,6 +33,28 @@ class DecksController < ApplicationController
     @pending_deck_imports = current_user.imports.deck_imports.pending
     @primary_options = primary_filter_options
     @secondary_options = secondary_filter_options
+  end
+
+  def shared
+    authorize Deck, :shared_index?
+
+    scope = Deck.shared.order(created_at: :desc)
+    scope = scope.merge(Deck.search(search_query)) if search_query.present?
+    scope = scope.where(format: params[:format]) if Deck.formats.key?(params[:format])
+    scope = scope.joins(:archetype).where(archetypes: { primary_card_id: params[:primary] }) if params[:primary].present?
+
+    @page = [ params[:page].to_i, 1 ].max
+    @pages = (scope.count / SHARED_PER_PAGE.to_f).ceil
+    # Same preloads as the dashboard showcase: each row renders the format badge, which names
+    # the Standard pool from both of its bounds — three extra queries per Standard deck, times
+    # 24 rows, without this.
+    @decks = scope.offset((@page - 1) * SHARED_PER_PAGE).limit(SHARED_PER_PAGE)
+                  .includes(:deck_cards,
+                            archetype: [ :primary_card, :secondary_card ],
+                            standard_pool: [ :first_card_set, :last_card_set ])
+
+    @archetype_options = shared_archetype_options
+    @filters = { q: search_query.presence, format: params[:format].presence, primary: params[:primary].presence }
   end
 
   def show
@@ -231,6 +251,15 @@ class DecksController < ApplicationController
   def member_card_filter_options(column)
     archetype_ids = current_user.decks.where.not(archetype_id: nil).select(:archetype_id)
     card_ids = Archetype.where(id: archetype_ids).select(column)
+    Card.where(id: card_ids).order(:name).pluck(:name, :id)
+  end
+
+  # Derived from the shared decks, deliberately not from member_card_filter_options, which
+  # starts at current_user.decks — it would offer a visitor a filter built from nobody's decks
+  # and a member one that hides most of the page.
+  def shared_archetype_options
+    archetype_ids = Deck.shared.where.not(archetype_id: nil).select(:archetype_id)
+    card_ids = Archetype.where(id: archetype_ids).select(:primary_card_id)
     Card.where(id: card_ids).order(:name).pluck(:name, :id)
   end
 

@@ -48,6 +48,7 @@ Rails.application.routes.draw do
   resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
     get :matchups, on: :collection
     get :compare, on: :collection
+    get :shared, on: :collection
     get :export, on: :member
     get :stats, on: :member
     post :duplicate, on: :member

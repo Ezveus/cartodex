@@ -648,6 +648,52 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".standard-pool-notice", count: 0
   end
 
+  test "the shared index lists other people's shared decks to a visitor" do
+    sign_out @user # this file's setup signs in; a visitor is the point here
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, name: "Theirs")
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select ".deck-item-link h2", text: "Theirs"
+    assert_select "a[href=?]", deck_path(@deck), count: 0
+  end
+
+  test "the shared index shows no collection-derived filter and nothing owner-only on a row" do
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, physical: true)
+    theirs.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
+    # Five decided results at 100% is what makes `hot?` true — and the foil flag it renders is
+    # the win rate, i.e. the record decision 3 keeps private.
+    5.times { theirs.deck_results.create!(result: "win") }
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select "select[name=proxies]", count: 0
+    assert_select "select[name=support]", count: 0
+    assert_select ".deck-badges .badge", text: "Proxies", count: 0
+    assert_select ".deck-badges .badge", text: "Physical", count: 0
+    assert_select ".deck-item-actions", count: 0
+    assert_select ".deck-hot-flag", count: 0
+    assert_select ".deck-item.is-foil", count: 0
+    # No deck-compare controller on this page, so a checkbox here would be a live control that
+    # does nothing.
+    assert_select ".deck-compare-checkbox", count: 0
+  end
+
+  test "the shared index's archetype filter comes from the shared decks, not from mine" do
+    theirs = decks(:two)
+    # Fixtures are `ogerpon` and `budew_ogerpon` (test/fixtures/archetypes.yml); there is no :one.
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon))
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select "select[name=primary] option[value=?]", archetypes(:ogerpon).primary_card_id.to_s
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
