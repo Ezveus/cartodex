@@ -6,11 +6,34 @@ class CardsController < ApplicationController
 
   PER_PAGE = 48
 
+  # The proxy fetches from limitlesstcg.com on every request — #image caches no bytes, so
+  # expires_in is a response header and nothing more. Absent a shared cache in front, one
+  # inbound request is one outbound request to a third party.
+  #
+  # 300/min is derived, not copied. The proxy serves exactly two things, the deck page's hover
+  # preview and the image export (/cards and /cards/:id hotlink card.image_url directly), and
+  # the export loads every printing of a deck in parallel. A deck holds at most 60 cards, so
+  # one export is at most 60 requests: 300/min leaves five exports a minute per IP. Copying
+  # Mcp::ServerController's 30/min would have broken the second export of the minute — an
+  # export the public scope explicitly promises.
+  IMAGE_RATE_LIMIT_TO = 300
+  INDEX_RATE_LIMIT_TO = 60
+  RATE_LIMIT_WITHIN = 1.minute
+
+  rate_limit to: IMAGE_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "cards-image", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :image
+
+  rate_limit to: INDEX_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "cards-index", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :index
+
   def index
     authorize Card, :index?
-    @blocks = CardSet.by_release
-                     .includes(:cards)
-                     .group_by(&:block_name)
+    @blocks = CardSet.by_release.group_by(&:block_name)
+    # A count per set, not every Card in the database. The sidebar prints these numbers and
+    # nothing else on the page reads the cards themselves.
+    @card_counts = Card.group(:card_set_id).count
     @current_set = CardSet.find_by(code: params[:set]) if params[:set].present?
 
     @query  = params[:q].to_s.strip
@@ -22,8 +45,17 @@ class CardsController < ApplicationController
 
     @searching = @query.length >= 2 || @type || @energy || @rarity || @mark
 
-    @rarities = Card.where.not(rarity: [ nil, "" ]).distinct.order(:rarity).pluck(:rarity)
-    @marks    = Card.where.not(regulation_mark: [ nil, "" ]).distinct.order(:regulation_mark).pluck(:regulation_mark)
+    # Both lists change only when a set is imported, and neither `rarity` nor
+    # `regulation_mark` is indexed — two full scans of `cards` on every request, anonymous
+    # ones included, once this action is public. A cache is the honest fix here: an index on a
+    # low-cardinality column read on every page load is not.
+    cache_key = [ "cards/filter-values", Card.maximum(:updated_at)&.to_i ]
+    @rarities, @marks = Rails.cache.fetch(cache_key) do
+      [
+        Card.where.not(rarity: [ nil, "" ]).distinct.order(:rarity).pluck(:rarity),
+        Card.where.not(regulation_mark: [ nil, "" ]).distinct.order(:regulation_mark).pluck(:regulation_mark)
+      ]
+    end
 
     @cards =
       if @searching
@@ -59,7 +91,9 @@ class CardsController < ApplicationController
       return head :bad_gateway
     end
 
-    expires_in 30.days, public: false
+    # Not a secret, and a shared cache in front of the app is the only thing that can make
+    # this endpoint cheap.
+    expires_in 30.days, public: true
     send_data body, type: image_content_type(card.image_url), disposition: "inline"
   end
 

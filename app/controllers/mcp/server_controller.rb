@@ -17,15 +17,6 @@ module Mcp
       ListPrintingsTool
     ].freeze
 
-    # Proxies to Rails.cache at call-time (rather than capturing it once at
-    # class-load, as the `rate_limit` macro's `cache_store` default would),
-    # so tests can swap Rails.cache for a real store and exercise throttling.
-    RATE_LIMIT_STORE = Module.new do
-      def self.increment(...)
-        Rails.cache.increment(...)
-      end
-    end
-
     IP_RATE_LIMIT_TO = 30
     IP_RATE_LIMIT_WITHIN = 1.minute
 
@@ -82,7 +73,7 @@ module Mcp
     # anything cheaper would have to throttle authenticated users by IP.
     rate_limit to: IP_RATE_LIMIT_TO, within: IP_RATE_LIMIT_WITHIN,
       name: "mcp-ip", unless: -> { @current_user },
-      store: RATE_LIMIT_STORE, only: :handle
+      store: RateLimitStore, only: :handle
 
     before_action :reject_unauthenticated!
 
@@ -96,7 +87,7 @@ module Mcp
     # Both limiters pass an explicit `name:` so they get distinct cache keys.
     rate_limit to: USER_RATE_LIMIT_TO, within: USER_RATE_LIMIT_WITHIN,
       by: -> { @current_user.id },
-      name: "mcp-user", store: RATE_LIMIT_STORE, only: :handle
+      name: "mcp-user", store: RateLimitStore, only: :handle
 
     # Scopes are enforced by what the server is even told about. A tool absent
     # from this list is absent from tools/list and unroutable by tools/call, so a
