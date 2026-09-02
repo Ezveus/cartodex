@@ -3,25 +3,25 @@ class AddCardToDeckTool < McpTool
   required_scope "mcp:write"
   input_schema(
     properties: {
-      deck_id: { type: "integer", description: "ID of the user's deck" },
+      deck_key: { type: "string", description: "Key of the user's deck" },
       card_id: { type: "integer", description: "ID of the card to add" },
       quantity: { type: "integer", minimum: 1, description: "How many copies to add (default 1)" }
     },
-    required: [ "deck_id", "card_id" ]
+    required: [ "deck_key", "card_id" ]
   )
 
-  def self.call(deck_id:, card_id:, server_context:, quantity: 1)
+  def self.call(deck_key:, card_id:, server_context:, quantity: 1)
     return quantity_error(quantity) unless positive_quantity?(quantity)
 
     user = current_user(server_context)
-    deck = find_deck!(user, deck_id)
+    deck = find_deck!(user, deck_key)
     card = find_card!(card_id)
     deck_card = Decks::CardAdder.call(deck: deck, card: card, quantity: quantity)
     message = "Added #{quantity}× #{card.name} to deck “#{deck.name}” (now #{deck_card.quantity}: #{deck_card.owned_copies} real, #{deck_card.quantity - deck_card.owned_copies} proxy)."
     message += equivalents_hint(user, card) if deck.physical? && deck_card.quantity > deck_card.owned_copies
     text(message)
   rescue ActiveRecord::RecordNotFound
-    text("Error: unknown deck id #{deck_id} or card id #{card_id} (deck must belong to you).")
+    text("Error: unknown deck key #{deck_key.inspect} or card id #{card_id} (deck must belong to you).")
   rescue ActiveRecord::RecordInvalid => e
     text("Error: #{e.message}")
   end

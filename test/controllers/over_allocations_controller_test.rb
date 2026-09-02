@@ -60,15 +60,4 @@ class OverAllocationsControllerTest < ActionDispatch::IntegrationTest
     assert_operator @user.decks.where(physical: true).count, :>, 1, "sanity: several decks must be involved"
     assert_equal small, large, "query count grew with the number of over-allocated cards: #{small} -> #{large}"
   end
-
-  private
-
-  # Commits more real copies of the card across a fresh physical deck than the
-  # user owns — the state a collection decrease leaves behind.
-  def over_allocate(card, owned:, committed:)
-    @user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: owned)
-    @user.decks.create!(name: "Deck #{card.id}", physical: true, standard_pool: standard_pools(:twm_por)).tap do |deck|
-      deck.deck_cards.create!(card: card, quantity: committed, owned_copies: committed)
-    end
-  end
 end

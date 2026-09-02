@@ -38,8 +38,8 @@ class McpTool < MCP::Tool
       Card.find(id)
     end
 
-    def find_deck!(user, id)
-      user.decks.find(id)
+    def find_deck!(user, key)
+      user.decks.find_by!(key: key)
     end
 
     def text(string)
