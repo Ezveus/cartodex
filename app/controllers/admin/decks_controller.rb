@@ -5,7 +5,7 @@ module Admin
     end
 
     def show
-      @deck = Deck.includes(deck_cards: :card, deck_results: []).find(params[:id])
+      @deck = Deck.includes(deck_cards: :card, deck_results: []).find_by!(key: params[:id])
     end
   end
 end

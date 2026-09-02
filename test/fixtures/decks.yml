@@ -1,7 +1,9 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 #
-# NOTE: fixtures skip callbacks, so name_normalized is spelled out by hand. DeckTest asserts it
-# stays in step with name.
+# NOTE: fixtures skip callbacks, so name_normalized and key are spelled out by hand.
+# DeckTest asserts name_normalized stays in step with name, and that every row has a key —
+# `decks.key` is NOT NULL, so a row without one fails to insert and takes the suite with it.
+# These are readable rather than 22 characters; only generated keys are that length.
 
 one:
   user: one
@@ -9,6 +11,7 @@ one:
   name_normalized: mystring
   description: MyText
   standard_pool: twm_por
+  key: deck-one-key
 
 two:
   user: two
@@ -16,3 +19,4 @@ two:
   name_normalized: mystring
   description: MyText
   standard_pool: twm_por
+  key: deck-two-key

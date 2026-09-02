@@ -29,7 +29,7 @@ module Api
     private
 
     def set_deck
-      @deck = current_user.decks.find(params[:deck_id])
+      @deck = current_user.decks.find_by!(key: params[:deck_id])
     end
 
     def deck_result_params

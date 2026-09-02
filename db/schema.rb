@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_01_100855) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_02_155700) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -140,6 +140,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_100855) do
     t.datetime "created_at", null: false
     t.text "description"
     t.string "format", default: "standard", null: false
+    t.string "key", null: false
     t.string "name"
     t.string "name_normalized"
     t.string "other_format_name"
@@ -149,6 +150,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_01_100855) do
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["archetype_id"], name: "index_decks_on_archetype_id"
+    t.index ["key"], name: "index_decks_on_key", unique: true
     t.index ["standard_pool_id"], name: "index_decks_on_standard_pool_id"
     t.index ["user_id"], name: "index_decks_on_user_id"
   end

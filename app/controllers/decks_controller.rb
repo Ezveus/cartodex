@@ -30,7 +30,7 @@ class DecksController < ApplicationController
   end
 
   def show
-    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find_by!(key: params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
     # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
@@ -49,7 +49,7 @@ class DecksController < ApplicationController
   end
 
   def stats
-    @deck = current_user.decks.includes(:archetype).find(params[:id])
+    @deck = current_user.decks.includes(:archetype).find_by!(key: params[:id])
     @results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ])
   end
 
@@ -74,9 +74,9 @@ class DecksController < ApplicationController
   end
 
   def compare
-    ids = Array(params[:ids]).map(&:to_i).uniq
-    decks = current_user.decks.where(id: ids).includes(deck_cards: :card)
-    decks = decks.sort_by { |deck| ids.index(deck.id) }
+    keys = Array(params[:ids]).map(&:to_s).uniq
+    decks = current_user.decks.where(key: keys).includes(deck_cards: :card)
+    decks = decks.sort_by { |deck| keys.index(deck.key) }
 
     if decks.size < 2 || decks.size > 4
       redirect_to decks_path, alert: "Select 2 to 4 decks to compare." and return
@@ -86,7 +86,7 @@ class DecksController < ApplicationController
   end
 
   def export
-    deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find(params[:id])
+    deck = current_user.decks.includes(deck_cards: { card: [ :attacks, :abilities ] }).find_by!(key: params[:id])
 
     case params[:style]
     when "tournament_pdf"
@@ -118,7 +118,7 @@ class DecksController < ApplicationController
   end
 
   def edit
-    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(params[:id])
+    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find_by!(key: params[:id])
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
     render :show
@@ -126,7 +126,7 @@ class DecksController < ApplicationController
 
   def update
     # The re-rendered header carries the proxy badge, which reads the deck's cards.
-    @deck = current_user.decks.includes(:deck_cards).find(params[:id])
+    @deck = current_user.decks.includes(:deck_cards).find_by!(key: params[:id])
 
     if @deck.update(deck_params)
       @editing = false
@@ -138,13 +138,13 @@ class DecksController < ApplicationController
   end
 
   def destroy
-    deck = current_user.decks.find(params[:id])
+    deck = current_user.decks.find_by!(key: params[:id])
     deck.destroy
     redirect_to decks_path, notice: "Deck deleted."
   end
 
   def duplicate
-    source = current_user.decks.find(params[:id])
+    source = current_user.decks.find_by!(key: params[:id])
     new_deck = Decks::Duplicator.call(source)
     redirect_to new_deck, notice: "Deck duplicated."
   end

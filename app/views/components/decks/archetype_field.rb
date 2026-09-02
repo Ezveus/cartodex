@@ -12,7 +12,7 @@ module Decks
     def view_template
       div(
         class: "deck-archetype-field",
-        data: { controller: "archetype-picker", archetype_picker_deck_id_value: @deck.id }
+        data: { controller: "archetype-picker", archetype_picker_deck_id_value: @deck.key }
       ) do
         render Ui::FormGroup.new(label: "Archetype", field_name: "deck_archetype") do
           @form.hidden_field :archetype_id, data: { archetype_picker_target: "archetypeId" }

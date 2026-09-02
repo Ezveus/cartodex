@@ -196,14 +196,15 @@ module Styleguide
     end
 
     # Plain in-memory records (never persisted), like sg_settings_user_with_token above: this page
-    # never touches the database. The ids are what the path helpers need; nothing is saved.
+    # never touches the database. The keys are what the path helpers need (deck_path builds from
+    # to_param, which reads key); nothing is saved.
     def sg_spotlight_results
       Search::Global::Result.new(
         query: "ogerpon",
         decks: [
-          Deck.new(id: 1, name: "Ogerpon Toolbox", format: "standard",
+          Deck.new(id: 1, key: "sg-ogerpon-toolbox", name: "Ogerpon Toolbox", format: "standard",
                    archetype: Archetype.new(name: "Teal Mask Ogerpon ex")),
-          Deck.new(id: 2, name: "Tuesday List", format: "glc")
+          Deck.new(id: 2, key: "sg-tuesday-list", name: "Tuesday List", format: "glc")
         ],
         deck_total: 4,
         cards: [

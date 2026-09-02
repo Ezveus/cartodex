@@ -41,7 +41,7 @@ module Decks
       div(class: "form-actions result-modal-actions") do
         button(
           class: "btn btn-primary",
-          data: { action: "tournament-pdf#download", tournament_pdf_deck_id_value: @deck.id }
+          data: { action: "tournament-pdf#download", tournament_pdf_deck_id_value: @deck.key }
         ) { "Download PDF" }
         button(
           class: "btn btn-secondary",

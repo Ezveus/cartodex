@@ -203,7 +203,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     @deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
     other.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1)
 
-    get compare_decks_path(ids: [ @deck.id, other.id ])
+    get compare_decks_path(ids: [ @deck.key, other.key ])
 
     assert_response :success
     assert_select ".deck-compare-table"
@@ -211,13 +211,13 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "compare redirects when fewer than two decks are selected" do
-    get compare_decks_path(ids: [ @deck.id ])
+    get compare_decks_path(ids: [ @deck.key ])
 
     assert_redirected_to decks_path
   end
 
   test "compare ignores decks belonging to other users" do
-    get compare_decks_path(ids: [ @deck.id, decks(:two).id ])
+    get compare_decks_path(ids: [ @deck.key, decks(:two).key ])
 
     assert_redirected_to decks_path
   end

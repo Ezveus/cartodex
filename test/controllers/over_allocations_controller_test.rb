@@ -19,6 +19,18 @@ class OverAllocationsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".over-allocation-deck-link", text: deck.name
   end
 
+  test "each deck link addresses the deck by its key, not its id" do
+    deck = over_allocate(cards(:honedge), owned: 1, committed: 2)
+
+    get over_allocations_path
+
+    assert_response :success
+    # `deck_path(deck)` goes through to_param; the point of the test is the negative
+    # assertion, because this is the one deck_path in the app that to_param cannot fix.
+    assert_select ".over-allocation-deck-link[href=?]", deck_path(deck)
+    assert_select ".over-allocation-deck-link[href=?]", "/decks/#{deck.id}", count: 0
+  end
+
   test "offers the decks with proxy slots left as reallocation targets" do
     over_allocate(cards(:honedge), owned: 0, committed: 1)
     target = @user.decks.create!(name: "Target", physical: true, standard_pool: standard_pools(:twm_por))

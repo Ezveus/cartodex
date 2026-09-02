@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import { requestJson } from "helpers/api"
 
 export default class extends Controller {
-  static values = { deckId: Number, cardId: Number, quantity: Number }
+  static values = { deckId: String, cardId: Number, quantity: Number }
 
   increment() {
     this.#updateQuantity(this.quantityValue + 1)

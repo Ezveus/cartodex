@@ -15,7 +15,7 @@ module Decks
         controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies",
         action: "deck-card-quantity:changed->deck-totals#updateTotals " \
                 "deck-proxies:changed->deck-proxies#toggle",
-        result_modal_deck_id_value: @deck.id
+        result_modal_deck_id_value: @deck.key
       }) do
         header_section
         stats_section
@@ -110,7 +110,7 @@ module Decks
         input_class: "form-input card-search-input",
         wrapper_class: "deck-card-search",
         controller: "card-search",
-        card_search_deck_id_value: @deck.id,
+        card_search_deck_id_value: @deck.key,
         input_target: :card_search_target,
         input_action: "input->card-search#search",
         results_target: :card_search_target
@@ -163,7 +163,7 @@ module Decks
           max_owned = availability ? [ dc.quantity, availability.available ].min : 0
           render Decks::DeckCardItem.new(
             deck_card: dc,
-            deck_id: @deck.id,
+            deck_id: @deck.key,
             physical: @deck.physical?,
             max_owned: max_owned,
             over_allocated: @over_allocated_card_ids.include?(dc.card_id),

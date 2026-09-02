@@ -8,7 +8,7 @@ export default class extends Controller {
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
     "tournamentSelect", "submitButton"
   ]
-  static values = { deckId: Number }
+  static values = { deckId: String }
 
   open() {
     this.dialogTarget.showModal()

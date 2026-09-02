@@ -19,7 +19,7 @@ module Decks
         input(
           type: "checkbox",
           class: "deck-compare-checkbox",
-          value: @deck.id,
+          value: @deck.key,
           aria_label: "Select #{@deck.name} to compare",
           data: { deck_compare_target: "checkbox", action: "deck-compare#toggle" }
         )

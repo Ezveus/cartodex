@@ -11,7 +11,7 @@ export default class extends Controller {
     "primaryInput", "primaryId", "primaryResults",
     "secondaryInput", "secondaryId", "secondaryResults"
   ]
-  static values = { deckId: Number }
+  static values = { deckId: String }
 
   connect() {
     this.handleClickOutside = this.#clickOutside.bind(this)

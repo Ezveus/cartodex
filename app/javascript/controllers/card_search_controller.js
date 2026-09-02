@@ -3,7 +3,7 @@ import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = ["input", "results"]
-  static values = { deckId: Number }
+  static values = { deckId: String }
 
   connect() {
     this.timeout = null

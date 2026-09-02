@@ -38,6 +38,6 @@ class Api::DeckResultsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def deck_results_path
-    "/api/decks/#{@deck.id}/results"
+    "/api/decks/#{@deck.key}/results"
   end
 end

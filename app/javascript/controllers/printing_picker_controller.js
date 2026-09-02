@@ -6,7 +6,7 @@ import { requestJson } from "helpers/api"
 // this deck, and a decklist would otherwise pay for sixty menus nobody opens.
 export default class extends Controller {
   static targets = ["trigger", "menu"]
-  static values = { deckId: Number, cardId: Number }
+  static values = { deckId: String, cardId: Number }
 
   // A double-click would otherwise fire two swaps of the same slot; the second one 404s, because
   // the first has already moved the row, and reports a failure for a write that succeeded.

@@ -288,4 +288,44 @@ class DeckTest < ActiveSupport::TestCase
 
     assert_equal "Standard", deck.format_label
   end
+
+  test "a new deck is assigned a url-safe key" do
+    deck = users(:one).decks.create!(name: "Keyed", standard_pool: standard_pools(:twm_por))
+
+    assert_match(/\A[A-Za-z0-9_-]{22}\z/, deck.key)
+  end
+
+  test "saving a deck again does not rewrite its key" do
+    deck = decks(:one)
+    original = deck.key
+
+    deck.update!(name: "Renamed")
+
+    assert_equal original, deck.reload.key
+  end
+
+  test "a blank key is filled in rather than rejected" do
+    deck = decks(:one)
+    deck.key = ""
+
+    # before_validation and the presence validation have to agree: with before_create
+    # this record would be invalid while `save` succeeded.
+    assert_predicate deck, :valid?
+    assert_predicate deck.key, :present?
+  end
+
+  test "to_param is the key, so no deck path carries a numeric id" do
+    deck = decks(:one)
+
+    assert_equal deck.key, deck.to_param
+    assert_equal "/decks/#{deck.key}", Rails.application.routes.url_helpers.deck_path(deck)
+  end
+
+  test "two decks cannot share a key" do
+    # The guarantee is the UNIQUE index, not a uniqueness validation, so the write has
+    # to bypass the model to be tested at all.
+    assert_raises ActiveRecord::RecordNotUnique do
+      Deck.where(id: decks(:two).id).update_all(key: decks(:one).key)
+    end
+  end
 end

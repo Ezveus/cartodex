@@ -4,7 +4,7 @@ import { requestJson } from "helpers/api"
 // Adjusts a deck card's real (owned-backed) copy count via the deck-card API.
 export default class extends Controller {
   static targets = ["label"]
-  static values = { deckId: Number, cardId: Number, owned: Number, max: Number }
+  static values = { deckId: String, cardId: Number, owned: Number, max: Number }
 
   increment() {
     if (this.ownedValue >= this.maxValue) return

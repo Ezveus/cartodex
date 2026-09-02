@@ -20,11 +20,18 @@ class Deck < ApplicationRecord
     "other"    => "Other"
   }.freeze
 
+  # SecureRandom.urlsafe_base64(16) yields 22 URL-safe characters and 128 bits of entropy.
+  # The length is fixed on purpose: a key can therefore never collide with a literal path
+  # segment such as "shared", which Stage 2 adds as a collection route.
+  KEY_BYTES = 16
+
   validates :name, presence: true
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
+  validates :key, presence: true
 
   before_validation :clear_inapplicable_classification
+  before_validation :assign_key, if: -> { key.blank? }
   after_update :release_owned_copies_if_not_physical
 
   # Matches the deck's own name or its archetype's (which itself spans the archetype name and its
@@ -52,6 +59,8 @@ class Deck < ApplicationRecord
 
     "#{base} (#{standard_pool.name})"
   end
+
+  def to_param = key
 
   # Whether the deck is played with any proxy, derived from the per-card real/proxy split rather
   # than declared by hand — the two used to be independent and could disagree. Only a physical
@@ -126,6 +135,18 @@ class Deck < ApplicationRecord
 
   def merge_counts!(target, source)
     source.each { |k, v| target[k] += v }
+  end
+
+  # The deck's address, everywhere: `to_param` returns it, so every URL of this deck is
+  # built from it. before_validation rather than before_create so that the callback and the
+  # presence validation agree — with before_create, `Deck.new(name: "x").valid?` would be
+  # false while `save` succeeded. The `key.blank?` guard stops an update from rewriting it
+  # (before_validation runs on update too) and heals a row written by a callback-bypassing
+  # insert. There is no uniqueness validation: it would add a SELECT to every deck save to
+  # guard a 128-bit collision that will not happen, and the UNIQUE index is the guarantee —
+  # the same division of labour as `(set_name, set_number)` on Card.
+  def assign_key
+    self.key = SecureRandom.urlsafe_base64(KEY_BYTES)
   end
 
   # When a deck stops being physical, its real (owned) copies are released back
