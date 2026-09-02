@@ -8,6 +8,7 @@ module Layouts
         head do
           title { content_for(:title) || "Cartodex" }
           meta(name: "viewport", content: "width=device-width,initial-scale=1")
+          meta(name: "robots", content: "noindex, nofollow")
           meta(name: "apple-mobile-web-app-capable", content: "yes")
           meta(name: "mobile-web-app-capable", content: "yes")
           csrf_meta_tags

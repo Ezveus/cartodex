@@ -63,6 +63,23 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal private_body, unknown_body
   end
 
+  test "no response invites indexing, and robots.txt does not block the directive" do
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+    assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
+    assert_select "meta[name=robots][content=?]", "noindex, nofollow"
+
+    # The header covers what has no <head> at all: JSON and the image proxy.
+    get cards_path
+    assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
+
+    # And robots.txt must NOT disallow: a path a crawler may not fetch is a path whose
+    # noindex it never reads, and a URL linked from elsewhere can still surface as a bare
+    # result. Blocking the crawl defeats the de-indexing it looks like it reinforces.
+    refute_match(/^Disallow:\s*\/\s*$/, Rails.public_path.join("robots.txt").read)
+  end
+
   private
 
   # Label => path, one entry per action that left the authenticate block. Methods rather than

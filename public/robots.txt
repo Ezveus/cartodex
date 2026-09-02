@@ -1,1 +1,9 @@
 # See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
+#
+# Deliberately does NOT disallow anything. Nothing in this app is meant to appear in a search
+# engine, and the way to achieve that is the `X-Robots-Tag: noindex, nofollow` header every
+# response carries (ApplicationController#discourage_indexing) plus the matching meta tag.
+#
+# A `Disallow: /` here would defeat it: a path a crawler may not fetch is a path whose noindex
+# it never reads, and a URL somebody linked from elsewhere can still surface as a bare result.
+# To have nothing indexed you must let the crawler in and hand it the directive.
