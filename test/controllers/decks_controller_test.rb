@@ -11,7 +11,25 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a signed-in stranger sees a shared deck's decklist and none of its owner controls" do
-    @deck.update!(shared: true)
+    honedge = cards(:honedge)
+    @deck.update!(shared: true, physical: true)
+    # A real owned copy, so the owner's view would carry `.deck-card-alloc` — otherwise that
+    # absence assertion passes on every deck, physical or not, and proves nothing.
+    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
+    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+
+    # A second printing of Honedge, so Cards::Printings.swappable_card_ids includes it and the
+    # owner's row would carry `.deck-card-set-swap` — otherwise that absence assertion is equally
+    # vacuous. A real Card record: fixtures bypass compute_fingerprint, so the fixture's literal
+    # fingerprint has to be forced onto a genuinely created row afterward, same as
+    # Cards::PrintingsTest's `reprint` helper.
+    honedge_reprint = Card.create!(
+      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
+      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
+      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
+    )
+    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+
     # Fixtures carry no image_url, so data-card-preview-url would otherwise be nil on every row
     # (Phlex omits a nil data attribute) and the DOM-contract assertion below would prove nothing.
     cards(:doublade).update!(image_url: "https://example.test/doublade.png")
@@ -31,12 +49,37 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-card-item .deck-card-qty"
 
     # Absence assertions: the whole point of a separate view is that it cannot render these.
+    # Setup above makes each one non-vacuous — the deck is physical with an owned copy, and
+    # honedge has a second printing — so Decks::ShowView would render every one of them for
+    # the owner (see "the owner still sees ..." below), and the public view still must not.
     assert_select ".deck-card-alloc", count: 0
     assert_select ".deck-card-set-swap", count: 0
     assert_select ".deck-badges .badge", text: "Proxies", count: 0
     assert_select "a[href=?]", edit_deck_path(@deck), count: 0
     assert_select "button", text: "Log Result", count: 0
     assert_select ".deck-card-search", count: 0
+  end
+
+  # What makes every absence assertion above meaningful: on the very same deck, the owner's
+  # request does carry the allocation and printing-swap controls the stranger's must not.
+  test "the owner still sees the allocation and swap controls on the same deck" do
+    honedge = cards(:honedge)
+    @deck.update!(shared: true, physical: true)
+    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
+    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+
+    honedge_reprint = Card.create!(
+      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
+      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
+      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
+    )
+    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-card-alloc"
+    assert_select ".deck-card-set-swap"
   end
 
   test "a signed-in stranger cannot see an unshared deck" do
