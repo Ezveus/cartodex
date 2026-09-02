@@ -217,9 +217,9 @@ class ReadToolsTest < ActiveSupport::TestCase
     # This file's setup defines @user only; the deck is fetched here.
     deck = decks(:one)
 
-    result = ListDecksTool.call(server_context: { user: @user })
+    response = ListDecksTool.call(server_context: @context)
 
-    decks = JSON.parse(result.content.first[:text])
+    decks = payload(response)
     assert_equal [ deck.key ], decks.map { |d| d["key"] }
     assert_nil decks.first["id"]
   end
@@ -227,9 +227,9 @@ class ReadToolsTest < ActiveSupport::TestCase
   test "list_over_allocations carries the key of every deck it names" do
     over_allocate(cards(:honedge), owned: 1, committed: 2)
 
-    result = ListOverAllocationsTool.call(server_context: { user: @user })
+    response = ListOverAllocationsTool.call(server_context: @context)
 
-    report = JSON.parse(result.content.first[:text])
+    report = payload(response)
     assert report.first["decks"].all? { |d| d["key"].present? }, "a named deck had no key"
   end
 end

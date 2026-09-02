@@ -1,5 +1,4 @@
 require "test_helper"
-require "json"
 
 class WriteToolsTest < ActiveSupport::TestCase
   setup do
@@ -176,17 +175,17 @@ class WriteToolsTest < ActiveSupport::TestCase
     target = @user.decks.create!(name: "Target", physical: true, standard_pool: standard_pools(:twm_por))
     target.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
 
-    report = JSON.parse(ListOverAllocationsTool.call(server_context: { user: @user }).content.first[:text])
+    report = JSON.parse(response_text(ListOverAllocationsTool.call(server_context: @context)))
     source_key = report.first["decks"].first["key"]
 
-    result = ReallocateOwnedCopiesTool.call(
+    response = ReallocateOwnedCopiesTool.call(
       from_deck_key: source_key, to_deck_key: target.key,
-      card_id: cards(:honedge).id, quantity: 1, server_context: { user: @user }
+      card_id: cards(:honedge).id, quantity: 1, server_context: @context
     )
 
     # A presence assertion proves the field exists; only chaining the two tools proves a
     # client can act on what it just read.
-    refute_match(/unknown deck/, result.content.first[:text])
+    refute_match(/unknown deck/, response_text(response))
     assert_equal 1, target.deck_cards.find_by(card: cards(:honedge)).owned_copies
   end
 end

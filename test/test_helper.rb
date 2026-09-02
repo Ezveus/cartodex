@@ -59,11 +59,12 @@ module ActiveSupport
     end
 
     # Commits more real copies of the card across a fresh physical deck than the
-    # user owns — the state a collection decrease leaves behind. Uses @user, set
-    # by the including test's setup.
-    def over_allocate(card, owned:, committed:)
-      @user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: owned)
-      @user.decks.create!(name: "Deck #{card.id}", physical: true, standard_pool: standard_pools(:twm_por)).tap do |deck|
+    # user owns — the state a collection decrease leaves behind. Defaults to
+    # @user, set by the including test's setup, but takes one explicitly like
+    # its neighbour force_over_allocation.
+    def over_allocate(card, owned:, committed:, user: @user)
+      user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: owned)
+      user.decks.create!(name: "Deck #{card.id}", physical: true, standard_pool: standard_pools(:twm_por)).tap do |deck|
         deck.deck_cards.create!(card: card, quantity: committed, owned_copies: committed)
       end
     end

@@ -521,7 +521,7 @@ Every `*_deck_id_value: @deck.id` in `app/views/components/decks/` becomes `*_de
 
 its three renders become `deck_card_quantity_deck_key_value: @deck_key`, `printing_picker_deck_key_value: @deck_key` and `deck_card_owned_copies_deck_key_value: @deck_key`, and the call site in `show_view.rb:166` passes `deck_key: @deck.key`.
 
-`grep -rn "deck_id" app/views/components/decks/` must come back empty when this step is done — not just `deck_id_value`.
+`grep -rn "deck_id" app/views/components/decks/ | grep -v over_allocated_deck_ids` must come back empty when this step is done — not just `deck_id_value`. `over_allocated_deck_ids` (`index_view.rb`) is the one expected occurrence: it is an integer id set used only for a membership test, which the spec requires to stay integer, so it is excluded rather than fixed.
 
 - [ ] **Step 6: Run the tests, then sabotage-verify**
 
@@ -711,7 +711,7 @@ asserting the field is present."
 ## Definition of done for Stage 1
 
 - `grep -rn "\.find(params\[:id\])\|\.find(params\[:deck_id\])" app/controllers/` returns nothing for decks.
-- `grep -rn "deck_id" app/views/components/decks/` returns nothing — the wide form, because `DeckCardItem` carries a `deck_id:` keyword and not only `*_deck_id_value` attributes.
+- `grep -rn "deck_id" app/views/components/decks/ | grep -v over_allocated_deck_ids` returns nothing — the wide form, because `DeckCardItem` carries a `deck_id:` keyword and not only `*_deck_id_value` attributes. `over_allocated_deck_ids` (`index_view.rb`) is the one expected occurrence, and is excluded rather than fixed: it is an integer id set used for a membership test, which the spec requires to stay integer.
 - `grep -rn "deck.id\|deck_id" app/mcp/` returns nothing.
 - `bin/rails test`, `bin/rubocop`, `bin/brakeman --no-pager`, `bin/importmap audit` all pass.
 - `bin/rails test:system` and `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system` both pass.

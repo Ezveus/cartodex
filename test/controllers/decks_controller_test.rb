@@ -129,6 +129,12 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-deck-card-quantity-deck-key-value=?]", @deck.key
     assert_select "[data-tournament-pdf-deck-key-value=?]", @deck.key
     assert_select "[data-result-modal-deck-id-value]", count: 0
+
+    # The archetype form only renders in edit mode (Decks::HeaderFrame#edit_form).
+    get edit_deck_path(@deck)
+
+    assert_response :success
+    assert_select "[data-archetype-picker-deck-key-value=?]", @deck.key
   end
 
   # The deck list has no such steppers, so it keeps a plain server-rendered badge — no hidden
