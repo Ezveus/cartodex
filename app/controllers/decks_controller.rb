@@ -189,9 +189,8 @@ class DecksController < ApplicationController
     @deck = current_user.decks.find_by!(key: params[:id])
     authorize @deck, :share?
 
-    # The checkbox posts "0" or "1", both truthy if assigned raw — hence the cast. And an
-    # unchecked box with no hidden field posts nothing at all, which casts to nil against a
-    # NOT NULL column — hence `|| false`. The form carries the hidden field; this is the belt.
+    # An unchecked bare checkbox posts no `shared` param at all — nil against a NOT NULL
+    # column raises. The form's hidden "0" field is the fix; `|| false` here is the belt.
     @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
     render :share, layout: false
   end

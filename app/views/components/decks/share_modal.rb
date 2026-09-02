@@ -11,8 +11,11 @@ module Decks
     end
 
     def view_template
-      dialog(class: "share-modal", data: { share_modal_target: "dialog" }) do
-        div(class: "share-modal-content") do
+      # Reuses .result-modal / .result-modal-content, same as Decks::TournamentPdfModal: those
+      # classes carry the <dialog> centering fix (application.css ~625-648) and this dialog
+      # needs nothing a dedicated class would add.
+      dialog(class: "result-modal", data: { share_modal_target: "dialog" }) do
+        div(class: "result-modal-content") do
           h2 { "Share this deck" }
           render Decks::ShareFrame.new(deck: @deck)
           button(class: "btn btn-secondary btn-sm", data: { action: "share-modal#close" }) { "Close" }

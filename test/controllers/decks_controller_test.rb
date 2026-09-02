@@ -746,6 +746,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     refute_predicate @deck.reload, :shared?
   end
 
+  test "the Shared badge appears on the owner's page only once the deck is shared" do
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-badges .badge", text: "Shared"
+
+    @deck.update!(shared: false)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-badges .badge", text: "Shared", count: 0
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
