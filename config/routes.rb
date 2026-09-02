@@ -52,6 +52,7 @@ Rails.application.routes.draw do
     get :export, on: :member
     get :stats, on: :member
     post :duplicate, on: :member
+    patch :share, on: :member
     resources :deck_results, only: [ :index, :edit, :update, :destroy ]
   end
 

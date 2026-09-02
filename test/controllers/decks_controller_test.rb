@@ -697,6 +697,55 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name=primary] option[value=?]", archetypes(:ogerpon).primary_card_id.to_s
   end
 
+  test "sharing a deck flips the flag and re-renders the modal with the link" do
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    assert_predicate @deck.reload, :shared?
+    assert_match deck_url(@deck), response.body
+  end
+
+  test "unsharing takes the deck off the shared index without changing its key" do
+    @deck.update!(shared: true)
+    key = @deck.key
+
+    patch share_deck_path(@deck), params: { shared: "0" }, as: :turbo_stream
+
+    assert_response :success
+    refute_predicate @deck.reload, :shared?
+    assert_equal key, @deck.key
+  end
+
+  test "unsharing with the parameter missing altogether still unshares" do
+    # What a bare check_box_tag posts when unchecked: nothing. Without the hidden "0" field
+    # (and the `|| false` behind it) this is update!(shared: nil) against a NOT NULL column.
+    @deck.update!(shared: true)
+
+    patch share_deck_path(@deck), params: {}, as: :turbo_stream
+
+    assert_response :success
+    refute_predicate @deck.reload, :shared?
+  end
+
+  test "the share response re-renders the frame, not a second dialog" do
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    # A dialog inside the stream would nest a closed <dialog> into the open one and blank it.
+    assert_select "turbo-stream[action=replace][target=?]", Decks::ShareFrame::FRAME_ID
+    assert_select "turbo-stream dialog", count: 0
+    assert_select "turbo-stream turbo-frame[id=?]", Decks::ShareFrame::FRAME_ID
+  end
+
+  test "a stranger cannot share somebody else's deck" do
+    sign_in users(:two)
+
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :not_found
+    refute_predicate @deck.reload, :shared?
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

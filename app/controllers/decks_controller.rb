@@ -185,6 +185,17 @@ class DecksController < ApplicationController
     redirect_to new_deck, notice: "Deck duplicated."
   end
 
+  def share
+    @deck = current_user.decks.find_by!(key: params[:id])
+    authorize @deck, :share?
+
+    # The checkbox posts "0" or "1", both truthy if assigned raw — hence the cast. And an
+    # unchecked box with no hidden field posts nothing at all, which casts to nil against a
+    # NOT NULL column — hence `|| false`. The form carries the hidden field; this is the belt.
+    @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
+    render :share, layout: false
+  end
+
   private
 
   # `includes` cannot be chained onto a `find_by!`, so each branch reloads with the preloads

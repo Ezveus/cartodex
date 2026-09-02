@@ -15,6 +15,8 @@ module Decks
     def view_template
       div(class: "deck-badges") do
         span(class: "badge badge-format") { @deck.format_label }
+        # Owner views only — this component is never rendered on a public surface.
+        span(class: "badge") { "Shared" } if @deck.shared?
         render Ui::ArchetypeBadge.new(archetype: @deck.archetype) if @deck.archetype
         span(class: "badge") { "Physical" } if @deck.physical?
         span(class: "badge") { "TCG Live" } if @deck.tcg_live?

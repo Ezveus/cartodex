@@ -12,7 +12,7 @@ module Decks
 
     def view_template
       div(class: "deck-show-container", data: {
-        controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies",
+        controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies share-modal",
         action: "deck-card-quantity:changed->deck-totals#updateTotals " \
                 "deck-proxies:changed->deck-proxies#toggle",
         result_modal_deck_key_value: @deck.key
@@ -24,6 +24,7 @@ module Decks
           preview_section
         end
         render Decks::ResultModal.new(deck: @deck)
+        render Decks::ShareModal.new(deck: @deck)
         render Decks::TournamentPdfModal.new(deck: @deck, tournament_profiles: @tournament_profiles)
       end
     end
@@ -71,7 +72,7 @@ module Decks
         end
         link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
-        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID)
+        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true)
       end
     end
 
