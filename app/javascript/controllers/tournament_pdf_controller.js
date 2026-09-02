@@ -16,11 +16,11 @@ export default class extends Controller {
   }
 
   download(event) {
-    const deckId = event.currentTarget.dataset.tournamentPdfDeckIdValue
+    const deckKey = event.currentTarget.dataset.tournamentPdfDeckKeyValue
     const profileId = this.profileSelectTarget.value
     if (!profileId) return
 
-    const url = `/decks/${deckId}/export?style=tournament_pdf&profile_id=${encodeURIComponent(profileId)}`
+    const url = `/decks/${deckKey}/export?style=tournament_pdf&profile_id=${encodeURIComponent(profileId)}`
     window.location.href = url
     this.close()
   }

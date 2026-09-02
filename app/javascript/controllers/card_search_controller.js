@@ -3,7 +3,7 @@ import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = ["input", "results"]
-  static values = { deckId: String }
+  static values = { deckKey: String }
 
   connect() {
     this.timeout = null
@@ -29,7 +29,7 @@ export default class extends Controller {
 
   async add(event) {
     const cardId = event.currentTarget.dataset.cardId
-    const added = await requestJson(`/api/decks/${this.deckIdValue}/cards`, {
+    const added = await requestJson(`/api/decks/${this.deckKeyValue}/cards`, {
       method: "POST",
       body: { deck_card: { card_id: cardId, quantity: 1 } },
       failure: "Couldn't add the card to this deck"

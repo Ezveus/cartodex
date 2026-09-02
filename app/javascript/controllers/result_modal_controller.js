@@ -8,7 +8,7 @@ export default class extends Controller {
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
     "tournamentSelect", "submitButton"
   ]
-  static values = { deckId: String }
+  static values = { deckKey: String }
 
   open() {
     this.dialogTarget.showModal()
@@ -96,7 +96,7 @@ export default class extends Controller {
         if (!archetypeId) return
       }
 
-      const data = await requestJson(`/api/decks/${this.deckIdValue}/results`, {
+      const data = await requestJson(`/api/decks/${this.deckKeyValue}/results`, {
         method: "POST",
         body: {
           deck_result: {

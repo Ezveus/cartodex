@@ -91,7 +91,7 @@ module Api
 
     def deck_json(deck)
       {
-        id: deck.id,
+        key: deck.key,
         name: deck.name,
         description: deck.description,
         physical: deck.physical,

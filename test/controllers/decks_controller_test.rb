@@ -117,6 +117,20 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge'][hidden]", false
   end
 
+  test "the deck page hands its javascript the key, not the id" do
+    get deck_path(@deck)
+
+    assert_response :success
+    # A String landing in a controller that still declares `deckId: Number` coerces to NaN
+    # and dies in a fetch catch, so these attributes are the JS half of the identity change
+    # and nothing else in the suite reads them.
+    assert_select "[data-result-modal-deck-key-value=?]", @deck.key
+    assert_select "[data-card-search-deck-key-value=?]", @deck.key
+    assert_select "[data-deck-card-quantity-deck-key-value=?]", @deck.key
+    assert_select "[data-tournament-pdf-deck-key-value=?]", @deck.key
+    assert_select "[data-result-modal-deck-id-value]", count: 0
+  end
+
   # The deck list has no such steppers, so it keeps a plain server-rendered badge — no hidden
   # element to toggle, no target attribute on the dozens of decks it renders.
   test "index omits the proxies badge entirely for a fully backed deck" do
@@ -220,6 +234,13 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     get compare_decks_path(ids: [ @deck.key, decks(:two).key ])
 
     assert_redirected_to decks_path
+  end
+
+  test "the compare checkbox carries the key" do
+    get decks_path
+
+    assert_response :success
+    assert_select ".deck-compare-checkbox[value=?]", @deck.key
   end
 
   test "update assigns an archetype to the deck" do
