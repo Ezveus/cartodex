@@ -632,18 +632,60 @@ module Decks
       end
     end
 
+    # The same section markup as Decks::ShowView — `.deck-section`, `.deck-section-group`,
+    # `.deck-subsection` and their headings are what the stylesheet styles — so the public page
+    # reads like the owner's, Trainers split by subtype included. Duplicated rather than shared:
+    # ShowView's card_list is where the owner controls come from, and this file must not import
+    # it. The labels are the one thing borrowed, since they are data rather than markup.
     def main_section
       div(class: "deck-show-main") do
         groups = @deck.deck_cards.group_by { |deck_card| deck_card.card.card_type }
 
-        [ "Pokémon", "Trainer", "Energy" ].each do |type|
-          group = groups[type]
-          next if group.blank?
+        card_type_section("Pokémon", groups["Pokémon"]) if groups["Pokémon"].present?
+        trainer_section(groups["Trainer"]) if groups["Trainer"].present?
+        card_type_section("Energy", groups["Energy"]) if groups["Energy"].present?
+      end
+    end
 
-          h3(class: "deck-card-group-title") { "#{type} (#{group.sum(&:quantity)})" }
-          ul(class: "deck-card-list") do
-            group.each { |deck_card| render Decks::PublicDeckCardItem.new(deck_card: deck_card) }
-          end
+    def card_type_section(type, group)
+      div(class: "deck-section") do
+        h2 { heading_text(type, group) }
+        card_list(group)
+      end
+    end
+
+    def trainer_section(group)
+      div(class: "deck-section-group") do
+        h2 { "Trainer" }
+        subtype_groups = group.group_by { |deck_card| deck_card.card.subtype }
+
+        Decks::ShowView::TRAINER_SUBTYPE_LABELS.each do |subtype, label|
+          subgroup = subtype_groups.delete(subtype)
+          trainer_subtype_section(label, subgroup) if subgroup.present?
+        end
+
+        other = subtype_groups.values.flatten
+        trainer_subtype_section("Other", other) if other.present?
+      end
+    end
+
+    def trainer_subtype_section(label, group)
+      div(class: "deck-section deck-subsection") do
+        h3 { heading_text(label, group) }
+        card_list(group)
+      end
+    end
+
+    # Plain text where ShowView wraps the numbers in deck-totals targets: nothing on this page
+    # can change a quantity, so there is nothing to keep in sync.
+    def heading_text(label, group)
+      "#{label} (#{group.sum(&:quantity)} — #{group.size} unique)"
+    end
+
+    def card_list(group)
+      ul(class: "deck-card-list") do
+        group.sort_by { |deck_card| deck_card.card.name }.each do |deck_card|
+          render Decks::PublicDeckCardItem.new(deck_card: deck_card)
         end
       end
     end
@@ -843,40 +885,17 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     @card = cards(:honedge)
   end
 
-  PUBLIC_GETS = ->(t) {
-    {
-      "dashboard" => t.dashboard_path,
-      "search" => t.search_path(q: "ab"),
-      "cards index" => t.cards_path,
-      "card show" => t.card_path(t.instance_variable_get(:@card)),
-      "deck show (shared)" => t.deck_path(t.instance_variable_get(:@deck))
-    }
-  }
-
-  OWNER_ONLY_GETS = ->(t) {
-    deck = t.instance_variable_get(:@deck)
-    {
-      "decks index" => t.decks_path,
-      "deck new" => t.new_deck_path,
-      "deck edit" => t.edit_deck_path(deck),
-      "deck stats" => t.stats_deck_path(deck),
-      "deck matchups" => t.matchups_decks_path,
-      "deck results" => t.deck_deck_results_path(deck),
-      "collections" => t.collections_path
-    }
-  }
-
   test "the public actions answer without a session" do
     @deck.update!(shared: true)
 
-    PUBLIC_GETS.call(self).each do |label, path|
+    public_gets.each do |label, path|
       get path
       assert_response :success, "expected #{label} to be public, got #{response.status}"
     end
   end
 
   test "the owner-only actions send a visitor to sign in" do
-    OWNER_ONLY_GETS.call(self).each do |label, path|
+    owner_only_gets.each do |label, path|
       get path
       assert_redirected_to new_user_session_path, "expected #{label} to require a session"
     end
@@ -887,7 +906,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
 
     # This is the half that can actually catch a missing `authorize`: verify_authorized runs
     # as an after_action, and an after_action does not run when a before_action halted.
-    OWNER_ONLY_GETS.call(self).each do |label, path|
+    owner_only_gets.each do |label, path|
       get path
       assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
     end
@@ -912,6 +931,33 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     # in one place makes them converge. A 403 on one of them would turn an unguessable key
     # into an existence oracle for private decks.
     assert_equal private_body, unknown_body
+  end
+
+  private
+
+  # Label => path, one entry per action that left the authenticate block. Methods rather than
+  # constants because the paths need the fixtures, which a constant cannot see. Last in the
+  # file: a `test` declared below `private` would be defined private and never run.
+  def public_gets
+    {
+      "dashboard" => dashboard_path,
+      "search" => search_path(q: "ab"),
+      "cards index" => cards_path,
+      "card show" => card_path(@card),
+      "deck show (shared)" => deck_path(@deck)
+    }
+  end
+
+  def owner_only_gets
+    {
+      "decks index" => decks_path,
+      "deck new" => new_deck_path,
+      "deck edit" => edit_deck_path(@deck),
+      "deck stats" => stats_deck_path(@deck),
+      "deck matchups" => matchups_decks_path,
+      "deck results" => deck_deck_results_path(@deck),
+      "collections" => collections_path
+    }
   end
 end
 ```
@@ -1335,6 +1381,8 @@ requests — not from another controller's budget."
 
 - [ ] **Step 1: Write the failing test**
 
+In `test/controllers/public_access_test.rb`, above its `private` line:
+
 ```ruby
   test "no response invites indexing, and robots.txt does not block the directive" do
     @deck.update!(shared: true)
@@ -1361,10 +1409,19 @@ Expected: FAIL — no header, no meta.
 
 - [ ] **Step 3: Send the header everywhere**
 
-In `app/controllers/application_controller.rb`:
+In `app/controllers/application_controller.rb`, **above** `before_action :authenticate_user!` — a halting `before_action` skips the callbacks declared after it, so declared below, the redirect to sign-in would go out without the header:
 
 ```ruby
+class ApplicationController < ActionController::Base
+  include Pundit::Authorization
+
+  # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
+  allow_browser versions: :modern
+  protect_from_forgery with: :exception
+  # Before authenticate_user!, so that even the redirect it issues carries the header.
   before_action :discourage_indexing
+  before_action :authenticate_user!
+  layout -> { Layouts::ApplicationLayout }
 
   private
 
@@ -1375,6 +1432,7 @@ In `app/controllers/application_controller.rb`:
   def discourage_indexing
     response.set_header("X-Robots-Tag", "noindex, nofollow")
   end
+end
 ```
 
 - [ ] **Step 4: Add the meta tag**
@@ -1429,16 +1487,23 @@ Before the navbar, because the navbar links here.
 
 **Interfaces:**
 - Consumes: `Deck.shared` (Task 1), `DeckPolicy#shared_index?` (Task 2), `Decks::PublicBadges` (Task 3).
-- Produces: `shared_decks_path`; `Decks::SharedIndexView.new(decks:, filters:, archetype_options:, page:, pages:)`; `Decks::DeckCard.new(deck:, with_actions:, over_allocated:, public_badges:)`.
+- Produces: `shared_decks_path`; `Decks::SharedIndexView.new(decks:, filters:, archetype_options:, page:, pages:)`; `Decks::DeckCard.new(deck:, with_actions:, over_allocated:, public_listing:)`.
 
 **Context you need:** routes declared inside a `resources` block are drawn before the member routes — the app already relies on that for `matchups` and `compare` — so `/decks/shared` cannot be swallowed by `/decks/:id`. A 22-character key makes it doubly impossible. There is no pagination gem; follow `CardsController`'s hand-rolled `PER_PAGE` / `offset` / `@pages`.
 
-`Decks::DeckCard` already accepts `with_actions:`, so the shared index reuses it for the row. What it does *not* have is a way to swap its badge row: it renders `Decks::ClassificationBadges`, which shows Physical, TCG Live, Proxies and Shared. On a public surface that must be `Decks::PublicBadges`, so the component gains one more keyword. Its title selector is `.deck-item-link h2`.
+`Decks::DeckCard` already accepts `with_actions:`, so the shared index reuses it for the row. But `with_actions: false` hides the dropdown and nothing else, and **three more things in that component are owner-only** (`deck_card.rb`, measured):
+
+1. line 31 renders `Decks::ClassificationBadges` — Physical, TCG Live, Proxies, Shared — where a public surface needs `Decks::PublicBadges`;
+2. lines 10–17 render the foil sheen and a `★ 63%` flag when `hot?` says so. `hot?` is *the win-loss record*, which decision 3 keeps private — and it reads `deck_results`, which the shared index does not preload, so it is an N+1 across 24 rows as well;
+3. lines 19–25 render the `deck-compare-checkbox`, absolutely positioned in the card's corner, wired to a `deck-compare` controller the shared index does not have. On that page it is a live checkbox that does nothing.
+
+So the component gains one keyword, `public_listing:`, that turns all three off together. Not three flags: they are one decision ("is a stranger looking at this row?"), and three flags would let the next caller get one of them wrong. Its title selector is `.deck-item-link h2`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ruby
   test "the shared index lists other people's shared decks to a visitor" do
+    sign_out @user # this file's setup signs in; a visitor is the point here
     theirs = decks(:two)
     theirs.update!(user: users(:two), shared: true, name: "Theirs")
 
@@ -1449,10 +1514,13 @@ Before the navbar, because the navbar links here.
     assert_select "a[href=?]", deck_path(@deck), count: 0
   end
 
-  test "the shared index shows no collection-derived filter and no badge that leaks one" do
+  test "the shared index shows no collection-derived filter and nothing owner-only on a row" do
     theirs = decks(:two)
     theirs.update!(user: users(:two), shared: true, physical: true)
     theirs.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
+    # Five decided results at 100% is what makes `hot?` true — and the foil flag it renders is
+    # the win rate, i.e. the record decision 3 keeps private.
+    5.times { theirs.deck_results.create!(result: "win") }
 
     get shared_decks_path
 
@@ -1462,17 +1530,22 @@ Before the navbar, because the navbar links here.
     assert_select ".deck-badges .badge", text: "Proxies", count: 0
     assert_select ".deck-badges .badge", text: "Physical", count: 0
     assert_select ".deck-item-actions", count: 0
+    assert_select ".deck-hot-flag", count: 0
+    assert_select ".deck-item.is-foil", count: 0
+    # No deck-compare controller on this page, so a checkbox here would be a live control that
+    # does nothing.
+    assert_select ".deck-compare-checkbox", count: 0
   end
 
   test "the shared index's archetype filter comes from the shared decks, not from mine" do
     theirs = decks(:two)
-    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:one))
-    sign_in @user
+    # Fixtures are `ogerpon` and `budew_ogerpon` (test/fixtures/archetypes.yml); there is no :one.
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon))
 
     get shared_decks_path
 
     assert_response :success
-    assert_select "select[name=primary] option[value=?]", archetypes(:one).primary_card_id.to_s
+    assert_select "select[name=primary] option[value=?]", archetypes(:ogerpon).primary_card_id.to_s
   end
 ```
 
@@ -1530,26 +1603,46 @@ and, private:
   end
 ```
 
-- [ ] **Step 5: Let the deck row take a public badge set**
+- [ ] **Step 5: Let the deck row render for a stranger**
 
 In `app/views/components/decks/deck_card.rb`:
 
 ```ruby
-    def initialize(deck:, with_actions: true, over_allocated: false, public_badges: false)
+    # `public_listing` is one switch for the three things on this row a stranger must not get:
+    # the owner's badges, the foil flag (which prints the win rate — the record stays private),
+    # and the compare checkbox (whose controller a public page does not carry). One keyword
+    # rather than three because they are one decision, and the next caller cannot get one of
+    # them wrong.
+    def initialize(deck:, with_actions: true, over_allocated: false, public_listing: false)
       @deck = deck
       @with_actions = with_actions
       @over_allocated = over_allocated
-      @public_badges = public_badges
+      @public_listing = public_listing
     end
+
+    def view_template
+      # Not computed on a public listing: hot? reads deck_results, which the shared index does
+      # not preload, and its answer would be a leak anyway.
+      hot = !@public_listing && @deck.hot?
+      item_class = hot ? "deck-item is-foil" : "deck-item"
+
+      div(class: item_class, id: "deck-#{@deck.id}") do
+        type_stripe
+        if hot
+          div(class: "deck-foil-sheen", aria_hidden: "true")
+          span(class: "deck-hot-flag") { "★ #{(@deck.win_rate * 100).round}%" }
+        end
+        compare_checkbox unless @public_listing
+        # …the link, unchanged…
 ```
 
-and where the badges render:
+`compare_checkbox` is the existing `input(type: "checkbox", …)` block moved into a private method, and where the badges render:
 
 ```ruby
           # Physical, TCG Live, Proxies and Shared all describe how the owner keeps the deck;
           # the first three of those read the collection through it. A public listing gets the
           # format and the archetype only.
-          if @public_badges
+          if @public_listing
             render Decks::PublicBadges.new(deck: @deck)
           else
             render Decks::ClassificationBadges.new(deck: @deck, over_allocated: @over_allocated)
@@ -1582,7 +1675,7 @@ module Decks
         filter_bar
         if @decks.any?
           div(class: "deck-list") do
-            @decks.each { |deck| render Decks::DeckCard.new(deck: deck, with_actions: false, public_badges: true) }
+            @decks.each { |deck| render Decks::DeckCard.new(deck: deck, with_actions: false, public_listing: true) }
           end
           pagination if @pages > 1
         else
@@ -1644,7 +1737,7 @@ Run: `bin/rails test test/controllers/decks_controller_test.rb`
 Expected: PASS.
 
 Sabotage 1: point `shared_archetype_options` at `member_card_filter_options(:primary_card_id)`. The archetype-filter test must FAIL.
-Sabotage 2: pass `public_badges: false` in the view. The "no badge that leaks one" test must FAIL on the Physical badge.
+Sabotage 2: pass `public_listing: false` in the view. The "nothing owner-only on a row" test must FAIL three ways — the Physical badge, the `.deck-hot-flag`, and the `.deck-compare-checkbox`. If it fails on the badge alone, the five results did not make `hot?` true; check `result_counts`.
 Restore both.
 
 ```bash
@@ -1653,8 +1746,10 @@ git commit -m "Add the shared deck index, with filters that mean something witho
 
 No support or proxies filter and no Physical or Proxies badge: all of them
 compare a deck against a collection the reader does not have, and the last
-two report what the owner does and does not own. Decks::DeckCard takes a
-public_badges keyword rather than being duplicated.
+two report what the owner does and does not own. No foil flag either — it
+prints the win rate, which is the record that stays private — and no
+compare checkbox, whose controller this page does not carry. Decks::DeckCard
+takes one public_listing keyword for the three rather than being duplicated.
 
 The archetype options come from Deck.shared rather than from the viewer's
 own decks, which for a visitor would have been a filter derived from
@@ -1673,6 +1768,8 @@ nothing."
 **Context you need:** below 768px `.navbar-menu` is `display: none` until the `navbar` Stimulus controller adds `.navbar-menu--open`, and the suite's `click_nav_link` helper depends on exactly those two classes plus `.navbar-toggle`. A `PublicNavbar` that reimplemented "brand plus links" without the hamburger would fail every mobile system test that navigates from a public page, and the failure would read as a Capybara visibility problem.
 
 `shared_decks_path` comes from Task 7, which is why that task runs first.
+
+**A consequence to accept, not discover:** `Layouts::ApplicationLayout` is also the layout of the Devise controllers, which inherit from `ApplicationController`. Today those pages render no navbar because nobody is signed in on them; after this task the sign-in and sign-up pages carry `Ui::PublicNavbar` — including its own "Sign in" link. That is the intended outcome (a visitor can get back to the catalog from the sign-in page), and it is written here so the first person to see it does not treat it as a regression.
 
 - [ ] **Step 1: Write the failing system test**
 
@@ -1837,13 +1934,18 @@ toggle passes on desktop and fails every mobile navigation test."
 ## Task 9: the Share control
 
 **Files:**
-- Create: `app/views/components/decks/share_modal.rb`, `app/views/decks/share.turbo_stream.erb`
+- Create: `app/views/components/decks/share_modal.rb`, `app/views/components/decks/share_frame.rb`, `app/views/decks/share.turbo_stream.erb`, `app/javascript/controllers/share_modal_controller.js`
 - Modify: `config/routes.rb`, `app/controllers/decks_controller.rb`
 - Modify: `app/views/components/decks/actions_dropdown.rb`, `classification_badges.rb`, `show_view.rb`
 - Test: `test/controllers/decks_controller_test.rb`, `test/system/deck_sharing_test.rb` (new)
 
 **Interfaces:**
-- Produces: `PATCH /decks/:key/share` → `share_deck_path(deck)`; `Decks::ShareModal.new(deck:)`.
+- Produces: `PATCH /decks/:key/share` → `share_deck_path(deck)`; `Decks::ShareModal.new(deck:)` (the `<dialog>`), `Decks::ShareFrame.new(deck:)` (the `<turbo-frame>` inside it, and what the PATCH re-renders).
+
+**Two traps in this task, both of which the controller tests as first drafted would have passed straight through:**
+
+1. **A Turbo Stream must replace the frame with a frame.** `turbo_stream.replace FRAME_ID` swaps out the `<turbo-frame id="deck-share">` element for whatever the block renders. Render the whole modal there and the open `<dialog>` receives a second, *closed* `<dialog>` where its frame was — the toggle and the link vanish from the screen. Hence two components: the dialog, and the frame it contains, and only the second is what the stream renders.
+2. **An unchecked `check_box_tag` sends nothing.** Rails' form-builder `check_box` emits a hidden `"0"` field before the box for exactly this reason; the bare tag helper does not. Uncheck the box and `params[:shared]` is absent, `cast(nil)` is `nil`, and `update!(shared: nil)` hits the `NOT NULL` constraint — a 500 on every un-share from a browser, while a controller test that posts `shared: "0"` by hand stays green. The hidden field is the fix; `|| false` in the action is the belt.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1869,6 +1971,27 @@ In `test/controllers/decks_controller_test.rb`:
     assert_equal key, @deck.key
   end
 
+  test "unsharing with the parameter missing altogether still unshares" do
+    # What a bare check_box_tag posts when unchecked: nothing. Without the hidden "0" field
+    # (and the `|| false` behind it) this is update!(shared: nil) against a NOT NULL column.
+    @deck.update!(shared: true)
+
+    patch share_deck_path(@deck), params: {}, as: :turbo_stream
+
+    assert_response :success
+    refute_predicate @deck.reload, :shared?
+  end
+
+  test "the share response re-renders the frame, not a second dialog" do
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    # A dialog inside the stream would nest a closed <dialog> into the open one and blank it.
+    assert_select "turbo-stream[action=replace][target=?]", Decks::ShareFrame::FRAME_ID
+    assert_select "turbo-stream dialog", count: 0
+    assert_select "turbo-stream turbo-frame[id=?]", Decks::ShareFrame::FRAME_ID
+  end
+
   test "a stranger cannot share somebody else's deck" do
     sign_in users(:two)
 
@@ -1892,15 +2015,24 @@ class DeckSharingTest < ApplicationSystemTestCase
     login_as @user, scope: :user
   end
 
-  test "the owner shares a deck and gets a link to copy" do
+  test "the owner shares a deck, gets a link to copy, and can take it back" do
     visit deck_path(@deck)
 
     find(".deck-actions-bar .dropdown button", text: "Actions").click
     click_on "Share…"
     check "shared"
 
-    assert_field "share-url", with: deck_url(@deck)
+    # A path suffix, not deck_url: no system test in this suite builds a full URL, nothing sets
+    # default_url_options for them, and the page's host is Capybara's server, not the test's.
+    assert_field "share-url", with: %r{/decks/#{@deck.key}\z}
     assert_predicate @deck.reload, :shared?
+
+    # The un-share half is the one a bare check_box_tag breaks (no param posted at all), and
+    # the one the controller tests cannot reproduce from a browser's point of view.
+    uncheck "shared"
+
+    assert_no_field "share-url"
+    refute_predicate @deck.reload, :shared?
   end
 end
 ```
@@ -1927,17 +2059,21 @@ In `DecksController`:
     @deck = current_user.decks.find_by!(key: params[:id])
     authorize @deck, :share?
 
-    # The checkbox posts "0" or "1", both truthy if assigned raw.
-    @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]))
+    # The checkbox posts "0" or "1", both truthy if assigned raw — hence the cast. And an
+    # unchecked box with no hidden field posts nothing at all, which casts to nil against a
+    # NOT NULL column — hence `|| false`. The form carries the hidden field; this is the belt.
+    @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
     render :share, layout: false
   end
 ```
 
-Create `app/views/decks/share.turbo_stream.erb`:
+Create `app/views/decks/share.turbo_stream.erb` — it renders the **frame**, never the modal:
 
 ```erb
-<%= turbo_stream.replace Decks::ShareModal::FRAME_ID do %>
-  <%= render Decks::ShareModal.new(deck: @deck) %>
+<%# The frame and only the frame: rendering Decks::ShareModal here would drop a second, closed
+    <dialog> inside the open one and blank it. %>
+<%= turbo_stream.replace Decks::ShareFrame::FRAME_ID do %>
+  <%= render Decks::ShareFrame.new(deck: @deck) %>
 <% end %>
 ```
 
@@ -1945,11 +2081,41 @@ Create `app/views/decks/share.turbo_stream.erb`:
 
 **Do not use `Ui::Modal` here.** It renders a plain `div.modal` whose visibility another controller toggles — that is the scanner modal's pattern. A modal opened from the actions dropdown should be a real `<dialog>`, which is what `Decks::ResultModal` does: a raw `dialog` carrying a Stimulus target, with the controller calling `showModal()`. Follow that.
 
-Create `app/views/components/decks/share_modal.rb`. It must say what sharing *does*, not merely offer a link — `/decks/shared` lists every shared deck, so this is publishing:
+Two components. The dialog, `app/views/components/decks/share_modal.rb`, which the page renders once and the share-modal controller opens:
 
 ```ruby
 module Decks
+  # The Share dialog. A <dialog> with a target the share-modal controller opens, like
+  # Decks::ResultModal — not Ui::Modal, which is a div whose display another controller flips.
+  #
+  # The dialog and its frame are two components on purpose: the PATCH answers with a Turbo
+  # Stream that replaces the frame, and a stream that rendered this component would drop a
+  # second, closed <dialog> inside the open one. Only Decks::ShareFrame is ever re-rendered.
   class ShareModal < ApplicationComponent
+    def initialize(deck:)
+      @deck = deck
+    end
+
+    def view_template
+      dialog(class: "share-modal", data: { share_modal_target: "dialog" }) do
+        div(class: "share-modal-content") do
+          h2 { "Share this deck" }
+          render Decks::ShareFrame.new(deck: @deck)
+          button(class: "btn btn-secondary btn-sm", data: { action: "share-modal#close" }) { "Close" }
+        end
+      end
+    end
+  end
+end
+```
+
+And the frame, `app/views/components/decks/share_frame.rb`. It must say what sharing *does*, not merely offer a link — `/decks/shared` lists every shared deck, so this is publishing:
+
+```ruby
+module Decks
+  # What the Share dialog contains and what PATCH /decks/:key/share re-renders: the toggle, the
+  # sentence that says sharing means publishing, and — once shared — the link to copy.
+  class ShareFrame < ApplicationComponent
     include Phlex::Rails::Helpers::TurboFrameTag
 
     FRAME_ID = "deck-share".freeze
@@ -1959,34 +2125,35 @@ module Decks
     end
 
     def view_template
-      # A <dialog> with a target the share-modal controller opens, like Decks::ResultModal —
-      # not Ui::Modal, which is a div whose display another controller flips.
-      dialog(class: "share-modal", data: { share_modal_target: "dialog" }) do
-        div(class: "share-modal-content") do
-          h2 { "Share this deck" }
-
-          # The frame is inside the dialog so the PATCH can replace the toggle and the link
-          # without closing the dialog the user is looking at.
-          turbo_frame_tag(FRAME_ID) do
-            form_with url: share_deck_path(@deck), method: :patch, data: { turbo_frame: FRAME_ID } do
-              check_box_tag :shared, "1", @deck.shared?, id: "shared", onchange: "this.form.requestSubmit()"
-              label_tag :shared, "Share this deck publicly"
-            end
-
-            # Sharing publishes: the deck is listed at /decks/shared, not merely reachable by
-            # anyone holding a link. Say so, and say what becomes visible — the description in
-            # particular is free text often written while the deck was private.
-            p(class: "share-explainer") do
-              plain "A shared deck is listed publicly on the shared decks page. Its name, " \
-                    "description, format, archetype and card list become visible to anyone. " \
-                    "Your results, your collection and your proxy counts do not."
-            end
-
-            share_link if @deck.shared?
-          end
-
-          button(class: "btn btn-secondary btn-sm", data: { action: "share-modal#close" }) { "Close" }
+      # Inside the dialog, so the PATCH swaps the toggle and the link without closing what the
+      # user is looking at.
+      turbo_frame_tag(FRAME_ID) do
+        # The card-filter controller is reused for its `submit` action (a requestSubmit on the
+        # form): the app carries no inline event handlers, and this form needs nothing more.
+        form_with url: share_deck_path(@deck), method: :patch,
+                  data: { turbo_frame: FRAME_ID, controller: "card-filter" } do
+          # The hidden "0" is what the form-builder `check_box` adds and a bare checkbox does
+          # not. Without it an unchecked box posts nothing, and nothing casts to nil against a
+          # NOT NULL column. Plain Phlex tags: ApplicationComponent includes FormWith but none
+          # of the *_tag helpers, and these need nothing a helper would add.
+          input(type: "hidden", name: "shared", value: "0")
+          input(
+            type: "checkbox", name: "shared", value: "1", id: "shared", checked: @deck.shared?,
+            data: { action: "change->card-filter#submit" }
+          )
+          label(for: "shared") { "Share this deck publicly" }
         end
+
+        # Sharing publishes: the deck is listed at /decks/shared, not merely reachable by
+        # anyone holding a link. Say so, and say what becomes visible — the description in
+        # particular is free text often written while the deck was private.
+        p(class: "share-explainer") do
+          plain "A shared deck is listed publicly on the shared decks page. Its name, " \
+                "description, format, archetype and card list become visible to anyone. " \
+                "Your results, your collection and your proxy counts do not."
+        end
+
+        share_link if @deck.shared?
       end
     end
 
@@ -2004,6 +2171,8 @@ module Decks
   end
 end
 ```
+
+`form_with` comes from `ApplicationComponent`, which already includes `Phlex::Rails::Helpers::FormWith`; the inputs and the label are plain Phlex tags, so nothing else is included. Phlex omits a boolean attribute that is `false`, so `checked: @deck.shared?` renders `checked` or nothing.
 
 The `clipboard` controller already prefers a static `text` value over `url`, so the copy button needs no new JavaScript. The dialog does — create `app/javascript/controllers/share_modal_controller.js`:
 
@@ -2068,7 +2237,9 @@ In `Decks::ClassificationBadges#view_template`, after the format badge:
 
 Run: `bin/rails test test/controllers/decks_controller_test.rb` and `bin/rails test:system test/system/deck_sharing_test.rb` at both viewports.
 
-Sabotage: change the action to `@deck.update!(shared: params[:shared])`. The unshare test must FAIL, because `"0"` is truthy. Restore.
+Sabotage 1: change the action to `@deck.update!(shared: params[:shared])`. The unshare test must FAIL, because `"0"` is truthy. Restore.
+Sabotage 2: drop the `hidden_field_tag` from `ShareFrame` **and** the `|| false` from the action. The system test must FAIL on the un-share half (a 500 behind the `uncheck`), and the "parameter missing altogether" controller test must FAIL with `NotNullViolation`. Restore both — then drop only the hidden field: the controller test passes (the belt holds) and the system test must still pass. If the system test fails here, the belt is not wired.
+Sabotage 3: make `share.turbo_stream.erb` render `Decks::ShareModal` instead of `ShareFrame`. The "not a second dialog" test must FAIL, and the system test must FAIL on `assert_field "share-url"` — the field is inside a closed nested dialog, which Capybara does not see. Restore.
 
 ```bash
 git add config/routes.rb app/controllers/decks_controller.rb app/views test/controllers test/system
@@ -2080,7 +2251,11 @@ than merely reachable — /decks/shared publishes it — and names what
 becomes visible, the description included: free text usually written while
 the deck was private.
 
-The param is cast explicitly: the checkbox posts \"0\", which is truthy."
+The param is cast explicitly: the checkbox posts \"0\", which is truthy —
+and carries a hidden \"0\" field, because an unchecked check_box_tag posts
+nothing, which casts to nil against a NOT NULL column. The PATCH answers
+with a stream that replaces the frame inside the dialog, never the dialog
+itself: a dialog inside a dialog is a closed one."
 ```
 
 ---
@@ -2243,6 +2418,8 @@ breaks a product rule rather than the keyboard navigation."
     assert_select ".dashboard-card", count: 0
     assert_select "#scanner-modal", count: 0
     assert_select "h1", text: /@/, count: 0
+    # The decks Stimulus controller fetches /api/decks on connect; a visitor must not carry it.
+    assert_select "[data-controller~=decks]", count: 0
   end
 
   test "the showcase never lists a private deck" do
@@ -2291,7 +2468,10 @@ Expected: FAIL — no showcase, and `root_path` still renders the welcome page.
 
 ```ruby
     def view_template
-      div(class: "dashboard-container", data: { controller: "decks" }) do
+      # The `decks` controller belongs to the signed-in page only: its connect() fetches
+      # /api/decks for the deck count, and for a visitor that request is a redirect to sign-in
+      # whose HTML body dies in response.json() — a console error on every visit.
+      div(class: "dashboard-container", data: (@current_user ? { controller: "decks" } : nil)) do
         if @current_user
           # The only place on this page that prints an email — decision 7 forbids one on a
           # public surface, so it lives inside this branch rather than above it.

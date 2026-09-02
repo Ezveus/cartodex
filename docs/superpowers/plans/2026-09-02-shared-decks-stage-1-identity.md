@@ -32,6 +32,8 @@
 
 This is the task that makes the other three visible. The moment `to_param` changes, all 35 path helpers emit keys while every lookup still reads ids, so most of the suite goes red — that is the intended signal, and Task 2 turns it green again.
 
+**Tasks 1 and 2 land in one commit**, at the end of Task 2. This task has no commit step of its own: the suite is red between the two, the global constraint says green before every commit, and CI runs on every push. Splitting them would produce a commit that fails CI and that `git bisect` cannot land on. The two tasks stay separate here because they are reviewed separately — the column and the callback on one side, the thirteen lookups on the other.
+
 **Files:**
 - Create: `db/migrate/YYYYMMDDHHMMSS_add_key_to_decks.rb`
 - Modify: `app/models/deck.rb`
@@ -113,9 +115,12 @@ class AddKeyToDecks < ActiveRecord::Migration[8.1]
     # format is standard, so `update!` on any pre-#122 Standard row that never got an anchor
     # would abort this migration halfway, leaving a nullable column and no index. Filling a
     # column is all this is; re-validating history is not its job.
+    #
+    # 16 is spelled out rather than read from Deck::KEY_BYTES: a migration has to keep running
+    # after the model has moved on, so it must not depend on a constant the model may rename.
     Deck.reset_column_information
     Deck.where(key: nil).pluck(:id).each do |id|
-      Deck.where(id: id).update_all(key: SecureRandom.urlsafe_base64(Deck::KEY_BYTES))
+      Deck.where(id: id).update_all(key: SecureRandom.urlsafe_base64(16))
     end
 
     change_column_null :decks, :key, false
@@ -210,23 +215,10 @@ Change `before_validation :assign_key, if: -> { key.blank? }` to `before_create 
 
 Change `assign_key` to `self.key = "constant"`. Run `bin/rails test test/models/deck_test.rb -n "/url-safe key/"` — it must FAIL on the length. Restore.
 
-- [ ] **Step 8: Record the expected breakage, then commit**
+- [ ] **Step 8: Record the expected breakage — and do not commit**
 
 Run: `bin/rails test 2>&1 | tail -30`
-Expected: **many failures**, all of the shape "Couldn't find Deck with 'id'=deck-one-key" or a 404. This is the signal described at the top of this task: helpers now emit keys, lookups still read ids. Do not fix them here.
-
-```bash
-git add db/migrate db/schema.rb app/models/deck.rb test/fixtures/decks.yml test/models/deck_test.rb
-git commit -m "Address a deck by an unguessable key rather than by its id
-
-to_param returns the key, so all 35 path helpers change what they emit
-without being edited — which is also why the rest of the suite is red
-until the lookups follow in the next commit.
-
-before_validation rather than before_create so the callback and the
-presence validation agree; the UNIQUE index, not a validation, is what
-guarantees uniqueness."
-```
+Expected: **many failures**, all of the shape "Couldn't find Deck with 'id'=deck-one-key" or a 404. This is the signal described at the top of this task: helpers now emit keys, lookups still read ids. Do not fix them here, and do not commit here: Task 2's final step commits both tasks together, once the suite is green again.
 
 ---
 
@@ -394,17 +386,28 @@ Run: `bin/rails test:system`
 Then: `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system`
 Expected: PASS at both. This is not optional here: the system suite is what drives the deck page's real URLs, and `bin/rails test` never loads `test/system/`.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 12: Commit Tasks 1 and 2 together**
+
+Both tasks in one commit, as announced at the top of Task 1: between them the suite is red, and the constraint is green before every commit.
 
 ```bash
+git add db/migrate db/schema.rb app/models/deck.rb test/fixtures/decks.yml test/models/deck_test.rb
 git add app/controllers app/services/allocations/physical_decks_by_card.rb app/views/components test/controllers
-git commit -m "Read a deck by its key, keeping every ownership scope where it was
+git commit -m "Address a deck by an unguessable key rather than by its id
 
-The key replaces the id *inside* the existing scope: no lookup becomes
-unscoped in this commit. Two identifiers to_param cannot reach are edited
-by hand — the compare checkbox, and the over-allocation report's
-deck_path(d[:id]), which was handed a bare integer and would have 404'd
-every deck link in the report with nothing to notice."
+to_param returns the key, so all 35 path helpers change what they emit
+without being edited. The 13 lookups follow in the same commit: the key
+replaces the id *inside* each existing ownership scope, and no lookup
+becomes unscoped here.
+
+before_validation rather than before_create so the callback and the
+presence validation agree; the UNIQUE index, not a validation, is what
+guarantees uniqueness.
+
+Two identifiers to_param cannot reach are edited by hand — the compare
+checkbox, and the over-allocation report's deck_path(d[:id]), which was
+handed a bare integer and would have 404'd every deck link in the report
+with nothing to notice."
 ```
 
 ---
@@ -429,7 +432,7 @@ Seven Stimulus controllers build API URLs from a value the server renders. Six d
 - Consumes: `Deck#key` (Task 1), the key-reading API lookups (Task 2).
 - Produces: `deck_json` returns `key:` and no `id:`. Every Stimulus value that identified a deck is `deckKey: String`, rendered as `data-<controller>-deck-key-value`.
 
-**Context you need:** which view renders which value — `grep -rn "deck_id_value" app/views/components/` finds all of them. `archetype_picker_controller.js:59` guards with `if (!this.deckIdValue) return`; a `String` value defaults to `""`, which is falsy, so the guard survives the type change unchanged.
+**Context you need:** which view renders which value — `grep -rn "deck_id" app/views/components/decks/` finds all of them, and the grep has to be that wide: `Decks::DeckCardItem` does not read `@deck` at all. It takes a `deck_id:` keyword (`deck_card_item.rb:3`), which `show_view.rb:166` fills with `@deck.id`, and renders it three times as `@deck_id`. Renaming only the `*_deck_id_value` attributes would leave `deck_card_quantity_deck_key_value: @deck_id` — an attribute with the right name and an id in it, which a grep on `deck_id_value` would call done. `archetype_picker_controller.js:59` guards with `if (!this.deckIdValue) return`; a `String` value defaults to `""`, which is falsy, so the guard survives the type change unchanged.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -506,7 +509,19 @@ and `tournament_pdf_controller.js`, which reads a dataset attribute rather than 
 
 - [ ] **Step 5: Render the new attribute names**
 
-Every `*_deck_id_value: @deck.id` in `app/views/components/decks/` becomes `*_deck_key_value: @deck.key`. `grep -rn "deck_id_value" app/views/components/` must come back empty when this step is done.
+Every `*_deck_id_value: @deck.id` in `app/views/components/decks/` becomes `*_deck_key_value: @deck.key` — `show_view.rb` (lines 18 and 113), `tournament_pdf_modal.rb:44`, `archetype_field.rb:15`.
+
+`Decks::DeckCardItem` is the exception that needs two edits, not one. Its keyword changes:
+
+```ruby
+    def initialize(deck_card:, deck_key:, physical: false, max_owned: 0, over_allocated: false, swappable: false)
+      @deck_card = deck_card
+      @deck_key = deck_key
+```
+
+its three renders become `deck_card_quantity_deck_key_value: @deck_key`, `printing_picker_deck_key_value: @deck_key` and `deck_card_owned_copies_deck_key_value: @deck_key`, and the call site in `show_view.rb:166` passes `deck_key: @deck.key`.
+
+`grep -rn "deck_id" app/views/components/decks/` must come back empty when this step is done — not just `deck_id_value`.
 
 - [ ] **Step 6: Run the tests, then sabotage-verify**
 
@@ -555,10 +570,13 @@ In `test/mcp/read_tools_test.rb`:
 
 ```ruby
   test "list_decks identifies each deck by its key" do
+    # This file's setup defines @user only; the deck is fetched here.
+    deck = decks(:one)
+
     result = ListDecksTool.call(server_context: { user: @user })
 
     decks = JSON.parse(result.content.first[:text])
-    assert_equal [ @deck.key ], decks.map { |d| d["key"] }
+    assert_equal [ deck.key ], decks.map { |d| d["key"] }
     assert_nil decks.first["id"]
   end
 
@@ -693,7 +711,7 @@ asserting the field is present."
 ## Definition of done for Stage 1
 
 - `grep -rn "\.find(params\[:id\])\|\.find(params\[:deck_id\])" app/controllers/` returns nothing for decks.
-- `grep -rn "deck_id_value" app/views/components/` returns nothing.
+- `grep -rn "deck_id" app/views/components/decks/` returns nothing — the wide form, because `DeckCardItem` carries a `deck_id:` keyword and not only `*_deck_id_value` attributes.
 - `grep -rn "deck.id\|deck_id" app/mcp/` returns nothing.
 - `bin/rails test`, `bin/rubocop`, `bin/brakeman --no-pager`, `bin/importmap audit` all pass.
 - `bin/rails test:system` and `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system` both pass.

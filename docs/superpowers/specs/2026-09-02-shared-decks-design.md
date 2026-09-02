@@ -80,6 +80,14 @@ And after a second review pass:
 - **`public/robots.txt` exists and is the Rails default** — a comment and nothing else.
 - **`yield(:head)` is available in the layout** (`application_layout.rb:15`) and Phlex writes `content_for` (`styleguide/page_view.rb:37`), so a per-page meta has an insertion point — though decision 12 makes it app-wide instead.
 
+And after the review of the two implementation plans, each of which had reused an existing component without reading all of it:
+
+- **`Decks::DeckCard` prints the win rate.** Lines 10–17 render a foil sheen and a `★ 63%` flag when `Deck#hot?` is true — five decided results at 60% or better — which is the record decision 3 keeps private, read from `deck_results` on every row. Lines 19–25 render the compare checkbox whatever the page. Reusing the row on `/decks/shared` therefore needs one switch that turns off the owner's badges, the foil flag *and* the checkbox together; `with_actions: false` hides the dropdown and nothing else.
+- **`check_box_tag` posts nothing when unchecked**, unlike the form builder's `check_box`, which emits a hidden `"0"` first. `ActiveModel::Type::Boolean.new.cast(nil)` is `nil`, and `shared` is `NOT NULL`. The Share form needs the hidden field, and the action a `|| false` behind it.
+- **A Turbo Stream `replace` on a `<turbo-frame>` inside an open `<dialog>` must render the frame, not the dialog** — a `<dialog>` rendered inside another is closed, and the open one goes blank. The Share control is therefore two components, the dialog and the frame it contains.
+- **No system test builds a full URL** and nothing sets `default_url_options` for them, so `deck_url(deck)` in `test/system/` either raises or names a host that is not Capybara's. Assert on a path suffix.
+- **`test/fixtures/archetypes.yml` has no `:one`.** Its rows are `ogerpon` and `budew_ogerpon`.
+
 ## Data model
 
 ### `decks.key`
@@ -344,7 +352,8 @@ With those two done, the action gets a limiter as well: the limiter bounds how o
 | `Decks::PublicShowView` | new: header, card-count stat, grouped card list, preview pane, export dropdown minus the tournament PDF |
 | `Decks::PublicDeckCardItem` | new, ~25 lines: quantity as text, name, `SET NUMBER` as plain text, preview hooks |
 | `Decks::SharedIndexView` | new: the shared index, deck cards with `Decks::PublicBadges` and no actions dropdown |
-| `Decks::ShareModal` | new: the toggle, and when shared `deck_url(@deck)` in a readonly field with a `clipboard`-controller copy button — plus the sentence below |
+| `Decks::ShareModal` | new: the `<dialog>`, following `Decks::ResultModal`'s pattern; renders `Decks::ShareFrame` |
+| `Decks::ShareFrame` | new: the `<turbo-frame>` the PATCH re-renders — the toggle (with the hidden `"0"` field), the sentence below, and when shared `deck_url(@deck)` in a readonly field with a `clipboard`-controller copy button. Separate from the dialog because a stream that re-rendered the dialog would nest a closed one inside the open one |
 | `Decks::ActionsDropdown` | gains "Share…" |
 | `Cards::ShowView` | `signed_in:` gates `collection_control` |
 | `Search::ResultsList` | gains the "Shared decks" group |
