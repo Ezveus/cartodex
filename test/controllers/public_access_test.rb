@@ -91,7 +91,8 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "search" => search_path(q: "ab"),
       "cards index" => cards_path,
       "card show" => card_path(@card),
-      "deck show (shared)" => deck_path(@deck)
+      "deck show (shared)" => deck_path(@deck),
+      "shared decks index" => shared_decks_path
     }
   end
 

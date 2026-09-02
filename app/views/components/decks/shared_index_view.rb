@@ -34,7 +34,8 @@ module Decks
       form(action: shared_decks_path, method: "get", class: "deck-filters", data: { controller: "card-filter" }) do
         input(
           type: "search", name: "q", value: @filters[:q], placeholder: "Search shared decks…",
-          class: "form-input", autocomplete: "off"
+          class: "form-input deck-filter-search", autocomplete: "off", aria_label: "Search shared decks",
+          data: { action: "input->card-filter#debounce" }
         )
         filter_select(:format, FORMAT_OPTIONS + Deck::FORMAT_LABELS.map { |value, label| [ label, value ] })
         filter_select(:primary, [ [ "Any archetype card", "" ] ] + @archetype_options) if @archetype_options.any?

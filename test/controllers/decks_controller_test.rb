@@ -658,6 +658,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".deck-item-link h2", text: "Theirs"
     assert_select "a[href=?]", deck_path(@deck), count: 0
+    # Same live-filter wiring as Decks::IndexView#search_input: without the debounce action,
+    # typing here does nothing until Enter, unlike the sibling page this one is meant to match.
+    assert_select "input[name=q][data-action=?]", "input->card-filter#debounce"
   end
 
   test "the shared index shows no collection-derived filter and nothing owner-only on a row" do
