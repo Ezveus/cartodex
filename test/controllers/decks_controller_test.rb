@@ -697,6 +697,38 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name=primary] option[value=?]", archetypes(:ogerpon).primary_card_id.to_s
   end
 
+  test "a filter keystroke on the shared index asks for the grid alone" do
+    sign_out @user
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon), name: "Theirs")
+
+    sql = capture_queries do
+      get shared_decks_path, headers: { "Turbo-Frame" => Decks::SharedIndexView::FRAME_ID }
+    end
+
+    assert_response :success
+    assert_select "turbo-frame[id=?] .decks-grid .deck-item", Decks::SharedIndexView::FRAME_ID
+    # The filter bar sits outside the frame, so Turbo throws it away — which means the query
+    # that fills its archetype select should not have run. Same short-circuit as
+    # DecksController#index, on the endpoint a debounced field fires per keystroke.
+    assert_select "select[name=primary]", count: 0
+    assert_empty sql.grep(/"archetypes"\."primary_card_id" FROM "archetypes"/),
+      "expected the archetype filter options not to be built for a frame request"
+  end
+
+  test "the shared index loads its page of decks once" do
+    sign_out @user
+    decks(:two).update!(user: users(:two), shared: true)
+
+    sql = capture_queries { get shared_decks_path }
+
+    assert_response :success
+    # `any?` on an unloaded relation is a SELECT 1 … LIMIT 1 beside the page query that
+    # immediately follows it.
+    assert_empty sql.grep(/SELECT 1 AS one/),
+      "expected no existence probe beside the page query"
+  end
+
   test "sharing a deck flips the flag and re-renders the modal with the link" do
     patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
 
@@ -762,102 +794,110 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-badges .badge", text: "Shared", count: 0
   end
 
-test "the shared index lays out its rows and pager with classes the stylesheet defines" do
-  sign_out @user
-  # One more than SHARED_PER_PAGE, so the pager renders at all.
-  (DecksController::SHARED_PER_PAGE + 1).times do |i|
-    Deck.create!(user: users(:two), name: "Shared #{i}", shared: true, standard_pool: standard_pools(:twm_por))
+  test "the shared index lays out its rows and pager with classes the stylesheet defines" do
+    sign_out @user
+    # One more than SHARED_PER_PAGE, so the pager renders at all.
+    (DecksController::SHARED_PER_PAGE + 1).times do |i|
+      Deck.create!(user: users(:two), name: "Shared #{i}", shared: true, standard_pool: standard_pools(:twm_por))
+    end
+
+    get shared_decks_path
+
+    assert_response :success
+    # application.css is the app's only stylesheet, and it has no rule for `.deck-list`,
+    # `.pagination` or `.pagination-position`. A class it does not define is a page with no
+    # layout, which no assertion about content can see.
+    assert_select "div.decks-grid .deck-item"
+    assert_select "div.deck-list", count: 0
+    assert_select ".cards-pagination .cards-pagination-info"
+    assert_select "nav.pagination", count: 0
+    # Rows, pager and empty state inside the frame; the filter bar outside it.
+    assert_select "turbo-frame[id=?] .decks-grid", Decks::SharedIndexView::FRAME_ID
+    assert_select "turbo-frame[id=?] .cards-pagination", Decks::SharedIndexView::FRAME_ID
+    assert_select "turbo-frame[id=?] form.deck-filters", Decks::SharedIndexView::FRAME_ID, count: 0
+    # A pager link inside a frame navigates the frame and leaves the address bar behind
+    # without this; a deck row escapes the frame through DeckCard's own _top.
+    assert_select ".cards-pagination-link[data-turbo-action=?]", "replace"
+    assert_select ".deck-item-link[data-turbo-frame=?]", "_top"
   end
 
-  get shared_decks_path
+  test "the shared index's empty state uses a class the stylesheet defines" do
+    sign_out @user
+    Deck.update_all(shared: false)
 
-  assert_response :success
-  # application.css is the app's only stylesheet, and it has no rule for `.deck-list`,
-  # `.pagination` or `.pagination-position`. A class it does not define is a page with no
-  # layout, which no assertion about content can see.
-  assert_select "div.decks-grid .deck-item"
-  assert_select "div.deck-list", count: 0
-  assert_select ".cards-pagination .cards-pagination-info"
-  assert_select "nav.pagination", count: 0
-end
+    get shared_decks_path
 
-test "the shared index's empty state uses a class the stylesheet defines" do
-  sign_out @user
-  Deck.update_all(shared: false)
+    assert_response :success
+    assert_select "p.empty-state", text: "No shared decks yet."
+    assert_includes File.read(Rails.root.join("app/assets/stylesheets/application.css")), ".empty-state"
+  end
 
-  get shared_decks_path
+  test "the shared index survives a page parameter that is not a number" do
+    sign_out @user
 
-  assert_response :success
-  assert_select "p.empty-state", text: "No shared decks yet."
-  assert_includes File.read(Rails.root.join("app/assets/stylesheets/application.css")), ".empty-state"
-end
+    # PubliclyReachable rescues RecordNotFound and NotAuthorizedError, nothing else, so a
+    # NoMethodError here is an unhandled 500 on an endpoint any crawler can reach.
+    get shared_decks_path(page: { a: "b" })
+    assert_response :success
 
-test "the shared index survives a page parameter that is not a number" do
-  sign_out @user
+    get shared_decks_path, params: { page: [ "1" ] }
+    assert_response :success
+  end
 
-  # PubliclyReachable rescues RecordNotFound and NotAuthorizedError, nothing else, so a
-  # NoMethodError here is an unhandled 500 on an endpoint any crawler can reach.
-  get shared_decks_path(page: { a: "b" })
-  assert_response :success
+  test "sharing works on a Standard deck that predates the pool anchor" do
+    # A pre-backfill row, or any environment that skipped standard_pools:backfill_anchors:
+    # the column is there, `validates :standard_pool, presence:, if: :standard?` is there,
+    # and nothing has filled it in. An `update!` would rejoin that validation and leave the
+    # deck neither shareable nor unshareable.
+    @deck.update_column(:standard_pool_id, nil)
 
-  get shared_decks_path, params: { page: [ "1" ] }
-  assert_response :success
-end
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
 
-test "sharing works on a Standard deck that predates the pool anchor" do
-  # A pre-backfill row, or any environment that skipped standard_pools:backfill_anchors:
-  # the column is there, `validates :standard_pool, presence:, if: :standard?` is there,
-  # and nothing has filled it in. An `update!` would rejoin that validation and leave the
-  # deck neither shareable nor unshareable.
-  @deck.update_column(:standard_pool_id, nil)
+    assert_response :success
+    assert_predicate @deck.reload, :shared?
+  end
 
-  patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+  test "a client that does not speak turbo_stream is sent to the deck, not to a missing template" do
+    # share has only a .turbo_stream.erb behind it. Without a format branch an
+    # `Accept: text/html` request raises MissingTemplate *after* the flag has committed:
+    # the write lands and the response is a 500.
+    patch share_deck_path(@deck), params: { shared: "1" }
 
-  assert_response :success
-  assert_predicate @deck.reload, :shared?
-end
+    assert_redirected_to deck_path(@deck)
+    assert_predicate @deck.reload, :shared?
+  end
 
-test "a client that does not speak turbo_stream is sent to the deck, not to a missing template" do
-  # share has only a .turbo_stream.erb behind it. Without a format branch an
-  # `Accept: text/html` request raises MissingTemplate *after* the flag has committed:
-  # the write lands and the response is a 500.
-  patch share_deck_path(@deck), params: { shared: "1" }
+  test "a visitor who opens a shared deck is returned to it after signing in" do
+    sign_out @user
+    @deck.update!(shared: true)
 
-  assert_redirected_to deck_path(@deck)
-  assert_predicate @deck.reload, :shared?
-end
+    get deck_path(@deck)
 
-test "a visitor who opens a shared deck is returned to it after signing in" do
-  sign_out @user
-  @deck.update!(shared: true)
+    assert_response :success
+    assert_equal deck_path(@deck), session["user_return_to"]
+  end
 
-  get deck_path(@deck)
+  test "a prefetch of a shared deck does not hijack where sign-in returns to" do
+    sign_out @user
+    @deck.update!(shared: true)
 
-  assert_response :success
-  assert_equal deck_path(@deck), session["user_return_to"]
-end
+    # Turbo 8 prefetches on hover by default and marks the request with this header. Without
+    # the guard, hovering a link rewrites user_return_to for a page nobody opened.
+    get deck_path(@deck), headers: { "X-Sec-Purpose" => "prefetch" }
 
-test "a prefetch of a shared deck does not hijack where sign-in returns to" do
-  sign_out @user
-  @deck.update!(shared: true)
+    assert_response :success
+    assert_nil session["user_return_to"]
+  end
 
-  # Turbo 8 prefetches on hover by default and marks the request with this header. Without
-  # the guard, hovering a link rewrites user_return_to for a page nobody opened.
-  get deck_path(@deck), headers: { "X-Sec-Purpose" => "prefetch" }
+  test "a member reading someone else's shared deck keeps their own return-to" do
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true)
 
-  assert_response :success
-  assert_nil session["user_return_to"]
-end
+    get deck_path(theirs)
 
-test "a member reading someone else's shared deck keeps their own return-to" do
-  theirs = decks(:two)
-  theirs.update!(user: users(:two), shared: true)
-
-  get deck_path(theirs)
-
-  assert_response :success
-  assert_nil session["user_return_to"]
-end
+    assert_response :success
+    assert_nil session["user_return_to"]
+  end
 
   private
 

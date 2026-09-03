@@ -32,6 +32,15 @@ module ActiveSupport
       counter.log.size
     end
 
+    # The same measurement, handing back the statements rather than their number: for a test
+    # that cares *which* query ran, not how many did.
+    def capture_queries(&block)
+      ActiveRecord::Base.connection.clear_query_cache
+      counter = ActiveRecord::Assertions::QueryAssertions::SQLCounter.new
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      counter.log
+    end
+
     # Grows the user's collection by FLAT_COST_EXTRA_CARDS: the "large" input of a
     # flat-cost test. Returns the cards added, so a caller can put them in a deck
     # too.

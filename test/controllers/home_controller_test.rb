@@ -68,6 +68,19 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
     assert_select ".dashboard-showcase-deck-name", text: "Private", count: 0
   end
 
+  test "the showcase is loaded once, not asked about and then loaded" do
+    sign_out @user
+    decks(:two).update!(user: users(:two), shared: true)
+
+    sql = capture_queries { get dashboard_path }
+
+    assert_response :success
+    # The view asks `any?` before iterating; on an unloaded relation that is a
+    # SELECT 1 … LIMIT 1 beside the query that follows it, on the app's landing page.
+    assert_empty sql.grep(/SELECT 1 AS one/),
+      "expected no existence probe beside the showcase query"
+  end
+
   test "root is the dashboard for everyone" do
     sign_out @user
     get root_path

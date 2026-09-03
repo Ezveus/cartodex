@@ -6,6 +6,33 @@ class DecksController < ApplicationController
 
   SHARED_PER_PAGE = 24
 
+  # Both numbers are derived, and both are for the two actions that lost the session gate.
+  # #show is not among them: it is one page load per click, with no live control behind it.
+  #
+  # 60/min for the index because it is the same shape as CardsController#index — a field
+  # debounced at 300ms driving a paginated listing — and now the same cost, too: the filter
+  # form targets a Turbo Frame, so a keystroke pays the COUNT the pager needs and the page of
+  # rows, not the archetype options query or the surrounding page. One request a second
+  # sustained is well past what a debounced field emits; the amplifier was removed before the
+  # rationing, as it was for /cards.
+  #
+  # 30/min for the export because nothing fires it automatically: it is a click on a dropdown
+  # item, and the image export goes to the card proxy rather than here. Each request does
+  # preload deck_cards → card → attacks/abilities for a whole deck, which is what makes 30
+  # the right order of magnitude rather than 300 — and only an anonymous reader of a shared
+  # deck spends it, since the owner is signed in and exempt.
+  SHARED_RATE_LIMIT_TO = 60
+  EXPORT_RATE_LIMIT_TO = 30
+  RATE_LIMIT_WITHIN = 1.minute
+
+  rate_limit to: SHARED_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-shared", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :shared
+
+  rate_limit to: EXPORT_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-export", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :export
+
   def index
     authorize Deck, :index?
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
@@ -52,13 +79,21 @@ class DecksController < ApplicationController
     # Same preloads as the dashboard showcase: each row renders the format badge, which names
     # the Standard pool from both of its bounds — three extra queries per Standard deck, times
     # 24 rows, without this.
+    # to_a, not the relation: the view asks `any?` before iterating, and on an unloaded
+    # relation that is a SELECT 1 … LIMIT 1 beside the page query it is about to run anyway.
     @decks = scope.offset((@page - 1) * SHARED_PER_PAGE).limit(SHARED_PER_PAGE)
                   .includes(:deck_cards,
                             archetype: [ :primary_card, :secondary_card ],
-                            standard_pool: [ :first_card_set, :last_card_set ])
+                            standard_pool: [ :first_card_set, :last_card_set ]).to_a
+
+    @filters = { q: search_query.presence, format: params[:format].presence, primary: params[:primary].presence }
+
+    # A live-filter keystroke asks for the results frame alone; the filter bar lives outside
+    # it and Turbo throws the rest of the response away. Same short-circuit as #index, and the
+    # reason this endpoint could be rationed without rationing an amplifier.
+    return if results_frame_request?(Decks::SharedIndexView::FRAME_ID)
 
     @archetype_options = shared_archetype_options
-    @filters = { q: search_query.presence, format: params[:format].presence, primary: params[:primary].presence }
   end
 
   def show
@@ -282,9 +317,9 @@ class DecksController < ApplicationController
   end
 
   # True when Turbo is refreshing just the deck grid (the filter form targets it) rather than
-  # loading the whole page.
-  def results_frame_request?
-    request.headers["Turbo-Frame"] == Decks::IndexView::FRAME_ID
+  # loading the whole page. The owner's index and the shared one have a frame each.
+  def results_frame_request?(frame_id = Decks::IndexView::FRAME_ID)
+    request.headers["Turbo-Frame"] == frame_id
   end
 
   def filter_params
