@@ -1,8 +1,14 @@
 module Search
-  # The dashboard's search field: a combobox whose results land in a floating panel below it.
+  # The search field: a combobox whose results land in a floating panel below it. Rendered inline
+  # by the dashboard and by the styleguide, and inside Search::Overlay everywhere else — one per
+  # page, never two, because the panel's frame is addressed by id.
   #
   # The panel is a sibling of the form rather than a child, so the frame Turbo replaces on every
   # keystroke never contains the input the user is typing in.
+  #
+  # It does not own ⌘K: the trigger that opens it may have to unfold a dialog first, so the
+  # shortcut belongs to the search-overlay controller on <body>, which reaches this input through
+  # its `field` target.
   class Spotlight < ApplicationComponent
     include Phlex::Rails::Helpers::TurboFrameTag
 
@@ -21,8 +27,7 @@ module Search
       {
         controller: "dashboard-search",
         dashboard_search_min_length_value: Global::MIN_QUERY_LENGTH,
-        action: "click@document->dashboard-search#clickOutside " \
-                "keydown@document->dashboard-search#shortcut"
+        action: "click@document->dashboard-search#clickOutside"
       }
     end
 
@@ -49,6 +54,7 @@ module Search
           aria_label: "Search decks, cards and tournaments",
           data: {
             dashboard_search_target: "input",
+            search_overlay_target: "field",
             action: "input->dashboard-search#search " \
                     "focus->dashboard-search#resume " \
                     "keydown.down->dashboard-search#next " \

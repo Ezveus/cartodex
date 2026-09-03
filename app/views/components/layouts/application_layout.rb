@@ -20,13 +20,25 @@ module Layouts
           stylesheet_link_tag :app, data_turbo_track: "reload"
           javascript_importmap_tags
         end
-        body do
+        # The search-overlay controller sits on <body> rather than on a wrapper of its own: its
+        # trigger is in the navbar and its field is either in the dialog below or somewhere in the
+        # page, and a Stimulus action only resolves to a controller on an ancestor.
+        # turbo:before-cache closes the dialog before the snapshot is taken. The overlay's usual
+        # exit is a result that navigates away, so the page left behind would otherwise be cached
+        # with the dialog open — and restored, an open <dialog> is no longer modal: no backdrop to
+        # click, and open() sees it as already open, so nothing can dismiss it.
+        body(data: {
+          controller: "search-overlay",
+          action: "keydown@document->search-overlay#shortcut " \
+                  "turbo:before-cache@document->search-overlay#close"
+        }) do
           if user_signed_in?
             turbo_stream_from(current_user, :notifications)
             render Ui::AppNavbar.new(current_user: current_user, active_controller: controller_name)
           else
             render Ui::PublicNavbar.new(active_controller: controller_name)
           end
+          render Search::Overlay.new if search_overlay?
           render Ui::FlashMessages.new
           yield
         end

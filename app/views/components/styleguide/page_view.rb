@@ -200,13 +200,24 @@ module Styleguide
     # is the exact bug StyleguideControllerTest guards against for the MCP panels.
     def spotlight_section
       sg_section("Composants", "Recherche spotlight",
-              "Champ de recherche du dashboard : panneau flottant, résultats groupés par type.") do
+              "Champ de recherche global : panneau flottant, résultats groupés par type. " \
+              "Inline sur le dashboard et ici, dans un <dialog> ailleurs — jamais les deux sur " \
+              "une même page, le panneau étant une frame Turbo adressée par id.") do
         div(class: "sg-spotlight-demo") do
           render Search::Spotlight.new
           div(class: "spotlight-panel spotlight-panel-open") do
             render Search::ResultsList.new(results: sg_spotlight_results)
           end
         end
+
+        # The shipped button, not a copy of its markup — same rule as the spotlight above. It is
+        # live: this page has an inline field, so clicking it focuses that field rather than
+        # opening a dialog, which is exactly the behaviour being documented.
+        p do
+          plain "Le déclencheur de la navbar (⌘K / « / »). Sans overlay sur la page, il donne le "
+          plain "focus au champ déjà affiché."
+        end
+        div(class: "sg-row sg-search-trigger-demo") { render Ui::SearchTrigger.new }
       end
     end
 

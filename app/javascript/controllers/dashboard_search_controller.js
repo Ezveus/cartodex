@@ -1,8 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Dashboard spotlight search: debounces the query into a Turbo Frame and makes the resulting
-// options keyboard-navigable. The options live inside the frame, so they are re-collected on
-// every frame load rather than cached at connect.
+// Spotlight search: debounces the query into a Turbo Frame and makes the resulting options
+// keyboard-navigable. The options live inside the frame, so they are re-collected on every frame
+// load rather than cached at connect.
+//
+// Opening the field is not its job — ⌘K may have a dialog to unfold first, so the search-overlay
+// controller on <body> owns the shortcut and the navbar trigger.
 export default class extends Controller {
   static targets = ["input", "form", "panel"]
   static values = { delay: { type: Number, default: 300 }, minLength: { type: Number, default: 2 } }
@@ -69,6 +72,13 @@ export default class extends Controller {
   clickOutside(event) {
     if (this.element.contains(event.target)) return
 
+    // The control that opens the search is part of the search, wherever it sits in the page: its
+    // click reaches this document-level watcher *after* search-overlay#open ran, so collapsing
+    // here would dismiss the panel that same click had just restored — and #dismissed would then
+    // keep the arrows and Enter dead until the query text changed. Marked with a data attribute
+    // rather than by class name because the navbar is not this controller's business.
+    if (event.target.closest("[data-search-surface]")) return
+
     this.#collapse()
   }
 
@@ -82,19 +92,6 @@ export default class extends Controller {
     this.dismissed = false
     this.#collectOptions()
     this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
-  }
-
-  // ⌘K / Ctrl+K / "/" focus the field. Stimulus key filters can't express modifiers, so both
-  // shortcuts share one handler.
-  shortcut(event) {
-    const isSlash = event.key === "/"
-    const isCommandK = event.key === "k" && (event.metaKey || event.ctrlKey)
-    if (!isSlash && !isCommandK) return
-    if (isSlash && this.#isTyping(event.target)) return
-
-    event.preventDefault()
-    this.inputTarget.focus()
-    this.inputTarget.select()
   }
 
   #frameLoaded = () => {
@@ -162,9 +159,5 @@ export default class extends Controller {
     this.panelTarget.classList.toggle("spotlight-panel-open", expanded)
     this.inputTarget.setAttribute("aria-expanded", expanded ? "true" : "false")
     if (!expanded) this.inputTarget.removeAttribute("aria-activedescendant")
-  }
-
-  #isTyping(target) {
-    return target.matches("input, textarea, select, [contenteditable=true]")
   }
 }
