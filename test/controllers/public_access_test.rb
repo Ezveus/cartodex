@@ -75,6 +75,38 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal 2, Deck.count
   end
 
+  test "a visitor is sent to sign in for a private deck and an unknown key alike" do
+    get deck_path(@deck)
+    assert_redirected_to new_user_session_path
+    private_location = response.location
+
+    get "/decks/thiskeydoesnotexist22"
+    assert_redirected_to new_user_session_path
+    # Still no oracle: the two are one answer, exactly as they were when both were the static
+    # 404. What changes is only that the answer is not a dead end.
+    assert_equal private_location, response.location
+
+    get export_deck_path(@deck)
+    assert_redirected_to new_user_session_path
+  end
+
+  test "the owner whose session expired is returned to the deck they asked for" do
+    # The regression this replaces: the static 404 carries no navbar, no sign-in link and no
+    # return-to, so an owner following their own bookmark had nowhere to go from it.
+    get deck_path(@deck)
+
+    assert_equal deck_path(@deck), session["user_return_to"]
+  end
+
+  test "an unknown card still answers 404 to a visitor" do
+    # CardsController includes the same concern and must NOT do the same thing: nothing in the
+    # catalog is private, so "not found" means not found, and sign-in would answer a question
+    # nobody asked.
+    get "/cards/999999"
+
+    assert_response :not_found
+  end
+
   test "an unknown key, a private deck and a stranger are indistinguishable" do
     sign_in users(:two)
     private_deck = @deck

@@ -214,6 +214,25 @@ class DecksController < ApplicationController
 
   private
 
+  # PubliclyReachable's renderer, with the one branch the other three including controllers do
+  # not need. A deck can be private, so "unknown key" and "not yours" have to stay one answer
+  # — and for a request carrying no session, the answer that satisfies that *and* leads
+  # somewhere is sign-in. Both outcomes redirect identically, so an anonymous scan of random
+  # keys learns exactly what it learned from two identical 404s: nothing. What it buys is the
+  # owner whose session expired, following their own bookmark, no longer landing on a static
+  # page with no navbar, no sign-in link and no return-to.
+  #
+  # A signed-in request keeps the 404. Sign-in has nothing to offer someone already signed in,
+  # and the two outcomes stay indistinguishable there too.
+  #
+  # CardsController deliberately does not do this: nothing in the catalog is private, so a
+  # missing card is a missing card.
+  def not_found
+    return authenticate_user! unless user_signed_in?
+
+    super
+  end
+
   # Each branch reloads with the preloads it needs. `includes` chains onto `find_by!` perfectly
   # well — that is not the reason for the second query. The reason is that authorize runs first
   # and only then does the request know which set of preloads it wants: loading the owner's up
