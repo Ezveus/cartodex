@@ -200,7 +200,7 @@ Expected: succeeds, and `git diff db/schema.rb` shows the new `tournaments` tabl
 Roll back, plant a collision in the development database, and confirm the migration refuses:
 
 ```bash
-bin/rails db:rollback
+bin/rails db:rollback:primary
 bin/rails runner 'Tournament.insert_all([
   { user_id: User.first.id, deck_id: Deck.first.id, name: "Collide Cup", name_normalized: "collide cup",
     date: "2026-04-01", tier: "league_cup", format: "expanded", created_at: Time.current, updated_at: Time.current },
@@ -223,7 +223,7 @@ Expected: succeeds. One event named "Collide Cup" exists; keep or delete it, it 
 
 - [ ] **Step 5: Prove `down` is not a lie**
 
-Run: `bin/rails db:rollback && bin/rails db:migrate`
+Run: `bin/rails db:rollback:primary && bin/rails db:migrate`
 Expected: both succeed, and `git diff db/schema.rb` after the second `db:migrate` is identical to what Step 2 produced. A rollback that leaves the schema different is a bug in `down`, not an acceptable outcome.
 
 - [ ] **Step 6: Prepare the test database**
@@ -2767,7 +2767,7 @@ bin/rails db:migrate                      # against the copy
 bin/rails runner 'puts [Tournament.count, TournamentEntry.count,
   Tournament.distinct.count("name_normalized || date"),
   DeckResult.where.not(tournament_entry_id: nil).where.missing(:tournament_entry).count].inspect'
-bin/rails db:rollback && bin/rails db:migrate
+bin/rails db:rollback:primary && bin/rails db:migrate
 ```
 
 Expected: `TournamentEntry.count` equals the row count of the pre-migration `tournaments` table; `Tournament.count` equals the number of distinct `(name_normalized, date)` pairs in it; the orphan count is `0`. Record the four numbers in the pull request.
