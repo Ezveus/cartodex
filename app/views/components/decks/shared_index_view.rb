@@ -18,7 +18,10 @@ module Decks
         h1 { "Shared decks" }
         filter_bar
         if @decks.any?
-          div(class: "deck-list") do
+          # decks-grid, not a name of this page's own: application.css is the app's only
+          # stylesheet and every class here has to exist in it. The owner's index lays its
+          # rows out with this one.
+          div(class: "decks-grid") do
             @decks.each { |deck| render Decks::DeckCard.new(deck: deck, with_actions: false, public_listing: true) }
           end
           pagination if @pages > 1
@@ -55,11 +58,13 @@ module Decks
       end
     end
 
+    # Borrows the card index's pager classes rather than inventing decks-only ones: they are
+    # the app's only styled pager, and this page has no reason to look different from it.
     def pagination
-      nav(class: "pagination") do
-        link_to "Previous", shared_decks_path(**@filters.compact, page: @page - 1), class: "btn btn-secondary btn-sm" if @page > 1
-        span(class: "pagination-position") { "Page #{@page} of #{@pages}" }
-        link_to "Next", shared_decks_path(**@filters.compact, page: @page + 1), class: "btn btn-secondary btn-sm" if @page < @pages
+      nav(class: "cards-pagination") do
+        link_to "← Previous", shared_decks_path(**@filters.compact, page: @page - 1), class: "cards-pagination-link" if @page > 1
+        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
+        link_to "Next →", shared_decks_path(**@filters.compact, page: @page + 1), class: "cards-pagination-link" if @page < @pages
       end
     end
   end

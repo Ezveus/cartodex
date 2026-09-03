@@ -43,7 +43,11 @@ class DecksController < ApplicationController
     scope = scope.where(format: params[:format]) if Deck.formats.key?(params[:format])
     scope = scope.joins(:archetype).where(archetypes: { primary_card_id: params[:primary] }) if params[:primary].present?
 
-    @page = [ params[:page].to_i, 1 ].max
+    # to_s first: `?page[a]=b` hands over ActionController::Parameters and `?page[]=1` an
+    # Array, neither of which answers to_i. PubliclyReachable rescues RecordNotFound and
+    # NotAuthorizedError and nothing else, so on this now-anonymous action that NoMethodError
+    # would be an unhandled 500 for any bot that tries the shape.
+    @page = [ params[:page].to_s.to_i, 1 ].max
     @pages = (scope.count / SHARED_PER_PAGE.to_f).ceil
     # Same preloads as the dashboard showcase: each row renders the format badge, which names
     # the Standard pool from both of its bounds — three extra queries per Standard deck, times
@@ -191,8 +195,21 @@ class DecksController < ApplicationController
 
     # An unchecked bare checkbox posts no `shared` param at all — nil against a NOT NULL
     # column raises. The form's hidden "0" field is the fix; `|| false` here is the belt.
-    @deck.update!(shared: ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
-    render :share, layout: false
+    #
+    # update_column, not update!: `validates :standard_pool, presence:, if: :standard?` would
+    # be rejoined here, so a Standard deck whose anchor is still NULL — a row from before that
+    # column, or any environment that skipped standard_pools:backfill_anchors — could be
+    # neither shared nor unshared. The toggle has no business asking whether the rest of the
+    # record is currently valid, and nothing caches on the deck's updated_at.
+    @deck.update_column(:shared, ActiveModel::Type::Boolean.new.cast(params[:shared]) || false)
+
+    # share has only a .turbo_stream.erb behind it. Unbranched, an `Accept: text/html`
+    # request raises MissingTemplate *after* the write has committed — the flag flips and the
+    # response is a 500. The deck page is where a non-Turbo client wanted to end up anyway.
+    respond_to do |format|
+      format.turbo_stream { render :share, layout: false }
+      format.html { redirect_to @deck }
+    end
   end
 
   private
@@ -227,8 +244,19 @@ class DecksController < ApplicationController
     # Devise only remembers a location when authenticate_user! bounces a request, so without
     # this a visitor who clicks Sign in here lands on the dashboard and has to find the deck
     # again.
-    store_location_for(:user, request.fullpath)
+    store_location_for(:user, request.fullpath) if remember_return_to?
     render :public_show
+  end
+
+  # Only for a visitor who actually asked for this page. A signed-in member reading somebody
+  # else's shared deck has a return-to of their own worth keeping, and Turbo 8 prefetches on
+  # hover by default — unguarded, merely passing the cursor over a link would set the place
+  # sign-in sends you to a deck you never opened (and a 404 if it is unshared by then).
+  def remember_return_to?
+    return false if user_signed_in?
+
+    request.headers["X-Sec-Purpose"] != "prefetch" &&
+      !request.headers["Sec-Purpose"].to_s.include?("prefetch")
   end
 
   # True when Turbo is refreshing just the deck grid (the filter form targets it) rather than

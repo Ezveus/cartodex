@@ -1662,7 +1662,9 @@ textarea.form-input {
   color: var(--ink-300);
 }
 
-.cards-empty {
+/* .empty-state is the generic name; .cards-empty predates it on the card index. */
+.cards-empty,
+.empty-state {
   color: var(--ink-500);
   font-size: 1.1rem;
 }

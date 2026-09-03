@@ -41,7 +41,9 @@ class CardsController < ApplicationController
     @energy = params[:energy].presence
     @rarity = params[:rarity].presence
     @mark   = params[:mark].presence
-    @page   = [ params[:page].to_i, 1 ].max
+    # to_s first: a Hash- or Array-shaped `page` param answers to neither to_i nor the
+    # concern's two rescued exceptions, and this action is reachable without a session.
+    @page   = [ params[:page].to_s.to_i, 1 ].max
 
     @searching = @query.length >= 2 || @type || @energy || @rarity || @mark
 

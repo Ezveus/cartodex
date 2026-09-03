@@ -762,6 +762,103 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-badges .badge", text: "Shared", count: 0
   end
 
+test "the shared index lays out its rows and pager with classes the stylesheet defines" do
+  sign_out @user
+  # One more than SHARED_PER_PAGE, so the pager renders at all.
+  (DecksController::SHARED_PER_PAGE + 1).times do |i|
+    Deck.create!(user: users(:two), name: "Shared #{i}", shared: true, standard_pool: standard_pools(:twm_por))
+  end
+
+  get shared_decks_path
+
+  assert_response :success
+  # application.css is the app's only stylesheet, and it has no rule for `.deck-list`,
+  # `.pagination` or `.pagination-position`. A class it does not define is a page with no
+  # layout, which no assertion about content can see.
+  assert_select "div.decks-grid .deck-item"
+  assert_select "div.deck-list", count: 0
+  assert_select ".cards-pagination .cards-pagination-info"
+  assert_select "nav.pagination", count: 0
+end
+
+test "the shared index's empty state uses a class the stylesheet defines" do
+  sign_out @user
+  Deck.update_all(shared: false)
+
+  get shared_decks_path
+
+  assert_response :success
+  assert_select "p.empty-state", text: "No shared decks yet."
+  assert_includes File.read(Rails.root.join("app/assets/stylesheets/application.css")), ".empty-state"
+end
+
+test "the shared index survives a page parameter that is not a number" do
+  sign_out @user
+
+  # PubliclyReachable rescues RecordNotFound and NotAuthorizedError, nothing else, so a
+  # NoMethodError here is an unhandled 500 on an endpoint any crawler can reach.
+  get shared_decks_path(page: { a: "b" })
+  assert_response :success
+
+  get shared_decks_path, params: { page: [ "1" ] }
+  assert_response :success
+end
+
+test "sharing works on a Standard deck that predates the pool anchor" do
+  # A pre-backfill row, or any environment that skipped standard_pools:backfill_anchors:
+  # the column is there, `validates :standard_pool, presence:, if: :standard?` is there,
+  # and nothing has filled it in. An `update!` would rejoin that validation and leave the
+  # deck neither shareable nor unshareable.
+  @deck.update_column(:standard_pool_id, nil)
+
+  patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+  assert_response :success
+  assert_predicate @deck.reload, :shared?
+end
+
+test "a client that does not speak turbo_stream is sent to the deck, not to a missing template" do
+  # share has only a .turbo_stream.erb behind it. Without a format branch an
+  # `Accept: text/html` request raises MissingTemplate *after* the flag has committed:
+  # the write lands and the response is a 500.
+  patch share_deck_path(@deck), params: { shared: "1" }
+
+  assert_redirected_to deck_path(@deck)
+  assert_predicate @deck.reload, :shared?
+end
+
+test "a visitor who opens a shared deck is returned to it after signing in" do
+  sign_out @user
+  @deck.update!(shared: true)
+
+  get deck_path(@deck)
+
+  assert_response :success
+  assert_equal deck_path(@deck), session["user_return_to"]
+end
+
+test "a prefetch of a shared deck does not hijack where sign-in returns to" do
+  sign_out @user
+  @deck.update!(shared: true)
+
+  # Turbo 8 prefetches on hover by default and marks the request with this header. Without
+  # the guard, hovering a link rewrites user_return_to for a page nobody opened.
+  get deck_path(@deck), headers: { "X-Sec-Purpose" => "prefetch" }
+
+  assert_response :success
+  assert_nil session["user_return_to"]
+end
+
+test "a member reading someone else's shared deck keeps their own return-to" do
+  theirs = decks(:two)
+  theirs.update!(user: users(:two), shared: true)
+
+  get deck_path(theirs)
+
+  assert_response :success
+  assert_nil session["user_return_to"]
+end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

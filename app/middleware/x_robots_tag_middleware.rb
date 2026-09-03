@@ -9,6 +9,14 @@
 # concern in, so default_headers silently leaves it uncovered. Inserted at position 0 in
 # config/application.rb, this wraps the entire stack — Warden::Manager included — so it runs
 # on every response's way out regardless of what built it.
+#
+# The key is lowercase because Rack 3's SPEC requires it, and because only some of what this
+# wraps would forgive getting it wrong. A controller answers with a case-insensitive
+# Rack::Headers, which quietly downcases on the way out; Rack::Files (/robots.txt, /404.html,
+# /assets/*), the routing 404 and HostAuthorization's 403 all answer with a plain Hash, which
+# keeps whatever case was written into it. On those, a differently spelled key would both ship
+# a non-conforming header and leave `||=` unable to see a directive another producer had
+# already set — adding a second, contradictory one beside it.
 class XRobotsTagMiddleware
   HEADER_VALUE = "noindex, nofollow".freeze
 
@@ -18,7 +26,7 @@ class XRobotsTagMiddleware
 
   def call(env)
     status, headers, body = @app.call(env)
-    headers["X-Robots-Tag"] ||= HEADER_VALUE
+    headers["x-robots-tag"] ||= HEADER_VALUE
     [ status, headers, body ]
   end
 end
