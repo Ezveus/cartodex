@@ -85,23 +85,36 @@ class SplitTournamentsIntoEventsAndEntries < ActiveRecord::Migration[8.1]
 
   private
 
+  # The one expression that decides which rows become one event. Shared with the pre-flight on
+  # purpose: when the guard grouped in SQL and the backfill coalesced in Ruby, a row whose
+  # name_normalized was NULL slipped past the guard and then collided on the unique index — as a
+  # raw constraint error instead of the crafted message.
+  def merge_key_name(normalized, name)
+    normalized.presence || name.to_s.downcase
+  end
+
   # Runs before anything is mutated, so the migration is replayable after a human has decided
-  # what the offending rows mean. Two rows that agree on (user, profile, normalized name, date)
+  # what the offending rows mean. Two rows that agree on (user, profile, merged name, date)
   # would merge into one event and then violate the entry uniqueness index — and this migration
-  # never deletes a row of its own accord. GROUP BY treats NULLs as equal, which is precisely
-  # the grouping the "profile IS NULL" index will enforce.
+  # never deletes a row of its own accord. Grouped in Ruby, on the same merge_key_name the
+  # backfill uses, rather than in SQL: SQLite's LOWER() folds ASCII A-Z only, so a SQL-side
+  # COALESCE(NULLIF(name_normalized, ''), LOWER(name)) would still disagree with Ruby's
+  # Unicode-aware downcase on an accented name — the whole reason name_normalized exists.
   def check_for_colliding_entries!
     rows = select_all(<<~SQL).to_a
-      SELECT user_id, tournament_profile_id, name_normalized, date, GROUP_CONCAT(id) AS ids
+      SELECT id, user_id, tournament_profile_id, name, name_normalized, date
       FROM tournaments
-      GROUP BY user_id, tournament_profile_id, name_normalized, date
-      HAVING COUNT(*) > 1
     SQL
-    return if rows.empty?
 
-    details = rows.map do |row|
-      "  ids #{row["ids"]} — user #{row["user_id"]}, profile #{row["tournament_profile_id"].inspect}, " \
-        "#{row["name_normalized"].inspect} on #{row["date"]}"
+    groups = rows.group_by do |row|
+      [ row["user_id"], row["tournament_profile_id"], merge_key_name(row["name_normalized"], row["name"]), row["date"] ]
+    end
+    colliding = groups.select { |_key, group_rows| group_rows.size > 1 }
+    return if colliding.empty?
+
+    details = colliding.map do |(user_id, profile_id, merged_name, date), group_rows|
+      ids = group_rows.map { |row| row["id"] }.join(",")
+      "  ids #{ids} — user #{user_id}, profile #{profile_id.inspect}, #{merged_name.inspect} on #{date}"
     end
 
     raise <<~MESSAGE
@@ -120,7 +133,7 @@ class SplitTournamentsIntoEventsAndEntries < ActiveRecord::Migration[8.1]
     # Ascending id, so the oldest participation is the one whose values the event keeps and
     # whose owner becomes its creator.
     MigrationEntry.order(:id).each do |entry|
-      normalized = entry.name_normalized.presence || entry.name.to_s.downcase
+      normalized = merge_key_name(entry.name_normalized, entry.name)
       event = MigrationTournament.find_or_create_by!(name_normalized: normalized, date: entry.date) do |t|
         t.name = entry.name
         t.tier = entry.tier
