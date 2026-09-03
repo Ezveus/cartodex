@@ -8,6 +8,7 @@ module Layouts
         head do
           title { content_for(:title) || "Cartodex" }
           meta(name: "viewport", content: "width=device-width,initial-scale=1")
+          meta(name: "robots", content: "noindex, nofollow")
           meta(name: "apple-mobile-web-app-capable", content: "yes")
           meta(name: "mobile-web-app-capable", content: "yes")
           csrf_meta_tags
@@ -22,10 +23,9 @@ module Layouts
         body do
           if user_signed_in?
             turbo_stream_from(current_user, :notifications)
-            render Ui::AppNavbar.new(
-              current_user: current_user,
-              active_controller: controller_name
-            )
+            render Ui::AppNavbar.new(current_user: current_user, active_controller: controller_name)
+          else
+            render Ui::PublicNavbar.new(active_controller: controller_name)
           end
           render Ui::FlashMessages.new
           yield

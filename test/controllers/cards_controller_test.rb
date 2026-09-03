@@ -85,4 +85,29 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".card-grid-name", { text: "Budew", count: 0 }, "% must not act as a wildcard"
   end
+
+  test "the cards index does not instantiate the catalog to count it" do
+    get cards_path # warm the session and the caches
+
+    assert_no_difference -> { Card.count } do
+      # The guard is on rows instantiated, not queries: the sidebar needs a count per set,
+      # and includes(:cards) built every Card object in the database to get it.
+      records = 0
+      subscriber = ActiveSupport::Notifications.subscribe("instantiation.active_record") do |*, payload|
+        records += payload[:record_count] if payload[:class_name] == "Card"
+      end
+      get cards_path
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      assert_equal 0, records, "the index instantiated #{records} Card objects without a search"
+    end
+    assert_response :success
+  end
+
+  test "the sidebar still shows a card count per set" do
+    get cards_path
+
+    assert_response :success
+    assert_select ".set-code", text: /\(\d+\)/
+  end
 end

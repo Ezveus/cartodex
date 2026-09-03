@@ -1,8 +1,8 @@
 module Decks
   class DeckCardItem < ApplicationComponent
-    def initialize(deck_card:, deck_id:, physical: false, max_owned: 0, over_allocated: false, swappable: false)
+    def initialize(deck_card:, deck_key:, physical: false, max_owned: 0, over_allocated: false, swappable: false)
       @deck_card = deck_card
-      @deck_id = deck_id
+      @deck_key = deck_key
       @physical = physical
       @max_owned = max_owned
       @over_allocated = over_allocated
@@ -17,7 +17,7 @@ module Decks
           card_preview_card_id: card.id,
           action: "mouseenter->card-preview#show click->card-preview#open",
           controller: "deck-card-quantity",
-          deck_card_quantity_deck_id_value: @deck_id,
+          deck_card_quantity_deck_key_value: @deck_key,
           deck_card_quantity_card_id_value: card.id,
           deck_card_quantity_quantity_value: @deck_card.quantity
         }
@@ -54,7 +54,7 @@ module Decks
         class: "deck-card-printing",
         data: {
           controller: "printing-picker",
-          printing_picker_deck_id_value: @deck_id,
+          printing_picker_deck_key_value: @deck_key,
           printing_picker_card_id_value: card.id,
           action: "click@document->printing-picker#closeOnOutsideClick keydown->printing-picker#navigate"
         }
@@ -79,7 +79,7 @@ module Decks
         class: "deck-card-alloc",
         data: {
           controller: "deck-card-owned-copies",
-          deck_card_owned_copies_deck_id_value: @deck_id,
+          deck_card_owned_copies_deck_key_value: @deck_key,
           deck_card_owned_copies_card_id_value: card.id,
           deck_card_owned_copies_owned_value: @deck_card.owned_copies,
           deck_card_owned_copies_max_value: @max_owned

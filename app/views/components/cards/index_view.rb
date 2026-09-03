@@ -4,10 +4,11 @@ module Cards
 
     FRAME_ID = "card_results".freeze
 
-    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, total: nil, page: 1, pages: nil)
+    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, card_counts:, total: nil, page: 1, pages: nil)
       @blocks = blocks
       @current_set = current_set
       @cards = cards
+      @card_counts = card_counts
       @query = query
       @type = type
       @energy = energy
@@ -90,7 +91,7 @@ module Cards
                 li(class: ("active" if @current_set == card_set)) do
                   link_to cards_path(set: card_set.code) do
                     span(class: "set-full-name") { card_set.name }
-                    span(class: "set-code") { "#{card_set.code} (#{card_set.cards.size})" }
+                    span(class: "set-code") { "#{card_set.code} (#{@card_counts.fetch(card_set.id, 0)})" }
                   end
                 end
               end

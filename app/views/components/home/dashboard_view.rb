@@ -1,27 +1,72 @@
 module Home
   class DashboardView < ApplicationComponent
-    def initialize(current_user:, pending_deck_imports: [])
+    def initialize(current_user:, shared_decks:, pending_deck_imports: [])
       @current_user = current_user
+      @shared_decks = shared_decks
       @pending_deck_imports = pending_deck_imports
     end
 
     def view_template
-      div(class: "dashboard-container", data: { controller: "decks" }) do
-        h1 { "Welcome, #{@current_user.email}" }
+      # The `decks` controller belongs to the signed-in page only: its connect() fetches
+      # /api/decks for the deck count, and for a visitor that request is a redirect to sign-in
+      # whose HTML body dies in response.json() — a console error on every visit.
+      div(class: "dashboard-container", data: (@current_user ? { controller: "decks" } : nil)) do
+        if @current_user
+          # The only place on this page that prints an email — decision 7 forbids one on a
+          # public surface, so it lives inside this branch rather than above it.
+          h1 { "Welcome, #{@current_user.email}" }
+        else
+          h1 { "Cartodex" }
+          p { "Your Pokémon Trading Card Game Manager" }
+        end
 
         render Search::Spotlight.new
 
-        div(class: "dashboard-grid") do
-          collection_card
-          decks_card
+        if @current_user
+          signed_in_grid
+        else
+          visitor_call_to_action
         end
 
-        render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
-        scanner_modal
+        showcase if @shared_decks.any?
+
+        if @current_user
+          render Ui::DeckImport.new(pending_imports: @pending_deck_imports)
+          scanner_modal
+        end
       end
     end
 
     private
+
+    def signed_in_grid
+      div(class: "dashboard-grid") do
+        collection_card
+        decks_card
+      end
+    end
+
+    def visitor_call_to_action
+      div(class: "auth-buttons") do
+        link_to "Sign In", new_user_session_path, class: "btn btn-primary"
+        link_to "Sign Up", new_user_registration_path, class: "btn btn-secondary"
+      end
+    end
+
+    def showcase
+      section(class: "dashboard-showcase") do
+        h2 { "Recently shared decks" }
+        div(class: "dashboard-showcase-grid") do
+          @shared_decks.each do |deck|
+            link_to deck_path(deck), class: "dashboard-showcase-deck" do
+              span(class: "dashboard-showcase-deck-name") { deck.name }
+              render Decks::PublicBadges.new(deck: deck)
+            end
+          end
+        end
+        link_to "See all shared decks", shared_decks_path, class: "btn btn-secondary btn-sm"
+      end
+    end
 
     def collection_card
       div(class: "dashboard-card", data: { controller: "collection" }) do

@@ -3,16 +3,16 @@ class SetDeckCardPrintingTool < McpTool
   required_scope "mcp:write"
   input_schema(
     properties: {
-      deck_id: { type: "integer", description: "ID of the user's deck" },
+      deck_key: { type: "string", description: "Key of the user's deck" },
       card_id: { type: "integer", description: "ID of the printing currently in the deck" },
       target_card_id: { type: "integer", description: "ID of the printing to switch to" }
     },
-    required: [ "deck_id", "card_id", "target_card_id" ]
+    required: [ "deck_key", "card_id", "target_card_id" ]
   )
 
-  def self.call(deck_id:, card_id:, target_card_id:, server_context:)
+  def self.call(deck_key:, card_id:, target_card_id:, server_context:)
     user = current_user(server_context)
-    deck = find_deck!(user, deck_id)
+    deck = find_deck!(user, deck_key)
     card = find_card!(card_id)
     target = find_card!(target_card_id)
     deck_card = Decks::PrintingSwapper.call(deck: deck, card: card, target_card: target).deck_card

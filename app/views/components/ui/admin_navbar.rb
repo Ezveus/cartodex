@@ -1,40 +1,27 @@
 # frozen_string_literal: true
 
 module Ui
+  # The admin panel's navbar. Same chrome as the other two — through Ui::NavbarShell, which is
+  # where the hamburger and the `navbar` Stimulus wiring live — with its own brand label and an
+  # extra `admin-navbar` class for the dark treatment.
   class AdminNavbar < ApplicationComponent
+    include Ui::NavLinks
+
     def initialize(current_user:, active_controller:)
       @current_user = current_user
       @active_controller = active_controller
     end
 
     def view_template
-      nav(class: "navbar admin-navbar", data: { controller: "navbar" }) do
-        div(class: "navbar-inner") do
-          brand
-          hamburger_button
-          div(class: "navbar-menu", data: { navbar_target: "menu" }) do
-            nav_links
-            right_section
-          end
-        end
+      render Ui::NavbarShell.new(
+        brand_path: admin_root_path, brand_label: "Cartodex Admin", nav_class: "admin-navbar"
+      ) do
+        nav_links
+        right_section
       end
     end
 
     private
-
-    def brand
-      link_to "Cartodex Admin", admin_root_path, class: "navbar-brand"
-    end
-
-    def hamburger_button
-      button(
-        class: "navbar-toggle",
-        data: { action: "navbar#toggle" },
-        aria: { label: "Menu", expanded: "false" }
-      ) do
-        span(class: "navbar-toggle-icon")
-      end
-    end
 
     def nav_links
       div(class: "navbar-links") do
@@ -56,10 +43,6 @@ module Ui
         link_to "Back to app", dashboard_path, class: "navbar-link"
         link_to "Sign out", destroy_user_session_path, data: { turbo_method: :delete }, class: "navbar-link"
       end
-    end
-
-    def nav_link(label, path, controller)
-      link_to label, path, class: [ "navbar-link", ("active" if @active_controller == controller) ].compact.join(" ")
     end
   end
 end

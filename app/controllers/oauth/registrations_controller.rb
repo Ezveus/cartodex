@@ -8,17 +8,8 @@ module Oauth
     RATE_LIMIT_TO = 20
     RATE_LIMIT_WITHIN = 1.minute
 
-    # Same call-time Rails.cache proxy as Mcp::ServerController, so tests can
-    # swap in a real store where the test environment's :null_store would make
-    # the limiter a no-op.
-    RATE_LIMIT_STORE = Module.new do
-      def self.increment(...)
-        Rails.cache.increment(...)
-      end
-    end
-
     rate_limit to: RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
-      name: "oauth-register", store: RATE_LIMIT_STORE, only: :create
+      name: "oauth-register", store: RateLimitStore, only: :create
 
     def create
       application = ClientRegistrar.call(registration_metadata)

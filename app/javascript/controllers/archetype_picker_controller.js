@@ -11,7 +11,7 @@ export default class extends Controller {
     "primaryInput", "primaryId", "primaryResults",
     "secondaryInput", "secondaryId", "secondaryResults"
   ]
-  static values = { deckId: Number }
+  static values = { deckKey: String }
 
   connect() {
     this.handleClickOutside = this.#clickOutside.bind(this)
@@ -56,9 +56,9 @@ export default class extends Controller {
   // --- Suggestion from the deck line-up ---
 
   async suggest() {
-    if (!this.deckIdValue) return
+    if (!this.deckKeyValue) return
 
-    const response = await fetch(`/api/decks/${this.deckIdValue}/suggested_archetype`, {
+    const response = await fetch(`/api/decks/${this.deckKeyValue}/suggested_archetype`, {
       credentials: "same-origin"
     })
     if (!response.ok) return

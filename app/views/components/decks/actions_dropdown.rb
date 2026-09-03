@@ -1,9 +1,13 @@
 module Decks
   class ActionsDropdown < ApplicationComponent
-    def initialize(deck:, edit_frame: nil, size: :sm)
+    # `share` is false by default: this dropdown is also rendered on the decks index rows
+    # (Decks::DeckCard), where no share-modal controller exists on the page, so a
+    # share-modal#open button there would do nothing. Only the deck show page passes true.
+    def initialize(deck:, edit_frame: nil, size: :sm, share: false)
       @deck = deck
       @edit_frame = edit_frame
       @size = size
+      @share = share
     end
 
     def view_template
@@ -11,6 +15,7 @@ module Decks
         button(class: button_class, data: { action: "dropdown#toggle" }) { "Actions ▾" }
         div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
           edit_item
+          share_item if @share
           duplicate_item
           delete_item
         end
@@ -21,6 +26,10 @@ module Decks
 
     def button_class
       [ "btn", "btn-secondary", ("btn-#{@size}" if @size) ].compact.join(" ")
+    end
+
+    def share_item
+      button(class: "dropdown-item", data: { action: "share-modal#open" }) { "Share…" }
     end
 
     def edit_item

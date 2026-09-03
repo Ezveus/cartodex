@@ -17,7 +17,7 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :created
     json = JSON.parse(response.body)
-    deck = Deck.find(json["id"])
+    deck = Deck.find_by!(key: json["key"])
     assert_equal StandardPool.current, deck.standard_pool
   end
 
@@ -75,6 +75,17 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
     get suggested_archetype_api_deck_path(other)
 
     assert_response :not_found
+  end
+
+  test "deck json identifies the deck by its key and never by its id" do
+    deck = decks(:one)
+
+    get api_deck_path(deck), as: :json
+
+    assert_response :success
+    body = response.parsed_body
+    assert_equal deck.key, body["key"]
+    assert_nil body["id"]
   end
 
   test "deck_json includes physical, tcg_live and per-card allocation" do

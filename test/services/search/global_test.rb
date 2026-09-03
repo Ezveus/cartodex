@@ -132,4 +132,38 @@ class Search::GlobalTest < ActiveSupport::TestCase
 
     assert_equal [ card ], result.cards
   end
+
+  test "a visitor searches cards and shared decks, and nothing personal" do
+    decks(:two).update!(user: users(:two), shared: true, name: "Zoroark Box")
+
+    result = Search::Global.call(user: nil, query: "Zoroark")
+
+    assert_empty result.decks
+    assert_equal 0, result.deck_total
+    assert_empty result.tournaments
+    assert_equal [ "Zoroark Box" ], result.shared_decks.map(&:name)
+  end
+
+  test "a member's own shared deck appears once, in their own group" do
+    mine = decks(:one)
+    mine.update!(user: users(:one), shared: true, name: "Zoroark Box")
+
+    result = Search::Global.call(user: users(:one), query: "Zoroark")
+
+    assert_equal [ mine ], result.decks
+    assert_empty result.shared_decks
+    # Without where.not(user:) this is 2, and Search::ResultsList would emit the same DOM id
+    # twice for it.
+    assert_equal 1, result.deck_total + result.shared_deck_total
+  end
+
+  test "the shared group carries the preloads its rows need" do
+    decks(:two).update!(user: users(:two), shared: true, name: "Zoroark Box")
+
+    result = Search::Global.call(user: nil, query: "Zoroark")
+    deck = result.shared_decks.first
+
+    assert_predicate deck.association(:standard_pool), :loaded?
+    assert_predicate deck.association(:archetype), :loaded?
+  end
 end

@@ -63,6 +63,34 @@ class Card < ApplicationRecord
     "var(--#{token})" if token
   end
 
+  # The rarity and regulation-mark values actually present in the catalog, for /cards's filter
+  # bar. Neither column is indexed, so this is two full scans of `cards` — and /cards is public
+  # now, so it was two full scans on every anonymous request. A cache is the honest fix; an
+  # index on a low-cardinality column read on every page load is not.
+  #
+  # A fixed key with a TTL, deliberately not one keyed on Card.maximum(:updated_at): that key
+  # was itself an unindexed full-table aggregate, so it paid a scan on every request to protect
+  # an entry that nothing ever invalidated. The writers call forget_filter_values instead, and
+  # the hour is the backstop for a path that forgets to.
+  FILTER_VALUES_CACHE_KEY = "cards/filter-values".freeze
+  FILTER_VALUES_TTL = 1.hour
+
+  def self.filter_values
+    Rails.cache.fetch(FILTER_VALUES_CACHE_KEY, expires_in: FILTER_VALUES_TTL) do
+      [
+        where.not(rarity: [ nil, "" ]).distinct.order(:rarity).pluck(:rarity),
+        where.not(regulation_mark: [ nil, "" ]).distinct.order(:regulation_mark).pluck(:regulation_mark)
+      ]
+    end
+  end
+
+  # Called by whatever can add a rarity or a regulation mark to the catalog: CardSets::Importer
+  # on an import, CardSets::RescrapeJob on a repair (a `force: true` rescrape is the only thing
+  # that rewrites an existing card's text at all).
+  def self.forget_filter_values
+    Rails.cache.delete(FILTER_VALUES_CACHE_KEY)
+  end
+
   def compute_fingerprint
     self.fingerprint = if card_type == "Pokémon"
       data = [ name, hp, type_symbol,

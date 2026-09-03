@@ -68,6 +68,7 @@ gem "thruster", require: false
 
 # Authentication
 gem "devise"
+gem "pundit"
 
 # Component library
 gem "phlex-rails", "~> 2.2"

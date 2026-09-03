@@ -39,4 +39,28 @@ class CardSets::RescrapeJobTest < ActiveSupport::TestCase
     end
     refute_empty @fetcher_calls
   end
+
+  test "forgets the cached filter values, which a forced rescrape can change" do
+    with_real_cache do
+      Card.filter_values # populate
+
+      CardSets::RescrapeJob.perform_now(@card_set.id)
+
+      # `force: true` is the only thing in the app that rewrites an existing card's text, so
+      # it is the only other way a rarity or regulation mark can change.
+      assert_operator count_queries { Card.filter_values }, :>, 0,
+        "expected the rescrape to have dropped the cached lists"
+    end
+  end
+
+  # :null_store in test makes every fetch a miss, so a real store has to stand in or the
+  # assertion is vacuous.
+  def with_real_cache
+    original = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+
+    yield
+  ensure
+    Rails.cache = original
+  end
 end

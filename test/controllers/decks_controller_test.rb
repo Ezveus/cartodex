@@ -10,6 +10,97 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  test "a signed-in stranger sees a shared deck's decklist and none of its owner controls" do
+    honedge = cards(:honedge)
+    @deck.update!(shared: true, physical: true)
+    # A real owned copy, so the owner's view would carry `.deck-card-alloc` — otherwise that
+    # absence assertion passes on every deck, physical or not, and proves nothing.
+    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
+    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+
+    # A second printing of Honedge, so Cards::Printings.swappable_card_ids includes it and the
+    # owner's row would carry `.deck-card-set-swap` — otherwise that absence assertion is equally
+    # vacuous. A real Card record: fixtures bypass compute_fingerprint, so the fixture's literal
+    # fingerprint has to be forced onto a genuinely created row afterward, same as
+    # Cards::PrintingsTest's `reprint` helper.
+    honedge_reprint = Card.create!(
+      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
+      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
+      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
+    )
+    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+
+    # Fixtures carry no image_url, so data-card-preview-url would otherwise be nil on every row
+    # (Phlex omits a nil data attribute) and the DOM-contract assertion below would prove nothing.
+    cards(:doublade).update!(image_url: "https://example.test/doublade.png")
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 2, owned_copies: 0)
+    sign_in users(:two)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "h1", text: @deck.name
+    assert_select ".deck-card-item", count: 2
+
+    # The DOM contract the image export depends on — the export is public, so these are
+    # requirements, not incidental markup.
+    assert_select ".deck-show-header h1"
+    assert_select ".deck-card-item[data-card-preview-url]"
+    assert_select ".deck-card-item .deck-card-qty"
+
+    # Absence assertions: the whole point of a separate view is that it cannot render these.
+    # Setup above makes each one non-vacuous — the deck is physical with an owned copy, and
+    # honedge has a second printing — so Decks::ShowView would render every one of them for
+    # the owner (see "the owner still sees ..." below), and the public view still must not.
+    assert_select ".deck-card-alloc", count: 0
+    assert_select ".deck-card-set-swap", count: 0
+    assert_select ".deck-badges .badge", text: "Proxies", count: 0
+    assert_select "a[href=?]", edit_deck_path(@deck), count: 0
+    assert_select "button", text: "Log Result", count: 0
+    assert_select ".deck-card-search", count: 0
+  end
+
+  # What makes every absence assertion above meaningful: on the very same deck, the owner's
+  # request does carry the allocation and printing-swap controls the stranger's must not.
+  test "the owner still sees the allocation and swap controls on the same deck" do
+    honedge = cards(:honedge)
+    @deck.update!(shared: true, physical: true)
+    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
+    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+
+    honedge_reprint = Card.create!(
+      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
+      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
+      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
+    )
+    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-card-alloc"
+    assert_select ".deck-card-set-swap"
+  end
+
+  test "a signed-in stranger cannot see an unshared deck" do
+    sign_in users(:two)
+
+    get deck_path(@deck)
+
+    assert_response :not_found
+  end
+
+  test "a stranger may export a shared deck but not its tournament pdf" do
+    @deck.update!(shared: true)
+    sign_in users(:two)
+
+    get export_deck_path(@deck)
+    assert_response :success
+
+    get export_deck_path(@deck, style: "tournament_pdf", profile_id: 1)
+    assert_response :not_found
+  end
+
   test "edit renders the show page with the edit frame" do
     get edit_deck_path(@deck)
 
@@ -117,6 +208,26 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge'][hidden]", false
   end
 
+  test "the deck page hands its javascript the key, not the id" do
+    get deck_path(@deck)
+
+    assert_response :success
+    # A String landing in a controller that still declares `deckId: Number` coerces to NaN
+    # and dies in a fetch catch, so these attributes are the JS half of the identity change
+    # and nothing else in the suite reads them.
+    assert_select "[data-result-modal-deck-key-value=?]", @deck.key
+    assert_select "[data-card-search-deck-key-value=?]", @deck.key
+    assert_select "[data-deck-card-quantity-deck-key-value=?]", @deck.key
+    assert_select "[data-tournament-pdf-deck-key-value=?]", @deck.key
+    assert_select "[data-result-modal-deck-id-value]", count: 0
+
+    # The archetype form only renders in edit mode (Decks::HeaderFrame#edit_form).
+    get edit_deck_path(@deck)
+
+    assert_response :success
+    assert_select "[data-archetype-picker-deck-key-value=?]", @deck.key
+  end
+
   # The deck list has no such steppers, so it keeps a plain server-rendered badge — no hidden
   # element to toggle, no target attribute on the dozens of decks it renders.
   test "index omits the proxies badge entirely for a fully backed deck" do
@@ -203,7 +314,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     @deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
     other.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1)
 
-    get compare_decks_path(ids: [ @deck.id, other.id ])
+    get compare_decks_path(ids: [ @deck.key, other.key ])
 
     assert_response :success
     assert_select ".deck-compare-table"
@@ -211,15 +322,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "compare redirects when fewer than two decks are selected" do
-    get compare_decks_path(ids: [ @deck.id ])
+    get compare_decks_path(ids: [ @deck.key ])
 
     assert_redirected_to decks_path
   end
 
   test "compare ignores decks belonging to other users" do
-    get compare_decks_path(ids: [ @deck.id, decks(:two).id ])
+    get compare_decks_path(ids: [ @deck.key, decks(:two).key ])
 
     assert_redirected_to decks_path
+  end
+
+  test "the compare checkbox carries the key" do
+    get decks_path
+
+    assert_response :success
+    assert_select ".deck-compare-checkbox[value=?]", @deck.key
   end
 
   test "update assigns an archetype to the deck" do
@@ -528,6 +646,284 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".standard-pool-notice", count: 0
+  end
+
+  test "the shared index lists other people's shared decks to a visitor" do
+    sign_out @user # this file's setup signs in; a visitor is the point here
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, name: "Theirs")
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select ".deck-item-link h2", text: "Theirs"
+    assert_select "a[href=?]", deck_path(@deck), count: 0
+    # Same live-filter wiring as Decks::IndexView#search_input: without the debounce action,
+    # typing here does nothing until Enter, unlike the sibling page this one is meant to match.
+    assert_select "input[name=q][data-action=?]", "input->card-filter#debounce"
+  end
+
+  test "the shared index shows no collection-derived filter and nothing owner-only on a row" do
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, physical: true)
+    theirs.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
+    # Five decided results at 100% is what makes `hot?` true — and the foil flag it renders is
+    # the win rate, i.e. the record decision 3 keeps private.
+    5.times { theirs.deck_results.create!(result: "win") }
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select "select[name=proxies]", count: 0
+    assert_select "select[name=support]", count: 0
+    assert_select ".deck-badges .badge", text: "Proxies", count: 0
+    assert_select ".deck-badges .badge", text: "Physical", count: 0
+    assert_select ".deck-item-actions", count: 0
+    assert_select ".deck-hot-flag", count: 0
+    assert_select ".deck-item.is-foil", count: 0
+    # No deck-compare controller on this page, so a checkbox here would be a live control that
+    # does nothing.
+    assert_select ".deck-compare-checkbox", count: 0
+  end
+
+  test "the shared index's archetype filter comes from the shared decks, not from mine" do
+    theirs = decks(:two)
+    # Fixtures are `ogerpon` and `budew_ogerpon` (test/fixtures/archetypes.yml); there is no :one.
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon))
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select "select[name=primary] option[value=?]", archetypes(:ogerpon).primary_card_id.to_s
+  end
+
+  test "a filter keystroke on the shared index asks for the grid alone" do
+    sign_out @user
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon), name: "Theirs")
+
+    sql = capture_queries do
+      get shared_decks_path, headers: { "Turbo-Frame" => Decks::SharedIndexView::FRAME_ID }
+    end
+
+    assert_response :success
+    assert_select "turbo-frame[id=?] .decks-grid .deck-item", Decks::SharedIndexView::FRAME_ID
+    # The filter bar sits outside the frame, so Turbo throws it away — which means the query
+    # that fills its archetype select should not have run. Same short-circuit as
+    # DecksController#index, on the endpoint a debounced field fires per keystroke.
+    assert_select "select[name=primary]", count: 0
+    assert_empty sql.grep(/"archetypes"\."primary_card_id" FROM "archetypes"/),
+      "expected the archetype filter options not to be built for a frame request"
+  end
+
+  test "the shared index loads its page of decks once" do
+    sign_out @user
+    decks(:two).update!(user: users(:two), shared: true)
+
+    sql = capture_queries { get shared_decks_path }
+
+    assert_response :success
+    # `any?` on an unloaded relation is a SELECT 1 … LIMIT 1 beside the page query that
+    # immediately follows it.
+    assert_empty sql.grep(/SELECT 1 AS one/),
+      "expected no existence probe beside the page query"
+  end
+
+  test "sharing a deck flips the flag and re-renders the modal with the link" do
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    assert_predicate @deck.reload, :shared?
+    assert_match deck_url(@deck), response.body
+  end
+
+  test "unsharing takes the deck off the shared index without changing its key" do
+    @deck.update!(shared: true)
+    key = @deck.key
+
+    patch share_deck_path(@deck), params: { shared: "0" }, as: :turbo_stream
+
+    assert_response :success
+    refute_predicate @deck.reload, :shared?
+    assert_equal key, @deck.key
+  end
+
+  test "unsharing with the parameter missing altogether still unshares" do
+    # What a bare check_box_tag posts when unchecked: nothing. Without the hidden "0" field
+    # (and the `|| false` behind it) this is update!(shared: nil) against a NOT NULL column.
+    @deck.update!(shared: true)
+
+    patch share_deck_path(@deck), params: {}, as: :turbo_stream
+
+    assert_response :success
+    refute_predicate @deck.reload, :shared?
+  end
+
+  test "the share response re-renders the frame, not a second dialog" do
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    # A dialog inside the stream would nest a closed <dialog> into the open one and blank it.
+    assert_select "turbo-stream[action=replace][target=?]", Decks::ShareFrame::FRAME_ID
+    assert_select "turbo-stream dialog", count: 0
+    assert_select "turbo-stream turbo-frame[id=?]", Decks::ShareFrame::FRAME_ID
+  end
+
+  test "a stranger cannot share somebody else's deck" do
+    sign_in users(:two)
+
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :not_found
+    refute_predicate @deck.reload, :shared?
+  end
+
+  test "the Shared badge appears on the owner's page only once the deck is shared" do
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-badges .badge", text: "Shared"
+
+    @deck.update!(shared: false)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-badges .badge", text: "Shared", count: 0
+  end
+
+  test "the export menu offers the owner the tournament PDF and a visitor everything else" do
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".dropdown-item", text: "Copy for TCG Live"
+    assert_select ".dropdown-item", text: "Copy as Cardmarket wishlist"
+    assert_select ".dropdown-item", text: "Copy as image"
+    assert_select ".dropdown-item", text: "Download as image"
+    assert_select ".dropdown-item", text: "Download as tournament PDF"
+    # The clipboard items carry the URL they copy; a missing value is a button that silently
+    # copies nothing.
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", export_deck_path(@deck)
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", export_deck_path(@deck, style: "cardmarket")
+
+    sign_out @user
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".dropdown-item", text: "Copy for TCG Live"
+    assert_select ".dropdown-item", text: "Download as image"
+    # The one item the public page must not carry: tournament_pdf? is owner-only because it
+    # reads one of the owner's profiles, so offering it here would be a button that 404s.
+    assert_select ".dropdown-item", text: "Download as tournament PDF", count: 0
+  end
+
+  test "the shared index lays out its rows and pager with classes the stylesheet defines" do
+    sign_out @user
+    # One more than SHARED_PER_PAGE, so the pager renders at all.
+    (DecksController::SHARED_PER_PAGE + 1).times do |i|
+      Deck.create!(user: users(:two), name: "Shared #{i}", shared: true, standard_pool: standard_pools(:twm_por))
+    end
+
+    get shared_decks_path
+
+    assert_response :success
+    # application.css is the app's only stylesheet, and it has no rule for `.deck-list`,
+    # `.pagination` or `.pagination-position`. A class it does not define is a page with no
+    # layout, which no assertion about content can see.
+    assert_select "div.decks-grid .deck-item"
+    assert_select "div.deck-list", count: 0
+    assert_select ".cards-pagination .cards-pagination-info"
+    assert_select "nav.pagination", count: 0
+    # Rows, pager and empty state inside the frame; the filter bar outside it.
+    assert_select "turbo-frame[id=?] .decks-grid", Decks::SharedIndexView::FRAME_ID
+    assert_select "turbo-frame[id=?] .cards-pagination", Decks::SharedIndexView::FRAME_ID
+    assert_select "turbo-frame[id=?] form.deck-filters", Decks::SharedIndexView::FRAME_ID, count: 0
+    # A pager link inside a frame navigates the frame and leaves the address bar behind
+    # without this; a deck row escapes the frame through DeckCard's own _top.
+    assert_select ".cards-pagination-link[data-turbo-action=?]", "replace"
+    assert_select ".deck-item-link[data-turbo-frame=?]", "_top"
+  end
+
+  test "the shared index's empty state uses a class the stylesheet defines" do
+    sign_out @user
+    Deck.update_all(shared: false)
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select "p.empty-state", text: "No shared decks yet."
+    assert_includes File.read(Rails.root.join("app/assets/stylesheets/application.css")), ".empty-state"
+  end
+
+  test "the shared index survives a page parameter that is not a number" do
+    sign_out @user
+
+    # PubliclyReachable rescues RecordNotFound and NotAuthorizedError, nothing else, so a
+    # NoMethodError here is an unhandled 500 on an endpoint any crawler can reach.
+    get shared_decks_path(page: { a: "b" })
+    assert_response :success
+
+    get shared_decks_path, params: { page: [ "1" ] }
+    assert_response :success
+  end
+
+  test "sharing works on a Standard deck that predates the pool anchor" do
+    # A pre-backfill row, or any environment that skipped standard_pools:backfill_anchors:
+    # the column is there, `validates :standard_pool, presence:, if: :standard?` is there,
+    # and nothing has filled it in. An `update!` would rejoin that validation and leave the
+    # deck neither shareable nor unshareable.
+    @deck.update_column(:standard_pool_id, nil)
+
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert_response :success
+    assert_predicate @deck.reload, :shared?
+  end
+
+  test "a client that does not speak turbo_stream is sent to the deck, not to a missing template" do
+    # share has only a .turbo_stream.erb behind it. Without a format branch an
+    # `Accept: text/html` request raises MissingTemplate *after* the flag has committed:
+    # the write lands and the response is a 500.
+    patch share_deck_path(@deck), params: { shared: "1" }
+
+    assert_redirected_to deck_path(@deck)
+    assert_predicate @deck.reload, :shared?
+  end
+
+  test "a visitor who opens a shared deck is returned to it after signing in" do
+    sign_out @user
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_equal deck_path(@deck), session["user_return_to"]
+  end
+
+  test "a prefetch of a shared deck does not hijack where sign-in returns to" do
+    sign_out @user
+    @deck.update!(shared: true)
+
+    # Turbo 8 prefetches on hover by default and marks the request with this header. Without
+    # the guard, hovering a link rewrites user_return_to for a page nobody opened.
+    get deck_path(@deck), headers: { "X-Sec-Purpose" => "prefetch" }
+
+    assert_response :success
+    assert_nil session["user_return_to"]
+  end
+
+  test "a member reading someone else's shared deck keeps their own return-to" do
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true)
+
+    get deck_path(theirs)
+
+    assert_response :success
+    assert_nil session["user_return_to"]
   end
 
   private

@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import { requestJson } from "helpers/api"
 
 export default class extends Controller {
-  static values = { deckId: Number, cardId: Number, quantity: Number }
+  static values = { deckKey: String, cardId: Number, quantity: Number }
 
   increment() {
     this.#updateQuantity(this.quantityValue + 1)
@@ -17,7 +17,7 @@ export default class extends Controller {
     // When the quantity reaches zero the row goes away and the endpoint answers
     // `{ removed: true }` — still carrying the deck-wide state, which the badge needs precisely
     // when the card that disappears was the deck's last unbacked one.
-    const updated = await requestJson(`/api/decks/${this.deckIdValue}/cards/${this.cardIdValue}`, {
+    const updated = await requestJson(`/api/decks/${this.deckKeyValue}/cards/${this.cardIdValue}`, {
       method: "PATCH",
       body: { deck_card: { quantity: newQuantity } },
       failure: "Couldn't update this card's quantity"

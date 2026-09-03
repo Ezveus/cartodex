@@ -29,7 +29,7 @@ module OverAllocations
         span(class: "over-allocation-counts") { "owned #{over[:owned]} · committed #{over[:committed]}" }
         div(class: "over-allocation-decks") do
           over[:decks].each do |d|
-            link_to d[:name], deck_path(d[:id]), class: "over-allocation-deck-link"
+            link_to d[:name], deck_path(d[:key]), class: "over-allocation-deck-link"
           end
         end
         reallocation_form(over)

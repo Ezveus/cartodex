@@ -67,7 +67,7 @@ module Api
     private
 
     def set_deck
-      @deck = current_user.decks.includes(deck_cards: { card: :pokemon_subtype }).find(params[:id])
+      @deck = current_user.decks.includes(deck_cards: { card: :pokemon_subtype }).find_by!(key: params[:id])
     end
 
     def archetype_json(archetype)
@@ -91,7 +91,7 @@ module Api
 
     def deck_json(deck)
       {
-        id: deck.id,
+        key: deck.key,
         name: deck.name,
         description: deck.description,
         physical: deck.physical,

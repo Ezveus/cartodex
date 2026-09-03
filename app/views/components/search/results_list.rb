@@ -12,6 +12,7 @@ module Search
       elsif @results.any?
         div(class: "spotlight-listbox", role: "listbox", aria_label: "Search results") do
           deck_group
+          shared_deck_group
           card_group
           tournament_group
         end
@@ -33,6 +34,23 @@ module Search
       ) do |deck|
         option_row(
           dom_id: "spotlight-option-deck-#{deck.id}",
+          path: deck_path(deck),
+          name: deck.name,
+          meta: [ deck.format_label, deck.archetype&.name ].compact.join(" · ")
+        )
+      end
+    end
+
+    def shared_deck_group
+      render ResultGroup.new(
+        key: "shared_decks", label: "SHARED DECKS", records: @results.shared_decks,
+        total: @results.shared_deck_total, index_path: shared_decks_path(q: query),
+        see_all_label: see_all_label(@results.shared_deck_total, "shared deck")
+      ) do |deck|
+        option_row(
+          # A distinct prefix, so this group cannot collide with the one above even if the
+          # exclusion in Search::Global is ever relaxed. Cheaper than relying on it.
+          dom_id: "spotlight-option-shared-deck-#{deck.id}",
           path: deck_path(deck),
           name: deck.name,
           meta: [ deck.format_label, deck.archetype&.name ].compact.join(" · ")

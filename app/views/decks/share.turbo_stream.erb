@@ -1,0 +1,5 @@
+<%# The frame and only the frame: rendering Decks::ShareModal here would drop a second, closed
+    <dialog> inside the open one and blank it. %>
+<%= turbo_stream.replace Decks::ShareFrame::FRAME_ID do %>
+  <%= render Decks::ShareFrame.new(deck: @deck) %>
+<% end %>

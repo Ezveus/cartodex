@@ -1,9 +1,10 @@
 module Cards
   class ShowView < ApplicationComponent
-    def initialize(card:, alt_printings:, collection_quantity: 0)
+    def initialize(card:, alt_printings:, collection_quantity: 0, signed_in: false)
       @card = card
       @alt_printings = alt_printings
       @collection_quantity = collection_quantity
+      @signed_in = signed_in
     end
 
     def view_template
@@ -11,7 +12,7 @@ module Cards
         div(class: "card-show-header") do
           h1 { @card.name }
           div(class: "card-show-header-actions") do
-            collection_control
+            collection_control if @signed_in
             link_to "Back", :back, class: "btn btn-secondary"
           end
         end

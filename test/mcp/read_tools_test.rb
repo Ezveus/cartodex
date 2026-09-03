@@ -35,15 +35,15 @@ class ReadToolsTest < ActiveSupport::TestCase
 
   test "ListDecksTool returns only the user's decks" do
     response = ListDecksTool.call(server_context: @context)
-    ids = payload(response).map { |d| d["id"] }
+    keys = payload(response).map { |d| d["key"] }
 
-    assert_includes ids, decks(:one).id
-    assert_not_includes ids, decks(:two).id
+    assert_includes keys, decks(:one).key
+    assert_not_includes keys, decks(:two).key
   end
 
   test "ListDecksTool names the Standard pool a deck is anchored to" do
     response = ListDecksTool.call(server_context: @context)
-    deck = payload(response).find { |d| d["id"] == decks(:one).id }
+    deck = payload(response).find { |d| d["key"] == decks(:one).key }
 
     assert_equal "TWM-POR", deck["standard_pool"]
   end
@@ -56,14 +56,14 @@ class ReadToolsTest < ActiveSupport::TestCase
   end
 
   test "ListDeckCardsTool returns the cards in an owned deck" do
-    response = ListDeckCardsTool.call(deck_id: decks(:one).id, server_context: @context)
+    response = ListDeckCardsTool.call(deck_key: decks(:one).key, server_context: @context)
     card_ids = payload(response).map { |c| c["card_id"] }
 
     assert_includes card_ids, cards(:honedge).id
   end
 
   test "ListDeckCardsTool reports an error for a deck the user does not own" do
-    response = ListDeckCardsTool.call(deck_id: decks(:two).id, server_context: @context)
+    response = ListDeckCardsTool.call(deck_key: decks(:two).key, server_context: @context)
 
     assert_match(/Error/i, response.content.first[:text])
   end
@@ -141,12 +141,27 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_equal one, many, "query count grew with the collection: #{one} -> #{many}"
   end
 
+  # Each deck reports its pool's name, and StandardPool#name reads both of the pool's card-set
+  # bounds — a pool per deck on purpose, since decks sharing one issue identical SQL that the
+  # query cache serves and count_queries does not see.
+  test "ListDecksTool issues a constant number of queries regardless of how many decks" do
+    @user.decks.create!(name: "Extra 0", standard_pool: pool_of_its_own(0))
+
+    one = count_queries { ListDecksTool.call(server_context: @context) }
+
+    (1..4).each { |i| @user.decks.create!(name: "Extra #{i}", standard_pool: pool_of_its_own(i)) }
+
+    many = count_queries { ListDecksTool.call(server_context: @context) }
+
+    assert_equal one, many, "query count grew with the deck count: #{one} -> #{many}"
+  end
+
   test "ListDeckCardsTool exposes owned_copies and proxies" do
     physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)
     physical.deck_cards.create!(card: cards(:honedge), quantity: 3, owned_copies: 1)
 
-    response = ListDeckCardsTool.call(deck_id: physical.id, server_context: @context)
+    response = ListDeckCardsTool.call(deck_key: physical.key, server_context: @context)
     entry = payload(response).find { |c| c["card_id"] == cards(:honedge).id }
 
     assert_equal 3, entry["quantity"]
@@ -201,7 +216,7 @@ class ReadToolsTest < ActiveSupport::TestCase
     deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: cards(:budew_asc), quantity: 3)
 
-    response = ListPrintingsTool.call(card_id: cards(:budew_asc).id, deck_id: deck.id, server_context: @context)
+    response = ListPrintingsTool.call(card_id: cards(:budew_asc).id, deck_key: deck.key, server_context: @context)
     entry = payload(response).find { |p| p["card_id"] == cards(:budew_pre).id }
 
     assert_equal 3, entry["proxies_after"]
@@ -211,5 +226,33 @@ class ReadToolsTest < ActiveSupport::TestCase
     response = ListPrintingsTool.call(card_id: -1, server_context: @context)
 
     assert_match(/Error/i, response.content.first[:text])
+  end
+
+  test "list_decks identifies each deck by its key" do
+    # This file's setup defines @user only; the deck is fetched here.
+    deck = decks(:one)
+
+    response = ListDecksTool.call(server_context: @context)
+
+    decks = payload(response)
+    assert_equal [ deck.key ], decks.map { |d| d["key"] }
+    assert_nil decks.first["id"]
+  end
+
+  test "list_over_allocations carries the key of every deck it names" do
+    over_allocate(cards(:honedge), owned: 1, committed: 2)
+
+    response = ListOverAllocationsTool.call(server_context: @context)
+
+    report = payload(response)
+    assert report.first["decks"].all? { |d| d["key"].present? }, "a named deck had no key"
+  end
+
+  def pool_of_its_own(index)
+    set = CardSet.create!(code: "M#{index}", name: "Mcp Set #{index}", release_date: Date.new(2025, 1, 1))
+    StandardPool.create!(
+      first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
+      released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
   end
 end

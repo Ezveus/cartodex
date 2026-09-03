@@ -32,6 +32,15 @@ module ActiveSupport
       counter.log.size
     end
 
+    # The same measurement, handing back the statements rather than their number: for a test
+    # that cares *which* query ran, not how many did.
+    def capture_queries(&block)
+      ActiveRecord::Base.connection.clear_query_cache
+      counter = ActiveRecord::Assertions::QueryAssertions::SQLCounter.new
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      counter.log
+    end
+
     # Grows the user's collection by FLAT_COST_EXTRA_CARDS: the "large" input of a
     # flat-cost test. Returns the cards added, so a caller can put them in a deck
     # too.
@@ -56,6 +65,17 @@ module ActiveSupport
       deck = user.decks.create!(name: "Over-allocated", physical: true, standard_pool: StandardPool.current)
       deck.deck_cards.create!(card: card, quantity: 1, owned_copies: 1)
       deck
+    end
+
+    # Commits more real copies of the card across a fresh physical deck than the
+    # user owns — the state a collection decrease leaves behind. Defaults to
+    # @user, set by the including test's setup, but takes one explicitly like
+    # its neighbour force_over_allocation.
+    def over_allocate(card, owned:, committed:, user: @user)
+      user.collections.find_or_create_by!(card: card) { |c| c.quantity = 0 }.update!(quantity: owned)
+      user.decks.create!(name: "Deck #{card.id}", physical: true, standard_pool: standard_pools(:twm_por)).tap do |deck|
+        deck.deck_cards.create!(card: card, quantity: committed, owned_copies: committed)
+      end
     end
   end
 end

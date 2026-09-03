@@ -3,18 +3,18 @@ class ReallocateOwnedCopiesTool < McpTool
   required_scope "mcp:write"
   input_schema(
     properties: {
-      from_deck_id: { type: "integer", description: "ID of the source physical deck" },
-      to_deck_id: { type: "integer", description: "ID of the target physical deck" },
+      from_deck_key: { type: "string", description: "Key of the source physical deck" },
+      to_deck_key: { type: "string", description: "Key of the target physical deck" },
       card_id: { type: "integer", description: "ID of the card" },
       quantity: { type: "integer", minimum: 1, description: "How many real copies to move" }
     },
-    required: [ "from_deck_id", "to_deck_id", "card_id", "quantity" ]
+    required: [ "from_deck_key", "to_deck_key", "card_id", "quantity" ]
   )
 
-  def self.call(from_deck_id:, to_deck_id:, card_id:, quantity:, server_context:)
+  def self.call(from_deck_key:, to_deck_key:, card_id:, quantity:, server_context:)
     user = current_user(server_context)
-    from_deck = find_deck!(user, from_deck_id)
-    to_deck = find_deck!(user, to_deck_id)
+    from_deck = find_deck!(user, from_deck_key)
+    to_deck = find_deck!(user, to_deck_key)
     card = find_card!(card_id)
     from, to = Decks::OwnedCopiesReallocator.call(from_deck: from_deck, to_deck: to_deck, card: card, quantity: quantity)
     text("Moved #{quantity}× real #{card.name}: “#{from_deck.name}” now #{from.owned_copies} real, “#{to_deck.name}” now #{to.owned_copies} real.")

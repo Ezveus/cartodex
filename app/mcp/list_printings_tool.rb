@@ -3,15 +3,15 @@ class ListPrintingsTool < McpTool
   input_schema(
     properties: {
       card_id: { type: "integer", description: "ID of the card whose printings to list" },
-      deck_id: { type: "integer", description: "Optional: a deck of the user's to annotate the printings for" }
+      deck_key: { type: "string", description: "Optional: a deck of the user's to annotate the printings for" }
     },
     required: [ "card_id" ]
   )
 
-  def self.call(card_id:, deck_id: nil, server_context:)
+  def self.call(card_id:, deck_key: nil, server_context:)
     user = current_user(server_context)
     card = find_card!(card_id)
-    deck = deck_id && find_deck!(user, deck_id)
+    deck = deck_key && find_deck!(user, deck_key)
     text(Cards::Printings.call(user: user, card: card, deck: deck).to_json)
   rescue ActiveRecord::RecordNotFound
     text("Error: unknown card or deck.")

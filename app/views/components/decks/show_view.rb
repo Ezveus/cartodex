@@ -12,10 +12,10 @@ module Decks
 
     def view_template
       div(class: "deck-show-container", data: {
-        controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies",
+        controller: "card-preview deck-totals result-modal tournament-pdf deck-proxies share-modal",
         action: "deck-card-quantity:changed->deck-totals#updateTotals " \
                 "deck-proxies:changed->deck-proxies#toggle",
-        result_modal_deck_id_value: @deck.id
+        result_modal_deck_key_value: @deck.key
       }) do
         header_section
         stats_section
@@ -24,6 +24,7 @@ module Decks
           preview_section
         end
         render Decks::ResultModal.new(deck: @deck)
+        render Decks::ShareModal.new(deck: @deck)
         render Decks::TournamentPdfModal.new(deck: @deck, tournament_profiles: @tournament_profiles)
       end
     end
@@ -44,34 +45,10 @@ module Decks
       end
       nav(class: "deck-actions-bar") do
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
-        div(class: "dropdown", data: { controller: "dropdown" }) do
-          button(class: "btn btn-secondary btn-sm", data: { action: "dropdown#toggle" }) { "Export ▾" }
-          div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
-            button(
-              class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck), action: "clipboard#copy" }
-            ) { "Copy for TCG Live" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
-            ) { "Copy as Cardmarket wishlist" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "deck-image-export", action: "deck-image-export#copy" }
-            ) { "Copy as image" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "deck-image-export", action: "deck-image-export#download" }
-            ) { "Download as image" }
-            button(
-              class: "dropdown-item",
-              data: { action: "tournament-pdf#open" }
-            ) { "Download as tournament PDF" }
-          end
-        end
+        render Decks::ExportDropdown.new(deck: @deck, tournament_pdf: true)
         link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
-        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID)
+        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true)
       end
     end
 
@@ -110,7 +87,7 @@ module Decks
         input_class: "form-input card-search-input",
         wrapper_class: "deck-card-search",
         controller: "card-search",
-        card_search_deck_id_value: @deck.id,
+        card_search_deck_key_value: @deck.key,
         input_target: :card_search_target,
         input_action: "input->card-search#search",
         results_target: :card_search_target
@@ -163,7 +140,7 @@ module Decks
           max_owned = availability ? [ dc.quantity, availability.available ].min : 0
           render Decks::DeckCardItem.new(
             deck_card: dc,
-            deck_id: @deck.id,
+            deck_key: @deck.key,
             physical: @deck.physical?,
             max_owned: max_owned,
             over_allocated: @over_allocated_card_ids.include?(dc.card_id),
@@ -174,27 +151,8 @@ module Decks
     end
 
     def preview_section
-      div(class: "deck-show-preview") do
-        image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
-        link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
-      end
-      card_preview_modal
-    end
-
-    def card_preview_modal
-      dialog(
-        class: "card-preview-modal",
-        data: {
-          card_preview_target: "modal",
-          action: "click->card-preview#backdropClose"
-        }
-      ) do
-        div(class: "card-preview-modal-content") do
-          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
-          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
-          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
-        end
-      end
+      render Ui::CardPreview.new(wrapper_class: "deck-show-preview")
+      render Ui::CardPreviewModal.new
     end
   end
 end
