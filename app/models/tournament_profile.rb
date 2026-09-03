@@ -3,7 +3,7 @@ class TournamentProfile < ApplicationRecord
   JUNIOR_MIN_AGE = 6
 
   belongs_to :user
-  has_many :tournaments, dependent: :nullify
+  has_many :tournament_entries, dependent: :nullify
 
   validates :player_name, presence: true
   validates :player_id, presence: true, uniqueness: true

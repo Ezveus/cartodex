@@ -9,7 +9,9 @@ class User < ApplicationRecord
   has_many :decks, dependent: :destroy
   has_many :imports, dependent: :destroy
   has_many :tournament_profiles, dependent: :destroy
-  has_many :tournaments, dependent: :destroy
+  has_many :tournament_entries, dependent: :destroy
+  # :nullify, not :destroy — a catalog entry other members point at must survive its author.
+  has_many :created_tournaments, class_name: "Tournament", foreign_key: :created_by_id, dependent: :nullify
 
   # Lifetime options offered when generating a token. nil means "never expires",
   # stored as a NULL api_token_expires_at. This Hash is the single definition of

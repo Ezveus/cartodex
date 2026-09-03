@@ -1,14 +1,17 @@
+# One real-world tournament, shared by everybody who attended it. Any member may catalogue an
+# event; only its creator (or an admin) corrects it afterwards. What a given player did there
+# is a TournamentEntry.
 class Tournament < ApplicationRecord
   include NameNormalizable
 
-  belongs_to :user
-  belongs_to :deck
-  belongs_to :tournament_profile, optional: true
-  # A tournament is played under the format legal on its date, which is not the
-  # same as "the newest set exists" — a set is tournament-legal about two weeks
-  # after release. The form pre-fills this from the date; it stays editable.
+  belongs_to :created_by, class_name: "User", optional: true
+  # A tournament is played under the format legal on its date, which is not the same as "the
+  # newest set exists" — a set is tournament-legal about two weeks after release. The form
+  # pre-fills this from the date; it stays editable.
   belongs_to :standard_pool, optional: true
-  has_many :deck_results, dependent: :nullify
+  # restrict_with_error, unlike Archetype's :nullify: another member's participation must not
+  # vanish because the creator of the catalog entry decided to delete it.
+  has_many :entries, class_name: "TournamentEntry", dependent: :restrict_with_error
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
   enum :tier, {
@@ -36,6 +39,9 @@ class Tournament < ApplicationRecord
   # exact attendance and age division) meant to pre-fill the CP field — the
   # user can always override them. League Challenges and informal events
   # award no CP; League Cups, Regionals/Specials, Internationals and Worlds do.
+  #
+  # Read by TournamentEntry#suggested_championship_points: the grid is keyed on the event's
+  # tier, the placement it is looked up with belongs to the participation.
   CP_REFERENCE = {
     "league_challenge" => [ [ 1..Float::INFINITY, 0 ] ],
     "league_cup" => [
@@ -66,17 +72,22 @@ class Tournament < ApplicationRecord
     [ 1025..Float::INFINITY, 64 ]
   ].freeze
 
+  # The catalog prints format_label, which for a Standard event names the pool, and
+  # StandardPool#name reads both of its bounds — so preloading the pool alone still costs two
+  # queries per distinct pool. Deliberately a twin of Deck.with_standard_pool rather than a
+  # shared concern: two call sites do not justify one, and a third model would be the moment.
+  scope :with_standard_pool, -> { includes(standard_pool: [ :first_card_set, :last_card_set ]) }
+
   validates :name, presence: true
   validates :date, presence: true
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
-  validates :participant_count, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
-  validates :placement, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
-  validates :championship_points, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
-  validate :placement_within_participant_count
-  validate :deck_belongs_to_user
-  validate :tournament_profile_belongs_to_user
+  validate :name_and_date_are_unique
 
+  # NameNormalizable normalizes in a before_save, which is too late for the uniqueness check
+  # below to see the value it must compare. Running it before_validation as well is idempotent,
+  # and it is what makes the validation and the UNIQUE index agree byte for byte.
+  before_validation :normalize_name
   before_validation :clear_inapplicable_classification
 
   # Human-readable format label. For the "other" format the user-supplied name
@@ -95,21 +106,6 @@ class Tournament < ApplicationRecord
     TIER_LABELS.fetch(tier, tier.to_s.humanize)
   end
 
-  # Indicative CP for the current tier/placement, or nil if not computable.
-  def suggested_championship_points
-    return if placement.blank?
-
-    CP_REFERENCE.fetch(tier, []).find { |range, _points| range.cover?(placement) }&.last
-  end
-
-  # Indicative standard top cut size for the current participant count, or
-  # nil if not computable or if the field size doesn't warrant a cut.
-  def standard_top_cut
-    return if participant_count.blank?
-
-    TOP_CUT_BANDS.find { |range, _cut| range.cover?(participant_count) }&.last
-  end
-
   private
 
   def clear_inapplicable_classification
@@ -117,21 +113,15 @@ class Tournament < ApplicationRecord
     self.standard_pool_id = nil unless standard?
   end
 
-  def placement_within_participant_count
-    return if placement.blank? || participant_count.blank?
+  # The readable half of the (name_normalized, date) UNIQUE index — the same division of
+  # labour as (set_name, set_number) on Card. The error is added to :name rather than to
+  # :name_normalized, which is a column no user has ever heard of, and TournamentsController
+  # re-finds the offending event from these two values so the form can link to it.
+  def name_and_date_are_unique
+    return if name_normalized.blank? || date.blank?
 
-    errors.add(:placement, "can't be greater than the number of participants") if placement > participant_count
-  end
-
-  def deck_belongs_to_user
-    return if deck.nil? || user.nil?
-
-    errors.add(:deck, "must belong to the same user") if deck.user_id != user_id
-  end
-
-  def tournament_profile_belongs_to_user
-    return if tournament_profile.nil? || user.nil?
-
-    errors.add(:tournament_profile, "must belong to the same user") if tournament_profile.user_id != user_id
+    clash = Tournament.where(name_normalized: name_normalized, date: date)
+    clash = clash.where.not(id: id) if persisted?
+    errors.add(:name, "is already catalogued for this date") if clash.exists?
   end
 end

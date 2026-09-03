@@ -9,7 +9,7 @@ class Deck < ApplicationRecord
   has_many :deck_cards, dependent: :destroy
   has_many :cards, through: :deck_cards
   has_many :deck_results, dependent: :destroy
-  has_many :tournaments, dependent: :destroy
+  has_many :tournament_entries, dependent: :destroy
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
 
