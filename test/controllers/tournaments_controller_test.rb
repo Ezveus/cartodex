@@ -5,128 +5,225 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @user = users(:one)
-    @deck = decks(:one)
-    @tournament = tournaments(:one)
+    @tournament = tournaments(:one) # created_by: one
+    @other_tournament = tournaments(:two) # created_by: two
     sign_in @user
   end
 
-  test "index lists the current user's tournaments" do
+  test "index lists every event in the catalog, whoever catalogued it" do
     get tournaments_path
 
     assert_response :success
-    assert_select ".data-table-row", count: 1
+    assert_select ".data-table-row", count: 2
+    assert_select ".data-table-row", text: /Local League Cup/
   end
 
-  test "index does not list another user's tournaments" do
+  test "index marks the events the reader attended" do
     get tournaments_path
 
-    assert_select ".data-table-row", text: /Local League Cup/, count: 0
+    assert_select ".data-table-row", text: /Regional Championship/ do
+      assert_select ".tournament-attended", text: "You attended"
+    end
+    assert_select ".data-table-row", text: /Local League Cup/ do
+      assert_select ".tournament-attended", count: 0
+    end
   end
 
-  test "show renders the tournament" do
+  test "index filters by name" do
+    get tournaments_path(q: "local")
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+    assert_select ".data-table-row", text: /Local League Cup/
+  end
+
+  test "index ignores a blank q" do
+    get tournaments_path(q: "   ")
+
+    assert_select ".data-table-row", count: 2
+  end
+
+  test "index keeps the query in the search field" do
+    get tournaments_path(q: "local")
+
+    assert_select "form.tournaments-search input[name=q][value=local]"
+  end
+
+  # The filter form targets this frame so the field survives the debounce — see
+  # Tournaments::IndexView::FRAME_ID.
+  test "index wraps the results in the turbo frame the filter form targets" do
+    get tournaments_path
+
+    assert_select "turbo-frame#tournament_results .data-table-row"
+    assert_select "form.tournaments-search[data-turbo-frame=tournament_results][data-turbo-action=replace]"
+  end
+
+  # The spotlight renders "See all N tournaments" from Search::Global; this page must show N.
+  test "index shows exactly as many events as the spotlight's total promises" do
+    get tournaments_path(q: "regional")
+
+    assert_equal Search::Global.call(user: @user, query: "regional").tournament_total,
+      css_select(".data-table-row").size
+  end
+
+  test "index paginates and its pager links replace the address bar" do
+    (TournamentsController::CATALOG_PER_PAGE + 1).times do |i|
+      Tournament.create!(name: "Filler Cup #{i}", date: Date.new(2026, 6, 1) + i,
+                         tier: "league_cup", format: "expanded", created_by: @user)
+    end
+
+    get tournaments_path
+
+    assert_select ".cards-pagination-info", text: %r{Page 1 / 2}
+    assert_select "a.cards-pagination-link[data-turbo-action=replace]", text: /Next/
+  end
+
+  test "an unknown page number does not blow up" do
+    get tournaments_path(page: [ "1" ])
+
+    assert_response :success
+  end
+
+  # The Format column names the event's Standard pool, and StandardPool#name reads both of the
+  # pool's card-set bounds — so an unpreloaded catalog costs three extra queries per Standard
+  # event. Each event gets a pool of its own on purpose: events sharing a pool id issue
+  # identical SQL, which the per-request query cache serves and count_queries does not count,
+  # hiding the very N+1 this guards. Modelled on the same test in DecksControllerTest.
+  test "index issues a constant number of queries regardless of how many events" do
+    2.times { |i| catalog_event(i) }
+
+    get tournaments_path # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get tournaments_path }
+
+    (2..7).each { |i| catalog_event(i) }
+
+    large = count_queries { get tournaments_path }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the catalog: #{small} -> #{large}"
+  end
+
+  test "show renders the event and offers the reader their own entry" do
     get tournament_path(@tournament)
 
     assert_response :success
     assert_select "h1", text: @tournament.name
+    assert_select "a[href=?]", tournament_entry_path(@tournament, tournament_entries(:one)), text: /Your entry/
   end
 
-  test "cannot show another user's tournament" do
-    get tournament_path(tournaments(:two))
+  test "show invites a reader with no entry to record one" do
+    get tournament_path(@other_tournament)
+
+    assert_response :success
+    assert_select "a[href=?]", new_tournament_entry_path(@other_tournament), text: /Record/
+  end
+
+  # An event page says nothing about anybody else — decision 4 of the spec.
+  test "show names no other member and no other deck" do
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /#{decks(:two).name}/, count: 0
+    refute_match users(:two).email, response.body
+  end
+
+  test "show 404s on an unknown event" do
+    get tournament_path(id: 999_999)
 
     assert_response :not_found
   end
 
-  test "new renders the form" do
+  test "mine lists the reader's own participations only" do
+    get mine_tournaments_path
+
+    assert_response :success
+    assert_select ".data-table-row", count: 1
+    assert_select ".data-table-row", text: /Regional Championship/
+  end
+
+  test "new renders the event form and nothing about a deck" do
     get new_tournament_path
 
     assert_response :success
     assert_select "form input[name='tournament[name]']"
+    assert_select "form select[name='tournament[deck_id]']", count: 0
   end
 
-  test "create with valid params saves and redirects" do
-    assert_difference -> { @user.tournaments.count }, 1 do
+  test "create saves the event, records the creator, and moves on to the participation" do
+    assert_difference -> { Tournament.count }, 1 do
       post tournaments_path, params: {
         tournament: {
-          name: "City Championship",
-          date: "2026-05-01",
-          deck_id: @deck.id,
-          tier: "league_cup",
-          format: "standard",
-          standard_pool_id: standard_pools(:twm_por).id,
-          participant_count: 20,
-          placement: 2
+          name: "City Championship", date: "2026-05-01", tier: "league_cup",
+          format: "standard", standard_pool_id: standard_pools(:twm_por).id
         }
       }
     end
 
-    assert_redirected_to tournament_path(Tournament.last)
-  end
-
-  test "create with an explicit standard_pool_id anchors the tournament to that pool" do
-    post tournaments_path, params: {
-      tournament: {
-        name: "City Championship",
-        date: "2026-05-01",
-        deck_id: @deck.id,
-        tier: "league_cup",
-        format: "standard",
-        standard_pool_id: standard_pools(:twm_asc).id
-      }
-    }
-
-    assert_redirected_to tournament_path(Tournament.last)
-    assert_equal standard_pools(:twm_asc), Tournament.last.standard_pool
+    created = Tournament.order(:id).last
+    assert_equal @user, created.created_by
+    assert_redirected_to new_tournament_entry_path(created)
   end
 
   test "create with invalid params re-renders the form" do
     assert_no_difference -> { Tournament.count } do
-      post tournaments_path, params: { tournament: { name: "", deck_id: @deck.id } }
+      post tournaments_path, params: { tournament: { name: "", date: "2026-05-01" } }
     end
 
     assert_response :unprocessable_entity
   end
 
-  test "create rejects a deck belonging to another user" do
+  # Half the anti-duplicate mechanism: being blocked is useless without being told where to go.
+  test "create on a duplicate names the existing event and links to it" do
     assert_no_difference -> { Tournament.count } do
       post tournaments_path, params: {
-        tournament: { name: "Sneaky", date: "2026-05-01", deck_id: decks(:two).id, tier: "regional" }
+        tournament: {
+          name: @tournament.name.upcase, date: @tournament.date.to_s, tier: "regional",
+          format: "standard", standard_pool_id: standard_pools(:twm_por).id
+        }
       }
     end
 
     assert_response :unprocessable_entity
+    assert_select "a[href=?]", tournament_path(@tournament), text: /#{@tournament.name}/
   end
 
-  test "update with valid params saves and redirects" do
+  test "the creator updates the event" do
     patch tournament_path(@tournament), params: { tournament: { name: "Renamed" } }
 
     assert_redirected_to tournament_path(@tournament)
     assert_equal "Renamed", @tournament.reload.name
   end
 
-  # format: "other" clears standard_pool_id (Tournament#clear_inapplicable_classification), so
-  # this tournament's selected pool can only come from the date-based default — never from a
-  # stored anchor. The date sits strictly inside twm_asc's window and before twm_por.legal_on,
-  # so a correct default differs from StandardPool.current (twm_por): this proves the form
-  # picks the pool legal on the tournament's own date, not merely the newest pool.
-  test "edit defaults the standard pool selection to the pool legal on the tournament's date" do
-    tournament = @user.tournaments.create!(
-      deck: @deck, name: "Cup Under An Older Pool", date: Date.new(2025, 12, 1),
-      format: "other", other_format_name: "Special Event", tier: "league_cup"
-    )
+  # 404 is the deck rule and it is deliberately not this one: an event's existence is public,
+  # so the honest answer is "not yours", with somewhere to go.
+  test "another member is sent back to the event with an alert instead of a 404" do
+    patch tournament_path(@other_tournament), params: { tournament: { name: "Hacked" } }
 
-    get edit_tournament_path(tournament)
-
-    assert_response :success
-    assert_select "select#tournament_standard_pool_id option[selected][value=?]", standard_pools(:twm_asc).id.to_s
+    assert_redirected_to tournament_path(@other_tournament)
+    assert_not_equal "Hacked", @other_tournament.reload.name
   end
 
-  test "cannot update another user's tournament" do
-    patch tournament_path(tournaments(:two)), params: { tournament: { name: "Hacked" } }
+  test "an admin updates anybody's event" do
+    @user.update!(admin: true)
 
-    assert_response :not_found
+    patch tournament_path(@other_tournament), params: { tournament: { name: "Moderated" } }
+
+    assert_redirected_to tournament_path(@other_tournament)
+    assert_equal "Moderated", @other_tournament.reload.name
   end
 
-  test "destroy removes the tournament and redirects" do
+  test "destroy is refused while participations remain, with a flash that counts them" do
+    assert_no_difference -> { Tournament.count } do
+      delete tournament_path(@tournament)
+    end
+
+    assert_redirected_to tournament_path(@tournament)
+    assert_match(/2 participations/, flash[:alert])
+  end
+
+  test "destroy succeeds once nothing points at the event" do
+    @tournament.entries.destroy_all
+
     assert_difference -> { Tournament.count }, -1 do
       delete tournament_path(@tournament)
     end
@@ -134,137 +231,48 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to tournaments_path
   end
 
-  test "cannot destroy another user's tournament" do
-    assert_no_difference -> { Tournament.count } do
-      delete tournament_path(tournaments(:two))
-    end
+  # The pool notice tests below are the ones the old suite carried; they move with the form and
+  # keep their reasoning. For a tournament the comparison is the pool legal on its date, not
+  # the newest one: a March 2026 event anchored to the latest pool is a data-entry error.
+  test "editing an event whose anchor disagrees with its date says so" do
+    @tournament.update!(date: Date.new(2026, 1, 20), standard_pool: standard_pools(:twm_por))
 
-    assert_response :not_found
-  end
-
-  test "index filters tournaments by name" do
-    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
-                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
-
-    get tournaments_path(q: "lyon")
-
-    assert_response :success
-    assert_select ".data-table-row", count: 1
-    assert_select ".data-table-row", text: /League Cup Lyon/
-  end
-
-  test "index ignores a blank q" do
-    get tournaments_path(q: "   ")
-
-    assert_response :success
-    assert_select ".data-table-row", count: 1
-  end
-
-  test "index keeps the query in the search field" do
-    get tournaments_path(q: "lyon")
-
-    assert_select "form.tournaments-search input[name=q][value=lyon]"
-  end
-
-  # The filter form targets this frame (instead of a full-page visit) so the search field
-  # survives the live-filtering debounce — see Tournaments::IndexView::FRAME_ID.
-  test "index wraps the results table in a turbo frame the filter form targets" do
-    get tournaments_path
-
-    assert_response :success
-    assert_select "turbo-frame#tournament_results .data-table-row"
-    assert_select "form.tournaments-search[data-turbo-frame=tournament_results][data-turbo-action=replace]"
-  end
-
-  # The spotlight renders "See all N tournaments" from Search::Global; this page must then show N.
-  test "index shows exactly as many tournaments as the spotlight's total promises" do
-    @user.tournaments.create!(deck: @deck, name: "Ogerpon Cup", date: Date.new(2026, 5, 1),
-                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
-    @user.tournaments.create!(deck: @deck, name: "Ogerpon League", date: Date.new(2026, 5, 2),
-                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
-
-    get tournaments_path(q: "ogerpon")
-
-    assert_response :success
-    assert_equal Search::Global.call(user: @user, query: "ogerpon").tournament_total,
-      css_select(".data-table-row").size
-  end
-
-  test "a q request renders the matching tournaments inside the turbo frame" do
-    @user.tournaments.create!(deck: @deck, name: "League Cup Lyon", date: Date.new(2026, 5, 1),
-                              format: "standard", standard_pool: standard_pools(:twm_por), tier: "league_cup")
-
-    get tournaments_path(q: "lyon")
-
-    assert_response :success
-    assert_select "turbo-frame#tournament_results .data-table-row", text: /League Cup Lyon/
-    assert_select "turbo-frame#tournament_results .data-table-row", count: 1
-  end
-
-  # For a tournament the comparison is the pool legal on its date, not the newest
-  # one: a March 2026 event anchored to the latest pool is a data-entry error, not
-  # a deck to refresh.
-  #
-  # Scoped with assert_select rather than assert_match on the raw body: the pool
-  # picker's own <select> already lists every pool by name (including TWM-ASC), so
-  # a plain substring match would pass even without the notice rendering at all.
-  test "editing a tournament whose anchor disagrees with its date says so" do
-    tournaments(:one).update!(date: Date.new(2026, 1, 20), standard_pool: standard_pools(:twm_por))
-
-    get edit_tournament_path(tournaments(:one))
+    get edit_tournament_path(@tournament)
 
     assert_response :success
     assert_select ".standard-pool-notice", text: /TWM-ASC/
   end
 
-  test "a tournament correctly anchored for its date is not nagged" do
-    tournaments(:one).update!(date: Date.new(2026, 3, 14), standard_pool: standard_pools(:twm_por))
+  test "an event correctly anchored for its date is not nagged" do
+    @tournament.update!(date: Date.new(2026, 3, 14), standard_pool: standard_pools(:twm_por))
 
-    get edit_tournament_path(tournaments(:one))
+    get edit_tournament_path(@tournament)
 
-    assert_response :success
     assert_select ".standard-pool-notice", count: 0
   end
 
-  # No pool was legal yet on this date (StandardPool.at returns nil), so there is
-  # nothing to compare the anchor against — the tournament predates the pool
-  # calendar this app tracks, not a data-entry error.
-  test "a tournament dated before any tracked pool is not nagged despite carrying an anchor" do
-    tournaments(:one).update!(date: Date.new(2020, 1, 1), standard_pool: standard_pools(:twm_por))
+  test "an event dated before any tracked pool is not nagged despite carrying an anchor" do
+    @tournament.update!(date: Date.new(2020, 1, 1), standard_pool: standard_pools(:twm_por))
 
-    get edit_tournament_path(tournaments(:one))
+    get edit_tournament_path(@tournament)
 
-    assert_response :success
     assert_select ".standard-pool-notice", count: 0
   end
 
-  # The other direction from "disagrees with its date says so" above: there the
-  # anchor was newer than the date calls for (the "else"/non-stale branch).
-  # Here the anchor is older than the date calls for, which is the ordinary
-  # staleness branch — reachable for a tournament too, not just a deck, and it
-  # is exactly the branch whose copy previously named "this deck" by mistake.
-  test "editing a tournament anchored to an older pool than its date calls for is nagged" do
-    tournaments(:one).update!(date: Date.new(2026, 2, 1), standard_pool: standard_pools(:twm_asc))
+  test "an event anchored to an older pool than its date calls for is nagged" do
+    @tournament.update!(date: Date.new(2026, 2, 1), standard_pool: standard_pools(:twm_asc))
 
-    get edit_tournament_path(tournaments(:one))
+    get edit_tournament_path(@tournament)
 
-    assert_response :success
     assert_select ".standard-pool-notice", text: /TWM-POR/
     assert_select ".standard-pool-notice", text: /released since/
-    # Guards the regression that actually shipped and was caught by a human, not by a
-    # test: this branch's copy used to read "update it if you still play this deck" on a
-    # page that has no deck on it. Both assertions above passed against that wording, so
-    # they proved the branch reachable and nothing more. These two only pass on copy that
-    # names no record type — which is the contract Ui::StandardPoolNotice documents.
+    # Guards the regression that shipped once and was caught by a human: this branch's copy
+    # used to read "update it if you still play this deck" on a page with no deck on it.
     assert_select ".standard-pool-notice", text: /update the anchor/
     notice = css_select(".standard-pool-notice").first.text
     refute_match(/deck/i, notice, "the notice must not name a record type: it renders for tournaments too")
   end
 
-  # A failed update re-renders the form with whatever was submitted, so a blanked date
-  # gets there. StandardPool.at(nil) answers with the newest pool by legal_on rather than
-  # nothing, so an unguarded notice would compare the anchor against that and nag about a
-  # date the user just erased.
   test "a rejected update that blanked the date is not nagged about the anchor" do
     @tournament.update!(date: Date.new(2026, 2, 1), standard_pool: standard_pools(:twm_asc))
 
@@ -272,5 +280,25 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_entity
     assert_select ".standard-pool-notice", count: 0
+  end
+
+  private
+
+  # A Standard event anchored to a pool nothing else uses, so the Format column really does
+  # have to read that pool's two bounds.
+  def catalog_event(index)
+    Tournament.create!(
+      name: "Quiet Cup #{index}", date: Date.new(2026, 7, 1) + index, tier: "league_cup",
+      format: "standard", standard_pool: pool_of_its_own(index), created_by: @user
+    )
+  end
+
+  # Copied from DecksControllerTest, where the same flat-cost test needs the same thing.
+  def pool_of_its_own(index)
+    set = CardSet.create!(code: "T#{index}", name: "Quiet Set #{index}", release_date: Date.new(2025, 1, 1))
+    StandardPool.create!(
+      first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
+      released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
   end
 end

@@ -1,65 +1,128 @@
+# The catalog and one event's page are public reads; cataloguing and correcting an event are
+# member writes. Both halves live here, the shape DecksController already has.
 class TournamentsController < ApplicationController
   include Searchable
 
+  CATALOG_PER_PAGE = 24
+
   before_action :set_tournament, only: %i[show edit update destroy]
-  before_action :set_form_collections, only: %i[new create edit update]
+
+  # An event's existence is public — it is listed at /tournaments — so "not yours" answers with
+  # somewhere to go rather than with the deck rule's 404. Stage 2 adds PubliclyReachable, whose
+  # own handler routes RecordNotFound and NotAuthorizedError onto one static 404; declaring
+  # this here wins for NotAuthorizedError alone, because rescue_from is consulted in reverse
+  # order of declaration.
+  rescue_from Pundit::NotAuthorizedError, with: :refuse_with_redirect
 
   def index
+    authorize Tournament, :index?
     @query = search_query
-    @tournaments = current_user.tournaments.includes(:deck, :tournament_profile).order(date: :desc)
-    @tournaments = @tournaments.name_matching(@query) if @query.present?
+
+    scope = Tournament.order(date: :desc)
+    scope = scope.name_matching(@query) if @query.present?
+
+    # to_s first: `?page[]=1` hands over an Array and `?page[a]=b` ActionController::Parameters,
+    # neither of which answers to_i. This action is anonymous in Stage 2, so that NoMethodError
+    # would be an unhandled 500 for any bot that tries the shape.
+    @page = [ params[:page].to_s.to_i, 1 ].max
+    @pages = (scope.count / CATALOG_PER_PAGE.to_f).ceil
+    # to_a, not the relation: the view asks `any?` before iterating, which on an unloaded
+    # relation is a SELECT 1 … LIMIT 1 beside the query it is about to run anyway.
+    @tournaments = scope.offset((@page - 1) * CATALOG_PER_PAGE).limit(CATALOG_PER_PAGE)
+                        .with_standard_pool.to_a
+    @attended_ids = attended_ids(@tournaments)
   end
 
   def show
-    @unassigned_results = @tournament.deck.deck_results.where(tournament_id: nil).order(played_at: :desc)
+    authorize @tournament
+    @my_entry = current_user&.tournament_entries&.find_by(tournament: @tournament)
+  end
+
+  def mine
+    authorize Tournament, :mine?
+    # No with_standard_pool here: this list has no Format column, and preloading two card sets
+    # per row for something nothing prints is the mistake that scope exists to fix.
+    @entries = current_user.tournament_entries
+      .joins(:tournament).includes(:deck, :tournament_profile, :tournament)
+      .order("tournaments.date DESC").to_a
   end
 
   def new
-    @tournament = current_user.tournaments.build(date: Date.current)
+    @tournament = Tournament.new(date: Date.current)
+    authorize @tournament, :create?
   end
 
   def create
-    @tournament = current_user.tournaments.build(tournament_params)
+    @tournament = Tournament.new(tournament_params.merge(created_by: current_user))
+    authorize @tournament, :create?
 
     if @tournament.save
-      redirect_to @tournament, notice: "Tournament created."
+      redirect_to new_tournament_entry_path(@tournament),
+        notice: "Tournament added to the catalog. Now record your participation."
     else
+      @existing = existing_tournament
       render :new, status: :unprocessable_entity
     end
   end
 
-  def edit; end
+  def edit
+    authorize @tournament
+  end
 
   def update
+    authorize @tournament
+
     if @tournament.update(tournament_params)
       redirect_to @tournament, notice: "Tournament updated."
     else
+      @existing = existing_tournament
       render :edit, status: :unprocessable_entity
     end
   end
 
   def destroy
-    @tournament.destroy
-    redirect_to tournaments_path, notice: "Tournament deleted."
+    authorize @tournament
+
+    if @tournament.destroy
+      redirect_to tournaments_path, notice: "Tournament deleted."
+    else
+      # restrict_with_error's own message names the association, not what a reader needs to
+      # know, which is whose data is in the way and how much of it.
+      count = @tournament.entries.count
+      redirect_to @tournament,
+        alert: "This tournament still has #{count} #{"participation".pluralize(count)} recorded against it."
+    end
   end
 
   private
 
   def set_tournament
-    @tournament = current_user.tournaments
-      .includes(:deck, :tournament_profile, deck_results: :archetype)
-      .find(params[:id])
+    @tournament = Tournament.with_standard_pool.find(params[:id])
   end
 
-  def set_form_collections
-    @decks = current_user.decks.order(:name)
-    @tournament_profiles = current_user.tournament_profiles.order(:player_name)
+  # The event the failed save collided with, so the form can link to it instead of merely
+  # refusing. nil unless the failure really was the uniqueness rule.
+  def existing_tournament
+    return if @tournament.errors[:name].none?
+
+    Tournament.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
+  end
+
+  # One grouped query for the whole page, and none at all for a visitor.
+  def attended_ids(tournaments)
+    return Set.new if current_user.nil? || tournaments.empty?
+
+    current_user.tournament_entries.where(tournament_id: tournaments.map(&:id))
+      .pluck(:tournament_id).to_set
+  end
+
+  def refuse_with_redirect
+    redirect_to tournament_path(params[:id]), alert: "Only the member who catalogued this tournament can edit it."
   end
 
   def tournament_params
     params.require(:tournament).permit(
-      :name, :date, :format, :other_format_name, :standard_pool_id, :tier, :deck_id, :tournament_profile_id,
-      :participant_count, :placement, :championship_points
+      :name, :date, :format, :other_format_name, :standard_pool_id, :tier
     )
   end
 end

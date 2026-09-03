@@ -1,9 +1,8 @@
 module Tournaments
   class Form < ApplicationComponent
-    def initialize(tournament:, decks:, tournament_profiles:)
+    def initialize(tournament:, existing: nil)
       @tournament = tournament
-      @decks = decks
-      @tournament_profiles = tournament_profiles
+      @existing = existing
     end
 
     def view_template
@@ -13,6 +12,15 @@ module Tournaments
         tournament_standard_pool_fallback_id_value: StandardPool.current&.id.to_i
       }) do |f|
         render Ui::FormErrors.new(resource: @tournament)
+
+        # Being blocked is useless without being told where to go: this is the other half of
+        # the anti-duplicate mechanism, the catalog's own search being the first.
+        if @existing
+          p(class: "form-hint") do
+            plain "This tournament is already catalogued: "
+            link_to @existing.name, tournament_path(@existing)
+          end
+        end
 
         render Ui::FormGroup.new do
           f.label :name, class: "form-label"
@@ -29,11 +37,6 @@ module Tournaments
               # the field — and invisible to a test that never blurs it.
               action: "input->tournament-standard-pool#syncFromDate change->tournament-standard-pool#syncFromDate"
             }
-        end
-
-        render Ui::FormGroup.new do
-          f.label :deck_id, "Deck", class: "form-label"
-          f.collection_select :deck_id, @decks, :id, :name, {}, class: "form-input"
         end
 
         render Ui::FormGroup.new do
@@ -63,27 +66,6 @@ module Tournaments
         render Ui::FormGroup.new(hint: "Only used when format is “Other”") do
           f.label :other_format_name, "Format name", class: "form-label"
           f.text_field :other_format_name, class: "form-input", placeholder: "e.g. Pocket, Theme…"
-        end
-
-        render Ui::FormGroup.new do
-          f.label :tournament_profile_id, "Tournament profile (optional)", class: "form-label"
-          f.collection_select :tournament_profile_id, @tournament_profiles, :id, :player_name,
-            { include_blank: "— None —" }, class: "form-input"
-        end
-
-        render Ui::FormGroup.new(hint: top_cut_hint) do
-          f.label :participant_count, "Number of participants", class: "form-label"
-          f.number_field :participant_count, class: "form-input", min: 1
-        end
-
-        render Ui::FormGroup.new do
-          f.label :placement, "Final placement", class: "form-label"
-          f.number_field :placement, class: "form-input", min: 1
-        end
-
-        render Ui::FormGroup.new(hint: cp_hint) do
-          f.label :championship_points, "Championship Points", class: "form-label"
-          f.number_field :championship_points, class: "form-input", min: 0
         end
 
         div(class: "form-actions deck-form-actions") do
@@ -127,21 +109,6 @@ module Tournaments
       return @tournament.standard_pool_id if @tournament.standard_pool_id
 
       (expected_standard_pool || StandardPool.current)&.id
-    end
-
-    def top_cut_hint
-      cut = @tournament.standard_top_cut
-      return "Standard top cut for this attendance is indicative only." if @tournament.participant_count.blank?
-
-      cut ? "Standard top cut for #{@tournament.participant_count} participants: Top #{cut} (indicative)." :
-        "No standard top cut for #{@tournament.participant_count} participants (indicative)."
-    end
-
-    def cp_hint
-      suggested = @tournament.suggested_championship_points
-      return "Reference CP depends on tier and placement — you can always override it." if suggested.nil?
-
-      "Reference CP for a #{@tournament.placement.ordinalize} place at this tier: #{suggested} (indicative, editable)."
     end
   end
 end

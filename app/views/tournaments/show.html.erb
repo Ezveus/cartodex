@@ -1,1 +1,2 @@
-<%= render Tournaments::ShowView.new(tournament: @tournament, unassigned_results: @unassigned_results) %>
+<%= render Tournaments::ShowView.new(tournament: @tournament, my_entry: @my_entry,
+                                     can_edit: policy(@tournament).edit?) %>

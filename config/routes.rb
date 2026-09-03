@@ -74,9 +74,19 @@ Rails.application.routes.draw do
     end
     resources :tournament_profiles, except: [ :show ]
     resources :tournaments do
-      resources :deck_results, only: [], controller: "tournaments/deck_results" do
-        post :attach, on: :collection
-        delete :detach, on: :member
+      # Declared before the member routes are emitted, so /tournaments/mine is not swallowed
+      # by /tournaments/:id.
+      get :mine, on: :collection
+      # `resources :entries`, not `:tournament_entries`: the URL reads
+      # /tournaments/:tournament_id/entries/:id. The cost is that polymorphic form_with cannot
+      # derive the path from the TournamentEntry class name, so the entry forms pass an
+      # explicit `url:` — see Tournaments::Entries::Form.
+      resources :entries, only: %i[new create show edit update destroy],
+                controller: "tournaments/entries" do
+        member do
+          post :attach_results
+          delete :detach_result
+        end
       end
     end
 
