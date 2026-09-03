@@ -410,10 +410,10 @@ Place it after "Cards" and before "Shared decks", so the visitor's order matches
 Run: `bin/rails test test/controllers/navbar_active_section_test.rb`
 Expected: PASS.
 
-Run: `bin/rails test:system test/system/public_navigation_test.rb`
+Run: `bin/rails test test/system/public_navigation_test.rb`
 Expected: PASS.
 
-Run: `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system test/system/public_navigation_test.rb`
+Run: `SYSTEM_TEST_VIEWPORT=mobile bin/rails test test/system/public_navigation_test.rb`
 Expected: PASS. If it fails here and not on the desktop side, the cause is almost always a plain `click_on` on a nav link rather than `click_nav_link`.
 
 - [ ] **Step 5: Commit**

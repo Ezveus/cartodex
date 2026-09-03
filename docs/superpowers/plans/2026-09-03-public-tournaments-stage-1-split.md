@@ -2694,12 +2694,12 @@ end
 
 - [ ] **Step 2: Run it on the desktop side**
 
-Run: `bin/rails test:system test/system/tournament_catalog_test.rb`
+Run: `bin/rails test test/system/tournament_catalog_test.rb`
 Expected: PASS. If a `click_on` cannot find a submit button, check the label Rails generates for the model (`f.submit` on a new `TournamentEntry` reads "Create Tournament entry") and use what the page actually renders.
 
 - [ ] **Step 3: Run it on the mobile side**
 
-Run: `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system test/system/tournament_catalog_test.rb`
+Run: `SYSTEM_TEST_VIEWPORT=mobile bin/rails test test/system/tournament_catalog_test.rb`
 Expected: PASS. Every system test in this repository is expected to pass on both sides of the breakpoint.
 
 - [ ] **Step 4: Run the whole system suite, both sides**
