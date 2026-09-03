@@ -68,16 +68,42 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_includes result.decks, @deck
   end
 
-  test "excludes another user's decks and tournaments" do
+  test "excludes another user's decks" do
     decks(:two).update!(user: users(:two), name: "Ogerpon Toolbox")
-    users(:two).tournaments.create!(deck: decks(:two), name: "Ogerpon Open",
-                                    date: Date.new(2026, 4, 1), format: "standard",
-                                    standard_pool: standard_pools(:twm_por), tier: "league_cup")
 
     result = Search::Global.call(user: @user, query: "ogerpon")
 
     assert_not_includes result.decks, decks(:two)
+  end
+
+  # Inverted deliberately. Under the old model a tournament belonged to one member, so this
+  # asserted an event another member recorded was invisible. The catalog is shared now: it is
+  # the same event, and hiding it was the bug the split fixes.
+  test "a member's search finds an event another member catalogued" do
+    other = Tournament.create!(name: "Ogerpon Open", date: Date.new(2026, 4, 1),
+                               tier: "league_cup", format: "expanded", created_by: users(:two))
+
+    result = Search::Global.call(user: users(:one), query: "ogerpon")
+
+    assert_includes result.tournaments, other
+  end
+
+  # A member's tournaments group becomes the whole catalog: an event another member catalogued
+  # is the same event, and it used to be invisible because the scope was @user.tournaments.
+  test "a member's search finds a fixture event catalogued by another member" do
+    result = Search::Global.call(user: users(:one), query: "local league")
+
+    assert_includes result.tournaments, tournaments(:two)
+  end
+
+  # Deliberately still empty in this stage. /tournaments is behind Devise until Stage 2, so
+  # offering a visitor a result whose link bounces to the sign-in page would be worse than
+  # offering nothing. Stage 2 deletes this branch and this test with it.
+  test "a visitor gets no tournament results while the catalog still requires a session" do
+    result = Search::Global.call(user: nil, query: "regional")
+
     assert_empty result.tournaments
+    assert_equal 0, result.tournament_total
   end
 
   test "searches the whole card catalog, not just the user's collection" do
@@ -88,9 +114,10 @@ class Search::GlobalTest < ActiveSupport::TestCase
   end
 
   test "matches the user's own tournaments by name" do
-    tournament = @user.tournaments.create!(deck: @deck, name: "Ogerpon Open",
-                                           date: Date.new(2026, 4, 1), format: "standard",
-                                           standard_pool: standard_pools(:twm_por), tier: "league_cup")
+    tournament = Tournament.create!(name: "Ogerpon Open",
+                                    date: Date.new(2026, 4, 1), format: "standard",
+                                    standard_pool: standard_pools(:twm_por), tier: "league_cup",
+                                    created_by: @user)
 
     result = Search::Global.call(user: @user, query: "ogerpon")
 
@@ -102,9 +129,10 @@ class Search::GlobalTest < ActiveSupport::TestCase
   # the COUNT — a second full LIKE scan of the card catalog — is skipped. Shrinking the cap to 1
   # fills every non-empty group, which is what makes the extra queries appear.
   test "skips the total count for a group the cap did not truncate" do
-    @user.tournaments.create!(deck: @deck, name: "Ogerpon Open",
-                              date: Date.new(2026, 4, 1), format: "standard",
-                              standard_pool: standard_pools(:twm_por), tier: "league_cup")
+    Tournament.create!(name: "Ogerpon Open",
+                       date: Date.new(2026, 4, 1), format: "standard",
+                       standard_pool: standard_pools(:twm_por), tier: "league_cup",
+                       created_by: @user)
 
     unfilled = count_queries { Search::Global.call(user: @user, query: "ogerpon", limit: 5) }
     filled   = count_queries { Search::Global.call(user: @user, query: "ogerpon", limit: 1) }

@@ -22,14 +22,18 @@ module Decks
 
     private
 
+    # The user picks a tournament; the value is their participation in it, which is what a
+    # match hangs off. Ordered by the event's date, so the select reads the way the deck's
+    # history does.
     def tournament_group
-      return if @deck.tournaments.empty?
+      entries = @deck.tournament_entries.includes(:tournament).sort_by { |e| e.tournament.date }.reverse
+      return if entries.empty?
 
       render Ui::FormGroup.new(label: "Tournament (optional)") do
-        select(class: "form-input", data: { result_modal_target: "tournamentSelect" }) do
+        select(class: "form-input", data: { result_modal_target: "tournamentEntrySelect" }) do
           option(value: "") { "— None —" }
-          @deck.tournaments.order(date: :desc).each do |tournament|
-            option(value: tournament.id) { "#{tournament.name} (#{localize(tournament.date)})" }
+          entries.each do |entry|
+            option(value: entry.id) { "#{entry.tournament.name} (#{localize(entry.tournament.date)})" }
           end
         end
       end

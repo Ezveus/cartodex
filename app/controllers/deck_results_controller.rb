@@ -33,6 +33,6 @@ class DeckResultsController < ApplicationController
   end
 
   def result_params
-    params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at, :match_format, :score, :tournament_id)
+    params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at, :match_format, :score, :tournament_entry_id)
   end
 end

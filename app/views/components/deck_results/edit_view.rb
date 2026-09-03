@@ -26,8 +26,10 @@ module DeckResults
           end
 
           render Ui::FormGroup.new do
-            f.label :tournament_id, "Tournament", class: "form-label"
-            f.collection_select :tournament_id, @deck.tournaments.order(date: :desc), :id, :name,
+            f.label :tournament_entry_id, "Tournament", class: "form-label"
+            f.select :tournament_entry_id,
+              @deck.tournament_entries.includes(:tournament).sort_by { |e| e.tournament.date }.reverse
+                .map { |e| [ "#{e.tournament.name} (#{localize(e.tournament.date)})", e.id ] },
               { include_blank: "— None —" }, class: "form-input"
           end
 
