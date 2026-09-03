@@ -37,12 +37,8 @@ class DecksController < ApplicationController
     authorize Deck, :index?
     # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
     # the ones it just showed — it orders by name too.
-    # standard_pool's two bounds are preloaded because the format badge names the pool,
-    # and StandardPool#name reads both of them: without this each Standard deck on the
-    # page costs three extra queries.
-    @decks = filter_decks(current_user.decks.order(:name).includes(
-      :deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ],
-      standard_pool: [ :first_card_set, :last_card_set ]
+    @decks = filter_decks(current_user.decks.order(:name).with_standard_pool.includes(
+      :deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ]
     ))
     @filters = filter_params
 
@@ -76,15 +72,13 @@ class DecksController < ApplicationController
     # would be an unhandled 500 for any bot that tries the shape.
     @page = [ params[:page].to_s.to_i, 1 ].max
     @pages = (scope.count / SHARED_PER_PAGE.to_f).ceil
-    # Same preloads as the dashboard showcase: each row renders the format badge, which names
-    # the Standard pool from both of its bounds — three extra queries per Standard deck, times
-    # 24 rows, without this.
+    # Same preloads as the dashboard showcase; see Deck.with_standard_pool for why the badge
+    # needs the pool's bounds too.
     # to_a, not the relation: the view asks `any?` before iterating, and on an unloaded
     # relation that is a SELECT 1 … LIMIT 1 beside the page query it is about to run anyway.
     @decks = scope.offset((@page - 1) * SHARED_PER_PAGE).limit(SHARED_PER_PAGE)
-                  .includes(:deck_cards,
-                            archetype: [ :primary_card, :secondary_card ],
-                            standard_pool: [ :first_card_set, :last_card_set ]).to_a
+                  .with_standard_pool
+                  .includes(:deck_cards, archetype: [ :primary_card, :secondary_card ]).to_a
 
     @filters = { q: search_query.presence, format: params[:format].presence, primary: params[:primary].presence }
 
@@ -335,26 +329,26 @@ class DecksController < ApplicationController
 
   # Primary card of the archetypes used by the current user's decks, for the filter bar.
   def primary_filter_options
-    member_card_filter_options(:primary_card_id)
+    archetype_card_options(current_user.decks, :primary_card_id)
   end
 
   # Secondary card of the archetypes used by the current user's decks, for the filter bar.
   def secondary_filter_options
-    member_card_filter_options(:secondary_card_id)
+    archetype_card_options(current_user.decks, :secondary_card_id)
   end
 
-  def member_card_filter_options(column)
-    archetype_ids = current_user.decks.where.not(archetype_id: nil).select(:archetype_id)
-    card_ids = Archetype.where(id: archetype_ids).select(column)
-    Card.where(id: card_ids).order(:name).pluck(:name, :id)
-  end
-
-  # Derived from the shared decks, deliberately not from member_card_filter_options, which
-  # starts at current_user.decks — it would offer a visitor a filter built from nobody's decks
-  # and a member one that hides most of the page.
+  # Derived from the shared decks, deliberately not from the current user's: that scope would
+  # offer a visitor a filter built from nobody's decks, and a member one that hides most of the
+  # page. The three stay named because they are three different questions; only the query they
+  # all ask is written once.
   def shared_archetype_options
-    archetype_ids = Deck.shared.where.not(archetype_id: nil).select(:archetype_id)
-    card_ids = Archetype.where(id: archetype_ids).select(:primary_card_id)
+    archetype_card_options(Deck.shared, :primary_card_id)
+  end
+
+  # "The cards these decks' archetypes point at", as [name, id] pairs for a filter <select>.
+  def archetype_card_options(decks, column)
+    archetype_ids = decks.where.not(archetype_id: nil).select(:archetype_id)
+    card_ids = Archetype.where(id: archetype_ids).select(column)
     Card.where(id: card_ids).order(:name).pluck(:name, :id)
   end
 

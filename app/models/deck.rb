@@ -48,6 +48,12 @@ class Deck < ApplicationRecord
   scope :with_proxies, -> { where(physical: true, id: DeckCard.with_proxies.select(:deck_id)) }
   scope :without_proxies, -> { where.not(id: Deck.with_proxies.select(:id)) }
 
+  # The pool *and both of its bounds*, because StandardPool#name reads them: preloading the
+  # pool alone still costs two queries per distinct pool. Every listing that renders a deck's
+  # format badge wants this — the two deck indexes, the dashboard showcase, the spotlight's two
+  # deck groups and the list_decks MCP tool — and each used to spell it out and re-explain it.
+  scope :with_standard_pool, -> { includes(standard_pool: [ :first_card_set, :last_card_set ]) }
+
   # Written by hand, not generated: Active Record refuses to define a scope named `public`
   # or `private`, since both are Module methods. `shared`/`unshared` is also the vocabulary
   # the Share modal and the badge use, so the column, the scopes and the UI agree.

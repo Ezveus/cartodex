@@ -81,6 +81,27 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
       "expected no existence probe beside the showcase query"
   end
 
+  # Same shape as the deck index's guard: each showcased deck gets a pool of its own, because
+  # decks sharing a pool id issue identical SQL that the per-request query cache serves and
+  # count_queries does not count — which would hide the very N+1 this is for. The badge on each
+  # showcase row names the pool, and StandardPool#name reads both of its card-set bounds.
+  test "the showcase costs the same whether it lists one deck or many" do
+    sign_out @user
+    Deck.update_all(shared: false)
+    users(:two).decks.create!(name: "Shared 0", shared: true, standard_pool: pool_of_its_own(0))
+
+    get dashboard_path # warm the session and the set/pool lookups
+
+    small = count_queries { get dashboard_path }
+
+    (1..4).each { |i| users(:two).decks.create!(name: "Shared #{i}", shared: true, standard_pool: pool_of_its_own(i)) }
+
+    large = count_queries { get dashboard_path }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the showcase: #{small} -> #{large}"
+  end
+
   test "root is the dashboard for everyone" do
     sign_out @user
     get root_path
@@ -90,5 +111,17 @@ class HomeControllerTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select ".dashboard-card"
+  end
+
+  private
+
+  # A pool nothing else shares, so that N showcased decks have N pool names to resolve.
+  # Dated well before twm_por, so StandardPool.current is untouched.
+  def pool_of_its_own(index)
+    set = CardSet.create!(code: "S#{index}", name: "Showcase Set #{index}", release_date: Date.new(2025, 1, 1))
+    StandardPool.create!(
+      first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
+      released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
   end
 end

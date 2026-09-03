@@ -141,6 +141,21 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_equal one, many, "query count grew with the collection: #{one} -> #{many}"
   end
 
+  # Each deck reports its pool's name, and StandardPool#name reads both of the pool's card-set
+  # bounds — a pool per deck on purpose, since decks sharing one issue identical SQL that the
+  # query cache serves and count_queries does not see.
+  test "ListDecksTool issues a constant number of queries regardless of how many decks" do
+    @user.decks.create!(name: "Extra 0", standard_pool: pool_of_its_own(0))
+
+    one = count_queries { ListDecksTool.call(server_context: @context) }
+
+    (1..4).each { |i| @user.decks.create!(name: "Extra #{i}", standard_pool: pool_of_its_own(i)) }
+
+    many = count_queries { ListDecksTool.call(server_context: @context) }
+
+    assert_equal one, many, "query count grew with the deck count: #{one} -> #{many}"
+  end
+
   test "ListDeckCardsTool exposes owned_copies and proxies" do
     physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 1)
@@ -231,5 +246,13 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     report = payload(response)
     assert report.first["decks"].all? { |d| d["key"].present? }, "a named deck had no key"
+  end
+
+  def pool_of_its_own(index)
+    set = CardSet.create!(code: "M#{index}", name: "Mcp Set #{index}", release_date: Date.new(2025, 1, 1))
+    StandardPool.create!(
+      first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
+      released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
   end
 end
