@@ -107,4 +107,28 @@ class CardSets::ImporterTest < ActiveSupport::TestCase
       pages.fetch(u) { raise "Unexpected URL: #{u}" }
     }
   end
+
+  test "forgets the cached filter values, which an import can add to" do
+    with_real_cache do
+      Card.filter_values # populate
+
+      CardSets::Importer.call(SET_URL)
+
+      # A new rarity or regulation mark arriving with an import must not stay invisible on
+      # /cards until the TTL lapses.
+      assert_operator count_queries { Card.filter_values }, :>, 0,
+        "expected the import to have dropped the cached lists"
+    end
+  end
+
+  # :null_store in test makes every fetch a miss, so a real store has to stand in or the
+  # assertion is vacuous.
+  def with_real_cache
+    original = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+
+    yield
+  ensure
+    Rails.cache = original
+  end
 end

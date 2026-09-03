@@ -11,5 +11,9 @@ class CardSets::RescrapeJob < ApplicationJob
     rescue => e
       Rails.logger.warn "Rescrape failed for #{card.set_name}/#{card.set_number}: #{e.message}"
     end
+
+    # The other writer of a rarity or regulation mark: `force: true` is the only thing in the
+    # app that rewrites an existing card's text, and /cards caches those two lists.
+    Card.forget_filter_values
   end
 end

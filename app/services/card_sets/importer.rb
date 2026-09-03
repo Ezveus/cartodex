@@ -29,6 +29,10 @@ class CardSets::Importer < ApplicationService
       imported += 1
     end
 
+    # An import is one of the two things that can put a new rarity or regulation mark in the
+    # catalog, and /cards caches those lists.
+    Card.forget_filter_values
+
     { card_set: card_set, imported: imported }
   end
 

@@ -47,17 +47,8 @@ class CardsController < ApplicationController
 
     @searching = @query.length >= 2 || @type || @energy || @rarity || @mark
 
-    # Both lists change only when a set is imported, and neither `rarity` nor
-    # `regulation_mark` is indexed — two full scans of `cards` on every request, anonymous
-    # ones included, once this action is public. A cache is the honest fix here: an index on a
-    # low-cardinality column read on every page load is not.
-    cache_key = [ "cards/filter-values", Card.maximum(:updated_at)&.to_i ]
-    @rarities, @marks = Rails.cache.fetch(cache_key) do
-      [
-        Card.where.not(rarity: [ nil, "" ]).distinct.order(:rarity).pluck(:rarity),
-        Card.where.not(regulation_mark: [ nil, "" ]).distinct.order(:regulation_mark).pluck(:regulation_mark)
-      ]
-    end
+    # Cached, and invalidated by the two things that can add a value — see Card.filter_values.
+    @rarities, @marks = Card.filter_values
 
     @cards =
       if @searching

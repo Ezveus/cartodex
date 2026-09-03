@@ -125,4 +125,40 @@ class CardTest < ActiveSupport::TestCase
       assert_equal card.name.downcase, card.name_normalized, "#{card.name.inspect} fixture is out of step"
     end
   end
+
+  # The test environment's cache store is :null_store, which makes every fetch a miss and
+  # every one of these assertions vacuous. A real store has to stand in — the same pattern
+  # test/controllers/cards_rate_limit_test.rb uses for `rate_limit`.
+  test "filter_values is computed once and forgotten on demand" do
+    with_real_cache do
+      first = count_queries { Card.filter_values }
+      assert_operator first, :>, 0, "expected the first call to actually query"
+
+      assert_equal 0, count_queries { Card.filter_values }, "expected the second call to be served from cache"
+
+      Card.forget_filter_values
+
+      assert_equal first, count_queries { Card.filter_values }, "expected forgetting to send it back to the database"
+    end
+  end
+
+  test "filter_values reports the values in the catalog" do
+    with_real_cache do
+      rarities, marks = Card.filter_values
+
+      assert_equal Card.where.not(rarity: [ nil, "" ]).distinct.order(:rarity).pluck(:rarity), rarities
+      assert_equal Card.where.not(regulation_mark: [ nil, "" ]).distinct.order(:regulation_mark).pluck(:regulation_mark), marks
+    end
+  end
+
+  private
+
+  def with_real_cache
+    original = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+
+    yield
+  ensure
+    Rails.cache = original
+  end
 end
