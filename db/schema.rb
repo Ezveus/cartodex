@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_03_203025) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -128,11 +128,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
     t.datetime "played_at"
     t.string "result"
     t.string "score"
-    t.integer "tournament_id"
+    t.integer "tournament_entry_id"
     t.datetime "updated_at", null: false
     t.index ["archetype_id"], name: "index_deck_results_on_archetype_id"
     t.index ["deck_id"], name: "index_deck_results_on_deck_id"
-    t.index ["tournament_id"], name: "index_deck_results_on_tournament_id"
+    t.index ["tournament_entry_id"], name: "index_deck_results_on_tournament_entry_id"
   end
 
   create_table "decks", force: :cascade do |t|
@@ -236,6 +236,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
     t.index ["last_card_set_id"], name: "index_standard_pools_on_last_card_set_id"
   end
 
+  create_table "tournament_entries", force: :cascade do |t|
+    t.integer "championship_points"
+    t.datetime "created_at", null: false
+    t.integer "deck_id", null: false
+    t.integer "participant_count"
+    t.integer "placement"
+    t.integer "tournament_id", null: false
+    t.integer "tournament_profile_id"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["deck_id"], name: "index_tournament_entries_on_deck_id"
+    t.index ["tournament_id", "tournament_profile_id"], name: "index_tournament_entries_on_tournament_and_profile", unique: true, where: "tournament_profile_id IS NOT NULL"
+    t.index ["tournament_id", "user_id"], name: "index_tournament_entries_on_tournament_and_user", unique: true, where: "tournament_profile_id IS NULL"
+    t.index ["tournament_id"], name: "index_tournament_entries_on_tournament_id"
+    t.index ["tournament_profile_id"], name: "index_tournament_entries_on_tournament_profile_id"
+    t.index ["user_id"], name: "index_tournament_entries_on_user_id"
+  end
+
   create_table "tournament_profiles", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.date "date_of_birth", null: false
@@ -248,25 +266,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
   end
 
   create_table "tournaments", force: :cascade do |t|
-    t.integer "championship_points"
     t.datetime "created_at", null: false
+    t.integer "created_by_id"
     t.date "date", null: false
-    t.integer "deck_id", null: false
     t.string "format", default: "standard", null: false
     t.string "name", null: false
-    t.string "name_normalized"
+    t.string "name_normalized", null: false
     t.string "other_format_name"
-    t.integer "participant_count"
-    t.integer "placement"
     t.integer "standard_pool_id"
     t.string "tier", default: "regional", null: false
-    t.integer "tournament_profile_id"
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
-    t.index ["deck_id"], name: "index_tournaments_on_deck_id"
+    t.index ["created_by_id"], name: "index_tournaments_on_created_by_id"
+    t.index ["name_normalized", "date"], name: "index_tournaments_on_name_normalized_and_date", unique: true
     t.index ["standard_pool_id"], name: "index_tournaments_on_standard_pool_id"
-    t.index ["tournament_profile_id"], name: "index_tournaments_on_tournament_profile_id"
-    t.index ["user_id"], name: "index_tournaments_on_user_id"
   end
 
   create_table "users", force: :cascade do |t|
@@ -300,7 +312,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
   add_foreign_key "deck_cards", "decks"
   add_foreign_key "deck_results", "archetypes"
   add_foreign_key "deck_results", "decks"
-  add_foreign_key "deck_results", "tournaments"
+  add_foreign_key "deck_results", "tournament_entries"
   add_foreign_key "decks", "archetypes"
   add_foreign_key "decks", "standard_pools"
   add_foreign_key "decks", "users"
@@ -309,9 +321,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_155701) do
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "standard_pools", "card_sets", column: "first_card_set_id"
   add_foreign_key "standard_pools", "card_sets", column: "last_card_set_id"
+  add_foreign_key "tournament_entries", "decks"
+  add_foreign_key "tournament_entries", "tournament_profiles"
+  add_foreign_key "tournament_entries", "tournaments"
+  add_foreign_key "tournament_entries", "users"
   add_foreign_key "tournament_profiles", "users"
-  add_foreign_key "tournaments", "decks"
   add_foreign_key "tournaments", "standard_pools"
-  add_foreign_key "tournaments", "tournament_profiles"
-  add_foreign_key "tournaments", "users"
+  add_foreign_key "tournaments", "users", column: "created_by_id"
 end
