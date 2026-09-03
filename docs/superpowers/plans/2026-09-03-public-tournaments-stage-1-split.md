@@ -2635,6 +2635,8 @@ git commit -m "Light one navbar entry for the catalog and one for my tournaments
 
 Create `test/system/tournament_catalog_test.rb`. Navigation goes through `click_nav_link`, not a plain click: below the 768px breakpoint `.navbar-menu` is `display: none` until the hamburger opens it.
 
+Note the neighbour: `test/system/standard_pools_test.rb` already holds two tournament system tests, both visiting `new_tournament_path` to exercise the pool-follows-date Stimulus controller. They survive this stage untouched — the event form keeps `date` and `standard_pool_id`, which is all they read — but they are the file to look at first if the form's behaviour regresses.
+
 ```ruby
 require "application_system_test_case"
 
@@ -2653,7 +2655,10 @@ class TournamentCatalogTest < ApplicationSystemTestCase
 
     click_on "Add a tournament"
     fill_in "Name", with: "League Cup Toulouse"
-    fill_in "Date", with: "2026-04-11"
+    # A Date, not a String: typed into a type=date input, "2026-04-11" is consumed segment by
+    # segment in the browser's own locale and lands as garbage (51201-02-20, measured — see
+    # test/system/standard_pools_test.rb). Capybara formats a Date object for the field.
+    fill_in "Date", with: Date.new(2026, 4, 11)
     select "League Cup", from: "Tournament tier"
     click_on "Create Tournament"
 
@@ -2676,7 +2681,7 @@ class TournamentCatalogTest < ApplicationSystemTestCase
     visit new_tournament_path
 
     fill_in "Name", with: tournaments(:one).name.upcase
-    fill_in "Date", with: tournaments(:one).date.to_s
+    fill_in "Date", with: tournaments(:one).date
     click_on "Create Tournament"
 
     assert_text "already catalogued"
@@ -2700,7 +2705,7 @@ Expected: PASS. Every system test in this repository is expected to pass on both
 - [ ] **Step 4: Run the whole system suite, both sides**
 
 Run: `bin/rails test:system` then `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system`
-Expected: PASS. `global_search_test.rb` and `spotlight_search_test.rb` touch tournaments; if either fails, it is the search group change from Task 4 surfacing in the browser, and the fix belongs here.
+Expected: PASS. Three existing files touch tournaments and are the ones to read first on a failure: `spotlight_search_test.rb` (edited in Task 4 — a failure here is that change surfacing in the browser), `global_search_test.rb`, and `standard_pools_test.rb` (its two tournament-form tests should be unaffected; if they are not, the form split in Task 5 took something it should have kept).
 
 - [ ] **Step 5: Commit**
 
