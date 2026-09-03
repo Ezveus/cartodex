@@ -229,6 +229,35 @@ class UserTest < ActiveSupport::TestCase
     assert_equal User::DEFAULT_LIFETIME_KEY, user.reload.api_token_lifetime_key
   end
 
+  # TournamentProfile refuses dependent: :destroy while a participation still points at it
+  # (Finding 1's fix), and Devise's "Cancel my account" reaches this same #destroy — so a
+  # profile in use could plausibly 500 the whole flow. It doesn't: `has_many :decks,
+  # dependent: :destroy` above (line 9, ahead of both tournament associations) always
+  # destroys this user's decks first, and Deck's own `has_many :tournament_entries,
+  # dependent: :destroy` (deck.rb) empties every entry that deck backs before either
+  # tournament_profiles or tournament_entries here gets a callback — every entry has a deck
+  # (NOT NULL) belonging to the same user (deck_belongs_to_user), so none can survive its
+  # owner's decks. By the time tournament_profiles runs, restrict_with_error never finds
+  # anything to refuse. This is what actually protects the flow, not the relative order of
+  # the two tournament associations — moving :decks below them, or taking :destroy off
+  # Deck#tournament_entries, is what should turn this test red.
+  test "cancelling the account removes the user, their entries and their profiles together" do
+    user = User.create!(email: "cancelling@example.com", password: "password123")
+    deck = Deck.create!(user: user, name: "Farewell Deck", standard_pool: standard_pools(:twm_por))
+    profile = user.tournament_profiles.create!(
+      player_name: "Departing Player", player_id: "9000001", date_of_birth: Date.new(2000, 1, 1)
+    )
+    entry = user.tournament_entries.create!(
+      tournament: tournaments(:one), deck: deck, tournament_profile: profile
+    )
+
+    assert user.destroy, user.errors.full_messages.to_sentence
+
+    assert_not User.exists?(user.id)
+    assert_not TournamentEntry.exists?(entry.id)
+    assert_not TournamentProfile.exists?(profile.id)
+  end
+
   test "an expired token records no usage" do
     user = User.create!(email: "usage-expired@example.com", password: "password123")
     raw = user.regenerate_api_token
