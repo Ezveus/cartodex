@@ -794,6 +794,33 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-badges .badge", text: "Shared", count: 0
   end
 
+  test "the export menu offers the owner the tournament PDF and a visitor everything else" do
+    @deck.update!(shared: true)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".dropdown-item", text: "Copy for TCG Live"
+    assert_select ".dropdown-item", text: "Copy as Cardmarket wishlist"
+    assert_select ".dropdown-item", text: "Copy as image"
+    assert_select ".dropdown-item", text: "Download as image"
+    assert_select ".dropdown-item", text: "Download as tournament PDF"
+    # The clipboard items carry the URL they copy; a missing value is a button that silently
+    # copies nothing.
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", export_deck_path(@deck)
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", export_deck_path(@deck, style: "cardmarket")
+
+    sign_out @user
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".dropdown-item", text: "Copy for TCG Live"
+    assert_select ".dropdown-item", text: "Download as image"
+    # The one item the public page must not carry: tournament_pdf? is owner-only because it
+    # reads one of the owner's profiles, so offering it here would be a button that 404s.
+    assert_select ".dropdown-item", text: "Download as tournament PDF", count: 0
+  end
+
   test "the shared index lays out its rows and pager with classes the stylesheet defines" do
     sign_out @user
     # One more than SHARED_PER_PAGE, so the pager renders at all.

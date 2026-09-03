@@ -182,6 +182,12 @@ module Styleguide
             input(class: "form-input", id: "sg-name", type: "text", value: "Raging Bolt — Ogerpon")
             span(class: "form-hint") { "Auto-détecté depuis la liste importée." }
           end
+          # Le vrai Ui::FilterSelect, celui des deux index de decks. Cards::IndexView garde
+          # le sien : il se style en .cards-search-select, c'est une variante et non une copie.
+          render Ui::FilterSelect.new(
+            name: :format, selected: "standard",
+            options: [ [ "Tous les formats", "" ] ] + Deck::FORMAT_LABELS.map { |value, label| [ label, value ] }
+          )
         end
       end
     end

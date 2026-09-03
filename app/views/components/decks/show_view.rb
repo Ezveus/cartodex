@@ -45,31 +45,7 @@ module Decks
       end
       nav(class: "deck-actions-bar") do
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
-        div(class: "dropdown", data: { controller: "dropdown" }) do
-          button(class: "btn btn-secondary btn-sm", data: { action: "dropdown#toggle" }) { "Export ▾" }
-          div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
-            button(
-              class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck), action: "clipboard#copy" }
-            ) { "Copy for TCG Live" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
-            ) { "Copy as Cardmarket wishlist" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "deck-image-export", action: "deck-image-export#copy" }
-            ) { "Copy as image" }
-            button(
-              class: "dropdown-item",
-              data: { controller: "deck-image-export", action: "deck-image-export#download" }
-            ) { "Download as image" }
-            button(
-              class: "dropdown-item",
-              data: { action: "tournament-pdf#open" }
-            ) { "Download as tournament PDF" }
-          end
-        end
+        render Decks::ExportDropdown.new(deck: @deck, tournament_pdf: true)
         link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
         render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true)
@@ -175,27 +151,8 @@ module Decks
     end
 
     def preview_section
-      div(class: "deck-show-preview") do
-        image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
-        link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
-      end
-      card_preview_modal
-    end
-
-    def card_preview_modal
-      dialog(
-        class: "card-preview-modal",
-        data: {
-          card_preview_target: "modal",
-          action: "click->card-preview#backdropClose"
-        }
-      ) do
-        div(class: "card-preview-modal-content") do
-          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
-          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
-          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
-        end
-      end
+      render Ui::CardPreview.new(wrapper_class: "deck-show-preview")
+      render Ui::CardPreviewModal.new
     end
   end
 end

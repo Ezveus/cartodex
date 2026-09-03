@@ -33,32 +33,8 @@ module Decks
           p(class: "deck-show-description") { @deck.description } if @deck.description.present?
         end
       end
-      nav(class: "deck-actions-bar") { export_dropdown }
-    end
-
-    # No tournament PDF: it reads one of the owner's tournament profiles.
-    def export_dropdown
-      div(class: "dropdown", data: { controller: "dropdown" }) do
-        button(class: "btn btn-secondary btn-sm", data: { action: "dropdown#toggle" }) { "Export ▾" }
-        div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
-          button(
-            class: "dropdown-item",
-            data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck), action: "clipboard#copy" }
-          ) { "Copy for TCG Live" }
-          button(
-            class: "dropdown-item",
-            data: { controller: "clipboard", clipboard_url_value: export_deck_path(@deck, style: "cardmarket"), action: "clipboard#copy" }
-          ) { "Copy as Cardmarket wishlist" }
-          button(
-            class: "dropdown-item",
-            data: { controller: "deck-image-export", action: "deck-image-export#copy" }
-          ) { "Copy as image" }
-          button(
-            class: "dropdown-item",
-            data: { controller: "deck-image-export", action: "deck-image-export#download" }
-          ) { "Download as image" }
-        end
-      end
+      # No tournament_pdf: it reads one of the owner's tournament profiles.
+      nav(class: "deck-actions-bar") { render Decks::ExportDropdown.new(deck: @deck) }
     end
 
     # The card count only. No wins, losses, draws or timeouts: the record stays private.
@@ -131,27 +107,8 @@ module Decks
     # window.innerWidth <= 768 and uses the <dialog> instead — so both halves have to be here
     # or the mobile side of the preview silently does nothing.
     def preview_section
-      div(class: "deck-show-preview") do
-        image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
-        link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
-      end
-      card_preview_modal
-    end
-
-    def card_preview_modal
-      dialog(
-        class: "card-preview-modal",
-        data: {
-          card_preview_target: "modal",
-          action: "click->card-preview#backdropClose"
-        }
-      ) do
-        div(class: "card-preview-modal-content") do
-          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
-          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
-          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
-        end
-      end
+      render Ui::CardPreview.new(wrapper_class: "deck-show-preview")
+      render Ui::CardPreviewModal.new
     end
   end
 end

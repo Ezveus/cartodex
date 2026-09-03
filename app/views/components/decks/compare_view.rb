@@ -94,27 +94,14 @@ module Decks
       end
     end
 
+    # The pane sits inside .deck-compare-content and the dialog outside it — hence two
+    # render calls from two places, and two components rather than one.
     def preview_section
-      div(class: "deck-compare-preview") do
-        image_tag "", data: { card_preview_target: "image" }, class: "card-preview-image", style: "display: none"
-        link_to "View card details", "#", data: { card_preview_target: "link" }, class: "card-preview-link", style: "display: none"
-      end
+      render Ui::CardPreview.new(wrapper_class: "deck-compare-preview")
     end
 
     def card_preview_modal
-      dialog(
-        class: "card-preview-modal",
-        data: {
-          card_preview_target: "modal",
-          action: "click->card-preview#backdropClose"
-        }
-      ) do
-        div(class: "card-preview-modal-content") do
-          image_tag "", data: { card_preview_target: "modalImage" }, class: "card-preview-modal-image"
-          link_to "View card details", "#", data: { card_preview_target: "modalLink" }, class: "btn btn-secondary btn-sm"
-          button(class: "btn btn-sm", data: { action: "card-preview#closeModal" }) { "Close" }
-        end
-      end
+      render Ui::CardPreviewModal.new
     end
   end
 end

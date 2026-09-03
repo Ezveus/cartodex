@@ -59,16 +59,7 @@ module Decks
     end
 
     def filter_select(name, options)
-      selected = @filters[name].to_s
-      select(name: name, class: "form-input deck-filter-select", data: { action: "change->card-filter#submit" }) do
-        options.each do |label, value|
-          if value.to_s == selected
-            option(value: value, selected: true) { label }
-          else
-            option(value: value) { label }
-          end
-        end
-      end
+      render Ui::FilterSelect.new(name: name, options: options, selected: @filters[name])
     end
 
     # Borrows the card index's pager classes rather than inventing decks-only ones: they are
