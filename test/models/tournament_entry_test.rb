@@ -70,6 +70,21 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:tournament], "already has a participation for this player"
   end
 
+  # The `user_id` half of the profile-less branch, which the refusal test above cannot pin:
+  # `where(tournament_profile_id: nil)` renders as IS NULL, so the profile branch answers
+  # correctly for a nil profile too, and a branch that dropped user_id would still refuse the
+  # duplicate. What only the right branch allows is a *second member* with no profile.
+  test "another member may record a profile-less entry on the same tournament" do
+    existing = tournament_entries(:shared_event)
+    assert_nil existing.tournament_profile_id, "sanity: this fixture is the profile-less case"
+
+    other = TournamentEntry.new(
+      user: users(:one), tournament: existing.tournament, deck: decks(:one)
+    )
+
+    assert other.valid?, other.errors.full_messages.to_sentence
+  end
+
   test "allows one entry per profile the user manages" do
     existing = tournament_entries(:one)
     second = TournamentEntry.new(
