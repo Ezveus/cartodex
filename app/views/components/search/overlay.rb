@@ -16,7 +16,10 @@ module Search
           action: "click->search-overlay#clickBackdrop keydown.esc->search-overlay#close"
         }
       ) do
-        render Search::Spotlight.new
+        # A modal <dialog> is its own backdrop as far as a click is concerned — clickBackdrop
+        # keys on exactly that — so padding on the dialog itself would make the visible ring
+        # around the field a dismiss zone. The wrapper carries it instead.
+        div(class: "search-overlay-content") { render Search::Spotlight.new }
       end
     end
   end

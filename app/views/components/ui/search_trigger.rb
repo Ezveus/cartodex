@@ -10,11 +10,21 @@ module Ui
       button(
         type: "button",
         class: "navbar-search-trigger",
-        data: { action: "search-overlay#open" },
+        # data-search-surface says "a click here is a click *inside* the search": the spotlight
+        # watches the document for outside clicks, and this button's own click reaches that
+        # watcher after it has opened the search.
+        data: { action: "search-overlay#open", search_surface: true },
         aria: { label: "Search" }
       ) do
         span(class: "navbar-search-trigger-icon", aria_hidden: "true")
-        span(class: "navbar-search-trigger-hint", aria_hidden: "true") { "⌘K" }
+        # ⌘K is the default rather than the truth: the shortcut takes Ctrl+K just as well, and
+        # which of the two this keyboard has is only knowable client-side, so the controller
+        # rewrites this on connect.
+        span(
+          class: "navbar-search-trigger-hint",
+          data: { search_overlay_target: "hint" },
+          aria_hidden: "true"
+        ) { "⌘K" }
       end
     end
   end

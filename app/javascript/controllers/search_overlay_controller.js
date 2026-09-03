@@ -9,7 +9,13 @@ import { Controller } from "@hotwired/stimulus"
 // deciding: pages with a dialog have their field inside it, and the dashboard and the styleguide
 // have theirs inline and no dialog at all. Same trigger, same shortcut, both ways.
 export default class extends Controller {
-  static targets = ["dialog", "field"]
+  static targets = ["dialog", "field", "hint"]
+
+  // Every hint on the page, not just the first: the styleguide renders the shipped trigger beside
+  // the navbar's own, and one of the two left saying ⌘K on a PC would be the bug this fixes.
+  connect() {
+    this.hintTargets.forEach((hint) => (hint.textContent = this.#shortcutLabel()))
+  }
 
   open(event) {
     if (!this.hasFieldTarget) return
@@ -40,6 +46,16 @@ export default class extends Controller {
     if (isSlash && this.#isTyping(event.target)) return
 
     this.open(event)
+  }
+
+  // The hint is the only thing that tells a user the shortcut exists, so it must name a key their
+  // keyboard has: shortcut() accepts ⌘K and Ctrl+K alike, and the markup can only ship one of
+  // them. userAgentData first, since navigator.platform is deprecated and reports Intel on Apple
+  // Silicon — either spelling still contains "mac".
+  #shortcutLabel() {
+    const platform = navigator.userAgentData?.platform || navigator.platform || ""
+
+    return /mac|iphone|ipad|ipod/i.test(platform) ? "⌘K" : "Ctrl K"
   }
 
   #isTyping(target) {

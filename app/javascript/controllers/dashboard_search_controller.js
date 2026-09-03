@@ -72,6 +72,13 @@ export default class extends Controller {
   clickOutside(event) {
     if (this.element.contains(event.target)) return
 
+    // The control that opens the search is part of the search, wherever it sits in the page: its
+    // click reaches this document-level watcher *after* search-overlay#open ran, so collapsing
+    // here would dismiss the panel that same click had just restored — and #dismissed would then
+    // keep the arrows and Enter dead until the query text changed. Marked with a data attribute
+    // rather than by class name because the navbar is not this controller's business.
+    if (event.target.closest("[data-search-surface]")) return
+
     this.#collapse()
   }
 

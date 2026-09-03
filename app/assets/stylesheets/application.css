@@ -217,6 +217,15 @@ body {
   gap: 1rem;
 }
 
+/* Two flex items with `margin-left: auto` split the free space between them rather than one of
+   them taking it, which parked the trigger mid-navbar — the same construct, and the same fix, as
+   the mobile block below applies to the hamburger. Only the first item needs the margin; scoping
+   it to a navbar that has a trigger leaves the admin one, which has none, pushing its own
+   .navbar-right right. */
+.navbar-search-trigger ~ .navbar-menu .navbar-right {
+  margin-left: 0;
+}
+
 .navbar-user {
   font-size: 0.85rem;
   color: var(--ink-500);
@@ -3016,7 +3025,7 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   margin: 12vh auto auto;
   width: min(90vw, 34rem);
   max-height: none;
-  padding: 1rem;
+  padding: 0;
   border: none;
   border-radius: 12px;
   background: var(--surface);
@@ -3026,6 +3035,13 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 
 .search-overlay::backdrop {
   background: rgb(0 0 0 / 45%);
+}
+
+/* The dialog's padding lives here, not on the dialog: a click reported against the dialog element
+   is how clickBackdrop recognises a click outside the panel, so padding on it would dismiss the
+   overlay from inside its own visible edge. */
+.search-overlay-content {
+  padding: 1rem;
 }
 
 /* Inside the dialog the field is the whole content, so it carries none of the dashboard's
