@@ -72,9 +72,13 @@ module Tournaments
     end
 
     def set_entry
+      # Scoped by @tournament too, not just current_user: the entry is the reader's own either
+      # way, but Tournaments::Entries::Form prints the URL's tournament name and date in its
+      # read-only header precisely so the user knows which event they are filling in — a
+      # mismatched pair must 404 rather than render somebody else's event above this entry.
       @entry = current_user.tournament_entries
         .includes(:deck, :tournament_profile, deck_results: :archetype)
-        .find(params[:id])
+        .find_by!(id: params[:id], tournament_id: @tournament.id)
     end
 
     def set_form_collections

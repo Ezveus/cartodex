@@ -38,6 +38,13 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "My tournaments", mine_tournaments_path
   end
 
+  test "a member's own participation page lights My tournaments alone" do
+    sign_in @user
+
+    entry = tournament_entries(:one)
+    assert_active_nav_link "My tournaments", tournament_entry_path(entry.tournament, entry)
+  end
+
   test "the other sections still light on their own controller" do
     sign_in @user
 

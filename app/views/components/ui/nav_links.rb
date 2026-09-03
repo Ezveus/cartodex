@@ -16,6 +16,12 @@ module Ui
     # are told apart by their action. A record's own page stays in the list it hangs off — the
     # section says which list, and the visitor's navbar, which has no "Decks" entry, is served
     # instead by its "Shared decks" link declaring both sections.
+    #
+    # A controller with no list of its own needs no row here at all: Tournaments::EntriesController
+    # (controller_name "entries") is one participation's own show/new/edit, not a list, so its
+    # pages pass through unchanged and are lit by whichever nav_link names "entries" among its
+    # own sections — "My tournaments" does, the same declare-two-sections construct as "Shared
+    # decks" above, just without an override, since nothing else is named "entries".
     SECTION_OVERRIDES = {
       [ "decks", "shared" ]     => "shared_decks",
       [ "tournaments", "mine" ] => "my_tournaments"

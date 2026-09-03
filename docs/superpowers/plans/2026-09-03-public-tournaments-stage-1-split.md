@@ -2761,13 +2761,32 @@ git commit -m "Document the tournament event and participation split"
 
 Not a code step, and not optional: CI never runs a migration, so this is the only thing standing between the backfill and production rows.
 
+The comparison has to happen on the *pre-migration* table: once `up` has run, `(name_normalized,
+date)` is UNIQUE on the new `tournaments` table, so counting distinct pairs there can only ever
+equal `Tournament.count` — the two numbers agreeing would prove nothing. Capture the expected
+counts from the old `tournaments` table before migrating, then check the migrated database
+against them.
+
 ```bash
 # From the main checkout, with the production database copied locally first.
+
+# BEFORE migrating, against the copy — this is the only place the pre-split table still exists.
+# The key uses merge_key_name's own coalescing rule (name_normalized, falling back to a
+# downcased name), or a legacy row with a NULL name_normalized would be counted as its own
+# event here while the migration folds it into another, and the expected number would be wrong.
+bin/rails runner 'rows = ActiveRecord::Base.connection.select_all("SELECT name_normalized, name, date FROM tournaments").to_a
+  keys = rows.map { |r| [ (r["name_normalized"].presence || r["name"].to_s.downcase), r["date"] ] }
+  puts({ entries_before: rows.size, distinct_events_expected: keys.uniq.size }.inspect)'
+
 bin/rails db:migrate                      # against the copy
-bin/rails runner 'puts [Tournament.count, TournamentEntry.count,
-  Tournament.distinct.count("name_normalized || date"),
+
+# AFTER migrating: TournamentEntry.count must equal entries_before, Tournament.count must equal
+# distinct_events_expected, and no DeckResult may point at a participation that vanished.
+bin/rails runner 'puts [TournamentEntry.count, Tournament.count,
   DeckResult.where.not(tournament_entry_id: nil).where.missing(:tournament_entry).count].inspect'
+
 bin/rails db:rollback:primary && bin/rails db:migrate
 ```
 
-Expected: `TournamentEntry.count` equals the row count of the pre-migration `tournaments` table; `Tournament.count` equals the number of distinct `(name_normalized, date)` pairs in it; the orphan count is `0`. Record the four numbers in the pull request.
+Expected: `TournamentEntry.count` equals `entries_before`; `Tournament.count` equals
+`distinct_events_expected`; the orphan count is `0`. Record all four numbers in the pull request.

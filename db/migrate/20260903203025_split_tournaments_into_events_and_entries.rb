@@ -58,6 +58,15 @@ class SplitTournamentsIntoEventsAndEntries < ActiveRecord::Migration[8.1]
       name: "index_tournament_entries_on_tournament_and_user"
   end
 
+  # Restores the pre-split shape, not the pre-split values. `restore_event_columns` copies each
+  # event's name/tier/format/etc. onto *every* participation that points at it — the same values
+  # for every attendee, which is only correct for a row that was never merged with another by
+  # `up`. Two participations `up` folded into one event (same user, same merged name/date — or
+  # the same profile) had, before the split, potentially different `name`, `tier` and `format`
+  # of their own; `down` cannot recover those, because `up` never kept them anywhere once the
+  # rows converged on one `tournaments` row via `find_or_create_by!`. A rollback after this
+  # migration has seen production use would silently rewrite every merged participation to the
+  # surviving row's values — this is a development escape hatch, not a production undo button.
   def down
     remove_index :tournament_entries, name: "index_tournament_entries_on_tournament_and_user"
     remove_index :tournament_entries, name: "index_tournament_entries_on_tournament_and_profile"

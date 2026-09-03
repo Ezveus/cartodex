@@ -27,6 +27,15 @@ module Tournaments
       assert_response :not_found
     end
 
+    test "cannot show the reader's own participation under a different event's URL" do
+      # @entry belongs to @tournament (tournaments(:one)); asking for it via tournaments(:two)'s
+      # URL must 404 rather than render, since the read-only header would otherwise show
+      # tournaments(:two)'s name and date above tournaments(:one)'s participation.
+      get tournament_entry_path(tournaments(:two), @entry)
+
+      assert_response :not_found
+    end
+
     test "new renders the participation form and nothing about the event's own fields" do
       get new_tournament_entry_path(tournaments(:two))
 

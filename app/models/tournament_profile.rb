@@ -3,7 +3,13 @@ class TournamentProfile < ApplicationRecord
   JUNIOR_MIN_AGE = 6
 
   belongs_to :user
-  has_many :tournament_entries, dependent: :nullify
+  # restrict_with_error, not :nullify: nullifying bypasses one_entry_per_player's validation
+  # (it is an update_all), and a member with both a profile-less entry and a profile-backed
+  # entry at the same event would end up with two profile-less rows there — the partial unique
+  # index on (tournament_id, user_id) WHERE tournament_profile_id IS NULL then raises a bare
+  # SQLite constraint exception instead of a readable error. Matches StandardPool#decks and
+  # Tournament#entries: another record depending on this row blocks the delete.
+  has_many :tournament_entries, dependent: :restrict_with_error
 
   validates :player_name, presence: true
   validates :player_id, presence: true, uniqueness: true

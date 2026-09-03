@@ -31,8 +31,16 @@ class TournamentProfilesController < ApplicationController
   end
 
   def destroy
-    @profile.destroy
-    redirect_to tournament_profiles_path, notice: "Tournament profile deleted."
+    if @profile.destroy
+      redirect_to tournament_profiles_path, notice: "Tournament profile deleted."
+    else
+      # restrict_with_error's own message names the association, not what a reader needs to
+      # know, which is whose data is in the way and how much of it — same shape as
+      # TournamentsController#destroy.
+      count = @profile.tournament_entries.count
+      redirect_to tournament_profiles_path,
+        alert: "This profile still has #{count} #{"participation".pluralize(count)} recorded against it."
+    end
   end
 
   private
