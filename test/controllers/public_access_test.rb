@@ -104,8 +104,10 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_select "meta[name=robots][content=?]", "noindex, nofollow"
 
     # Warden's own sign-in redirect: authenticate_user! throws before any controller code
-    # runs, so a before_action never gets a turn at it. The default_headers mechanism does,
-    # because it applies to the response regardless of who built it.
+    # runs, so a before_action never gets a turn at it — and neither does
+    # config.action_dispatch.default_headers, which only reaches responses built through
+    # ActionController::Base/API. Devise::FailureApp subclasses ActionController::Metal
+    # directly. XRobotsTagMiddleware, wrapping the whole stack, is what covers this.
     get edit_deck_path(@deck)
     assert_redirected_to new_user_session_path
     assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]

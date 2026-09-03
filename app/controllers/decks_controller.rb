@@ -214,10 +214,13 @@ class DecksController < ApplicationController
 
   private
 
-  # `includes` cannot be chained onto a `find_by!`, so each branch reloads with the preloads
-  # it needs. The alternative was to load the owner's preloads up front, which would make a
-  # visitor's request load deck_results and tournaments — exactly what the public view exists
-  # to avoid. One extra query is the price of authorizing before loading anything else.
+  # Each branch reloads with the preloads it needs. `includes` chains onto `find_by!` perfectly
+  # well — that is not the reason for the second query. The reason is that authorize runs first
+  # and only then does the request know which set of preloads it wants: loading the owner's up
+  # front would make a visitor's request pull deck_results and tournaments, exactly what the
+  # public view exists to avoid, and loading anything before authorize does work for a deck the
+  # caller may not see. One extra primary-key SELECT is the price of that ordering, in `export`
+  # (which has no branch) as much as here.
   def owner_show
     @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
