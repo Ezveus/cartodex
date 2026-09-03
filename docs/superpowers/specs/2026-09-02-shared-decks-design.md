@@ -173,7 +173,6 @@ Owner-only actions still call `authorize @deck` after the scoped find. The redun
 | `update?`, `destroy?`, `duplicate?`, `share?` | `owner?` | including every API write on the deck's cards |
 | `create?` | `user.present?` | |
 | `shared_index?` | `true` | the index of shared decks is open |
-| `Scope#resolve` | `user ? Deck.where(user:).or(Deck.shared) : Deck.shared` | "the decks I may see" |
 
 No `user.admin?` clause. Adding one would let an admin open any private deck at its normal URL, which is well beyond what an admin panel needs; `Admin::BaseController` keeps its own gate and its own unscoped lookups.
 
@@ -226,7 +225,9 @@ module PubliclyReachable
 end
 ```
 
-In a controller that includes it, **every** action calls `authorize` — index-shaped actions call `authorize Deck, :shared_index?` alongside `policy_scope`, rather than relying on `verify_policy_scoped`. One rule to re-read instead of two.
+In a controller that includes it, **every** action calls `authorize` — index-shaped actions call `authorize Deck, :shared_index?` rather than relying on `verify_policy_scoped`. One rule to re-read instead of two.
+
+**Amended after implementation: there is no `DeckPolicy::Scope`.** This spec asked for a `#resolve` returning "the decks I may see" (`user ? Deck.where(user:).or(Deck.shared) : Deck.shared`), and for the index-shaped actions to pair `authorize` with `policy_scope`. Neither survived contact with the two listings, which ask narrower questions: `/decks` is the owner's own decks and `/decks/shared` is `Deck.shared`, and the spotlight wants those two as *separate* result groups rather than as their union — a deck of mine that I have shared must not appear in both. So nothing in `app/` ever called it, and a policy object kept alive only by its own test is one that drifts out of step with the rules it claims to mirror. `ApplicationPolicy::Scope` stays as the contract the next one would start from.
 
 **`verify_authorized` catches less than the comment above promises, and the test plan has to make up the difference.** A `before_action` that halts the chain skips the remaining callbacks *and* the `after_action`, so on a signed-out request to an owner-only action, `authenticate_user!` redirects and `verify_authorized` never runs. A missing `authorize` on `edit`, `update`, `destroy`, `duplicate`, `stats` or `share` is therefore invisible to a signed-out test. Test family 1 adds a **signed-in** request per action for exactly this reason.
 

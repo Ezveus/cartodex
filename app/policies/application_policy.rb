@@ -18,6 +18,10 @@ class ApplicationPolicy
   def edit? = update?
   def destroy? = false
 
+  # Pundit's scope contract, which `policy_scope` instantiates by convention. No policy
+  # subclasses it today: both deck listings ask a narrower question than "the decks I may see"
+  # (/decks is the owner's own, /decks/shared is Deck.shared) and the spotlight wants those two
+  # as separate groups rather than as their union. Kept as the shape the next one starts from.
   class Scope
     attr_reader :user, :scope
 

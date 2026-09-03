@@ -129,6 +129,8 @@ Policies only — no controller calls `authorize` yet. This task is fully unit-t
 **Interfaces:**
 - Produces: `DeckPolicy.new(user_or_nil, deck)` answering `show?`, `export?`, `tournament_pdf?`, `stats?`, `results?`, `update?`, `destroy?`, `duplicate?`, `share?`, `create?`, `shared_index?`; `DeckPolicy::Scope.new(user_or_nil, Deck).resolve`. `CardPolicy` and `DashboardPolicy` answer `true` to their queries.
 
+> **Amended after review:** the `Scope` was built, shipped, and then removed — nothing in `app/` ever called it, because both listings ask a narrower question than its union. See the design spec, "Amended after implementation: there is no `DeckPolicy::Scope`." The scope test in Step 1 below went with it.
+
 - [ ] **Step 1: Write the failing policy tests**
 
 Create `test/policies/deck_policy_test.rb`:

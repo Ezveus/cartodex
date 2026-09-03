@@ -21,14 +21,6 @@ class DeckPolicy < ApplicationPolicy
   # The index of shared decks is the same page for a visitor and a member.
   def shared_index? = true
 
-  class Scope < ApplicationPolicy::Scope
-    # "The decks I may see." Not what either listing page uses — /decks is the owner's own
-    # and /decks/shared is Deck.shared — but what a search across both has to ask.
-    def resolve
-      user ? scope.where(user: user).or(scope.shared) : scope.shared
-    end
-  end
-
   private
 
   # nil user included: a visitor owns nothing.
