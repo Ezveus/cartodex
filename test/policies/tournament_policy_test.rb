@@ -28,8 +28,11 @@ class TournamentPolicyTest < ActiveSupport::TestCase
 
   test "only the creator edits the fiche" do
     assert TournamentPolicy.new(@creator, @tournament).update?
+    assert TournamentPolicy.new(@creator, @tournament).edit?
     assert_not TournamentPolicy.new(@other, @tournament).update?
+    assert_not TournamentPolicy.new(@other, @tournament).edit?
     assert_not TournamentPolicy.new(nil, @tournament).update?
+    assert_not TournamentPolicy.new(nil, @tournament).edit?
   end
 
   # The deliberate departure from "no query anywhere checks admin?": nothing about an event is
