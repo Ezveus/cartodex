@@ -13,8 +13,11 @@ module Ui
     end
 
     def view_template
+      # No search trigger: Layouts::AdminLayout renders neither the overlay nor the
+      # search-overlay controller that would answer the click.
       render Ui::NavbarShell.new(
-        brand_path: admin_root_path, brand_label: "Cartodex Admin", nav_class: "admin-navbar"
+        brand_path: admin_root_path, brand_label: "Cartodex Admin", nav_class: "admin-navbar",
+        search: false
       ) do
         nav_links
         right_section

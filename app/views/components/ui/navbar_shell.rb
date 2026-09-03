@@ -10,16 +10,21 @@ module Ui
   # picked up a future toggle or aria fix made here. test/system/admin_navigation_test.rb is
   # the coverage that made moving it safe.
   class NavbarShell < ApplicationComponent
-    def initialize(brand_path:, brand_label: "Cartodex", nav_class: nil)
+    def initialize(brand_path:, brand_label: "Cartodex", nav_class: nil, search: true)
       @brand_path = brand_path
       @brand_label = brand_label
       @nav_class = nav_class
+      @search = search
     end
 
     def view_template(&block)
       nav(class: [ "navbar", @nav_class ].compact.join(" "), data: { controller: "navbar" }) do
         div(class: "navbar-inner") do
           link_to @brand_label, @brand_path, class: "navbar-brand"
+          # Deliberately outside .navbar-menu: below 768px the menu is display:none until the
+          # hamburger opens it, and a search you have to unfold a menu to reach is not reachable
+          # "from any page". CSS, not DOM order, puts it right of the links above the breakpoint.
+          render Ui::SearchTrigger.new if @search
           button(
             class: "navbar-toggle",
             data: { action: "navbar#toggle" },

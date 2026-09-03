@@ -159,7 +159,58 @@ body {
   font-weight: 600;
 }
 
+/* The search trigger sits before .navbar-menu in the DOM so the hamburger can never hide it (see
+   Ui::NavbarShell). `order` is what puts it on the right of the links here; the mobile block below
+   hands it back to DOM order, where the menu is collapsed anyway and it belongs beside the
+   hamburger. .navbar-right has to be ordered past it, or it would come first whatever its margin. */
+.navbar-search-trigger {
+  order: 1;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+/* The lens is drawn, not shipped: the hamburger beside it is a CSS shape too, and the app has no
+   icon set to take a magnifier from. */
+.navbar-search-trigger-icon {
+  display: block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentcolor;
+  border-radius: 50%;
+}
+
+.navbar-search-trigger-icon::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 10px;
+  width: 2px;
+  height: 7px;
+  background: currentcolor;
+  border-radius: 1px;
+  transform: rotate(-45deg);
+  transform-origin: top left;
+}
+
+.navbar-search-trigger-hint {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-500);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+}
+
 .navbar-right {
+  order: 2;
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -2161,6 +2212,22 @@ textarea.form-input {
     display: block;
   }
 
+  .navbar-search-trigger {
+    order: 0;
+  }
+
+  /* Two flex items with `margin-left: auto` split the free space between them, which parked the
+     trigger mid-navbar. Only the first one needs it; the sibling selector leaves the admin
+     navbar — which has no trigger — pushing its own hamburger right. */
+  .navbar-search-trigger + .navbar-toggle {
+    margin-left: 0;
+  }
+
+  /* A phone has no ⌘K to press. */
+  .navbar-search-trigger-hint {
+    display: none;
+  }
+
   .navbar-menu {
     display: none;
     width: 100%;
@@ -2599,6 +2666,16 @@ h1, h2, h3, h4 {
 .navbar-toggle-icon::before,
 .navbar-toggle-icon::after { background: #fff; }
 
+/* Scoped to .navbar, unlike its neighbours here, because Ui::SearchTrigger is also rendered
+   outside one — the styleguide documents the shipped button on a paper background, where these
+   colours would make it invisible. Specificity, not source order, is what makes this win. */
+.navbar .navbar-search-trigger { color: var(--ink-200); border-radius: 4px; }
+.navbar .navbar-search-trigger:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.navbar .navbar-search-trigger-hint {
+  color: var(--ink-300);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
 /* — Dark table headers instead of red — */
 .deck-compare-table thead th { background: var(--ink-900); }
 .deck-compare-total td { border-top-color: var(--flare); }
@@ -2822,6 +2899,21 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   min-height: 4rem;
 }
 
+/* In the app the panel floats out of the field; here it is forced open and there is nothing to
+   float over, so it lays out in flow instead. .sg-printing-demo reserves the room with a
+   min-height, which cannot work for this one — the panel is a child of the demo box and anchored
+   to its *bottom* edge, so every rem added pushed it further down the page and further over the
+   section below it. Same classes either way, so the reference still can't drift on looks. */
+.sg-spotlight-demo .spotlight-panel {
+  position: static;
+}
+
+/* The trigger takes the navbar's free space with margin-left: auto; in a demo row that would
+   park it against the right edge, far from the paragraph describing it. */
+.sg-search-trigger-demo .navbar-search-trigger {
+  margin-left: 0;
+}
+
 /* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in —
    enough for the narrowest screen, where each option's counts and warning wrap onto more lines. */
 .sg-printing-demo {
@@ -2912,6 +3004,40 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .spotlight-empty {
   padding: 0.75rem;
   color: var(--ink-500);
+}
+
+/* The same spotlight, in a dialog, for every page that has no field of its own. Anchored near the
+   top rather than centred: the panel drops out of the field, and a vertically centred field would
+   push its own results off the bottom. `inset: 0` for the same reason as .result-modal — the UA
+   stylesheet only centres a modal dialog on the block axis. */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  margin: 12vh auto auto;
+  width: min(90vw, 34rem);
+  max-height: none;
+  padding: 1rem;
+  border: none;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--e2);
+  overflow: visible;
+}
+
+.search-overlay::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+/* Inside the dialog the field is the whole content, so it carries none of the dashboard's
+   spacing, and the panel meets its bottom edge instead of floating clear of it. */
+.search-overlay .spotlight {
+  margin-top: 0;
+}
+
+.search-overlay .spotlight-panel {
+  margin-top: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
 }
 
 /* — The deck row on a phone —

@@ -14,4 +14,11 @@ class HomeController < ApplicationController
                         .with_standard_pool
                         .includes(archetype: [ :primary_card, :secondary_card ]).to_a
   end
+
+  private
+
+  # The dashboard renders Search::Spotlight itself, right under the welcome line.
+  def search_overlay?
+    false
+  end
 end

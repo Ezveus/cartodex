@@ -4,6 +4,9 @@ module Oauth
   # itself stays Doorkeeper's.
   class AuthorizationsController < Doorkeeper::AuthorizationsController
     include ResourceIndicatorEnforcement
+    # Layouts::ApplicationLayout asks every host for search_overlay?; this one does not descend
+    # from ApplicationController, so it has to include the concern itself.
+    include SearchOverlayHost
 
     # Doorkeeper's controllers descend from ActionController::Base, so Rails'
     # layout lookup walks up to layouts/doorkeeper/application — the *gem's*

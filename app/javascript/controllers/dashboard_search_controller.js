@@ -1,8 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Dashboard spotlight search: debounces the query into a Turbo Frame and makes the resulting
-// options keyboard-navigable. The options live inside the frame, so they are re-collected on
-// every frame load rather than cached at connect.
+// Spotlight search: debounces the query into a Turbo Frame and makes the resulting options
+// keyboard-navigable. The options live inside the frame, so they are re-collected on every frame
+// load rather than cached at connect.
+//
+// Opening the field is not its job — ⌘K may have a dialog to unfold first, so the search-overlay
+// controller on <body> owns the shortcut and the navbar trigger.
 export default class extends Controller {
   static targets = ["input", "form", "panel"]
   static values = { delay: { type: Number, default: 300 }, minLength: { type: Number, default: 2 } }
@@ -84,19 +87,6 @@ export default class extends Controller {
     this.#setExpanded(this.panelTarget.textContent.trim().length > 0)
   }
 
-  // ⌘K / Ctrl+K / "/" focus the field. Stimulus key filters can't express modifiers, so both
-  // shortcuts share one handler.
-  shortcut(event) {
-    const isSlash = event.key === "/"
-    const isCommandK = event.key === "k" && (event.metaKey || event.ctrlKey)
-    if (!isSlash && !isCommandK) return
-    if (isSlash && this.#isTyping(event.target)) return
-
-    event.preventDefault()
-    this.inputTarget.focus()
-    this.inputTarget.select()
-  }
-
   #frameLoaded = () => {
     // A request already in flight when the panel was dismissed can still land afterwards (a 304
     // never even fires this listener, but a 200 does) — #dismissed is what stops it from
@@ -162,9 +152,5 @@ export default class extends Controller {
     this.panelTarget.classList.toggle("spotlight-panel-open", expanded)
     this.inputTarget.setAttribute("aria-expanded", expanded ? "true" : "false")
     if (!expanded) this.inputTarget.removeAttribute("aria-activedescendant")
-  }
-
-  #isTyping(target) {
-    return target.matches("input, textarea, select, [contenteditable=true]")
   }
 }
