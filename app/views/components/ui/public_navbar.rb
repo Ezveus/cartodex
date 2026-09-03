@@ -1,6 +1,8 @@
 module Ui
   # The navbar a visitor gets. Same chrome as Ui::AppNavbar, different links.
   class PublicNavbar < ApplicationComponent
+    include Ui::NavLinks
+
     def initialize(active_controller:)
       @active_controller = active_controller
     end
@@ -16,12 +18,6 @@ module Ui
           link_to "Sign up", new_user_registration_path, class: "navbar-link"
         end
       end
-    end
-
-    private
-
-    def nav_link(label, path, controller)
-      link_to label, path, class: [ "navbar-link", ("active" if @active_controller == controller) ].compact.join(" ")
     end
   end
 end

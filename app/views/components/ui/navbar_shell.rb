@@ -4,15 +4,22 @@ module Ui
   # `.navbar-menu` is display:none until the `navbar` controller adds `.navbar-menu--open`,
   # and `click_nav_link` drives exactly that. A variant missing the toggle fails every mobile
   # system test that navigates, and looks like a Capybara visibility bug.
+  #
+  # All three navbars go through it now, the admin one included: it was the only one still
+  # carrying its own copy of this markup, so it was also the only one that would not have
+  # picked up a future toggle or aria fix made here. test/system/admin_navigation_test.rb is
+  # the coverage that made moving it safe.
   class NavbarShell < ApplicationComponent
-    def initialize(brand_path:)
+    def initialize(brand_path:, brand_label: "Cartodex", nav_class: nil)
       @brand_path = brand_path
+      @brand_label = brand_label
+      @nav_class = nav_class
     end
 
     def view_template(&block)
-      nav(class: "navbar", data: { controller: "navbar" }) do
+      nav(class: [ "navbar", @nav_class ].compact.join(" "), data: { controller: "navbar" }) do
         div(class: "navbar-inner") do
-          link_to "Cartodex", @brand_path, class: "navbar-brand"
+          link_to @brand_label, @brand_path, class: "navbar-brand"
           button(
             class: "navbar-toggle",
             data: { action: "navbar#toggle" },
