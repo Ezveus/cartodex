@@ -4,9 +4,9 @@ module Ui
   class AppNavbar < ApplicationComponent
     include Ui::NavLinks
 
-    def initialize(current_user:, active_controller:)
+    def initialize(current_user:, active_section:)
       @current_user = current_user
-      @active_controller = active_controller
+      @active_section = active_section
     end
 
     def view_template
@@ -23,10 +23,10 @@ module Ui
         nav_link "Dashboard", dashboard_path, "home"
         nav_link "Decks", decks_path, "decks"
         # A member had no way to reach the shared index other than typing a matching search
-        # query — the visitor navigated the app better than the member. Both entries light up
-        # on /decks/shared (see Ui::NavLinks); accepted rather than threading a finer
-        # activation key through for one row.
-        nav_link "Shared decks", shared_decks_path, "decks"
+        # query — the visitor navigated the app better than the member. The two entries name
+        # different sections, so /decks and a deck's own page light this one and /decks/shared
+        # lights the next (see Ui::NavLinks.section_for).
+        nav_link "Shared decks", shared_decks_path, "shared_decks"
         nav_link "Tournaments", tournaments_path, "tournaments"
         nav_link "Cards", cards_path, "cards"
         nav_link "Collection", collections_path, "collections"
