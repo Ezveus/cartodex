@@ -7,9 +7,9 @@ module Ui
   class AdminNavbar < ApplicationComponent
     include Ui::NavLinks
 
-    def initialize(current_user:, active_controller:)
+    def initialize(current_user:, active_section:)
       @current_user = current_user
-      @active_controller = active_controller
+      @active_section = active_section
     end
 
     def view_template

@@ -16,7 +16,7 @@ module Layouts
         body do
           render Ui::AdminNavbar.new(
             current_user: current_user,
-            active_controller: controller_name
+            active_section: Ui::NavLinks.section_for(controller_name, action_name)
           )
           turbo_stream_from(current_user, :notifications)
           render Ui::FlashMessages.new

@@ -34,15 +34,21 @@ module Layouts
         }) do
           if user_signed_in?
             turbo_stream_from(current_user, :notifications)
-            render Ui::AppNavbar.new(current_user: current_user, active_controller: controller_name)
+            render Ui::AppNavbar.new(current_user: current_user, active_section: active_section)
           else
-            render Ui::PublicNavbar.new(active_controller: controller_name)
+            render Ui::PublicNavbar.new(active_section: active_section)
           end
           render Search::Overlay.new if search_overlay?
           render Ui::FlashMessages.new
           yield
         end
       end
+    end
+
+    private
+
+    def active_section
+      Ui::NavLinks.section_for(controller_name, action_name)
     end
   end
 end
