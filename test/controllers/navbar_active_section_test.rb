@@ -30,12 +30,19 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Shared decks", deck_path(@deck)
   end
 
+  test "a member's tournament pages light one entry each" do
+    sign_in @user
+
+    assert_active_nav_link "Tournaments", tournaments_path
+    assert_active_nav_link "Tournaments", tournament_path(tournaments(:one))
+    assert_active_nav_link "My tournaments", mine_tournaments_path
+  end
+
   test "the other sections still light on their own controller" do
     sign_in @user
 
     assert_active_nav_link "Dashboard", dashboard_path
     assert_active_nav_link "Cards", cards_path
-    assert_active_nav_link "Tournaments", tournaments_path
   end
 
   private

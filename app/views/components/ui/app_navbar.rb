@@ -28,6 +28,7 @@ module Ui
         # lights the next (see Ui::NavLinks.section_for).
         nav_link "Shared decks", shared_decks_path, "shared_decks"
         nav_link "Tournaments", tournaments_path, "tournaments"
+        nav_link "My tournaments", mine_tournaments_path, "my_tournaments"
         nav_link "Cards", cards_path, "cards"
         nav_link "Collection", collections_path, "collections"
         nav_link "Profiles", tournament_profiles_path, "tournament_profiles"
