@@ -4,6 +4,7 @@ module Tournaments
     # standing names an archetype and has no line-up to suggest one from.
     class Form < ApplicationComponent
       include Phlex::Rails::Helpers::HiddenFieldTag
+      include Phlex::Rails::Helpers::TextAreaTag
 
       def initialize(tournament:, standing:, existing: nil, entry: nil)
         @tournament = tournament
@@ -52,6 +53,12 @@ module Tournaments
             end
           end
 
+          render Ui::FormGroup.new(hint: decklist_hint) do
+            label(class: "form-label", for: "decklist") { "Decklist (optional)" }
+            text_area_tag(:decklist, nil, class: "form-input", id: "decklist", rows: 10,
+              placeholder: "4 Doublade TWM 62\n…")
+          end
+
           div(class: "form-actions deck-form-actions") do
             f.submit class: "btn btn-primary"
             link_to "Cancel", tournament_path(@tournament), class: "btn btn-secondary"
@@ -93,6 +100,15 @@ module Tournaments
         return "Optional — leave blank if nobody remembers the final standing." if field.blank?
 
         "The #{@standing.division} field at this event held #{field} players."
+      end
+
+      # Outside the tournament_standing hash, like tournament_entry_id: the text is not an
+      # attribute of the row, it is the payload of a background import. The list it produces
+      # belongs to the event and to nobody, and no UI can edit it afterwards.
+      def decklist_hint
+        return "Paste the list to import it. The row is saved either way." unless @standing.deck
+
+        "This standing already has a field list. Pasting a new one imports a second."
       end
     end
   end

@@ -35,6 +35,7 @@ module Tournaments
       @standing.tournament_entry = @entry
 
       if @standing.save
+        enqueue_list_import
         redirect_to tournament_path(@tournament), notice: "Standing recorded."
       else
         @existing = existing_standing
@@ -50,6 +51,7 @@ module Tournaments
       authorize @standing
 
       if @standing.update(standing_params)
+        enqueue_list_import
         redirect_to tournament_path(@tournament), notice: "Standing updated."
       else
         @existing = existing_standing
@@ -153,6 +155,18 @@ module Tournaments
       @tournament.standings.find_by(
         player_name_normalized: @standing.player_name_normalized, division: @standing.division
       )
+    end
+
+    # The standing is saved either way, so its row exists before its list does: a scrape that
+    # fails must not lose the row somebody typed. Absent a decklist, nothing is enqueued.
+    def enqueue_list_import
+      decklist = params[:decklist].to_s
+      return if decklist.strip.empty?
+
+      import = current_user.imports.create!(
+        kind: "standing_list", label: "#{@standing.player_name} — #{@tournament.name}"
+      )
+      Tournaments::StandingListImportJob.perform_later(@standing, decklist, current_user, import)
     end
 
     # tournament_entry_id is deliberately absent. Permitting it would let any member attach their

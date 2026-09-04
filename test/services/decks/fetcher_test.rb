@@ -226,4 +226,36 @@ class Decks::FetcherTest < ActiveSupport::TestCase
       end
     }
   end
+
+  # --- Ownerless import (tournament field lists) ---
+
+  test "imports a deck owned by nobody, shared and anchored where it is told" do
+    pool = standard_pools(:twm_asc)
+
+    deck = Decks::Fetcher.call(@decklist, nil, "Field list",
+      shared: true, format: "standard", standard_pool: pool)
+
+    assert_nil deck.user_id
+    assert_predicate deck, :shared?
+    refute_predicate deck, :physical?
+    # The event's pool, not StandardPool.current: the event has a date and it is the only thing
+    # here that knows which pool was legal when the deck was played.
+    assert_equal pool, deck.standard_pool
+  end
+
+  test "a non-Standard format drops the pool it was handed" do
+    deck = Decks::Fetcher.call(@decklist, nil, "GLC field list",
+      shared: true, format: "glc", standard_pool: standard_pools(:twm_por))
+
+    assert_equal "glc", deck.format
+    assert_nil deck.standard_pool_id
+  end
+
+  test "a member's own import is unchanged: owned, private and anchored to the current pool" do
+    deck = Decks::Fetcher.call(@decklist, users(:one), "Mine")
+
+    assert_equal users(:one), deck.user
+    refute_predicate deck, :shared?
+    assert_equal StandardPool.current, deck.standard_pool
+  end
 end

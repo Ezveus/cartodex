@@ -5,10 +5,17 @@ class Decks::Fetcher < ApplicationService
   CARD_LINE_RE = /\A(\d+)\s+(.+?)\s+([A-Z]{2,3})\s+(\d+)\z/
   LIMITLESS_BASE_URL = "https://limitlesstcg.com/cards"
 
-  def initialize(decklist, user, name)
+  # shared/format/standard_pool exist for the tournament field list, which is a Deck owned by
+  # nobody: it must be shared (the only listing that can show it is /decks/shared) and it is
+  # played under the *event's* format, anchored to the *event's* pool. A member's own import
+  # passes none of them and behaves exactly as it did.
+  def initialize(decklist, user, name, shared: false, format: nil, standard_pool: nil)
     @decklist = decklist
     @user = user
     @name = name
+    @shared = shared
+    @format = format
+    @standard_pool = standard_pool
   end
 
   def call
@@ -24,10 +31,18 @@ class Decks::Fetcher < ApplicationService
     # not because it changes the locking, which a top-level ActiveRecord
     # transaction already takes in immediate mode (see ApplicationService).
     serialized_transaction do
-      # The import never asks for a format, so the deck takes the "standard"
-      # column default. Anchor it to the current pool rather than leave it
-      # unsavable; the deck form is where the user corrects it.
-      deck = Deck.create!(user: @user, name: @name, standard_pool: StandardPool.current)
+      # A member's own import never asks for a format, so the deck takes the "standard" column
+      # default and is anchored to the current pool rather than left unsavable; the deck form is
+      # where the user corrects it. A field list is told both, because the event knows both —
+      # and clear_inapplicable_classification drops the pool when the format is not Standard, so
+      # a GLC event's list needs no special case here.
+      deck = Deck.create!(
+        user: @user,
+        name: @name,
+        shared: @shared,
+        format: @format || "standard",
+        standard_pool: @standard_pool || StandardPool.current
+      )
 
       card_entries.each do |entry|
         url = "#{LIMITLESS_BASE_URL}/#{entry[:set_code]}/#{entry[:card_number]}"

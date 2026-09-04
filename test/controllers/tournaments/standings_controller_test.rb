@@ -197,4 +197,69 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/can unlink it/, flash[:alert])
     assert_equal tournament_entries(:one), @standing.reload.tournament_entry
   end
+
+  test "a decklist on the form opens an import and enqueues the job" do
+    assert_difference -> { Import.count }, 1 do
+      assert_enqueued_with(job: Tournaments::StandingListImportJob) do
+        post tournament_standings_path(@tournament), params: { tournament_standing: {
+          player_name: "Brock", division: "masters", archetype_id: archetypes(:ogerpon).id
+        }, decklist: "4 Doublade TWM 62" }
+      end
+    end
+
+    import = Import.order(:id).last
+    assert_equal "standing_list", import.kind
+    assert_equal @user, import.user
+    # The row exists before its list does, which is the point: a failed import must not lose the
+    # standing somebody typed.
+    assert_equal "Brock", TournamentStanding.order(:id).last.player_name
+  end
+
+  test "no decklist enqueues nothing" do
+    assert_no_difference -> { Import.count } do
+      assert_no_enqueued_jobs(only: Tournaments::StandingListImportJob) do
+        post tournament_standings_path(@tournament), params: { tournament_standing: {
+          player_name: "Brock", division: "masters", archetype_id: archetypes(:ogerpon).id
+        }, decklist: "   " }
+      end
+    end
+  end
+
+  test "a refused save enqueues nothing" do
+    assert_no_difference -> { Import.count } do
+      post tournament_standings_path(@tournament), params: { tournament_standing: {
+        player_name: "", division: "masters", archetype_id: archetypes(:ogerpon).id
+      }, decklist: "4 Doublade TWM 62" }
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  # Phlex dasherizes Symbol attribute values, and this repo has shipped that bug once (an OAuth
+  # form whose hidden fields all rendered dashed, params[:client_id] permanently nil, seven tests
+  # green because each hand-built its params). So this reads the field's *actual* rendered name
+  # off the markup rather than assuming "decklist", and posts under that name — a hand-built
+  # params hash would pass even if the field silently rendered as "decklist" with dashes.
+  test "the decklist field's rendered name is what the controller reads" do
+    get new_tournament_standing_path(@tournament)
+    field = css_select("textarea#decklist").first
+    assert_not_nil field, "the form must render a decklist textarea"
+    field_name = field["name"]
+
+    assert_difference -> { Import.count }, 1 do
+      assert_enqueued_with(job: Tournaments::StandingListImportJob) do
+        post tournament_standings_path(@tournament), params: { tournament_standing: {
+          player_name: "Misty", division: "masters", archetype_id: archetypes(:ogerpon).id
+        }, field_name => "4 Doublade TWM 62" }
+      end
+    end
+  end
+
+  test "the event page shows the reader's field-list import in flight" do
+    @user.imports.create!(kind: "standing_list", label: "Brock's list")
+
+    get tournament_path(@tournament)
+
+    assert_select "#importing-standings .importing-item", text: /Brock's list/
+  end
 end

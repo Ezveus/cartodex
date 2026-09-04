@@ -17,6 +17,18 @@ module Admin
         return
       end
 
+      # The decklist text is not stored anywhere — an Import carries a label, not a payload — so
+      # there is nothing to re-run. Refused here rather than left to fall through the `case`
+      # below, which destroys the old row and enqueues nothing. (The "deck" branch has had that
+      # bug since it was written: it re-enqueues @import.label as the *decklist*, which is the
+      # deck's name. Pre-existing and out of scope — recorded so the new kind is not wired into
+      # the same switch and left silently doing nothing.)
+      if @import.kind == "standing_list"
+        redirect_to admin_imports_path,
+          alert: "A tournament field list cannot be retried: its decklist text is not stored."
+        return
+      end
+
       new_import = @import.user.imports.create!(kind: @import.kind, label: @import.label)
 
       case @import.kind

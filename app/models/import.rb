@@ -1,7 +1,7 @@
 class Import < ApplicationRecord
   belongs_to :user
 
-  KINDS = %w[deck card_set].freeze
+  KINDS = %w[deck card_set standing_list].freeze
   STATUSES = %w[pending completed failed].freeze
 
   validates :kind, inclusion: { in: KINDS }
@@ -11,6 +11,7 @@ class Import < ApplicationRecord
   scope :pending, -> { where(status: "pending") }
   scope :deck_imports, -> { where(kind: "deck") }
   scope :card_set_imports, -> { where(kind: "card_set") }
+  scope :standing_list_imports, -> { where(kind: "standing_list") }
 
   def pending? = status == "pending"
   def completed? = status == "completed"
