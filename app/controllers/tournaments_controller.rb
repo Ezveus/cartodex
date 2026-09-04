@@ -56,6 +56,13 @@ class TournamentsController < ApplicationController
     authorize @tournament
     @my_entries = my_entries
     @can_record_another = unrecorded_profile?
+    # The preload the table actually reads: Ui::ArchetypeBadge reads the archetype's lead card
+    # (and the parent, for a sub-archetype's name), and the "You" marker reads the linked entry's
+    # user_id. A flat-cost test guards it, like the four that already guard with_standard_pool.
+    @standings = @tournament.standings.as_a_sheet
+      .includes(:deck, :tournament_entry, archetype: %i[primary_card secondary_card parent]).to_a
+    @pending_standing_imports = pending_standing_imports
+    @claimable_entries = claimable_entries
   end
 
   def mine
@@ -137,7 +144,7 @@ class TournamentsController < ApplicationController
     return [] if current_user.nil?
 
     current_user.tournament_entries.where(tournament: @tournament)
-      .includes(:tournament_profile).order(:id).to_a
+      .includes(:tournament_profile, :standing).order(:id).to_a
   end
 
   # Whether the reader still has a player this event holds no participation for. Deliberately
@@ -149,6 +156,21 @@ class TournamentsController < ApplicationController
 
     current_user.tournament_profiles
       .where.not(id: @my_entries.filter_map(&:tournament_profile_id)).exists?
+  end
+
+  # Field-list imports the reader has in flight. Empty for a visitor, and never queried for one.
+  def pending_standing_imports
+    return [] if current_user.nil?
+
+    current_user.imports.pending.where(kind: "standing_list").to_a
+  end
+
+  # The reader's own participations at this event that no standing names yet — one claim button
+  # each. Plural for the reason my_entries is: entry uniqueness is per profile.
+  def claimable_entries
+    return [] if current_user.nil?
+
+    @my_entries.reject(&:standing)
   end
 
   # One grouped query for the whole page, and none at all for a visitor.

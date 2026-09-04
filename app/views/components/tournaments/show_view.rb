@@ -3,13 +3,19 @@ module Tournaments
   # entry count, no deck anybody played. The only thing it knows about its reader is whether
   # they have a participation of their own to go to.
   class ShowView < ApplicationComponent
-    def initialize(tournament:, my_entries: [], can_record: false,
-                   can_record_another: false, can_edit: false)
+    def initialize(tournament:, my_entries: [], standings: [], can_record: false,
+                   can_record_another: false, can_edit: false, can_edit_standings: false,
+                   viewer: nil, pending_standing_imports: [], claimable_entries: [])
       @tournament = tournament
       @my_entries = my_entries
+      @standings = standings
       @can_record = can_record
       @can_record_another = can_record_another
       @can_edit = can_edit
+      @can_edit_standings = can_edit_standings
+      @viewer = viewer
+      @pending_standing_imports = pending_standing_imports
+      @claimable_entries = claimable_entries
     end
 
     def view_template
@@ -23,10 +29,43 @@ module Tournaments
         end
 
         render Tournaments::EventDetails.new(tournament: @tournament)
+        standings_section
       end
     end
 
     private
+
+    # The event's public sheet. Public by the same rule the page is: the catalog does not hide an
+    # event, so it does not hide what was played there either. Only the write controls are gated.
+    def standings_section
+      div(class: "tournament-standings") do
+        div(class: "admin-header") do
+          h2 { "Standings" }
+          if @can_edit_standings
+            link_to "Add a standing", new_tournament_standing_path(@tournament),
+              class: "btn btn-primary btn-sm"
+          end
+        end
+
+        # The pending state, in Ui::ImportingList's own vocabulary: the item id is
+        # importing-<import id>, which is exactly what the import job removes by target when the
+        # field list lands.
+        render Ui::ImportingList.new(
+          pending_imports: @pending_standing_imports,
+          item_id_prefix: "importing",
+          list_id: "importing-standings"
+        )
+
+        if @standings.any?
+          render Tournaments::Standings::Table.new(
+            standings: @standings, viewer: @viewer,
+            can_edit: @can_edit_standings, claimable_entries: @claimable_entries
+          )
+        else
+          p(class: "empty-state") { "No standings recorded for this event yet." }
+        end
+      end
+    end
 
     # Two rules meet here. A reader has as many participations as they have Play! Pokémon
     # profiles that attended, so this is a list, not a link — and the "record" button survives

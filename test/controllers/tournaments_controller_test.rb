@@ -406,6 +406,90 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".standard-pool-notice", count: 0
   end
 
+  test "show renders the event's standings, grouped by division and ranked" do
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h3", text: "Masters"
+    assert_select ".data-table-row", text: /Giovanni/
+    assert_select ".data-table-row", text: /Ash Ketchum/
+    # Ranked before unranked, and 7th before 33rd within the division.
+    players = css_select(".tournament-standings .data-table-row").map(&:text)
+    assert players.index { |row| row.include?("Giovanni") } <
+           players.index { |row| row.include?("Ash Ketchum") },
+      "expected the better placement first"
+  end
+
+  test "a standing's row names its archetype and its record" do
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Giovanni/ do
+      assert_select ".badge", text: tournament_standings(:giovanni_masters).archetype.name
+      assert_select ".data-table-cell", text: "7-2-0"
+      assert_select ".data-table-cell", text: "#7"
+    end
+  end
+
+  test "a standing with a field list links to it, and one without says so" do
+    tournament_standings(:ash_masters).update!(deck: decks(:field_list))
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select "a[href=?]", deck_path(decks(:field_list)), text: "Decklist"
+    end
+    assert_select ".data-table-row", text: /Giovanni/ do
+      assert_select "a", text: "Decklist", count: 0
+    end
+  end
+
+  test "an event with no standings says so with a class the stylesheet defines" do
+    @tournament.standings.destroy_all
+
+    get tournament_path(@tournament)
+
+    assert_select "p.empty-state", text: "No standings recorded for this event yet."
+  end
+
+  test "the row of the reader's own linked participation is marked as theirs" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select ".badge", text: "You"
+    end
+  end
+
+  test "a visitor sees the sheet and no ownership marker on it" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select ".data-table-row", text: /Ash Ketchum/
+    assert_select ".badge", text: "You", count: 0
+  end
+
+  # Ui::ArchetypeBadge reads the archetype's cards and the "You" marker reads the linked entry's
+  # user_id, so both belong in the includes. Modelled on the four tests that already guard
+  # with_standard_pool.
+  test "show issues a constant number of queries regardless of how many standings" do
+    2.times { |i| record_standing(i) }
+
+    get tournament_path(@tournament) # warm the session
+
+    small = count_queries { get tournament_path(@tournament) }
+
+    (2..7).each { |i| record_standing(i) }
+
+    large = count_queries { get tournament_path(@tournament) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the sheet: #{small} -> #{large}"
+  end
+
   private
 
   # users(:one) owns two Play! Pokémon profiles; tournament_entries(:one) already spends `ash`
@@ -432,6 +516,23 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     StandardPool.create!(
       first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
       released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
+  end
+
+  # An archetype of its own per row, so two rows never issue identical SQL that the per-request
+  # query cache would serve — which is what hides an N+1 from count_queries.
+  #
+  # Correction to the brief: its version of this helper omits type_symbol/retreat_cost, which
+  # Card requires for card_type: "Pokémon" and raises RecordInvalid without.
+  def record_standing(index)
+    card = Card.create!(
+      name: "Quiet Pokémon #{index}", set_name: "QS#{index}", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    archetype = Archetype.create!(primary_card: card, name: "Quiet #{index}", custom_name: "1")
+    @tournament.standings.create!(
+      player_name: "Quiet Player #{index}", division: "masters",
+      placement: 100 + index, archetype: archetype
     )
   end
 end

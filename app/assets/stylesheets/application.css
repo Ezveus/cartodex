@@ -2903,6 +2903,11 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   max-width: 22rem;
 }
 
+/* The standings sheet sits under the event's own facts. One rule and nothing more: the table,
+   the badges and the buttons inside it are the app's existing components. */
+.tournament-standings { margin-top: 1.5rem; }
+.tournament-standings h3 { margin: 1rem 0 0.5rem; }
+
 .sg-spotlight-demo {
   position: relative;
   min-height: 4rem;
