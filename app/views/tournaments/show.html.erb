@@ -6,4 +6,4 @@
                                      can_edit_standings: policy(TournamentStanding).create?,
                                      viewer: current_user,
                                      pending_standing_imports: @pending_standing_imports,
-                                     claimable_entries: []) %>
+                                     claimable_entries: @claimable_entries) %>

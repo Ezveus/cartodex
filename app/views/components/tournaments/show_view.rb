@@ -85,6 +85,7 @@ module Tournaments
       @my_entries.each do |entry|
         link_to entry_label(entry), tournament_entry_path(@tournament, entry), class: "btn btn-primary"
       end
+      publish_actions
       return unless @can_record_another
 
       link_to "Record another participation", new_tournament_entry_path(@tournament), class: "btn btn-secondary"
@@ -97,6 +98,27 @@ module Tournaments
 
       player_name = entry.tournament_profile&.player_name
       player_name ? "Your entry (#{player_name})" : "Your entry (no profile)"
+    end
+
+    # One per participation the reader owns that no standing names yet. Guarded by the same
+    # can_record as the buttons above, for the same reason: a visitor's my_entries is [] by
+    # construction, so the loop is empty for them anyway — but the guard is what says the whole
+    # block belongs to a reader who may write, rather than resting on that emptiness.
+    def publish_actions
+      @claimable_entries.each do |entry|
+        link_to publish_label(entry),
+          new_tournament_standing_path(@tournament, tournament_entry_id: entry.id),
+          class: "btn btn-secondary"
+      end
+    end
+
+    # One participation needs no disambiguation; two do, and the player name is the only thing
+    # that tells them apart — the same rule entry_label follows.
+    def publish_label(entry)
+      return "Publish my participation" if @my_entries.one?
+
+      name = entry.tournament_profile&.player_name
+      name ? "Publish #{name}'s participation" : "Publish my participation (no profile)"
     end
   end
 end

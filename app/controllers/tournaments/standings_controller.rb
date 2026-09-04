@@ -12,10 +12,10 @@ module Tournaments
   # test/controllers/public_access_test.rb covers per action.
   class StandingsController < ApplicationController
     before_action :set_tournament
-    # claim/unclaim land in Task 7 — Rails 7.1+'s raise_on_missing_callback_actions rejects an
-    # :only list naming an action that does not exist yet, so they are added here only once
-    # they are implemented.
-    before_action :set_standing, only: %i[edit update destroy]
+    # claim and unclaim both need @standing, exactly as edit/update/destroy do — Rails 7.1+'s
+    # raise_on_missing_callback_actions is why Task 6 could not name them here before the
+    # actions themselves existed.
+    before_action :set_standing, only: %i[edit update destroy claim unclaim]
 
     # Preflight ruling 3. See #refuse_with_redirect below for why this controller carries its own
     # handler rather than leaning on a shared one.
@@ -63,6 +63,24 @@ module Tournaments
       redirect_to tournament_path(@tournament), notice: "Standing deleted."
     end
 
+    # The act of a member saying "the row naming this player is me". It writes the link and
+    # nothing else: the public data on the row stays whatever whoever typed it wrote, and
+    # correcting it is an ordinary wiki edit.
+    #
+    # A player with no account cannot do this, and that is not a gap: claiming *is* a member
+    # linking their own participation, which is the whole reason the two tables are separate.
+    def claim
+      authorize @standing, :claim?
+      @standing.update!(tournament_entry: scoped_entry!(params[:tournament_entry_id]))
+      redirect_to tournament_path(@tournament), notice: "Standing linked to your participation."
+    end
+
+    def unclaim
+      authorize @standing, :unclaim?
+      @standing.update!(tournament_entry: nil)
+      redirect_to tournament_path(@tournament), notice: "Standing unlinked from your participation."
+    end
+
     private
 
     def set_tournament
@@ -97,6 +115,12 @@ module Tournaments
     def scoped_entry(id)
       return if id.blank?
 
+      current_user.tournament_entries.find_by!(id: id, tournament_id: @tournament.id)
+    end
+
+    # #claim's entry is mandatory — the whole action is "link this row to that participation" —
+    # so a missing id must be a RecordNotFound rather than a silent no-op that reports success.
+    def scoped_entry!(id)
       current_user.tournament_entries.find_by!(id: id, tournament_id: @tournament.id)
     end
 

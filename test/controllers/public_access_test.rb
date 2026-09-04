@@ -132,6 +132,15 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     delete tournament_standing_path(tournaments(:one), standing)
     assert_redirected_to new_user_session_path
 
+    post claim_tournament_standing_path(tournaments(:one), standing,
+      tournament_entry_id: tournament_entries(:one).id)
+    assert_redirected_to new_user_session_path
+
+    delete unclaim_tournament_standing_path(tournaments(:one), standing)
+    assert_redirected_to new_user_session_path
+
+    assert_nil standing.reload.tournament_entry_id
+
     assert_equal standing_placement_was, standing.reload.placement
     assert_equal 2, TournamentStanding.count
 

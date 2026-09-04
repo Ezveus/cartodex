@@ -523,6 +523,42 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the sheet: #{small} -> #{large}"
   end
 
+  test "the event page offers to publish each participation no standing names yet" do
+    get tournament_path(@tournament)
+
+    assert_select "a[href=?]",
+      new_tournament_standing_path(@tournament, tournament_entry_id: tournament_entries(:one).id),
+      text: "Publish my participation"
+  end
+
+  test "a published participation is no longer offered for publishing" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select "a[href*=?]", "tournament_entry_id=#{tournament_entries(:one).id}", count: 0
+  end
+
+  # Plural, for the reason my_entries is: entry uniqueness is per Play! Pokémon profile, so a
+  # parent tracking two profiles has two participations here and both must be publishable.
+  test "two unpublished participations are offered separately, named by their player" do
+    second_entry_for_misty
+
+    get tournament_path(@tournament)
+
+    assert_select "a", text: /Publish Ash Ketchum's participation/
+    assert_select "a", text: /Publish Misty's participation/
+  end
+
+  test "a visitor is offered nothing to publish" do
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a", text: /Publish/, count: 0
+  end
+
   private
 
   # users(:one) owns two Play! Pokémon profiles; tournament_entries(:one) already spends `ash`
