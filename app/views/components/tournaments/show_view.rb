@@ -112,10 +112,15 @@ module Tournaments
       end
     end
 
-    # One participation needs no disambiguation; two do, and the player name is the only thing
-    # that tells them apart — the same rule entry_label follows.
+    # One button needs no disambiguation; two or more do, and the player name is the only thing
+    # that tells them apart. Keyed on @claimable_entries, the collection this method's own caller
+    # (publish_actions) iterates — not on @my_entries, which entry_label above uses because *it*
+    # iterates @my_entries. The two collections can disagree: once one of a reader's two entries
+    # is already published, @claimable_entries drops to one while @my_entries stays at two, and a
+    # label keyed on the wrong collection would name a player nobody needs named for the single
+    # remaining button.
     def publish_label(entry)
-      return "Publish my participation" if @my_entries.one?
+      return "Publish my participation" if @claimable_entries.one?
 
       name = entry.tournament_profile&.player_name
       name ? "Publish #{name}'s participation" : "Publish my participation (no profile)"

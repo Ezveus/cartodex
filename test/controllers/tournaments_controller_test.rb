@@ -580,6 +580,20 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a", text: /Publish Misty's participation/
   end
 
+  # F5: publish_label used to key on @my_entries.one? while it is @claimable_entries that
+  # publish_actions actually iterates. With one of two entries already published, @my_entries
+  # stays at two but @claimable_entries drops to one — the remaining button must read
+  # unambiguously, since there is only one option left to choose from.
+  test "a reader with two entries, one already published, gets an unambiguous label for the other" do
+    second_entry_for_misty
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select "a", text: "Publish my participation"
+    assert_select "a", text: /Publish Misty's participation/, count: 0
+  end
+
   test "a visitor is offered nothing to publish" do
     sign_out @user
 
