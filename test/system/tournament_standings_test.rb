@@ -127,8 +127,11 @@ class TournamentStandingsTest < ApplicationSystemTestCase
   # (not :async) whenever Rails.env.test?, and nothing in this app overrides that — confirmed by
   # log/test.log showing "Enqueued Tournaments::StandingListImportJob ... to Test(default)" for a
   # plain create. The test adapter only records the job; nothing performs it without
-  # perform_enqueued_jobs, which ActionDispatch::IntegrationTest (SystemTestCase's own ancestor)
-  # pulls in ActiveJob::TestHelper for. Running the job that way is still a real perform, through
+  # perform_enqueued_jobs, and ApplicationSystemTestCase does not carry ActiveJob::TestHelper —
+  # checked directly (`ancestors.grep(/ActiveJob/)` is empty on it), despite ActiveJob::Railtie
+  # registering an :action_dispatch_integration_test load hook for exactly this module; whatever
+  # that hook is for, it evidently does not reach here, so this class includes it above, by
+  # hand. Running the job that way is still a real perform, through
   # the app's real broadcaster — config/cable.yml's test adapter is documented by Action Cable
   # itself as "could be used in system tests too", since it is a thin subclass of the real Async
   # pubsub adapter rather than a mock, and broadcasting is independent of which thread enqueued or
@@ -150,19 +153,30 @@ class TournamentStandingsTest < ApplicationSystemTestCase
     # nothing queued yet.
     assert_text "Standing recorded."
 
-    # This is the subscription that actually matters, and the sleep belongs here, not right
-    # after the first visit: every full Turbo Drive visit — the "Publish my participation" GET,
-    # then this create's redirect — tears down and rebuilds the layout's own
-    # turbo_stream_from(current_user, :notifications) <turbo-cable-stream-source>, so it is the
+    # This is the subscription that actually matters, and the wait belongs here, not right after
+    # the first visit: every full Turbo Drive visit — the "Publish my participation" GET, then
+    # this create's redirect — tears down and rebuilds the layout's own
+    # turbo_stream_from(current_user, :notifications) <turbo-cable-stream-source>, so it is
     # *this* page's WebSocket handshake that has to finish before the job's broadcast is fired,
     # not the very first page load's. Action Cable does not queue a message for a subscriber
     # that connects after it was published, so a broadcast fired too early is simply never
     # delivered, no matter how long something later waits for it — confirmed the hard way: with
-    # the sleep only at the top of the test, the job (traced end-to-end via log/test.log —
+    # a fixed sleep only at the top of the test, the job (traced end-to-end via log/test.log —
     # enqueued, performed, and broadcast successfully in under a second) still occasionally left
     # the browser with nothing rendered, because the redirect's fresh subscription hadn't opened
     # yet when the broadcast went out.
-    sleep 1.5
+    #
+    # Rather than guess a sleep long enough for that handshake, poll for it directly: Turbo's
+    # <turbo-cable-stream-source> custom element (turbo-rails 2.0.23,
+    # app/assets/javascripts/turbo.min.js) sets its own `connected` attribute from
+    # `subscriptionConnected()`, called only once Action Cable's `connected` channel callback
+    # fires — a real, public completion signal (documented on the element itself, not a private
+    # internal reached for lack of one), not a guess about how long that takes on some machine.
+    # assert_selector is Capybara's own bounded poll, so a slow runner gets more time
+    # automatically and a genuinely stuck subscription fails by naming exactly that, right here,
+    # instead of failing an unrelated assertion several lines later. visible: :all because the
+    # element has no visual box for Capybara's default visibility check to find.
+    assert_selector("turbo-cable-stream-source[connected]", visible: :all, wait: 10)
 
     # Even past the flash and the subscription, flushing found nothing to perform on a handful of
     # runs under the full suite's parallel workers (this machine has exactly 8 cores and the
