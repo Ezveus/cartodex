@@ -12,11 +12,27 @@ module Tournaments
   class StandingListImportJob < ApplicationJob
     def perform(standing, decklist, contributor, import)
       tournament = standing.tournament
+      # The raw id, not standing.deck: Rails auto-detects the inverse of this belongs_to/has_one
+      # pair, so loading the association here would cache `standing` as *this* deck's
+      # tournament_standing — and dependent: :nullify below would then nullify that cached
+      # target (the same in-memory `standing`, already pointed at the *new* deck by the time it
+      # runs) instead of requerying, undoing the update! two lines down. Re-fetching the deck by
+      # id after the update sidesteps that entirely.
+      previous_deck_id = standing.deck_id
       deck = ::Decks::Fetcher.call(
         decklist, nil, deck_name(standing, tournament),
         shared: true, format: tournament.format, standard_pool: tournament.standard_pool
       )
       standing.update!(deck: deck)
+      # The standing points at the new deck before the old one is destroyed, never the other way
+      # round, so it is never left pointing at a destroyed row. destroy_if_ownerless is the same
+      # guard TournamentStanding#destroy_ownerless_deck applies on delete: nothing points a
+      # standing at a member's own deck today, but a re-import must not be the caller that
+      # detonates one if that ever changes. Without this, re-importing over an existing field
+      # list would leave the old Deck referenced by nothing — still shared: true, so listed at
+      # /decks/shared and in every spotlight, under a name byte-identical to the new one, forever
+      # (no path in the app can reach an ownerless deck to delete it any other way).
+      Deck.find_by(id: previous_deck_id)&.destroy_if_ownerless
       import.update!(status: "completed")
 
       broadcast_success(standing, deck, contributor, import)

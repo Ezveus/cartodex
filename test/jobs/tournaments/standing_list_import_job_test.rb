@@ -65,6 +65,41 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
     assert_equal "importing-#{@import.id}", remove[:target]
   end
 
+  # F2: without this, replacing a standing's field list left the old ownerless Deck referenced by
+  # nothing — still shared: true, so listed at /decks/shared and in every spotlight forever,
+  # since no path in the app can reach an ownerless deck to delete it except through its
+  # standing, and the standing now points elsewhere.
+  test "re-importing replaces the list and destroys exactly the old ownerless deck" do
+    @standing.update!(deck: decks(:field_list))
+    old_deck = decks(:field_list)
+
+    assert_difference -> { Deck.count }, 0 do
+      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+    end
+
+    refute Deck.exists?(old_deck.id), "the orphaned field list should have been destroyed"
+    new_deck = @standing.reload.deck
+    assert_not_nil new_deck
+    assert_not_equal old_deck.id, new_deck.id
+  end
+
+  # The same guard TournamentStanding#destroy_ownerless_deck applies on delete: nothing points a
+  # standing at a member's own deck today, but a re-import must not be the caller that detonates
+  # one if that ever changes.
+  test "a standing whose deck is somehow owned is left alone" do
+    owned = decks(:one)
+    @standing.update_column(:deck_id, owned.id)
+
+    assert_difference -> { Deck.count }, 1 do
+      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+    end
+
+    assert Deck.exists?(owned.id), "an owned deck must never be destroyed by a re-import"
+    new_deck = @standing.reload.deck
+    assert_not_nil new_deck
+    assert_not_equal owned.id, new_deck.id
+  end
+
   test "a failure marks the import failed and says so, leaving the standing listless" do
     broadcasts = capture_turbo_broadcasts do
       Tournaments::StandingListImportJob.perform_now(@standing, "not a decklist", @contributor, @import)

@@ -112,6 +112,6 @@ class TournamentStanding < ApplicationRecord
   end
 
   def destroy_ownerless_deck
-    deck&.destroy if deck && deck.user_id.nil?
+    deck&.destroy_if_ownerless
   end
 end

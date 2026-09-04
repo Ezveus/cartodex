@@ -20,10 +20,14 @@ class Deck < ApplicationRecord
   # User#tournament_entries is declared ahead of User#decks precisely so account cancellation
   # empties the entries before it reaches this rule — see the note there.
   has_many :tournament_entries, dependent: :restrict_with_error
-  # :nullify, and the reverse direction of TournamentStanding#destroy_ownerless_deck.
-  # Admin::DecksController#destroy is unscoped by design, so an admin can delete an ownerless
-  # deck from the panel; without this the standing keeps a dangling deck_id and its row's list
-  # link 404s.
+  # :nullify, the reverse direction of #destroy_if_ownerless (called by
+  # TournamentStanding#destroy_ownerless_deck on destroy, and by
+  # Tournaments::StandingListImportJob when a re-import replaces a standing's field list).
+  # Nothing else in the app destroys an ownerless deck — there is no Admin::DecksController
+  # destroy action, and every other deck write is scoped to a member's own decks, which an
+  # ownerless deck is in none of — so this is the backstop for any future caller: without it, a
+  # deck destroyed some other way would leave the standing pointing at a dangling deck_id and its
+  # row's list link 404ing.
   has_one :tournament_standing, dependent: :nullify
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
@@ -92,6 +96,14 @@ class Deck < ApplicationRecord
   # `deck.user&.email || "…"` in each of them: all three read `deck.user.email` and all three
   # raised the day user_id became nullable.
   def owner_label = user&.email || "Tournament field list"
+
+  # The one destroy path an ownerless deck has. Guarded here rather than left to each caller,
+  # because both of today's callers (TournamentStanding#destroy_ownerless_deck,
+  # Tournaments::StandingListImportJob replacing a standing's field list) need the identical
+  # guard against a future caller detonating a member's own deck by mistake.
+  def destroy_if_ownerless
+    destroy if user_id.nil?
+  end
 
   def to_param = key
 
