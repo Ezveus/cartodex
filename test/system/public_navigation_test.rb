@@ -45,4 +45,20 @@ class PublicNavigationTest < ApplicationSystemTestCase
 
     assert_current_path shared_decks_path
   end
+
+  test "a visitor can reach the catalog from the navbar and open an event" do
+    visit cards_path
+
+    # Not a plain click: below the breakpoint the menu is display:none until the hamburger
+    # opens it, and this is the assertion that PublicNavbar really carries that hamburger.
+    click_nav_link "Tournaments"
+
+    assert_current_path tournaments_path
+    click_on tournaments(:one).name
+
+    assert_selector "h1", text: tournaments(:one).name
+    # Nothing on the page for somebody who cannot act on it.
+    assert_no_link "Record your participation"
+    assert_no_link "Edit"
+  end
 end

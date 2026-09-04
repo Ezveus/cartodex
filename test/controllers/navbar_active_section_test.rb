@@ -52,6 +52,13 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Cards", cards_path
   end
 
+  test "a visitor's tournament pages light the catalog entry" do
+    assert_active_nav_link "Tournaments", tournaments_path
+    # One section, not two: unlike "Shared decks", this link has no second list to stand in
+    # for — a visitor cannot reach /tournaments/mine at all.
+    assert_active_nav_link "Tournaments", tournament_path(tournaments(:one))
+  end
+
   private
 
   def assert_active_nav_link(label, path)
