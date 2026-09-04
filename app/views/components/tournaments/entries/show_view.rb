@@ -1,9 +1,13 @@
 module Tournaments
   module Entries
     class ShowView < ApplicationComponent
-      def initialize(entry:, unassigned_results:)
+      # The event comes in rather than off the entry: EntriesController loads it through
+      # Tournament.with_standard_pool (the pool and both of its card-set bounds, which
+      # EventDetails prints through format_label), and entry.tournament is a fresh record that
+      # throws all of it away and re-reads it lazily.
+      def initialize(tournament:, entry:, unassigned_results:)
+        @tournament = tournament
         @entry = entry
-        @tournament = entry.tournament
         @unassigned_results = unassigned_results
       end
 

@@ -66,6 +66,16 @@ class TournamentTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:name], "is already catalogued for this date"
   end
 
+  # (name_normalized, date) is the only thing between the catalog and two rows for one real
+  # event, and a name arrives copy-pasted — with a trailing space, or a double space where a
+  # line wrapped — far more often than it arrives typed.
+  test "the duplicate check ignores surrounding and repeated whitespace" do
+    duplicate = build_tournament(name: "  Regional   Championship ", date: tournaments(:one).date)
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:name], "is already catalogued for this date"
+  end
+
   test "the same name on another date is a different event" do
     assert build_tournament(name: tournaments(:one).name, date: tournaments(:one).date + 1).valid?
   end
@@ -103,6 +113,17 @@ class TournamentTest < ActiveSupport::TestCase
     end
   end
 
+  # The stored side and the query side share one normalization or they share none: squishing
+  # only what is saved would make a name typed with a double space unfindable.
+  test "name_matching squishes the query as well as the stored name" do
+    tournament = tournaments(:one)
+    tournament.update!(name: "Regional  Championship")
+
+    [ "regional championship", "  regional   championship " ].each do |query|
+      assert_includes Tournament.name_matching(query), tournament, "#{query.inspect} must match"
+    end
+  end
+
   test "name_matching treats LIKE metacharacters in the query as literals" do
     assert_includes Tournament.name_matching("regional"), tournaments(:one), "sanity: the plain spelling matches"
     assert_empty Tournament.name_matching("reg_onal"), "_ must not act as a wildcard"
@@ -111,7 +132,7 @@ class TournamentTest < ActiveSupport::TestCase
 
   test "every tournament fixture carries the normalization its name implies" do
     Tournament.find_each do |tournament|
-      assert_equal tournament.name.downcase, tournament.name_normalized,
+      assert_equal tournament.name.squish.downcase, tournament.name_normalized,
         "#{tournament.name.inspect} fixture is out of step"
     end
   end

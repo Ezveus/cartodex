@@ -49,6 +49,38 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
     assert_not DeckResult.exists?(@result.id)
   end
 
+  # The same picker as Decks::ResultModal, and the same trap: one deck can carry two
+  # participations in one event, one per Play! Pokémon profile.
+  test "the edit form tells two participations in one event apart" do
+    sign_in @user
+    second = @user.tournament_entries.create!(
+      tournament: tournaments(:one), deck: @deck, tournament_profile: tournament_profiles(:misty)
+    )
+
+    get edit_deck_deck_result_path(@deck, @result)
+
+    assert_response :success
+    assert_select "option[value=?]", tournament_entries(:one).id.to_s, text: /Ash Ketchum/
+    assert_select "option[value=?]", second.id.to_s, text: /Misty/
+  end
+
+  # Same picker, same preload obligation: DeckResults::EditView prints picker_label, which reads
+  # both the event and the profile. An event and a profile of its own per participation, or rows
+  # sharing an id issue identical SQL the query cache serves and count_queries never sees.
+  test "edit issues a constant number of queries regardless of how many participations" do
+    sign_in @user
+    get edit_deck_deck_result_path(@deck, @result) # warm the session
+
+    small = count_queries { get edit_deck_deck_result_path(@deck, @result) }
+
+    3.times { |i| participation_of_its_own(i) }
+
+    large = count_queries { get edit_deck_deck_result_path(@deck, @result) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the participation count: #{small} -> #{large}"
+  end
+
   test "signed in as a stranger, every action 404s and changes nothing" do
     # Re-sign in before each request: an unhandled RecordNotFound raised inside a before_action
     # propagates straight past the session middleware (it never reaches the point where it
@@ -73,5 +105,17 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "win", @result.reload.result
     assert DeckResult.exists?(@result.id)
+  end
+  private
+
+  def participation_of_its_own(index)
+    event = Tournament.create!(
+      name: "Quiet Open #{index}", date: Date.new(2026, 5, 1) + index,
+      tier: "league_cup", format: "expanded", created_by: @user
+    )
+    profile = @user.tournament_profiles.create!(
+      player_name: "Player #{index}", player_id: "200000#{index}", date_of_birth: Date.new(2000, 1, 1)
+    )
+    @user.tournament_entries.create!(tournament: event, deck: @deck, tournament_profile: profile)
   end
 end

@@ -98,8 +98,12 @@ class SplitTournamentsIntoEventsAndEntries < ActiveRecord::Migration[8.1]
   # purpose: when the guard grouped in SQL and the backfill coalesced in Ruby, a row whose
   # name_normalized was NULL slipped past the guard and then collided on the unique index — as a
   # raw constraint error instead of the crafted message.
+  #
+  # squish mirrors NameNormalizable#normalize_name, which the split's own model rule now uses:
+  # rows written before that rule carry an unsquished name_normalized, and merging on the value
+  # as stored would give one real event two catalog rows the new UNIQUE key then rejects.
   def merge_key_name(normalized, name)
-    normalized.presence || name.to_s.downcase
+    (normalized.presence || name.to_s).squish.downcase
   end
 
   # Runs before anything is mutated, so the migration is replayable after a human has decided

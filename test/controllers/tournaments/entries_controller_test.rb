@@ -21,6 +21,22 @@ module Tournaments
       assert_select ".data-table-cell", text: "##{@entry.placement} / #{@entry.participant_count}"
     end
 
+    # set_tournament loads the event through Tournament.with_standard_pool — the pool and both of
+    # its card-set bounds, because Tournaments::EventDetails prints format_label and
+    # StandardPool#name reads them. A view that reaches the event through entry.tournament
+    # instead throws all of that away and re-reads it lazily, four queries at a time.
+    test "show reuses the preloaded event rather than re-reading it through the entry" do
+      get tournament_entry_path(@tournament, @entry) # warm the session
+
+      log = capture_queries { get tournament_entry_path(@tournament, @entry) }
+
+      assert_response :success
+      { "tournaments" => 1, "standard_pools" => 1, "card_sets" => 1 }.each do |table, expected|
+        actual = log.count { |sql| sql.include?(%(FROM "#{table}")) }
+        assert_equal expected, actual, "#{table} read #{actual} times:\n#{log.join("\n")}"
+      end
+    end
+
     test "cannot show another member's participation" do
       get tournament_entry_path(tournaments(:two), tournament_entries(:two))
 

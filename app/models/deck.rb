@@ -9,7 +9,13 @@ class Deck < ApplicationRecord
   has_many :deck_cards, dependent: :destroy
   has_many :cards, through: :deck_cards
   has_many :deck_results, dependent: :destroy
-  has_many :tournament_entries, dependent: :destroy
+  # restrict_with_error, not :destroy — the same call Tournament#entries and
+  # TournamentProfile#tournament_entries make. A participation records a placement, CP and a
+  # profile, and this cascade left the *event* standing while the player's own record of
+  # attending it vanished behind a confirmation that only mentioned cards and results.
+  # User#tournament_entries is declared ahead of User#decks precisely so account cancellation
+  # empties the entries before it reaches this rule — see the note there.
+  has_many :tournament_entries, dependent: :restrict_with_error
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
 

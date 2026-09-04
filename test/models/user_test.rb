@@ -229,18 +229,14 @@ class UserTest < ActiveSupport::TestCase
     assert_equal User::DEFAULT_LIFETIME_KEY, user.reload.api_token_lifetime_key
   end
 
-  # TournamentProfile refuses dependent: :destroy while a participation still points at it
-  # (Finding 1's fix), and Devise's "Cancel my account" reaches this same #destroy — so a
-  # profile in use could plausibly 500 the whole flow. It doesn't: `has_many :decks,
-  # dependent: :destroy` above (line 9, ahead of both tournament associations) always
-  # destroys this user's decks first, and Deck's own `has_many :tournament_entries,
-  # dependent: :destroy` (deck.rb) empties every entry that deck backs before either
-  # tournament_profiles or tournament_entries here gets a callback — every entry has a deck
-  # (NOT NULL) belonging to the same user (deck_belongs_to_user), so none can survive its
-  # owner's decks. By the time tournament_profiles runs, restrict_with_error never finds
-  # anything to refuse. This is what actually protects the flow, not the relative order of
-  # the two tournament associations — moving :decks below them, or taking :destroy off
-  # Deck#tournament_entries, is what should turn this test red.
+  # Two associations refuse dependent: :destroy while a participation still points at them —
+  # TournamentProfile#tournament_entries and Deck#tournament_entries, both restrict_with_error —
+  # and Devise's "Cancel my account" reaches this same #destroy, so either could plausibly break
+  # the whole flow. Neither does, and the only reason is declaration order: `has_many
+  # :tournament_entries, dependent: :destroy` sits ahead of both :decks and :tournament_profiles
+  # in user.rb, dependent callbacks run in the order they are declared, so every entry is gone
+  # before anything gets the chance to refuse. Moving :tournament_entries back below either of
+  # them is what should turn this test red.
   test "cancelling the account removes the user, their entries and their profiles together" do
     user = User.create!(email: "cancelling@example.com", password: "password123")
     deck = Deck.create!(user: user, name: "Farewell Deck", standard_pool: standard_pools(:twm_por))

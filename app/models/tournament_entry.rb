@@ -14,8 +14,21 @@ class TournamentEntry < ApplicationRecord
   validate :deck_belongs_to_user
   validate :tournament_profile_belongs_to_user
   validate :one_entry_per_player
+  validate :deck_unchanged_while_results_attached
 
-  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid
+  # The label both tournament pickers print — Decks::ResultModal and DeckResults::EditView —
+  # kept here rather than in either of them for the reason Card#printing_label is: two callers
+  # that spell one label by hand eventually spell it two ways. The player name is part of the
+  # label, not decoration: entry uniqueness is per Play! Pokémon profile, so one deck can carry
+  # two participations in one event, and "Name (date)" alone prints them identically.
+  def picker_label
+    base = "#{tournament.name} (#{I18n.l(tournament.date)})"
+    return base if tournament_profile.nil?
+
+    "#{base} — #{tournament_profile.player_name}"
+  end
+
+  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid
   # lives on Tournament, beside the tier that keys it; the placement that looks it up is here.
   def suggested_championship_points
     return if placement.blank? || tournament.nil?
@@ -51,6 +64,20 @@ class TournamentEntry < ApplicationRecord
     return if tournament_profile.nil? || user.nil?
 
     errors.add(:tournament_profile, "must belong to the same user") if tournament_profile.user_id != user_id
+  end
+
+  # DeckResult#entry_belongs_to_same_deck is the other half of "a match hangs off a
+  # participation played with the same deck", and it is checked when the *result* is saved —
+  # nothing re-checks it when the entry moves the deck underneath. Without this the update
+  # succeeds and leaves every attached match invalid, listed on a page that names a deck they
+  # do not belong to. Refusing rather than detaching keeps the decision with the user, the same
+  # call Tournament#entries and TournamentProfile#tournament_entries make with
+  # restrict_with_error: detaching would empty a match history nobody asked to empty.
+  def deck_unchanged_while_results_attached
+    return unless persisted? && deck_id_changed?
+    return unless deck_results.exists?
+
+    errors.add(:deck, "can't be changed while matches are attached to this participation")
   end
 
   # One rule, one method, one message — mirroring both partial unique indexes rather than

@@ -6,10 +6,14 @@ class User < ApplicationRecord
 
   has_many :collections, dependent: :destroy
   has_many :cards, through: :collections
+  # Declared ahead of :decks and :tournament_profiles, and the order is load-bearing: both of
+  # those refuse to be destroyed while an entry points at them (Deck#tournament_entries and
+  # TournamentProfile#tournament_entries are restrict_with_error), so "Cancel my account" only
+  # works if the entries go first. UserTest covers it.
+  has_many :tournament_entries, dependent: :destroy
   has_many :decks, dependent: :destroy
   has_many :imports, dependent: :destroy
   has_many :tournament_profiles, dependent: :destroy
-  has_many :tournament_entries, dependent: :destroy
   # :nullify, not :destroy — a catalog entry other members point at must survive its author.
   has_many :created_tournaments, class_name: "Tournament", foreign_key: :created_by_id, dependent: :nullify
 

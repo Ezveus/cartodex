@@ -35,7 +35,8 @@ class TournamentsController < ApplicationController
 
   def show
     authorize @tournament
-    @my_entry = current_user&.tournament_entries&.find_by(tournament: @tournament)
+    @my_entries = my_entries
+    @can_record_another = unrecorded_profile?
   end
 
   def mine
@@ -108,6 +109,29 @@ class TournamentsController < ApplicationController
     Tournament.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
   end
 
+  # Plural, because entry uniqueness is per Play! Pokémon profile rather than per user: a parent
+  # tracking their own and their child's profiles legitimately has two participations in one
+  # event, and a singular find_by picks one of them arbitrarily and hides the other from the
+  # only page that links to it. tournament_profile is preloaded because the page names it —
+  # that is what tells two of the reader's own entries apart.
+  def my_entries
+    return [] if current_user.nil?
+
+    current_user.tournament_entries.where(tournament: @tournament)
+      .includes(:tournament_profile).order(:id).to_a
+  end
+
+  # Whether the reader still has a player this event holds no participation for. Deliberately
+  # narrower than TournamentEntry#one_entry_per_player and deliberately not a restatement of it:
+  # it answers "another entry is obviously possible", so a reader it says no to loses a button
+  # they might have been able to use, never gets a form that then refuses them.
+  def unrecorded_profile?
+    return false if current_user.nil?
+
+    current_user.tournament_profiles
+      .where.not(id: @my_entries.filter_map(&:tournament_profile_id)).exists?
+  end
+
   # One grouped query for the whole page, and none at all for a visitor.
   def attended_ids(tournaments)
     return Set.new if current_user.nil? || tournaments.empty?
@@ -116,8 +140,17 @@ class TournamentsController < ApplicationController
       .pluck(:tournament_id).to_set
   end
 
+  # rescue_from covers every action, and four of them — index, mine, new, create — carry no :id.
+  # Those policies can only refuse a nil user, which Stage 1's `authenticate :user` block already
+  # prevents; Stage 2 lifts that gate, and without the branch the same refusal becomes an
+  # ActionController::UrlGenerationError 500 rather than the redirect it was written to be.
   def refuse_with_redirect
-    redirect_to tournament_path(params[:id]), alert: "Only the member who catalogued this tournament can edit it."
+    if params[:id].present?
+      redirect_to tournament_path(params[:id]),
+        alert: "Only the member who catalogued this tournament can edit it."
+    else
+      redirect_to tournaments_path, alert: "You need to be signed in to do that."
+    end
   end
 
   def tournament_params

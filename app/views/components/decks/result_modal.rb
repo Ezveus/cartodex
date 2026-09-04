@@ -26,14 +26,18 @@ module Decks
     # match hangs off. Ordered by the event's date, so the select reads the way the deck's
     # history does.
     def tournament_group
-      entries = @deck.tournament_entries.includes(:tournament).sort_by { |e| e.tournament.date }.reverse
+      # sort_by on the association itself, not on a fresh relation: DecksController preloads
+      # tournament_entries with their event and profile, and `.includes(…)` here would build a
+      # new relation that ignores all of it — an N+1 on the profile picker_label reads, hidden
+      # from a plain query count because the entry SELECT it repeats is served by the query cache.
+      entries = @deck.tournament_entries.sort_by { |e| e.tournament.date }.reverse
       return if entries.empty?
 
       render Ui::FormGroup.new(label: "Tournament (optional)") do
         select(class: "form-input", data: { result_modal_target: "tournamentEntrySelect" }) do
           option(value: "") { "— None —" }
           entries.each do |entry|
-            option(value: entry.id) { "#{entry.tournament.name} (#{localize(entry.tournament.date)})" }
+            option(value: entry.id) { entry.picker_label }
           end
         end
       end

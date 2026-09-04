@@ -28,8 +28,8 @@ module DeckResults
           render Ui::FormGroup.new do
             f.label :tournament_entry_id, "Tournament", class: "form-label"
             f.select :tournament_entry_id,
-              @deck.tournament_entries.includes(:tournament).sort_by { |e| e.tournament.date }.reverse
-                .map { |e| [ "#{e.tournament.name} (#{localize(e.tournament.date)})", e.id ] },
+              @deck.tournament_entries.sort_by { |e| e.tournament.date }.reverse
+                .map { |e| [ e.picker_label, e.id ] },
               { include_blank: "— None —" }, class: "form-input"
           end
 

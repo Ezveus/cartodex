@@ -104,6 +104,28 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert tournament_entries(:one).valid?
   end
 
+  # DeckResult#entry_belongs_to_same_deck is the other half of this rule, and it is checked when
+  # the *result* is saved — nothing re-checks it when the entry moves underneath. Left alone,
+  # the update succeeds and every attached result silently becomes invalid.
+  test "refuses to change deck while matches are attached to the entry" do
+    entry = tournament_entries(:one)
+    entry.deck.deck_results.create!(result: "win", played_at: Time.current, tournament_entry: entry)
+    other_deck = Deck.create!(user: users(:one), name: "Other Deck", standard_pool: standard_pools(:twm_por))
+
+    assert_not entry.update(deck: other_deck)
+    assert_includes entry.errors[:deck], "can't be changed while matches are attached to this participation"
+    assert_equal decks(:one).id, entry.reload.deck_id
+  end
+
+  test "the deck may be changed once no match is attached" do
+    entry = tournament_entries(:one)
+    assert_empty entry.deck_results, "sanity: the fixture entry has no attached match"
+
+    other_deck = Deck.create!(user: users(:one), name: "Other Deck", standard_pool: standard_pools(:twm_por))
+
+    assert entry.update(deck: other_deck), entry.errors.full_messages.to_sentence
+  end
+
   test "suggested_championship_points reads the grid with the event's tier and its own placement" do
     entry = build_entry(placement: 1)
     entry.tournament = tournaments(:two) # league_cup

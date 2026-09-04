@@ -1,5 +1,6 @@
 class DeckResultsController < ApplicationController
   before_action :set_deck
+  before_action :preload_tournament_entries, only: [ :edit, :update ]
   before_action :set_result, only: [ :edit, :update, :destroy ]
 
   def index
@@ -26,6 +27,15 @@ class DeckResultsController < ApplicationController
   def set_deck
     @deck = current_user.decks.find_by!(key: params[:deck_id])
     authorize @deck, :results?
+  end
+
+  # The edit form's tournament picker prints TournamentEntry#picker_label, which reads both the
+  # event and the profile — two N+1s without this. Reloaded here rather than preloaded in
+  # set_deck because #index and #destroy render no picker and would pay for it too; one extra
+  # primary-key SELECT is the same price DecksController pays to preload after authorize.
+  def preload_tournament_entries
+    @deck = current_user.decks
+      .includes(tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
   end
 
   def set_result

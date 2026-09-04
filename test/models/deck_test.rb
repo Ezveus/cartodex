@@ -28,9 +28,32 @@ class DeckTest < ActiveSupport::TestCase
 
   test "destroying deck destroys deck_results" do
     deck = decks(:one)
+    deck.tournament_entries.destroy_all # or restrict_with_error refuses and nothing cascades
 
     assert_difference "DeckResult.count", -deck.deck_results.count do
-      deck.destroy
+      assert deck.destroy, deck.errors.full_messages.to_sentence
+    end
+  end
+
+  # The same call Tournament#entries and TournamentProfile#tournament_entries make: a
+  # participation records a placement, CP and a profile that the deck's deletion has no business
+  # taking with it — and unlike those two, this cascade left the *event* standing while the
+  # player's own record of attending it vanished.
+  test "refuses to be destroyed while a participation records it" do
+    deck = decks(:one)
+    assert_predicate deck.tournament_entries, :any?, "sanity: the fixture deck was played at an event"
+
+    assert_no_difference -> { Deck.count } do
+      assert_not deck.destroy
+    end
+  end
+
+  test "is destroyed once no participation records it" do
+    deck = decks(:one)
+    deck.tournament_entries.destroy_all
+
+    assert_difference -> { Deck.count }, -1 do
+      assert deck.destroy
     end
   end
 

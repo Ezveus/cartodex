@@ -1,5 +1,13 @@
 require "test_helper"
 
+# Pundit resolves a record's policy through Tournament.policy_class when the class defines it,
+# which is how the test below refuses an action that carries no :id — the id-less policies
+# (index?, mine?, create?) can only refuse a nil user, and Stage 1's `authenticate :user` block
+# means no request ever reaches them with one.
+class RefusingTournamentPolicy < TournamentPolicy
+  def create? = false
+end
+
 class TournamentsControllerTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
@@ -112,6 +120,44 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", tournament_entry_path(@tournament, tournament_entries(:one)), text: /Your entry/
   end
 
+  # Entry uniqueness is per Play! Pokémon profile, not per user: a parent tracking their own and
+  # their child's profiles has two participations in one event. A singular find_by picks one of
+  # them arbitrarily and leaves the other unreachable from the page.
+  test "show reaches every one of the reader's entries and tells them apart" do
+    second = second_entry_for_misty
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a[href=?]", tournament_entry_path(@tournament, tournament_entries(:one)), text: /Ash Ketchum/
+    assert_select "a[href=?]", tournament_entry_path(@tournament, second), text: /Misty/
+  end
+
+  # With one participation there is nothing to tell apart, and naming the profile would be noise.
+  test "show does not name the profile when the reader has a single entry" do
+    get tournament_path(@tournament)
+
+    assert_select "a[href=?]", tournament_entry_path(@tournament, tournament_entries(:one)), text: "Your entry"
+  end
+
+  # The other half of the same bug: once one profile was recorded, the page offered no way at
+  # all to record the second — the "Record your participation" button was gone.
+  test "show still offers to record a participation for a profile that has none here" do
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a[href=?]", new_tournament_entry_path(@tournament), text: /Record another/
+  end
+
+  test "show stops offering another participation once every profile is recorded" do
+    second_entry_for_misty
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a[href=?]", new_tournament_entry_path(@tournament), false
+  end
+
   test "show invites a reader with no entry to record one" do
     get tournament_path(@other_tournament)
 
@@ -119,7 +165,23 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", new_tournament_entry_path(@other_tournament), text: /Record/
   end
 
-  # An event page says nothing about anybody else — decision 4 of the spec.
+  # rescue_from covers every action, and four of them carry no :id — the id-less policies can
+  # only refuse a nil user today, which Stage 1's `authenticate :user` block already prevents,
+  # so this is reached by refusing an id-less action on purpose. Stage 2 lifts that gate and
+  # makes the same path a 500 (ActionController::UrlGenerationError) for any signed-out POST.
+  test "a refusal on an action with no id lands on the catalog rather than raising" do
+    Tournament.define_singleton_method(:policy_class) { RefusingTournamentPolicy }
+
+    post tournaments_path, params: { tournament: {
+      name: "Refused Cup", date: Date.current, tier: "league_cup", format: "expanded"
+    } }
+
+    assert_redirected_to tournaments_path
+  ensure
+    Tournament.singleton_class.send(:remove_method, :policy_class)
+  end
+
+  # An event page says nothing about anybody else — decision 4 of the spec.  # An event page says nothing about anybody else — decision 4 of the spec.
   test "show names no other member and no other deck" do
     get tournament_path(@tournament)
 
@@ -283,6 +345,15 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  # users(:one) owns two Play! Pokémon profiles; tournament_entries(:one) already spends `ash`
+  # on @tournament, so this is the second player they are legitimately tracking there.
+  def second_entry_for_misty
+    deck = Deck.create!(user: @user, name: "Second Player Deck", standard_pool: standard_pools(:twm_por))
+    @user.tournament_entries.create!(
+      tournament: @tournament, deck: deck, tournament_profile: tournament_profiles(:misty)
+    )
+  end
 
   # A Standard event anchored to a pool nothing else uses, so the Format column really does
   # have to read that pool's two bounds.
