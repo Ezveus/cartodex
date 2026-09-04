@@ -28,7 +28,7 @@ class TournamentEntry < ApplicationRecord
     "#{base} — #{tournament_profile.player_name}"
   end
 
-  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid
+  # Indicative CP for this placement at the event's tier, or nil if not computable. The grid
   # lives on Tournament, beside the tier that keys it; the placement that looks it up is here.
   def suggested_championship_points
     return if placement.blank? || tournament.nil?
