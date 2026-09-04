@@ -49,8 +49,15 @@ class PublicNavigationTest < ApplicationSystemTestCase
   test "a visitor can reach the catalog from the navbar and open an event" do
     visit cards_path
 
-    # Not a plain click: below the breakpoint the menu is display:none until the hamburger
-    # opens it, and this is the assertion that PublicNavbar really carries that hamburger.
+    # click_nav_link because below the breakpoint the menu is display:none until the hamburger
+    # opens it — but that is already asserted by the shared-deck test at the top of this file,
+    # on the same component, so it is not what this test is for. What only this test covers is
+    # the click below: a catalog row lives inside Tournaments::IndexView::FRAME_ID and has to
+    # escape it with data-turbo-frame="_top". Remove that attribute and this test goes red on a
+    # missing h1, while the two pre-existing tournament system tests stay green — neither ever
+    # clicks a row from inside the frame. It passes on both sides of the breakpoint, which is
+    # the floor CLAUDE.md describes rather than the ceiling: there is no catalog-specific mobile
+    # behaviour here, so do not read it as covering any.
     click_nav_link "Tournaments"
 
     assert_current_path tournaments_path

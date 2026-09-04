@@ -181,7 +181,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     Tournament.singleton_class.send(:remove_method, :policy_class)
   end
 
-  # An event page says nothing about anybody else — decision 4 of the spec.  # An event page says nothing about anybody else — decision 4 of the spec.
+  # An event page says nothing about anybody else — decision 4 of the spec.
   test "show names no other member and no other deck" do
     get tournament_path(@tournament)
 
@@ -207,6 +207,19 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", edit_tournament_path(@tournament), count: 0
   end
 
+  # The same assertion for the reader who *has* a session but did not catalogue the event. It
+  # is a different gate — policy(@tournament).edit? rather than the absence of a user — and
+  # only the visitor half was pinned.
+  test "a signed-in stranger sees no way to change an event they did not catalogue" do
+    sign_in users(:two)
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h1", text: @tournament.name
+    assert_select "a[href=?]", edit_tournament_path(@tournament), count: 0
+  end
+
   test "a visitor's catalog offers no way to add a tournament" do
     sign_out @user
 
@@ -216,6 +229,19 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".data-table-row", count: 2
     assert_select "a[href=?]", new_tournament_path, count: 0
     assert_select ".tournament-attended", count: 0
+  end
+
+  # The other half of that: attended_ids is commented "none at all for a visitor", and the
+  # markup assertion above cannot see the difference between returning early and querying
+  # anyway. This is the one that can — a variant which runs the grouped query for a visitor
+  # renders exactly the same page.
+  test "a visitor's catalog never queries the participations" do
+    sign_out @user
+
+    sql = capture_queries { get tournaments_path }
+
+    assert_response :success
+    assert_empty sql.grep(/tournament_entries/i)
   end
 
   test "mine lists the reader's own participations only" do
