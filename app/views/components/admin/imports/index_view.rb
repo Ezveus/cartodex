@@ -31,6 +31,16 @@ module Admin
 
       private
 
+      # A bulk run's row is the only record of what it wrote — Undo reads created_standing_ids off
+      # it and nothing else can find those rows again. Deleting it beside an Undo button that looks
+      # identical should say so.
+      def delete_confirm(imp)
+        return "Delete import ##{imp.id}?" unless imp.kind == "limitless_standings"
+
+        "Delete import ##{imp.id}? This is the only record of which standings it created, " \
+          "so they can no longer be undone."
+      end
+
       def status_badge(imp)
         render Ui::StatusBadge.new(status: imp.status)
       end
@@ -38,7 +48,7 @@ module Admin
       # A bulk standings run's error_message is a *list* of per-row failures, not a sentence, so
       # the full text has to be readable. It used to live in a `title=` tooltip, which below the
       # 768 px breakpoint is unreachable by construction: Ui::DataTable stacks into a data-label
-      # card grid there and a phone has no hover \u2014 the message was, in effect, desktop-only. A
+      # card grid there and a phone has no hover — the message was, in effect, desktop-only. A
       # <details> discloses it on a tap, at both widths, with no JavaScript.
       def error_cell(imp)
         return plain "\u2014" if imp.error_message.blank?
@@ -64,7 +74,7 @@ module Admin
         end
         # Undo is offered for every bulk run, not only a failed one: the damage this button
         # repairs is rows that were written *successfully* from a wrong deck id or a wrong
-        # archetype. It says what it will not do, because it genuinely will not \u2014 a claimed row
+        # archetype. It says what it will not do, because it genuinely will not — a claimed row
         # belongs to the member who claimed it and survives.
         if imp.kind == "limitless_standings"
           link_to "Undo", undo_admin_import_path(imp),
@@ -77,7 +87,7 @@ module Admin
           plain " "
         end
         link_to "Delete", admin_import_path(imp),
-          data: { turbo_method: :delete, turbo_confirm: "Delete import ##{imp.id}?" },
+          data: { turbo_method: :delete, turbo_confirm: delete_confirm(imp) },
           class: "btn-danger btn-sm"
       end
     end

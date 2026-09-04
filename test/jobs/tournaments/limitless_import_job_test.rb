@@ -14,6 +14,7 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     @original_http = HttpFetcher.method(:call)
     @original_cards_fetcher = Cards::Fetcher.method(:call)
     @original_pause = Tournaments::LimitlessImportJob.request_pause
+    @original_failure_limit = Tournaments::LimitlessImportJob.failure_limit
     Tournaments::LimitlessImportJob.request_pause = 0
     stub_http
     stub_cards_fetcher
@@ -23,6 +24,7 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     HttpFetcher.define_singleton_method(:call, @original_http)
     Cards::Fetcher.define_singleton_method(:call, @original_cards_fetcher)
     Tournaments::LimitlessImportJob.request_pause = @original_pause
+    Tournaments::LimitlessImportJob.failure_limit = @original_failure_limit
   end
 
   test "imports the plan and records what it created" do
@@ -37,6 +39,17 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     # an event becomes undeletable the moment a member records a participation at it.
     assert_equal IMPORTABLE, @import.created_standing_ids.size
     assert_equal IMPORTABLE, TournamentStanding.where(id: @import.created_standing_ids).count
+  end
+
+  # The one message an admin actually reads is the flash this broadcasts. The fixture's 2024 event
+  # predates every seeded Standard pool, so one row is blocked — and a run that silently skipped a
+  # whole event while reporting only its successes would leave the admin believing it was complete.
+  test "tells the admin what the run did, blocked rows included" do
+    message = broadcast_flash { perform }
+
+    assert_match(/#{IMPORTABLE} created/, message)
+    assert_match(/1 in events that cannot be imported/, message)
+    assert_match(/Raging Bolt/, message)
   end
 
   test "folds the JR and SR headings into one catalogued event" do
@@ -108,6 +121,9 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
   # were never even attempted, and reporting that as "completed" would tell an admin the import is
   # done when half of it is missing.
   test "fails the import when the run gave up on a silent remote" do
+    # Two, because the fixture's six importable rows include one with no decklist to fetch: that
+    # row succeeds and clears the count, so five consecutive failures never occur through it.
+    Tournaments::LimitlessImportJob.failure_limit = 2
     stub_http(decklist: ->(_url) { raise HttpFetcher::FetchError, "HTTP 429" })
 
     perform
@@ -131,6 +147,20 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
   end
 
   private
+
+  # The job's own report, as the admin receives it: appended to their notifications stream, never
+  # returned. Asserting on the Import row alone would miss the sentence entirely.
+  def broadcast_flash
+    original = Turbo::StreamsChannel.method(:broadcast_append_to)
+    captured = []
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_append_to) { |*_args, **kwargs|
+      captured << kwargs[:html]
+    }
+    yield
+    captured.join
+  ensure
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_append_to, original)
+  end
 
   def perform(**overrides)
     Tournaments::LimitlessImportJob.perform_now(@import.id, @admin.id, options(**overrides))

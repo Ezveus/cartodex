@@ -18,10 +18,10 @@ module Tournaments
   # :destroy_ownerless_deck` already takes an unowned deck with the row, and that guard — not a
   # deck delete written here — is what keeps a member's own deck out of reach.
   class StandingsImportUndo < ApplicationService
-    # `destroyed` is what this call actually removed; `kept_claimed` is what it found and left.
-    # Both are counts and not id lists: the admin flash names numbers, and the ids that still
-    # matter stay on the Import itself.
-    Result = Struct.new(:destroyed, :kept_claimed, keyword_init: true)
+    # `destroyed` is what this call actually removed, `detached` the field lists it took back off
+    # rows it did not create, `kept_claimed` what it found and left. Counts and not id lists: the
+    # admin flash names numbers, and the ids that still matter stay on the Import itself.
+    Result = Struct.new(:destroyed, :detached, :kept_claimed, keyword_init: true)
 
     def initialize(import)
       @import = import
@@ -38,18 +38,37 @@ module Tournaments
       # to notice that.
       recorded = TournamentStanding.where(id: @import.created_standing_ids).to_a
       claimed, unclaimed = recorded.partition { |standing| standing.tournament_entry_id.present? }
+      enriched = TournamentStanding.where(id: @import.enriched_standing_ids).to_a
 
       serialized_transaction do
         unclaimed.each(&:destroy!)
+        enriched.each { |standing| detach_field_list(standing) }
         # Only the ids actually destroyed are struck off. A claimed row keeps its id on the
         # receipt on purpose: the claim may later be severed with "Unlink", and a second undo
         # should then be able to finish the job. Since nothing was destroyed for it, running undo
         # twice in a row destroys nothing the second time and still reports the same rows it kept
         # — a no-op, not a double count.
-        @import.update!(created_standing_ids: @import.created_standing_ids - unclaimed.map(&:id))
+        @import.update!(
+          created_standing_ids: @import.created_standing_ids - unclaimed.map(&:id),
+          enriched_standing_ids: @import.enriched_standing_ids - enriched.map(&:id)
+        )
       end
 
-      Result.new(destroyed: unclaimed.size, kept_claimed: claimed.size)
+      Result.new(destroyed: unclaimed.size, detached: enriched.size, kept_claimed: claimed.size)
+    end
+
+    private
+
+    # An enriched row existed before the run and belongs to whoever typed it: the run added a field
+    # list and that is all it may take back. `update_column` for the reason
+    # Tournaments::StandingsController#unclaim uses it — severing a link has no business asking
+    # whether the rest of a wiki-editable row still validates, and a placement invalidated since by
+    # a shrunk field size would otherwise make the row un-undoable. The deck goes only if nobody
+    # owns it, the same guard TournamentStanding#destroy_ownerless_deck applies.
+    def detach_field_list(standing)
+      deck = standing.deck
+      standing.update_column(:deck_id, nil)
+      deck&.destroy_if_ownerless
     end
   end
 end

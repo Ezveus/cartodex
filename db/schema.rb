@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -160,6 +160,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_090000) do
   create_table "imports", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.json "created_standing_ids", default: [], null: false
+    t.json "enriched_standing_ids", default: [], null: false
     t.text "error_message"
     t.string "kind", null: false
     t.string "label", null: false

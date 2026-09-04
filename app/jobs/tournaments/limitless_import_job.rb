@@ -16,6 +16,11 @@ class Tournaments::LimitlessImportJob < ApplicationJob
   # attribute rather than a constant so a test can set it to zero: there is no remote to be polite
   # to in a test, and eight rows would otherwise cost four seconds of sleeping.
   class_attribute :request_pause, default: 0.5
+  # Likewise a class attribute rather than the service's constant: the test fixture holds six rows,
+  # one of which carries no decklist and therefore succeeds, so five *consecutive* failing rows are
+  # not reachable through it — and proving that an abandoned run is reported as failed matters more
+  # than proving it at exactly five.
+  class_attribute :failure_limit, default: Tournaments::StandingsImporter::CONSECUTIVE_FAILURE_LIMIT
   # Enough failures to be worth naming, few enough to stay readable in the admin table's
   # disclosure. The count is always stated, so a truncated list never hides how bad it was.
   FAILURES_LISTED = 20
@@ -33,7 +38,7 @@ class Tournaments::LimitlessImportJob < ApplicationJob
     verify!(plan, options[:expected_row_count])
 
     finish(import, user, Tournaments::StandingsImporter.call(
-      plan: plan, archetype: archetype, user: user, pause: request_pause
+      plan: plan, archetype: archetype, user: user, pause: request_pause, failure_limit: failure_limit
     ))
   rescue StandardError => e
     report_failure(import, user, e)
@@ -76,6 +81,7 @@ class Tournaments::LimitlessImportJob < ApplicationJob
     import.update!(
       status: result.aborted? ? "failed" : "completed",
       created_standing_ids: result.standing_ids,
+      enriched_standing_ids: result.enriched_standing_ids,
       error_message: summarise(result)
     )
     broadcast(user, result.aborted? ? "flash-alert" : "flash-notice", outcome(import, result))
@@ -83,6 +89,9 @@ class Tournaments::LimitlessImportJob < ApplicationJob
 
   def outcome(import, result)
     counts = "#{result.created} created, #{result.enriched} enriched, #{result.skipped} already present"
+    # Named only when there were any: a run with nothing blocked should not have to explain a zero,
+    # and a run that quietly skipped a whole event must not look like one that had nothing to skip.
+    counts += ", #{result.blocked} in events that cannot be imported" if result.blocked.positive?
     return %(Import of "#{import.label}" stopped: #{result.aborted_reason} (#{counts}).) if result.aborted?
 
     %(Import of "#{import.label}" finished: #{counts}#{", #{result.failed_count} refused" if result.failed_count.positive?}.)

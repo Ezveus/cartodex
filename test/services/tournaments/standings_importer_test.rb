@@ -79,6 +79,10 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     assert_not_nil standing.deck
     assert_equal 1, result.enriched
     assert_equal 0, result.created
+    # On the receipt separately from the rows the run created, because undo treats the two
+    # oppositely: it deletes what it made and only takes the list back off what it did not.
+    assert_equal [ standing.id ], result.enriched_standing_ids
+    assert_empty result.standing_ids
   end
 
   test "leaves a standing that already has a list alone" do
@@ -140,13 +144,92 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     assert_equal 5, result.failed_count
   end
 
+  # The card pages are the bulk of a run's traffic — up to fifteen per row against one decklist
+  # page — so a rate limit lands on them first. Counting only the decklist fetches let a
+  # rate-limited run hammer on to the end and report success.
+  test "gives up when it is the card pages that stop answering" do
+    Cards::Fetcher.define_singleton_method(:call) { |_url| raise HttpFetcher::FetchError, "HTTP 429" }
+
+    result = import(Array.new(8) { |i| row(player_name: "P#{i}", placement: i + 1) })
+
+    assert result.aborted?
+    assert_match(/consecutive fetch failures/, result.aborted_reason)
+    # Five rows tried, not eight: the run stops rather than working through the rest.
+    assert_equal 5, result.failed_count
+  end
+
+  # "Consecutive" has to mean consecutive. A patch of bad luck around one row that went through is
+  # not a far side that has stopped answering, and a run that gave up on it would strand rows an
+  # admin has no way to import except by running the whole thing again.
+  test "a row that goes through clears the count" do
+    stub_http(->(url) { url.end_with?("/4") ? DECKLIST_HTML : raise(HttpFetcher::FetchError, "HTTP 429") })
+
+    result = import(Array.new(9) { |i|
+      row(player_name: "P#{i}", placement: i + 1, list_url: "https://limitlesstcg.com/decks/list/#{i}")
+    })
+
+    assert_not result.aborted?, result.aborted_reason
+    assert_equal 8, result.failed_count
+    assert_equal 9, result.created
+  end
+
   test "counts a blocked event's rows without touching the database" do
     assert_no_difference [ -> { Tournament.count }, -> { TournamentStanding.count } ] do
       result = import([ row(event_date: Date.new(2024, 11, 2), event_name: "Regional Antwerp") ])
 
       assert_equal 1, result.blocked
       assert_equal 0, result.created
+      # A blocked event is a decision the plan already made and printed; it is not a failure to
+      # report a second time, and the guard that returns early is the only thing keeping the run
+      # from trying to create the event anyway.
+      assert_empty result.failures
     end
+  end
+
+  # A member catalogues the event between the preview and the write. `name_and_date_are_unique` is
+  # a validation, so it fires long before the UNIQUE index can — rescuing only RecordNotUnique
+  # blocked every row of the event instead of using the row somebody else had just made.
+  test "reuses an event catalogued while the run was walking it" do
+    original = Tournament.method(:create!)
+    Tournament.define_singleton_method(:create!) { |*args, **kwargs|
+      Tournament.define_singleton_method(:create!, original)
+      original.call(name: "World Championships 2026", date: Date.new(2026, 8, 28), tier: "worlds",
+        format: "standard", standard_pool: StandardPool.at(Date.new(2026, 8, 28)))
+      original.call(*args, **kwargs)
+    }
+
+    result = import([ row(player_name: "Tomi Markkula", placement: 4) ])
+
+    assert_empty result.failures
+    assert_equal 1, result.created
+    assert_equal 1, Tournament.where(name_normalized: "world championships 2026").count
+  ensure
+    Tournament.define_singleton_method(:create!, original)
+  end
+
+  # A member deletes their own row while the run is fetching its list. `update!` against a row that
+  # no longer exists returns true without raising, so the list would otherwise be left ownerless,
+  # shared, and referenced by nothing.
+  test "destroys a field list whose standing vanished mid-import" do
+    standing = tournament_standings(:ash_masters)
+    original = ::Decks::Fetcher.method(:call)
+    ::Decks::Fetcher.define_singleton_method(:call) { |*args, **kwargs|
+      deck = original.call(*args, **kwargs)
+      TournamentStanding.where(id: standing.id).delete_all
+      deck
+    }
+
+    before = Deck.pluck(:id)
+    result = import([ row(event_name: "Regional Championship", event_date: Date.new(2026, 3, 14),
+      player_name: "Ash Ketchum", placement: 33) ])
+
+    assert_equal 1, result.failed_count
+    assert_match(/deleted while its field list/, result.failures.first.last)
+    # An exact-set comparison, not a count: decks(:field_list) is itself an ownerless deck, so
+    # "no ownerless decks" would be false before the run as well as after it.
+    assert_equal before.sort, Deck.pluck(:id).sort
+  ensure
+    ::Decks::Fetcher.define_singleton_method(:call, original)
   end
 
   private

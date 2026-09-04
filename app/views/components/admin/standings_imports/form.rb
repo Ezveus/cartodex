@@ -31,9 +31,9 @@ module Admin
 
       def deck_id_field
         render Ui::FormGroup.new(
+          label: "Limitless deck id", field_name: "deck_id",
           hint: "The number in limitlesstcg.com/decks/280/results. Digits only — it goes straight into the URL this fetches."
         ) do
-          label(class: "form-label", for: "deck_id") { "Limitless deck id" }
           # Strings, not Symbols, for every name and id: Phlex dasherizes a Symbol passed as an
           # attribute value, and `name="deck-id"` reaches the controller as nothing at all.
           input(type: "text", name: "deck_id", id: "deck_id", value: @deck_id,
@@ -46,8 +46,10 @@ module Admin
       # is the admin's declaration about a whole page of results (D2), so it is picked from what
       # cartodex already knows or the run does not happen.
       def archetype_field
-        render Ui::FormGroup.new(hint: "Every row this run writes carries it. Nothing is guessed and no archetype is created.") do
-          label(class: "form-label", for: "archetype_id") { "Archetype" }
+        render Ui::FormGroup.new(
+          label: "Archetype", field_name: "archetype_id",
+          hint: "Every row this run writes carries it. Nothing is guessed and no archetype is created."
+        ) do
           select(name: "archetype_id", id: "archetype_id", class: "form-input") do
             option(value: "") { "— Pick an archetype —" }
             @archetypes.each do |archetype|
@@ -59,9 +61,9 @@ module Admin
 
       def event_filters_field
         render Ui::FormGroup.new(
+          label: "Only these events (optional)", field_name: "event_filters",
           hint: "One per line or comma-separated. A row is kept when its event name contains any of them. Leave blank for every event on the page — which is thousands of rows."
         ) do
-          label(class: "form-label", for: "event_filters") { "Only these events (optional)" }
           textarea(name: "event_filters", id: "event_filters", class: "form-input", rows: 4,
                    placeholder: "NAIC\nWorld Championships") { @event_filters }
         end
@@ -69,9 +71,9 @@ module Admin
 
       def limit_field
         render Ui::FormGroup.new(
+          label: "Top N per event (optional)", field_name: "limit_per_event",
           hint: "Applied per age division, not per event: a cap across the whole event would keep ten Masters rows and drop the single Junior one."
         ) do
-          label(class: "form-label", for: "limit_per_event") { "Top N per event (optional)" }
           input(type: "number", name: "limit_per_event", id: "limit_per_event",
                 value: @limit_per_event, class: "form-input", min: "1")
         end

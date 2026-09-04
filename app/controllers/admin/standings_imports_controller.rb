@@ -58,17 +58,6 @@ module Admin
 
     # "Undo this run". `params[:id]` is an *Import* id: the run left its receipt there
     # (imports.created_standing_ids) and there is no standings-import record to address.
-    def destroy
-      import = Import.find(params[:id])
-      unless import.kind == "limitless_standings"
-        return redirect_to admin_imports_path,
-          alert: "Only a Limitless standings import can be undone — this one is a #{import.kind} import."
-      end
-
-      result = Tournaments::StandingsImportUndo.call(import)
-      redirect_to admin_imports_path, notice: undo_notice(result)
-    end
-
     private
 
     def read_form_params
@@ -115,11 +104,6 @@ module Admin
         # approved.
         "expected_row_count" => params[:expected_row_count].to_i
       }
-    end
-
-    def undo_notice(result)
-      "Undo complete: #{result.destroyed} standings deleted, " \
-        "#{result.kept_claimed} left alone because a member has claimed them."
     end
   end
 end

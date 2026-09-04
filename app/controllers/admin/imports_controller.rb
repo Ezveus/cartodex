@@ -84,11 +84,16 @@ module Admin
     # answers to the same click, and the claimed rows are the half the admin has to go and look
     # at by hand.
     def undo_notice(result)
-      notice = "Undid #{helpers.pluralize(result.destroyed, 'standing')}."
-      return notice if result.kept_claimed.zero?
-
-      was_were = result.kept_claimed == 1 ? "was" : "were"
-      "#{notice.chomp('.')}; #{result.kept_claimed} #{was_were} claimed and kept."
+      parts = [ "Undid #{helpers.pluralize(result.destroyed, 'standing')}" ]
+      # Named separately because it is a different act on somebody else's row: the run attached a
+      # field list to a standing it did not create, and undo takes only that back.
+      parts << "took the field list back off #{helpers.pluralize(result.detached, 'existing standing')}" if
+        result.detached.positive?
+      if result.kept_claimed.positive?
+        was_were = result.kept_claimed == 1 ? "was" : "were"
+        parts << "#{result.kept_claimed} #{was_were} claimed and kept"
+      end
+      "#{parts.join("; ")}."
     end
   end
 end

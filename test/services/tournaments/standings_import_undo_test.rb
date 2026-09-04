@@ -131,6 +131,31 @@ class Tournaments::StandingsImportUndoTest < ActiveSupport::TestCase
     assert_match(/limitless_standings/, error.message)
   end
 
+  # An enrich-only run used to be unundoable in both directions at once: the receipt was empty, so
+  # this button did nothing, and Tournaments::StandingsController#standing_params does not permit
+  # deck_id, so the member whose row it was could not detach the list either — their only way out
+  # was destroying their own public standing.
+  test "takes an imported field list back off a row it did not create" do
+    standing = tournament_standings(:ash_masters)
+    deck = Deck.create!(user: nil, name: "Ash Ketchum — field list", shared: true,
+      standard_pool: StandardPool.current)
+    standing.update!(deck: deck)
+    import = users(:one).imports.create!(
+      kind: "limitless_standings", label: "Raging Bolt — Limitless deck 280", status: "completed",
+      enriched_standing_ids: [ standing.id ]
+    )
+
+    result = Tournaments::StandingsImportUndo.call(import)
+
+    assert_equal 1, result.detached
+    assert_equal 0, result.destroyed
+    # The member's row stays; only the list the run attached to it goes.
+    assert TournamentStanding.exists?(standing.id)
+    assert_nil standing.reload.deck_id
+    assert_not Deck.exists?(deck.id)
+    assert_empty import.reload.enriched_standing_ids
+  end
+
   private
 
   # archetypes(:standings_marker) and no other fixture — TournamentStanding's cascade off

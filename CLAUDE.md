@@ -266,24 +266,43 @@ fetch and fails if any is nested.
 **The standing is created first and the list attached after**, because `Decks::Fetcher` commits its
 own transaction and `deck` is optional on a standing: build the list first and a row that fails
 `placement_within_division_field` leaves a shared, ownerless deck that `/decks/shared` lists and no
-path in the app can delete. **An existing standing is never rewritten, but a NULL `deck_id` is
-filled in** — a row naming an archetype with no list is the common case, and attaching one
-overwrites nothing, so a run reports *created*, *enriched* and *skipped* as three different
-numbers. **The event lookup is `find_by || create!`, never `find_or_create_by`**, whose
-`name_normalized:` key `before_validation :normalize_name` promptly overwrites with nil, failing
-validation and returning an unpersisted record without raising; both it and the standing create
-rescue `RecordNotUnique`, since the validations behind both UNIQUE indexes are non-atomic
-`exists?`.
+path in the app can delete. The attach is then **confirmed against the database** rather than
+assumed — `update!` returns `true` even when the row it targets has been deleted, Rails does not
+raise for an UPDATE that matched nothing, and standings are wiki-governed while a run walks
+hundreds of them, so that `true` is exactly how the same orphan arrives by the other door.
+
+**An existing standing is never rewritten, but a NULL `deck_id` is filled in** — a row naming an
+archetype with no list is the common case, and attaching one overwrites nothing, so a run reports
+*created*, *enriched* and *skipped* as three different numbers. Enrichment is recorded on its own
+half of the receipt (`imports.enriched_standing_ids`) because undo treats the two oppositely: it
+deletes the rows the run *made* and only takes the field list back off the rows it did not.
+Without that split an enrich-only run was unundoable in both directions at once — the receipt was
+empty, and `standing_params` does not permit `deck_id`, so the member whose row it was could not
+detach the list either.
+
+**The event lookup is `find_by || create!`, never `find_or_create_by`**, whose `name_normalized:`
+key `before_validation :normalize_name` promptly overwrites with nil, failing validation and
+returning an unpersisted record without raising. It rescues **`RecordInvalid` as well as
+`RecordNotUnique`**, and the validation is the likely path: `name_and_date_are_unique` is a
+non-atomic `exists?` that fires long before the UNIQUE index can, so a member cataloguing the event
+between the preview and the write surfaces as `RecordInvalid` — rescuing only the index error
+blocked every row of that event instead of reusing the row somebody else had just made.
 
 **The preview is a GET and the job refuses a plan that has changed.** A POST that renders a body is
 an error to Turbo ("Form responses must redirect"), and every render-a-body branch in this app is a
 422 or JSON. The job re-fetches rather than trusting a plan carried through the browser, and the
 confirm form carries the row count the admin saw: without that check, Limitless publishing an event
 between the two clicks silently imports rows nobody approved. A run is capped (`max_rows:`, default
-300 — a keyword so a test can prove the refusal with two rows), gives up after five *consecutive
-fetch* failures (a decklist that will not parse is not "the far side is down" and does not count),
-and records its `created_standing_ids` on the `Import` so `#undo` can take it back — destroying the
-unclaimed rows, keeping the claimed ones and saying how many, and leaving the events alone.
+300 — a keyword so a test can prove the refusal with two rows) and gives up after five consecutive
+*rows* lost to a transport failure. Per row and not per request, because a row makes up to sixteen
+of them: the card pages are fifteen sixteenths of a run's traffic, so a rate limit that lets the
+decklist page through and refuses those is still a run that has stopped working — and a counter
+cleared by any one successful request would never reach five. A decklist that merely will not parse
+is neither counted nor forgiven. The run records both halves of its receipt on the `Import`, and
+**undo lives on `Admin::ImportsController#undo`**, beside the row it acts on: it destroys the
+created rows nobody has claimed, takes the field list back off the enriched ones with
+`update_column` (for the reason `#unclaim` uses it), keeps the claimed rows and says how many, and
+leaves the events alone.
 `Import::KINDS` gains `limitless_standings`, whose `tournament_id` stays nil because a run spans
 many events, and `Admin::ImportsController#retry` became an allowlist (`deck`, `card_set`) rather
 than a chain of refusals — its `case` has no `else`, so a new kind used to destroy the row and

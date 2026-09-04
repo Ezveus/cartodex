@@ -146,7 +146,7 @@ Rails.application.routes.draw do
       #
       # `destroy` takes an *Import* id, not a standings-import id: there is no such record. It is
       # the "undo this run" action, and the receipt it undoes is the Import row.
-      resources :standings_imports, only: [ :new, :create, :destroy ] do
+      resources :standings_imports, only: [ :new, :create ] do
         get :preview, on: :collection
       end
     end

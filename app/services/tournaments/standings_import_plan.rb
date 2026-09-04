@@ -78,11 +78,34 @@ class Tournaments::StandingsImportPlan < ApplicationService
   end
 
   def call
-    events = grouped_rows.map { |(name, date), rows| build_event(name, date, rows) }
+    groups = grouped_rows
+    @catalogued = load_catalogued(groups.keys)
+    @standings = load_standings
+
+    events = groups.map { |(name, date), rows| build_event(name, date, rows) }
     Plan.new(events: events.sort_by { |event| event.date }.reverse, max_rows: @max_rows)
   end
 
   private
+
+  # Two queries for the whole plan rather than three per event. The unfiltered page really does
+  # hold 116 events, and resolving each one on its own turned a preview into 230-odd queries in a
+  # single web request — most of them spent before `over_limit?` had a chance to refuse the plan.
+  # `with_standard_pool` because the plan renders each pool by name, which reads both of its bounds.
+  def load_catalogued(keys)
+    return [] if keys.empty?
+
+    dates = keys.map(&:last)
+    Tournament.with_standard_pool
+      .where(date: (dates.min - SIMILAR_DATE_WINDOW)..(dates.max + SIMILAR_DATE_WINDOW)).to_a
+  end
+
+  def load_standings
+    ids = @catalogued.map(&:id)
+    return {} if ids.empty?
+
+    TournamentStanding.where(tournament_id: ids).group_by(&:tournament_id)
+  end
 
   def grouped_rows
     filtered = @rows
@@ -93,24 +116,35 @@ class Tournaments::StandingsImportPlan < ApplicationService
   end
 
   def build_event(name, date, rows)
-    format, other_format_name = FORMATS.fetch(dominant_format(rows), [ nil, nil ])
-    tournament = Tournament.find_by(name_normalized: name.squish.downcase, date: date)
-    pool = standard_pool_for(format, date, tournament)
+    normalized = name.squish.downcase
+    tournament = @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
+    derived = classification(rows, date)
+    # Taken whole from an existing event, or derived whole — never field by field. Mixing them
+    # produces records like format "standard" carrying an other_format_name, which is meaningless
+    # even where a callback later drops it.
+    settled = tournament ? classification_of(tournament) : derived
 
     event = EventPlan.new(
-      name: name,
-      date: date,
+      name: name, date: date, tournament: tournament,
       tier: tournament&.tier || tier_for(name),
-      format: tournament&.format || format,
-      other_format_name: tournament&.other_format_name || other_format_name,
-      standard_pool: tournament&.standard_pool || pool,
-      tournament: tournament,
-      blocked_reason: blocked_reason(rows, format, pool, tournament, date),
-      similar_tournaments: tournament ? [] : similar_tournaments(name, date),
+      **settled,
+      blocked_reason: blocked_reason(rows: rows, derived: derived, tournament: tournament, date: date),
+      similar_tournaments: tournament ? [] : similar_tournaments(normalized, date),
       rows: []
     )
     event.rows = build_rows(event, capped(rows))
     event
+  end
+
+  def classification(rows, date)
+    format, other_format_name = FORMATS.fetch(dominant_format(rows), [ nil, nil ])
+    { format: format, other_format_name: other_format_name,
+      standard_pool: (StandardPool.at(date) if format == "standard") }
+  end
+
+  def classification_of(tournament)
+    { format: tournament.format, other_format_name: tournament.other_format_name,
+      standard_pool: tournament.standard_pool }
   end
 
   # The format icon is on the row, not the heading, so an event's format is whatever its rows
@@ -124,21 +158,16 @@ class Tournaments::StandingsImportPlan < ApplicationService
     TIER_PATTERNS.find { |pattern, _tier| pattern.match?(name) }&.last || DEFAULT_TIER
   end
 
-  def standard_pool_for(format, date, tournament)
-    return tournament.standard_pool if tournament
-    return unless format == "standard"
-
-    StandardPool.at(date)
-  end
-
-  def blocked_reason(rows, format, pool, tournament, date)
+  # Keywords rather than positions: this took five of them, two of which were a Tournament and a
+  # StandardPool, and swapping those two would have been silent.
+  def blocked_reason(rows:, derived:, tournament:, date:)
     return "Limitless reports the format as #{dominant_format(rows).inspect}, which cartodex has no value for" if
-      format.nil?
+      derived[:format].nil?
     # Only for an event this run would have to create: an existing Standard tournament already has
     # a pool, and its own form is where that gets corrected.
     return if tournament
-    return unless format == "standard"
-    return if pool
+    return unless derived[:format] == "standard"
+    return if derived[:standard_pool]
 
     "no Standard pool covers #{date} — add one from Admin → Standard pools and re-run"
   end
@@ -158,12 +187,10 @@ class Tournaments::StandingsImportPlan < ApplicationService
     rows.map { |row| build_row(event, row, existing) }
   end
 
-  # One query per event rather than one per row: an event's sheet is small, and the plan already
-  # walks every row of it.
   def existing_standings(tournament)
     return {} if tournament.nil?
 
-    tournament.standings.group_by { |standing| standing.player_name_normalized }
+    (@standings[tournament.id] || []).group_by { |standing| standing.player_name_normalized }
   end
 
   def build_row(event, row, existing)
@@ -194,13 +221,13 @@ class Tournaments::StandingsImportPlan < ApplicationService
     { status: :skip, reason: standing.deck_id ? "already has a field list" : "no field list to add" }
   end
 
-  def similar_tournaments(name, date)
-    normalized = name.squish.downcase
+  def similar_tournaments(normalized, date)
     window = (date - SIMILAR_DATE_WINDOW)..(date + SIMILAR_DATE_WINDOW)
 
-    Tournament.where(date: window).select { |candidate|
+    @catalogued.select { |candidate|
       other = candidate.name_normalized.to_s
-      other != normalized && (other.include?(normalized) || normalized.include?(other))
+      window.cover?(candidate.date) && other != normalized &&
+        (other.include?(normalized) || normalized.include?(other))
     }
   end
 end

@@ -189,44 +189,6 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_match "must be a number", flash[:alert]
   end
 
-  # Undo destroys public rows. Pointed at a deck import it would read created_standing_ids off a
-  # row that has none, so the kind is checked rather than assumed from the button that was clicked.
-  test "undo refuses an import of any other kind" do
-    import = @admin.imports.create!(kind: "deck", label: "Raging Bolt", status: "completed")
-
-    delete admin_standings_import_path(import)
-
-    assert_redirected_to admin_imports_path
-    assert_match "Only a Limitless standings import can be undone", flash[:alert]
-    assert Import.exists?(import.id)
-  end
-
-  # The happy path of the only way back out of a bad run. Worth a controller test of its own and
-  # not just a service one: the button hands the action an *Import* id where every other route in
-  # this controller takes none, and reads two counters off a service this file does not otherwise
-  # touch.
-  test "undo deletes the standings a run created and says what it left" do
-    standing = tournament_standings(:ash_masters)
-    claimed = tournament_standings(:giovanni_masters)
-    claimed.update_column(:tournament_entry_id, tournament_entries(:one).id)
-    import = @admin.imports.create!(
-      kind: "limitless_standings", label: "Raging Bolt — Limitless deck 280", status: "completed",
-      created_standing_ids: [ standing.id, claimed.id ]
-    )
-
-    assert_difference -> { TournamentStanding.count }, -1 do
-      delete admin_standings_import_path(import)
-    end
-
-    assert_redirected_to admin_imports_path
-    assert_match "1 standings deleted", flash[:notice]
-    assert_match "1 left alone", flash[:notice]
-    assert_not TournamentStanding.exists?(standing.id)
-    # A member pressed "This is me" on that row: it is their published record now, and an admin's
-    # mis-run is not a reason to delete somebody else's work.
-    assert TournamentStanding.exists?(claimed.id)
-  end
-
   # The one test that runs the whole thing: this screen and the job behind it were written against
   # a written-down contract, and a Hash key spelled differently on either side would leave every
   # real import failing while twelve controller tests and nine job tests stayed green.

@@ -21,11 +21,14 @@ class Tournaments::LimitlessDecklist < ApplicationService
 
   DECK_SIZE = 60
 
-  # Decks::Fetcher::CARD_LINE_RE demands two or three uppercase letters for the set code and
-  # *silently drops* any line it cannot match — a dropped line is a deck missing four cards with
-  # no error anywhere. So a code it could not parse is refused here, by name, while there is still
-  # something to say about it.
+  # Decks::Fetcher::CARD_LINE_RE demands two or three uppercase letters for the set code and digits
+  # for the number, and *silently drops* any line it cannot match — a dropped line is a deck four
+  # cards short with no error anywhere, which is exactly the failure these guards exist for. Both
+  # halves are checked here, by name, while there is still something to say about the card. No page
+  # observed so far carries a non-numeric card number, which is precisely why a future one would
+  # go unnoticed: nothing downstream would complain.
   SET_CODE_RE = /\A[A-Z]{2,3}\z/
+  NUMBER_RE = /\A\d+\z/
 
   def initialize(url)
     @url = url
@@ -60,6 +63,8 @@ class Tournaments::LimitlessDecklist < ApplicationService
     raise ParseError, "#{label} at #{@url} carries no printing" if set_code.blank? || number.blank?
     raise ParseError, "#{label} at #{@url} is from set #{set_code}, which cartodex cannot address" unless
       SET_CODE_RE.match?(set_code)
+    raise ParseError, "#{label} at #{@url} is #{set_code} #{number}, whose number cartodex cannot address" unless
+      NUMBER_RE.match?(number)
     raise ParseError, "#{set_code} #{number} at #{@url} has no card name" if name.blank?
   end
 

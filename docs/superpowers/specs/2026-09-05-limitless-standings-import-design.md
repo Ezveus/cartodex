@@ -114,10 +114,10 @@ that by the time the transaction opens every lookup is a local hit and the lock 
 milliseconds. Nothing in `Decks::Fetcher` changes.
 
 **D8 — a decklist becomes PTCG text.** The `data-set` / `data-number` attributes give exactly the
-`QUANTITY NAME SET NUMBER` line `Decks::Fetcher::CARD_LINE_RE` wants. Two guards, because that
-regex fails **silently** — it wants `[A-Z]{2,3}` and drops what it cannot match: the parser refuses
-a card with no printing, a set code outside `/\A[A-Z]{2,3}\z/`, and a list whose quantities do not
-sum to 60. Each refusal names the card and fails that row alone. A run does create new `Card` rows
+`QUANTITY NAME SET NUMBER` line `Decks::Fetcher::CARD_LINE_RE` wants. Guards, because that regex
+fails **silently** — it wants `[A-Z]{2,3}` for the set code *and* `\d+` for the number, and drops
+what it cannot match: the parser refuses a card with no printing, a set code outside
+`/\A[A-Z]{2,3}\z/`, a number outside `/\A\d+\z/`, and a list whose quantities do not sum to 60. Each refusal names the card and fails that row alone. A run does create new `Card` rows
 and does spend one HTTP request per unknown printing — the first draft's "nothing new touches
 `cards`" was simply wrong.
 
@@ -128,7 +128,11 @@ downgrading the format, would both write a lie into the public catalog. The even
 preview as unimportable with the reason, which is actionable: the admin adds the pool from
 `/admin/standard_pools` and re-runs.
 
-**D10 — the standing is written first, the list attached after.** *(new; blocker.)*
+**D10 — the standing is written first, the list attached after, and the attach is confirmed.**
+*(new; blocker. The confirmation was added after a second review.)* `update!` returns `true` even
+when the row it targets has been deleted — Rails does not raise for an UPDATE that matched nothing
+— and standings are wiki-governed while a run walks hundreds of them, so the write is read back
+rather than assumed.
 `Decks::Fetcher` commits its own transaction, so a list created before its standing is an orphan
 the moment the standing fails validation — `placement_within_division_field` refuses a placement
 above a field size the event already records, and that is reachable. `deck` is `optional:` on a
@@ -141,7 +145,8 @@ unparseable list, a placement above a recorded field size, an unreachable card) 
 the run continues. The `Import` row ends `completed` with the failures listed in `error_message`
 when there were any, `failed` only when nothing could be done at all.
 
-**D12 — a run can be undone.** *(new; blocker.)* Nothing else in the app can clean up after a bad
+**D12 — a run can be undone, and undo lives beside the row it acts on
+(`Admin::ImportsController#undo`).** *(new; blocker.)* Nothing else in the app can clean up after a bad
 run: there is no admin tournaments controller, `Tournament has_many :entries,
 dependent: :restrict_with_error` makes an event undeletable as soon as one member records a
 participation at it, and an ownerless `shared` deck is reachable for deletion through
@@ -173,10 +178,14 @@ imports rows nobody approved.
 message asking for a tighter event filter or a lower per-event cap. It is a keyword rather than a
 constant so a test can prove the refusal with two rows instead of a 300-row HTML fixture.
 
-**D14b — a run that has stopped working stops.** *(new.)* `HttpFetcher` raises on any non-2xx,
-429 included, and D11 collects per-row failures — so a rate-limited run would otherwise end
-`completed` with 300 identical refusals. Five consecutive fetch failures abort the run as `failed`
-instead.
+**D14b — a run that has stopped working stops.** *(new; revised after review.)* `HttpFetcher`
+raises on any non-2xx, 429 included, and D11 collects per-row failures — so a rate-limited run
+would otherwise end `completed` with 300 identical refusals. Five consecutive **rows** lost to a
+transport failure abort it as `failed` instead. Per row and not per request: a row makes up to
+sixteen of them and the card pages are fifteen sixteenths of the traffic, so counting only the
+decklist fetch missed the requests a rate limit actually lands on — while a counter cleared by one
+successful request would never reach five, since the decklist page can keep answering while the
+card pages refuse. A list that merely will not parse is neither counted nor forgiven.
 
 **D14c — a wrong division is not fixable by re-running.** *(new.)* The skip key of D6 includes
 `division`, and `division` is derived. A run that got it wrong writes a second public row for the
@@ -223,9 +232,9 @@ Tournaments::StandingsImportPlan.call(
 # No `archetype:` — which archetype the rows carry only matters at write time.
 
 Tournaments::StandingsImporter.call(plan:, archetype:, user:, pause: 0.0)
-# => Result(created:, enriched:, skipped:, blocked:, standing_ids:, failures: [[label, message]],
-#           aborted_reason:) — #aborted?, #failed_count
-Tournaments::StandingsImportUndo.call(import)        # => Result(destroyed:, kept_claimed:)
+# => Result(created:, enriched:, skipped:, blocked:, standing_ids:, enriched_standing_ids:,
+#           failures: [[label, message]], aborted_reason:) — #aborted?, #failed_count
+Tournaments::StandingsImportUndo.call(import)        # => Result(destroyed:, detached:, kept_claimed:)
 
 Tournaments::LimitlessImportJob.perform(import_id, user_id, options)
 # options: deck_id, archetype_id, event_filters, limit_per_event, expected_row_count
@@ -239,9 +248,11 @@ Tournaments::LimitlessImportJob.perform(import_id, user_id, options)
 | `app/services/tournaments/standings_importer.rb` | write the plan |
 | `app/jobs/tournaments/limitless_import_job.rb` | run it against an `Import`, broadcast the summary |
 | `app/services/tournaments/standings_import_undo.rb` | roll one run back |
-| `app/controllers/admin/standings_imports_controller.rb` | `new` / `preview` (GET) / `create` / `destroy` (undo) |
+| `app/controllers/admin/standings_imports_controller.rb` | `new` / `preview` (GET) / `create` |
+| `app/controllers/admin/imports_controller.rb` | `undo`, beside the run it acts on |
 | `app/views/components/admin/standings_imports/*` | the form and the plan table |
-| `db/migrate/*_add_created_standing_ids_to_imports.rb` | the one migration (D12) |
+| `db/migrate/*_add_created_standing_ids_to_imports.rb` | the run's receipt (D12) |
+| `db/migrate/*_add_enriched_standing_ids_to_imports.rb` | its other half (D12) |
 
 `Import::KINDS` gains `limitless_standings`; its `label` is the archetype's name and the Limitless
 deck id ("Raging Bolt — Limitless deck 280"), which is what the admin table's Label column and the

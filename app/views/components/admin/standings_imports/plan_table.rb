@@ -164,17 +164,28 @@ module Admin
       end
 
       def rows_table(event)
-        render Ui::DataTable.new(columns: %w[Player Placement Division Status Reason]) do |t|
+        render Ui::DataTable.new(columns: [ "Player", "Placement", "Division", "List", "Status", "Reason" ]) do |t|
           event.rows.each do |row_plan|
             t.row do
               t.cell { row_plan.row.player_name.to_s }
               t.cell { row_plan.row.placement&.to_s || "—" }
               t.cell { division_cell(row_plan) }
+              # Whether a row carries a decklist is what decides how long the run takes and how
+              # many requests it makes — and the per-event cap is chosen on exactly that basis.
+              t.cell { row_plan.row.list_url.present? ? "✓" : "—" }
               t.cell { span(class: badge_class(row_plan.status)) { STATUS_LABEL.fetch(row_plan.status) } }
-              t.cell { row_plan.reason.presence || "—" }
+              t.cell { row_reason(event, row_plan) }
             end
           end
         end
+      end
+
+      # A blocked event's reason is printed once above the table. Repeating it verbatim on each of
+      # its forty rows buries the rows that have something of their own to say.
+      def row_reason(event, row_plan)
+        return "—" if row_plan.reason.blank? || row_plan.reason == event.blocked_reason
+
+        row_plan.reason
       end
 
       def division_cell(row_plan)

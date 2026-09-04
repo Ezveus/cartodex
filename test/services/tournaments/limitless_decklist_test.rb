@@ -61,6 +61,18 @@ class Tournaments::LimitlessDecklistTest < ActiveSupport::TestCase
     assert_match(/SV9a/, error.message)
   end
 
+  # The other half of the same guard as the set code: CARD_LINE_RE wants `(\d+)\z` and drops what
+  # it cannot match without a word, so a lettered card number — a Trainer Gallery style "TG05" —
+  # would land as a field list four cards short that nothing anywhere reports.
+  test "refuses a card number cartodex cannot address, and names the card" do
+    stub_http(DECKLIST_HTML.sub('data-number="104"', 'data-number="TG05"'))
+
+    error = assert_raises(Tournaments::LimitlessDecklist::ParseError) { Tournaments::LimitlessDecklist.call(URL) }
+
+    assert_match(/Mega Kangaskhan ex/, error.message)
+    assert_match(/MEG TG05/, error.message)
+  end
+
   test "refuses a card carrying no printing" do
     stub_http(DECKLIST_HTML.sub('data-set="MEG" data-number="104"', 'data-set="" data-number=""'))
 
