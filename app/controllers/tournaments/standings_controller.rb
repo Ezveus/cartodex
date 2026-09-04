@@ -75,6 +75,12 @@ module Tournaments
       authorize @standing, :claim?
       @standing.update!(tournament_entry: scoped_entry!(params[:tournament_entry_id]))
       redirect_to tournament_path(@tournament), notice: "Standing linked to your participation."
+    rescue ActiveRecord::RecordInvalid
+      # entry_is_not_already_linked is the one validation update! can fail here — every other
+      # attribute is untouched. There is no form to re-render for a claim (it is a button, not a
+      # page), so the same redirect-with-alert shape #refuse_with_redirect gives an authorization
+      # refusal is what a validation refusal gets too: somewhere to go, and the reason why.
+      redirect_to tournament_path(@tournament), alert: @standing.errors[:tournament_entry].to_sentence
     end
 
     def unclaim

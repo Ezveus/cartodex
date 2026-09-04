@@ -86,6 +86,41 @@ class TournamentStandingTest < ActiveSupport::TestCase
     assert_includes standing.errors[:tournament_entry], "must be a participation in this tournament"
   end
 
+  # F3: the readable half of the partial UNIQUE index on tournament_entry_id, the same division
+  # of labour as "one player gets one row per division" above.
+  test "a participation already linked to another row cannot be linked to this one" do
+    build_standing(player_name: "Brock", tournament_entry: tournament_entries(:one)).save!
+
+    clash = build_standing(player_name: "Misty", tournament_entry: tournament_entries(:one))
+    refute_predicate clash, :valid?
+    assert_includes clash.errors[:tournament_entry], "is already linked to another standing"
+  end
+
+  test "a standing may keep its own already-linked participation on update" do
+    standing = build_standing(player_name: "Brock", tournament_entry: tournament_entries(:one))
+    standing.save!
+
+    standing.placement = 5
+    assert_predicate standing, :valid?
+  end
+
+  # The validation above is the readable error; this is the guarantee it mirrors. A
+  # callback-bypassing write is what still needs the index — update! goes through validations
+  # and would refuse this before ever reaching the database. This is deliberately not a
+  # controller test: RecordNotUnique is a property of the partial UNIQUE index, not of any
+  # request path, and Tournaments::StandingsControllerTest instead asserts the *validation's*
+  # behaviour (a redirect with an alert, never a 500).
+  test "the database itself refuses two rows sharing a claimed participation" do
+    claimed = build_standing(player_name: "Brock", tournament_entry: tournament_entries(:one))
+    claimed.save!
+    other = build_standing(player_name: "Misty")
+    other.save!
+
+    assert_raises ActiveRecord::RecordNotUnique do
+      other.update_column(:tournament_entry_id, tournament_entries(:one).id)
+    end
+  end
+
   test "a participation in this event may be linked" do
     assert_predicate build_standing(tournament_entry: tournament_entries(:one)), :valid?
   end

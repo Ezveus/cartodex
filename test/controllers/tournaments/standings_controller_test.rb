@@ -179,20 +179,42 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  # The partial UNIQUE index on tournament_entry_id is what stops a member publishing themselves
-  # twice under two spellings of their own name, which the player-name key cannot see.
-  # Preflight ruling 4: if this does not raise through the request stack (Rails 8 test env uses
-  # show_exceptions = :rescuable, and RecordNotUnique is not rescuable, so it should), move the
-  # test to test/models/tournament_standing_test.rb and assert the raise on
-  # standing.update!(tournament_entry: …) directly. The property under test is the partial UNIQUE
-  # index — a database guarantee, not a controller behaviour.
-  test "one participation may back only one row" do
+  # F3: the partial UNIQUE index on tournament_entry_id is what stops a member publishing
+  # themselves twice under two spellings of their own name, which the player-name key cannot
+  # see — but this table used to mirror it with no readable validation, so re-opening the
+  # still-bookmarkable new?tournament_entry_id=E under a different name, or claiming from two
+  # tabs, raised ActiveRecord::RecordNotUnique straight through the request stack: a 500. This
+  # asserts the request-level behaviour changed to a redirect with an alert; the database
+  # guarantee itself now has its own test in TournamentStandingTest, on a callback-bypassing
+  # write, since that is a property of the index and not of this controller.
+  test "claiming a participation that already backs another row redirects with an alert" do
     @standing.update!(tournament_entry: tournament_entries(:one))
 
-    assert_raises ActiveRecord::RecordNotUnique do
-      post claim_tournament_standing_path(@tournament, tournament_standings(:ash_masters),
-        tournament_entry_id: tournament_entries(:one).id)
+    post claim_tournament_standing_path(@tournament, tournament_standings(:ash_masters),
+      tournament_entry_id: tournament_entries(:one).id)
+
+    assert_redirected_to tournament_path(@tournament)
+    assert_match(/already linked/, flash[:alert])
+    assert_nil tournament_standings(:ash_masters).reload.tournament_entry_id
+    assert_equal tournament_entries(:one), @standing.reload.tournament_entry
+  end
+
+  # The same failure reachable from the ordinary create path: publishing from a prefill whose
+  # participation has, in the meantime, already been linked to a different row.
+  test "creating from a prefill whose participation already backs another standing re-renders the form" do
+    @standing.update!(tournament_entry: tournament_entries(:one))
+
+    assert_no_difference -> { TournamentStanding.count } do
+      post tournament_standings_path(@tournament), params: {
+        tournament_entry_id: tournament_entries(:one).id,
+        tournament_standing: {
+          player_name: "Ash Ketchum", division: "junior", archetype_id: archetypes(:ogerpon).id
+        }
+      }
     end
+
+    assert_response :unprocessable_entity
+    assert_select ".form-errors li", text: /already linked/
   end
 
   test "the member whose participation is linked may sever the link" do

@@ -31,6 +31,7 @@ class TournamentStanding < ApplicationRecord
   validate :player_name_is_unique_in_division
   validate :placement_within_division_field
   validate :entry_belongs_to_same_tournament
+  validate :entry_is_not_already_linked
 
   # before_validation as well as before_save, for the reason Tournament runs normalize_name
   # twice: the uniqueness validation has to compare the normalized value before the record is
@@ -109,6 +110,20 @@ class TournamentStanding < ApplicationRecord
     return if tournament_entry.tournament_id == tournament_id
 
     errors.add(:tournament_entry, "must be a participation in this tournament")
+  end
+
+  # The readable half of the partial UNIQUE index on tournament_entry_id (WHERE … IS NOT NULL) —
+  # the same division of labour as player_name_is_unique_in_division above and
+  # Tournament#name_and_date_are_unique. Without it, re-opening the still-bookmarkable
+  # new?tournament_entry_id=E under a different player name, or claiming from two tabs, hits the
+  # index directly and raises ActiveRecord::RecordNotUnique. The error goes on :tournament_entry,
+  # which #claim's rescue reads to build its alert.
+  def entry_is_not_already_linked
+    return if tournament_entry_id.blank?
+
+    clash = TournamentStanding.where(tournament_entry_id: tournament_entry_id)
+    clash = clash.where.not(id: id) if persisted?
+    errors.add(:tournament_entry, "is already linked to another standing") if clash.exists?
   end
 
   def destroy_ownerless_deck
