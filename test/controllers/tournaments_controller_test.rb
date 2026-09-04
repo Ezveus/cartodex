@@ -520,7 +520,11 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # An archetype of its own per row, so two rows never issue identical SQL that the per-request
-  # query cache would serve — which is what hides an N+1 from count_queries.
+  # query cache would serve — which is what hides an N+1 from count_queries. Likewise a
+  # TournamentEntry of its own per row, linked via tournament_entry:, so the :tournament_entry
+  # preload the controller takes is actually exercised: a nil FK never issues a query at all
+  # (belongs_to short-circuits it), which is what let a first version of this helper leave that
+  # preload's N+1 undetected — see the coordinator's fix-round-1 note.
   #
   # Correction to the brief: its version of this helper omits type_symbol/retreat_cost, which
   # Card requires for card_type: "Pokémon" and raises RecordInvalid without.
@@ -530,9 +534,15 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
       card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
     )
     archetype = Archetype.create!(primary_card: card, name: "Quiet #{index}", custom_name: "1")
+    # A User (and Deck) of its own per row: deck_belongs_to_user requires the entry's deck to be
+    # owned by the entry's own user, and one_entry_per_player allows only one profile-less entry
+    # per user per event — a distinct user per row is what a shared user could not give us.
+    user = User.create!(email: "quiet-player-#{index}@example.com", password: "password123")
+    deck = Deck.create!(user: user, name: "Quiet Deck #{index}", standard_pool: standard_pools(:twm_por))
+    entry = user.tournament_entries.create!(tournament: @tournament, deck: deck)
     @tournament.standings.create!(
       player_name: "Quiet Player #{index}", division: "masters",
-      placement: 100 + index, archetype: archetype
+      placement: 100 + index, archetype: archetype, tournament_entry: entry
     )
   end
 end
