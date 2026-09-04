@@ -19,27 +19,7 @@ module Tournaments
       standing.update!(deck: deck)
       import.update!(status: "completed")
 
-      remove_importing_item(contributor, import)
-      broadcast_flash(contributor, "flash-notice",
-        %(Field list for "#{standing.player_name}" imported (#{deck.deck_cards.count} cards).))
-      Turbo::StreamsChannel.broadcast_replace_to(
-        contributor, :notifications,
-        target: Tournaments::Standings::Row.dom_id(standing),
-        # can_edit: the broadcast only ever reaches the contributor, who is signed in and may
-        # therefore write any row — wiki governance, so no further question to ask.
-        #
-        # render_in(rails_view_context), not .call: Row uses link_to/button_to and route path
-        # helpers, all of which delegate to a Rails view context (Phlex::Rails::Helpers::Routes'
-        # URLOptions override calls it). A background job has no request to render one from, so
-        # a fabricated one — a throwaway ApplicationController instance carrying a bare GET
-        # request — is built for exactly this render. Decks::ImportJob's own broadcast avoids
-        # the question entirely by giving Decks::DeckCard raw href attributes instead of
-        # link_to; Row has no such escape hatch without changing a component this task does not
-        # own, so the fabricated context is built here instead.
-        html: Tournaments::Standings::Row.new(
-          standing: standing, viewer: contributor, can_edit: true
-        ).render_in(rails_view_context)
-      )
+      broadcast_success(standing, deck, contributor, import)
     rescue => e
       import.update!(status: "failed", error_message: e.message)
       remove_importing_item(contributor, import)
@@ -54,16 +34,58 @@ module Tournaments
       "#{standing.player_name} — #{tournament.name} (#{tournament.date})"
     end
 
-    # A minimal Rails view context, built the same way ActionController::Renderer builds one for
-    # rendering a template outside a request (used by ActionMailer, previews, etc.) — a bare GET
-    # request is all url_options and link_to/button_to need; nothing here reads session or
-    # current_user.
-    def rails_view_context
-      request = ActionDispatch::Request.new(Rack::MockRequest.env_for("/"))
-      controller = ApplicationController.new
-      controller.set_request!(request)
-      controller.set_response!(ApplicationController.make_response!(request))
-      controller.view_context
+    # The import's work is the deck: it is created and *attached to the standing* above, before
+    # this method ever runs. Everything here is a notification about that work, not the work
+    # itself, so a failure in here must never flip a completed import back to "failed" — the
+    # outer rescue exists for Decks::Fetcher raising or a bad decklist, not for a broadcast that
+    # merely failed to tell the page about a deck that already landed. Logged rather than
+    # silently swallowed: the contributor's page will just not update until they reload.
+    def broadcast_success(standing, deck, contributor, import)
+      remove_importing_item(contributor, import)
+      broadcast_flash(contributor, "flash-notice",
+        %(Field list for "#{standing.player_name}" imported (#{deck.deck_cards.count} cards).))
+      Turbo::StreamsChannel.broadcast_replace_to(
+        contributor, :notifications,
+        target: Tournaments::Standings::Row.dom_id(standing),
+        # can_edit: the broadcast only ever reaches the contributor, who is signed in and may
+        # therefore write any row — wiki governance, so no further question to ask.
+        #
+        # The row's `button_to` (claim/unclaim, delete) carries no authenticity token here: this
+        # is rendered by ApplicationController.renderer, not inside the request whose CSRF
+        # session the token would need to match anyway. It works in the browser because Turbo
+        # intercepts the form submission and replaces X-CSRF-Token with the value from the *live
+        # page's* own <meta name="csrf-token"> before sending it, and Rails' verified_request?
+        # accepts that header — the hidden field's stale value is never actually checked. If
+        # Turbo ever stopped doing that (or a client submitted the form without Turbo), these
+        # buttons would 422 with an invalid authenticity token. Not fixed here: injecting a real
+        # token would need a real session, and there is no session to borrow one from outside a
+        # request — this is a case to exercise by clicking a live-broadcasted button in a
+        # browser, not something a render-context change can paper over.
+        #
+        # render_in via ApplicationController.renderer, not .call: Row uses link_to/button_to and
+        # route path helpers. Rails' url_for consults url_options even for a bare _path helper,
+        # and Phlex::Rails::Helpers::Routes overrides url_options/default_url_options to delegate
+        # to the component's view_context — which is nil outside a real render_in(view_context)
+        # call, hence the NoMethodError a plain .call raises here. (Route helpers mixed in
+        # directly, as Rails.application.routes.url_helpers.deck_path is called in
+        # Decks::DeckCard, do *not* hit this: called that way, self is the url_helpers module,
+        # not the component, so the overridden url_options is never consulted — that plus
+        # with_actions: false, which keeps link_to/button_to from running at all, is how
+        # Decks::ImportJob's broadcast avoids the question entirely.) ApplicationController's
+        # own renderer builds exactly the request-shaped context render_in needs and additionally
+        # resolves url_options from the app's configured default_url_options
+        # (config/application.rb) rather than Rack's bare "example.org" default — verified to
+        # produce byte-identical output to a hand-built view context for this component, so it is
+        # strictly better with no downside for the _path helpers Row actually uses.
+        html: ApplicationController.renderer.render(
+          Tournaments::Standings::Row.new(standing: standing, viewer: contributor, can_edit: true),
+          layout: false
+        )
+      )
+    rescue => e
+      Rails.logger.error(
+        "Tournaments::StandingListImportJob: broadcast for import #{import.id} failed: #{e.message}"
+      )
     end
 
     def remove_importing_item(contributor, import)

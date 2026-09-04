@@ -76,6 +76,26 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
     assert_includes flash[:html], "flash-alert"
   end
 
+  # The import's work is the deck: created and attached before any broadcast runs. A broadcast is
+  # a notification about that work, not the work itself, so a broadcast failure must not flip a
+  # completed import back to failed — the deck stays put and the contributor's page simply does
+  # not update until they reload. Without this, the outer rescue that exists for *real* import
+  # failures (Decks::Fetcher raising, a bad decklist) would just as happily catch a raise from
+  # rendering the Turbo Stream payload and misreport a fully successful import as failed.
+  test "a broadcast failure does not un-complete a successful import" do
+    original_replace = Turbo::StreamsChannel.method(:broadcast_replace_to)
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_replace_to) { |*, **|
+      raise "broadcast boom"
+    }
+
+    Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+
+    assert_equal "completed", @import.reload.status
+    assert_not_nil @standing.reload.deck
+  ensure
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_replace_to, original_replace)
+  end
+
   private
 
   # Both helpers copied from test/jobs/decks/import_job_test.rb, where they were written for the
