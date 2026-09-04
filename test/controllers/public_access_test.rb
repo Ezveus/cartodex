@@ -72,7 +72,8 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     @deck.reload
     assert_equal name_was, @deck.name
     assert_equal shared_was, @deck.shared
-    assert_equal 2, Deck.count
+    # Three deck fixtures now: the two members' decks and the ownerless field list.
+    assert_equal 3, Deck.count
   end
 
   # Every write below rides out of the `authenticate :user` block by nesting alone, and what

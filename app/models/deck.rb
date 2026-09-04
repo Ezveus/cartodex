@@ -1,7 +1,11 @@
 class Deck < ApplicationRecord
   include NameNormalizable
 
-  belongs_to :user
+  # Nullable since tournament standings: a field list belongs to an event, not to a member.
+  # Every allocation service that reads deck.user sits behind an owner-only policy that a nil
+  # user can never satisfy, so all of them are unreachable for such a deck by construction
+  # rather than by convention — see ownerless_deck_is_shared_and_virtual below.
+  belongs_to :user, optional: true
   belongs_to :archetype, optional: true
   # Which Standard the deck was built for. Standard rotates, so its name alone
   # does not identify a card pool; every other format is eternal and has no anchor.
@@ -35,6 +39,7 @@ class Deck < ApplicationRecord
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
   validates :key, presence: true
+  validate :ownerless_deck_is_shared_and_virtual
 
   before_validation :clear_inapplicable_classification
   before_validation :assign_key, if: -> { key.blank? }
@@ -77,6 +82,11 @@ class Deck < ApplicationRecord
 
     "#{base} (#{standard_pool.name})"
   end
+
+  # Who to print in the admin panel's three deck listings. Named here rather than repeated as
+  # `deck.user&.email || "…"` in each of them: all three read `deck.user.email` and all three
+  # raised the day user_id became nullable.
+  def owner_label = user&.email || "Tournament field list"
 
   def to_param = key
 
@@ -143,6 +153,17 @@ class Deck < ApplicationRecord
   end
 
   private
+
+  # An ownerless deck is a tournament field list: it belongs to an event, not to a member. It
+  # must be shared, because /decks/shared is the only listing that can show it, and it must not
+  # be physical, because `physical` is what makes a deck consume a collection and there is no
+  # collection to consume.
+  def ownerless_deck_is_shared_and_virtual
+    return if user_id.present?
+
+    errors.add(:shared, "must be true for a deck with no owner") unless shared?
+    errors.add(:physical, "must be false for a deck with no owner") if physical?
+  end
 
   # Drops classification fields that don't apply to the current state so we never persist a stale
   # custom format name once the format is no longer "other".

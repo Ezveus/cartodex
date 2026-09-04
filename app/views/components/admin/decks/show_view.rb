@@ -12,7 +12,7 @@ module Admin
               h1 { @deck.name }
               p do
                 plain "Owner: "
-                strong { @deck.user.email }
+                strong { @deck.owner_label }
                 plain " — Cards: "
                 strong { @deck.deck_cards.sum(&:quantity).to_s }
               end

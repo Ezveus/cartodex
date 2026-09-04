@@ -370,4 +370,39 @@ class DeckTest < ActiveSupport::TestCase
     # construction. The test guards the next person who reaches for `dup` instead.
     refute_predicate copy, :shared?
   end
+
+  test "an ownerless deck must be shared" do
+    deck = Deck.new(name: "Field list", standard_pool: standard_pools(:twm_por), shared: false)
+
+    refute_predicate deck, :valid?
+    assert_includes deck.errors[:shared], "must be true for a deck with no owner"
+  end
+
+  test "an ownerless deck must not be physical" do
+    deck = Deck.new(name: "Field list", standard_pool: standard_pools(:twm_por),
+                    shared: true, physical: true)
+
+    refute_predicate deck, :valid?
+    assert_includes deck.errors[:physical], "must be false for a deck with no owner"
+  end
+
+  test "an ownerless shared virtual deck saves" do
+    deck = Deck.new(name: "Field list", standard_pool: standard_pools(:twm_por), shared: true)
+
+    assert_predicate deck, :valid?
+    assert deck.save
+    assert_nil deck.reload.user_id
+  end
+
+  test "a deck with an owner is free to be private and physical" do
+    deck = Deck.new(user: users(:one), name: "Mine",
+                    standard_pool: standard_pools(:twm_por), physical: true)
+
+    assert_predicate deck, :valid?
+  end
+
+  test "owner_label names the member, or says the deck is a field list" do
+    assert_equal users(:one).email, decks(:one).owner_label
+    assert_equal "Tournament field list", decks(:field_list).owner_label
+  end
 end

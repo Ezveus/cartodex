@@ -96,7 +96,10 @@ class DecksController < ApplicationController
     @deck = Deck.find_by!(key: params[:id])
     authorize @deck
 
-    if @deck.user_id == current_user&.id
+    # `current_user &&` first: `@deck.user_id == current_user&.id` alone is nil == nil for an
+    # ownerless field list read by a visitor, which is `true`, which served the owner's page —
+    # inline editing, steppers, result logging — to the public.
+    if current_user && @deck.user_id == current_user.id
       owner_show
     else
       public_show

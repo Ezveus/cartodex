@@ -975,6 +975,19 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_nil session["user_return_to"]
   end
 
+  # `@deck.user_id == current_user&.id` was true with both sides nil, so an ownerless field list
+  # served the owner's page — inline editing, allocation steppers and all — to the public.
+  test "a visitor on an ownerless shared deck gets the public page, not the owner's" do
+    sign_out @user
+
+    get deck_path(decks(:field_list))
+
+    assert_response :success
+    assert_select ".deck-card-item"
+    assert_select "form.deck-form", count: 0
+    assert_select ".deck-actions-dropdown", count: 0
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

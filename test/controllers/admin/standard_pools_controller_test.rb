@@ -41,7 +41,9 @@ class Admin::StandardPoolsControllerTest < ActionDispatch::IntegrationTest
     por = rows.find { |row| row.text.include?("TWM-POR") }
     asc = rows.find { |row| row.text.include?("TWM-ASC") }
 
-    assert_equal "2", por.css("[data-label='Decks']").first.text
+    # Three deck fixtures anchored to this pool now: the two members' decks and the
+    # ownerless tournament field list.
+    assert_equal "3", por.css("[data-label='Decks']").first.text
     assert_equal "2", por.css("[data-label='Tournaments']").first.text
     assert_equal "0", asc.css("[data-label='Decks']").first.text
     assert_equal "0", asc.css("[data-label='Tournaments']").first.text
