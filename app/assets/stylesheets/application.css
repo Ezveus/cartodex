@@ -1887,6 +1887,32 @@ textarea.form-input {
   text-decoration: underline;
 }
 
+/* The Error cell of the admin imports table. A bulk standings run's message is a list of per-row
+   failures, so it is disclosed rather than parked in a title= tooltip — below 768px the row is a
+   data-label card and there is no hover to reveal one. min-width: 0 is what lets it shrink there:
+   the cell is a flex container at that width, and a flex item defaults to min-content, which a
+   long unbroken error string would push past the card's edge. */
+.import-error {
+  min-width: 0;
+}
+
+.import-error > summary {
+  cursor: pointer;
+  color: var(--ink-500);
+}
+
+.import-error-full {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--ink-700);
+  /* The message is written with newlines between failures, and a URL or a card name in one of
+     them has no break opportunity of its own. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Detail table (key/value pairs in admin show views) */
 .detail-table {
   width: 100%;
@@ -2619,6 +2645,51 @@ textarea.form-input {
   font-size: 1.1rem;
   text-align: center;
   padding: 3rem 1rem;
+}
+
+
+/* Limitless standings import — the plan preview */
+.standings-import-plan {
+  margin-top: 2rem;
+}
+
+.standings-import-totals {
+  color: var(--ink-500);
+  margin-bottom: 1.5rem;
+}
+
+.standings-import-event {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: var(--e1);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+/* A left rail rather than a wash: the rows underneath keep their own status badges, and two
+   competing backgrounds made a blocked event's table harder to read than an importable one's. */
+.standings-import-event--blocked {
+  border-left: 4px solid var(--loss-bg);
+}
+
+.standings-import-event-meta,
+.standings-import-event-catalog {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+/* The flash treatment is centred and capped at 480px, which is right for a banner at the top of
+   a page and wrong for a warning that belongs to the event block it sits in. */
+.standings-import-refusal,
+.standings-import-duplicate {
+  max-width: none;
+  margin: 0 0 1rem;
+  text-align: left;
+}
+
+.standings-import-confirm {
+  margin-top: 1.5rem;
 }
 
 

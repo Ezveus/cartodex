@@ -132,11 +132,23 @@ Rails.application.routes.draw do
       resources :decks, only: [ :index, :show ]
       resources :imports, only: [ :index, :destroy ] do
         post :retry, on: :member
+        post :undo, on: :member
       end
       resources :archetypes
       # No show action: a pool is five fields and the index already lists all of
       # them, so a show page would only restate the row.
       resources :standard_pools, except: [ :show ]
+
+      # Importing an archetype's field off Limitless TCG. `preview` is a GET on the collection
+      # and not the POST a "run this" button suggests: Turbo treats a non-redirected 200
+      # answering a form POST as an error, so a POST that rendered the plan would do nothing at
+      # all in a browser — and a plan reached by GET is reload-safe and bookmarkable besides.
+      #
+      # `destroy` takes an *Import* id, not a standings-import id: there is no such record. It is
+      # the "undo this run" action, and the receipt it undoes is the Import row.
+      resources :standings_imports, only: [ :new, :create, :destroy ] do
+        get :preview, on: :collection
+      end
     end
 
     # API endpoints

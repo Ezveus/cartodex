@@ -221,7 +221,89 @@ and a disagreement between the two is information rather than a conflict.
 metagame breakdown, no cross-event metagame page. The archetype FK and the `division` column are
 chosen so that a breakdown is a `group` over one table when it ships. Also out: claiming a row as
 a player with no account (claiming *is* a member linking their own participation), importing
-standings from RK9 or Limitless, and Championship Points on a standing.
+standings from RK9, and Championship Points on a standing. (Importing them from Limitless is no
+longer out — see the next section.)
+
+**Bulk import of a field from Limitless TCG** (`/admin/standings_imports`) turns one archetype's
+tournament history — `limitlesstcg.com/decks/<deck_id>/results`, measured at 176 event headings and
+1569 placement rows for deck 280 — into `Tournament` and `TournamentStanding` rows. Five services
+and a job, all two levels deep like every other service here: `Tournaments::LimitlessResults`
+(fetch + parse the results page), `Tournaments::LimitlessDecklist` (one decklist → the PTCG text
+`Decks::Fetcher` already parses), `Tournaments::StandingsImportPlan` (reads, never writes),
+`Tournaments::StandingsImporter` (writes), `Tournaments::StandingsImportUndo`, and
+`Tournaments::LimitlessImportJob`. The design record is
+`docs/superpowers/specs/2026-09-05-limitless-standings-import-design.md`; the decisions that are
+not obvious from the code:
+
+**The `/JR` and `/SR` suffix on an event's href is an age division, not a different event.**
+`/tournaments/518`, `/tournaments/518/SR` and `/tournaments/518/JR` are the three halves of one
+tournament, and the heading repeats the suffix in the name — so it is stripped, and the 176
+headings collapse to 116 events (measured against the live page). Left in, every import would add
+a permanent second public catalog row per division per event, which is the one mistake here no
+later correction undoes cheaply. A suffix `DIVISION_BY_SUFFIX` does *not* know yields a **nil**
+division and keeps its name suffix, so a third division surfaces as a refused row instead of being
+filed as Masters.
+
+**The archetype is the admin's declaration, and the tier and format are guesses shown before they
+are written.** `archetype_id` is `NOT NULL` on a standing and a deck-results page *is* one
+archetype, so the admin picks it once; nothing is detected and no archetype is created (detection
+still tags the *deck*, never the standing). `tournaments.tier` defaults to `regional` in the
+schema, which would file Worlds as a Regional and then hand a claimant 350 CP instead of 600
+through `CP_REFERENCE` — so it is derived from the name by a pattern table and printed per event in
+the preview. Limitless's `standard-jp` becomes format `other` with `other_format_name`
+`"Standard (JP)"`: writing it as `standard` would force a western `StandardPool` onto a Japanese
+event, the same lie a missing pool is refused for. (The decklists are safe either way — Limitless
+normalises even a Champions League list to English set codes, so issue #111 does not bite here.)
+
+**Every printing is resolved before `Decks::Fetcher` opens its transaction.** That transaction is a
+SQLite `BEGIN IMMEDIATE`, so the database's single write lock is taken at `Deck.create!`, and
+`Cards::Fetcher` goes to the network for any printing not already held at roughly 0.7 s each — one
+list of new cards would hold the lock for 15–30 s while every other writer raises
+`SQLite3::BusyException` after `database.yml`'s `timeout: 5000`. Warmed first, the same transaction
+closes in milliseconds. `StandingsImporterTest` records the transaction depth at each simulated
+fetch and fails if any is nested.
+
+**The standing is created first and the list attached after**, because `Decks::Fetcher` commits its
+own transaction and `deck` is optional on a standing: build the list first and a row that fails
+`placement_within_division_field` leaves a shared, ownerless deck that `/decks/shared` lists and no
+path in the app can delete. **An existing standing is never rewritten, but a NULL `deck_id` is
+filled in** — a row naming an archetype with no list is the common case, and attaching one
+overwrites nothing, so a run reports *created*, *enriched* and *skipped* as three different
+numbers. **The event lookup is `find_by || create!`, never `find_or_create_by`**, whose
+`name_normalized:` key `before_validation :normalize_name` promptly overwrites with nil, failing
+validation and returning an unpersisted record without raising; both it and the standing create
+rescue `RecordNotUnique`, since the validations behind both UNIQUE indexes are non-atomic
+`exists?`.
+
+**The preview is a GET and the job refuses a plan that has changed.** A POST that renders a body is
+an error to Turbo ("Form responses must redirect"), and every render-a-body branch in this app is a
+422 or JSON. The job re-fetches rather than trusting a plan carried through the browser, and the
+confirm form carries the row count the admin saw: without that check, Limitless publishing an event
+between the two clicks silently imports rows nobody approved. A run is capped (`max_rows:`, default
+300 — a keyword so a test can prove the refusal with two rows), gives up after five *consecutive
+fetch* failures (a decklist that will not parse is not "the far side is down" and does not count),
+and records its `created_standing_ids` on the `Import` so `#undo` can take it back — destroying the
+unclaimed rows, keeping the claimed ones and saying how many, and leaving the events alone.
+`Import::KINDS` gains `limitless_standings`, whose `tournament_id` stays nil because a run spans
+many events, and `Admin::ImportsController#retry` became an allowlist (`deck`, `card_set`) rather
+than a chain of refusals — its `case` has no `else`, so a new kind used to destroy the row and
+enqueue nothing.
+
+**`HttpFetcher` gained a `User-Agent` and real timeouts** (10 s connect, 30 s read, against
+Net::HTTP's 60/60), and rescues timeouts and connection errors into `FetchError` — the class every
+caller already handles, so `CardsController#image` still answers 502 rather than 500. It also
+refuses a URI that is not `URI::HTTP`, the backstop behind the caller-side rule that a Limitless
+deck id must match `/\A\d+\z/` before it is interpolated into a URL.
+
+**Still out of scope, and worth knowing:** `play.limitlesstcg.com`'s online "best finishes" (they
+are online-only tournaments with no age divisions, and cataloguing them would fill the public
+`/tournaments` list with events no member attended); attendance and W/L/T, which the results page
+does not carry; and **pagination of `tournaments#show`'s standings sheet**, which renders
+`as_a_sheet` with no limit and no rate limit. That is fine for a hand-typed sheet and stops being
+fine once several archetypes have been imported into one Worlds event — it is a prerequisite for
+using this feature at full scale. A sheet imported from one archetype's page is also a *partial*
+sheet, and nothing says so; that is a property it shares with every hand-typed sheet, and marking
+one complete would mean knowing when it is.
 
 `StandardPool` is one period of the rotating Standard calendar: two `CardSet` bounds — the oldest legal set, moved by the annual rotation, and the newest, moved by every release — plus the legal `regulation_marks` and **two** dates. `(first_card_set_id, last_card_set_id)` is UNIQUE because that pair *is* the pool's name, `TEF-PBL`, which is what players call it. `released_on` says the cards exist and drives `StandardPool.current`, the anchor a new deck is pre-selected to; `legal_on` says Play! Pokémon considers the pool legal and drives `StandardPool.at(date)`, which is what a tournament asks — a set is tournament-legal about two weeks after it ships, so neither date derives from the other. `Deck` and `Tournament` each carry a `standard_pool_id`, required by validation when the format is `standard` and cleared otherwise (the `other_format_name` pattern): **only Standard rotates**, the other three formats are eternal and have no anchor. The anchor is **pinned** — nothing moves it automatically, and `Ui::StandardPoolNotice` merely invites the user to. `has_many :decks, dependent: :restrict_with_error`, unlike `Archetype`'s `:nullify`, because a NULL anchor on a Standard deck is unsavable on its next edit. Deck-construction rules are deliberately **not** here: see #61.
 
