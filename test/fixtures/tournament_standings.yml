@@ -4,6 +4,10 @@
 # Two rows on tournaments(:one) — the event tournament_entries(:one) and (:shared_event) point
 # at — so a controller test has both a claimed-to-be and an unclaimed row to work with.
 
+# archetype: froakie on both rows, deliberately — see the note in archetypes.yml. Neither
+# ogerpon nor budew_ogerpon may be referenced here: both are destroyed by other tests, and
+# TournamentStanding's cascade off Archetype is restrict_with_error.
+
 ash_masters:
   tournament: one
   player_name: Ash Ketchum
@@ -13,7 +17,7 @@ ash_masters:
   wins: 6
   losses: 3
   ties: 0
-  archetype: ogerpon
+  archetype: froakie
   created_by: one
 
 giovanni_masters:
@@ -25,5 +29,5 @@ giovanni_masters:
   wins: 7
   losses: 2
   ties: 0
-  archetype: budew_ogerpon
+  archetype: froakie
   created_by: two

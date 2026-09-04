@@ -83,6 +83,23 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_nothing_raised { Archetype.search("Ogerpon").to_a }
   end
 
+  # A standing is another member's public record of a real placement; deleting the archetype
+  # *tag* it carries must not silently take that record with it. archetype_id is NOT NULL on a
+  # standing, so :nullify (this model's cascade for deck_results/decks) is not available here —
+  # unlike those two, this is restrict_with_error.
+  test "refuses to be destroyed while a standing names it" do
+    archetype = archetypes(:froakie)
+    assert_predicate archetype.tournament_standings, :any?, "sanity: fixture standings reference it"
+
+    assert_no_difference -> { Archetype.count } do
+      assert_no_difference -> { TournamentStanding.count } do
+        assert_not archetype.destroy
+      end
+    end
+
+    assert_not_empty archetype.errors
+  end
+
   # --- Fingerprint identity ---
 
   test "the fingerprint pair is filled from the member cards on save" do
