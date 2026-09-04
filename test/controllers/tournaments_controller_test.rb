@@ -195,6 +195,29 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "a visitor sees the event and no control that would bounce them to sign in" do
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h1", text: @tournament.name
+    assert_select ".tournament-details", text: /#{@tournament.tier_label}/
+    assert_select "a[href=?]", new_tournament_entry_path(@tournament), count: 0
+    assert_select "a[href=?]", edit_tournament_path(@tournament), count: 0
+  end
+
+  test "a visitor's catalog offers no way to add a tournament" do
+    sign_out @user
+
+    get tournaments_path
+
+    assert_response :success
+    assert_select ".data-table-row", count: 2
+    assert_select "a[href=?]", new_tournament_path, count: 0
+    assert_select ".tournament-attended", count: 0
+  end
+
   test "mine lists the reader's own participations only" do
     get mine_tournaments_path
 
