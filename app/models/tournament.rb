@@ -17,6 +17,12 @@ class Tournament < ApplicationRecord
   # event's own public sheet. Deleting the event takes the sheet with it — and still refuses while
   # any participation survives.
   has_many :standings, class_name: "TournamentStanding", dependent: :destroy
+  # Which event a field-list import is for, so the event page can list the reader's imports in
+  # flight *here* rather than everywhere. :nullify, not :destroy: an Import is the member's own
+  # record of work they asked for, and it outlives its subject the way a deck import already
+  # outlives the deck. Declared after :entries, whose restrict_with_error runs first and aborts
+  # the whole destroy anyway.
+  has_many :imports, dependent: :nullify
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
   enum :tier, {

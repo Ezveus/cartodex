@@ -17,7 +17,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
 
   test "the imported list belongs to nobody, is shared, virtual, and attached to the standing" do
     assert_difference -> { Deck.count }, 1 do
-      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
     end
 
     deck = @standing.reload.deck
@@ -36,13 +36,13 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
     @tournament.update!(format: "standard", standard_pool: standard_pools(:twm_asc))
     assert_not_equal standard_pools(:twm_asc), StandardPool.current
 
-    Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+    Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
 
     assert_equal standard_pools(:twm_asc), @standing.reload.deck.standard_pool
   end
 
   test "the list's name situates it: /decks/shared prints no author" do
-    Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+    Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
 
     assert_equal "Ash Ketchum — #{@tournament.name} (#{@tournament.date})",
       @standing.reload.deck.name
@@ -53,7 +53,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
   # must never be. This job broadcasts the standing's row instead.
   test "it broadcasts the row and never the contributor's deck grid" do
     broadcasts = capture_turbo_broadcasts do
-      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
     end
 
     assert_empty broadcasts.select { |b| b[:target] == "decks-grid" }
@@ -74,7 +74,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
     old_deck = decks(:field_list)
 
     assert_difference -> { Deck.count }, 0 do
-      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
     end
 
     refute Deck.exists?(old_deck.id), "the orphaned field list should have been destroyed"
@@ -91,7 +91,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
     @standing.update_column(:deck_id, owned.id)
 
     assert_difference -> { Deck.count }, 1 do
-      Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
     end
 
     assert Deck.exists?(owned.id), "an owned deck must never be destroyed by a re-import"
@@ -102,7 +102,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
 
   test "a failure marks the import failed and says so, leaving the standing listless" do
     broadcasts = capture_turbo_broadcasts do
-      Tournaments::StandingListImportJob.perform_now(@standing, "not a decklist", @contributor, @import)
+      Tournaments::StandingListImportJob.perform_now(@standing.id, "not a decklist", @contributor.id, @import.id)
     end
 
     assert_equal "failed", @import.reload.status
@@ -123,12 +123,82 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
       raise "broadcast boom"
     }
 
-    Tournaments::StandingListImportJob.perform_now(@standing, @decklist, @contributor, @import)
+    Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
 
     assert_equal "completed", @import.reload.status
     assert_not_nil @standing.reload.deck
   ensure
     Turbo::StreamsChannel.define_singleton_method(:broadcast_replace_to, original_replace)
+  end
+
+  # The event form really offers "other" as a format, and Deck validates other_format_name's
+  # presence whenever the format is "other" — so passing the format without its name made
+  # Deck.create! raise, and field-list import was unconditionally broken at such an event.
+  test "a field list imports at an event played under a custom format" do
+    @tournament.update!(format: "other", other_format_name: "Gym Leader Challenge",
+      standard_pool: nil)
+
+    assert_difference -> { Deck.count }, 1 do
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
+    end
+
+    deck = @standing.reload.deck
+    assert_equal "completed", @import.reload.status
+    assert_predicate deck, :other?
+    assert_equal "Gym Leader Challenge", deck.other_format_name
+  end
+
+  # Decks::Fetcher commits its own transaction, so the deck lands before the update! that attaches
+  # it. When that update! fails the deck is left ownerless, shared and referenced by nothing —
+  # listed at /decks/shared and in every spotlight, with no path in the app able to delete it. The
+  # same orphan the re-import path guards against, reached through the create path instead.
+  test "a list that cannot be attached is destroyed rather than left orphaned" do
+    # The standing is placed 33rd; shrink the event's masters field under it and the row that was
+    # perfectly savable when it was written no longer validates.
+    @tournament.update_column(:masters_participant_count, 10)
+    before = Deck.pluck(:id)
+
+    Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
+
+    assert_equal "failed", @import.reload.status
+    assert_nil @standing.reload.deck
+    # The exact set, not merely the count: a net zero would also be the answer if the deck had
+    # never been created at all, and decks(:field_list) already carries the name this import
+    # would have produced.
+    assert_equal before.sort, Deck.pluck(:id).sort
+  end
+
+  # Governance is wiki, so any member may delete this row — or the event, which cascades — while
+  # the job sits in the queue. Handed records, GlobalID would raise ActiveJob::DeserializationError
+  # before #perform is entered, where the method's own rescue cannot see it: the Import would stay
+  # "pending" forever, and Admin::ImportsController#retry refuses this kind.
+  test "a standing deleted while the job waited reports a failure instead of staying pending" do
+    id = @standing.id
+    @standing.destroy!
+
+    broadcasts = capture_turbo_broadcasts do
+      Tournaments::StandingListImportJob.perform_now(id, @decklist, @contributor.id, @import.id)
+    end
+
+    assert_equal "failed", @import.reload.status
+    assert_match(/deleted/, @import.error_message)
+    flash = broadcasts.find { |b| b[:target] == "flash-messages" }
+    assert_includes flash[:html], "flash-alert"
+  end
+
+  # The broadcast replaces the row wholesale. Rendered with Row's [] default for claimable_entries,
+  # it deleted the "This is me" button the contributor was looking at, until they reloaded.
+  test "the broadcast row keeps the claim button the contributor had" do
+    assert_nil @standing.tournament_entry_id
+    assert_equal [ tournament_entries(:one) ],
+      @contributor.tournament_entries.where(tournament: @tournament).to_a
+
+    broadcasts = capture_turbo_broadcasts do
+      Tournaments::StandingListImportJob.perform_now(@standing.id, @decklist, @contributor.id, @import.id)
+    end
+
+    replace = broadcasts.find { |b| b[:action] == :replace }
+    assert_includes replace[:html], "This is me"
   end
 
   private

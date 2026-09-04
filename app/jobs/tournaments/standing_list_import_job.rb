@@ -10,7 +10,28 @@ module Tournaments
   # the event's: they are the one person waiting for it, and they are the only one the layout
   # subscribes for.
   class StandingListImportJob < ApplicationJob
-    def perform(standing, decklist, contributor, import)
+    # The standing was deleted while this job waited in the queue. A real failure of the import,
+    # reported down the same path as a bad decklist — see #perform for why it cannot be an
+    # ActiveJob::DeserializationError instead.
+    class StandingDeleted < StandardError; end
+
+    # Ids, not records, unlike Decks::ImportJob and CardSets::ImportJob. Those two are handed a
+    # user and an import, neither of which can disappear while the job waits. Standings are
+    # wiki-governed: any member may delete this row, or the event, which cascades onto it. Passed
+    # as records, GlobalID would then fail to deserialize and raise *before* #perform is entered,
+    # where no rescue of this method can see it — the Import row would sit at "pending" forever,
+    # with Admin::ImportsController#retry refusing this kind and nothing else able to clear it. As
+    # ids, the deletion is an ordinary lookup miss and reports itself like any other failure.
+    def perform(standing_id, decklist, contributor_id, import_id)
+      import = Import.find_by(id: import_id)
+      contributor = User.find_by(id: contributor_id)
+      # Nothing left to report to, or about. A destroyed user takes their imports with them, so
+      # this is the same event seen from either side.
+      return if import.nil? || contributor.nil?
+
+      standing = TournamentStanding.find_by(id: standing_id)
+      raise StandingDeleted, "the standing was deleted before its list could be imported" if standing.nil?
+
       tournament = standing.tournament
       # The raw id, not standing.deck: Rails auto-detects the inverse of this belongs_to/has_one
       # pair, so loading the association here would cache `standing` as *this* deck's
@@ -21,7 +42,10 @@ module Tournaments
       previous_deck_id = standing.deck_id
       deck = ::Decks::Fetcher.call(
         decklist, nil, deck_name(standing, tournament),
-        shared: true, format: tournament.format, standard_pool: tournament.standard_pool
+        shared: true, format: tournament.format, standard_pool: tournament.standard_pool,
+        # Not optional alongside format: a deck whose format is "other" and whose custom name is
+        # blank fails validation, and "other" is a format the event form really offers.
+        other_format_name: tournament.other_format_name
       )
       standing.update!(deck: deck)
       # The standing points at the new deck before the old one is destroyed, never the other way
@@ -37,13 +61,31 @@ module Tournaments
 
       broadcast_success(standing, deck, contributor, import)
     rescue => e
+      discard_orphaned_list(deck, standing_id)
       import.update!(status: "failed", error_message: e.message)
       remove_importing_item(contributor, import)
       broadcast_flash(contributor, "flash-alert",
-        %(Import of the field list for "#{standing.player_name}" failed: #{e.message}))
+        %(Import of the field list for "#{import.label}" failed: #{e.message}))
     end
 
     private
+
+    # Decks::Fetcher commits its own transaction, so a deck can land and the update! attaching it
+    # still fail — the standing deleted underneath us, or gone invalid since it was written (the
+    # event's field sizes are editable and cap a placement already recorded). What is left is
+    # exactly the orphan the re-import path guards against above: an ownerless, shared Deck
+    # referenced by nothing, listed at /decks/shared and in every spotlight, with no path in the
+    # app able to reach it. `deck` is nil whenever Fetcher itself raised, which is the common case.
+    #
+    # The column is read back from the database rather than off the record: update! assigns the
+    # association before it validates, so a *failed* standing.update!(deck: deck) leaves
+    # standing.deck_id pointing at this deck in memory while nothing was written.
+    def discard_orphaned_list(deck, standing_id)
+      return if deck.nil?
+      return if TournamentStanding.where(id: standing_id).pick(:deck_id) == deck.id
+
+      deck.destroy_if_ownerless
+    end
 
     # /decks/shared prints no author, so the name is the only thing that can situate the list.
     def deck_name(standing, tournament)
@@ -65,6 +107,11 @@ module Tournaments
         target: Tournaments::Standings::Row.dom_id(standing),
         # can_edit: the broadcast only ever reaches the contributor, who is signed in and may
         # therefore write any row — wiki governance, so no further question to ask.
+        #
+        # claimable_entries is passed rather than left at Row's [] default: this replaces the row
+        # wholesale, and a contributor who has an unrecorded participation at this event was
+        # looking at a "This is me" button on it. Rendering the replacement without them deleted
+        # that button until the next reload.
         #
         # The row's `button_to` (claim/unclaim, delete) carries no authenticity token here: this
         # is rendered by ApplicationController.renderer, not inside the request whose CSRF
@@ -94,7 +141,10 @@ module Tournaments
         # produce byte-identical output to a hand-built view context for this component, so it is
         # strictly better with no downside for the _path helpers Row actually uses.
         html: ApplicationController.renderer.render(
-          Tournaments::Standings::Row.new(standing: standing, viewer: contributor, can_edit: true),
+          Tournaments::Standings::Row.new(
+            standing: standing, viewer: contributor, can_edit: true,
+            claimable_entries: claimable_entries(standing, contributor)
+          ),
           layout: false
         )
       )
@@ -102,6 +152,17 @@ module Tournaments
       Rails.logger.error(
         "Tournaments::StandingListImportJob: broadcast for import #{import.id} failed: #{e.message}"
       )
+    end
+
+    # The contributor's own participations at this event that no standing names yet — the same
+    # question TournamentsController#show asks, answered the same way, so a row this job renders
+    # offers exactly the buttons a reload would.
+    def claimable_entries(standing, contributor)
+      contributor.tournament_entries
+        .where(tournament_id: standing.tournament_id)
+        .includes(:tournament_profile, :standing)
+        .order(:id)
+        .reject(&:standing)
     end
 
     def remove_importing_item(contributor, import)

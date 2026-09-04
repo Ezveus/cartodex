@@ -242,6 +242,35 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal tournament_entries(:one), @standing.reload.tournament_entry
   end
 
+  # A row can go invalid after it was written: the event's per-division field sizes are editable
+  # and cap a placement already recorded. update! re-runs *every* validation, not only the one
+  # being changed, so unlinking such a row raised RecordInvalid — which nothing here rescues, so
+  # the member's "Unlink" click answered with a 500.
+  test "severing a link still works on a row the event's field size has since invalidated" do
+    @standing.update!(tournament_entry: tournament_entries(:one))
+    @tournament.update_column(:masters_participant_count, 5) # @standing is placed 7th
+    refute_predicate @standing.reload, :valid?
+
+    delete unclaim_tournament_standing_path(@tournament, @standing)
+
+    assert_redirected_to tournament_path(@tournament)
+    assert_nil @standing.reload.tournament_entry_id
+  end
+
+  # The other half of the same premise. A claim refused by a validation that is not the link rule
+  # used to build its alert from errors[:tournament_entry], which is empty here — so the member
+  # was redirected with a blank alert and no idea why the button did nothing.
+  test "a claim refused by a stale placement says why" do
+    @tournament.update_column(:masters_participant_count, 5) # ash_masters is placed 33rd
+
+    post claim_tournament_standing_path(@tournament, tournament_standings(:ash_masters),
+      tournament_entry_id: tournament_entries(:one).id)
+
+    assert_redirected_to tournament_path(@tournament)
+    assert_match(/masters field/, flash[:alert])
+    assert_nil tournament_standings(:ash_masters).reload.tournament_entry_id
+  end
+
   test "a decklist on the form opens an import and enqueues the job" do
     assert_difference -> { Import.count }, 1 do
       assert_enqueued_with(job: Tournaments::StandingListImportJob) do
@@ -299,11 +328,64 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # prefill_attributes yields no division at all for a participation with no TournamentProfile —
+  # profile&.division is nil and .compact drops it — and DIVISIONS runs junior-senior-masters, so
+  # a select with no explicit selection let the browser pre-pick Junior and silently published a
+  # Masters player as a Junior.
+  test "the division select defaults to masters, not to the first option" do
+    sign_in users(:two) # tournament_entries(:shared_event) carries no tournament_profile
+    assert_nil tournament_entries(:shared_event).tournament_profile
+
+    get new_tournament_standing_path(@tournament,
+      tournament_entry_id: tournament_entries(:shared_event).id)
+
+    assert_select "select[name=?] option[selected]", "tournament_standing[division]",
+      text: "Masters", count: 1
+  end
+
   test "the event page shows the reader's field-list import in flight" do
-    @user.imports.create!(kind: "standing_list", label: "Brock's list")
+    @user.imports.create!(kind: "standing_list", label: "Brock's list", tournament: @tournament)
 
     get tournament_path(@tournament)
 
     assert_select "#importing-standings .importing-item", text: /Brock's list/
+  end
+
+  # Scoped by event, not merely by kind. Unscoped, an import started at one event was listed under
+  # every other event's "Importing…" heading — and since the item's DOM id is importing-<import
+  # id>, that other event's completion broadcast then removed a row from this page.
+  test "an import in flight at another event is not listed on this one" do
+    other = tournaments(:two)
+    assert_not_equal other, @tournament
+    @user.imports.create!(kind: "standing_list", label: "Brock's list", tournament: other)
+
+    get tournament_path(@tournament)
+
+    assert_select "#importing-standings .importing-item", count: 0
+  end
+
+  # The enqueue has to hand the job ids: a standing (or its event) may be deleted while the job
+  # waits, and GlobalID deserialization of a deleted record raises before #perform is entered,
+  # where no rescue inside it can see the failure — the Import would stay "pending" forever.
+  test "the import job is enqueued with ids, never with records" do
+    form = get_standing_form
+    field_name = form.at_css("textarea")["name"]
+
+    post tournament_standings_path(@tournament), params: { tournament_standing: {
+      player_name: "Misty", division: "masters", archetype_id: archetypes(:ogerpon).id
+    }, field_name => "4 Doublade TWM 62" }
+
+    standing = @tournament.standings.find_by(player_name: "Misty")
+    import = Import.order(:id).last
+    assert_equal @tournament, import.tournament
+    enqueued = enqueued_jobs.find { |j| j["job_class"] == "Tournaments::StandingListImportJob" }
+    assert_equal [ standing.id, "4 Doublade TWM 62", @user.id, import.id ], enqueued["arguments"]
+  end
+
+  private
+
+  def get_standing_form
+    get new_tournament_standing_path(@tournament)
+    Nokogiri::HTML(response.body)
   end
 end

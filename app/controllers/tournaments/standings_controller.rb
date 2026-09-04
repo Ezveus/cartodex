@@ -73,19 +73,32 @@ module Tournaments
     # linking their own participation, which is the whole reason the two tables are separate.
     def claim
       authorize @standing, :claim?
-      @standing.update!(tournament_entry: scoped_entry!(params[:tournament_entry_id]))
-      redirect_to tournament_path(@tournament), notice: "Standing linked to your participation."
-    rescue ActiveRecord::RecordInvalid
-      # entry_is_not_already_linked is the one validation update! can fail here — every other
-      # attribute is untouched. There is no form to re-render for a claim (it is a button, not a
-      # page), so the same redirect-with-alert shape #refuse_with_redirect gives an authorization
-      # refusal is what a validation refusal gets too: somewhere to go, and the reason why.
-      redirect_to tournament_path(@tournament), alert: @standing.errors[:tournament_entry].to_sentence
+      @standing.tournament_entry = scoped_entry!(params[:tournament_entry_id])
+
+      if @standing.save
+        redirect_to tournament_path(@tournament), notice: "Standing linked to your participation."
+      else
+        # full_messages, not errors[:tournament_entry]: a save re-runs *every* validation, not only
+        # the one being changed, and a row can go invalid after it was written —
+        # placement_within_division_field reads the event's field sizes, which the event's creator
+        # may lower below a placement already recorded. Reading the one key made that refusal a
+        # redirect with a blank alert, which tells the member nothing about why their click did
+        # nothing. There is no form to re-render for a claim (it is a button, not a page), so the
+        # same redirect-with-alert shape #refuse_with_redirect gives an authorization refusal is
+        # what a validation refusal gets too: somewhere to go, and the reason why.
+        redirect_to tournament_path(@tournament), alert: @standing.errors.full_messages.to_sentence
+      end
     end
 
     def unclaim
       authorize @standing, :unclaim?
-      @standing.update!(tournament_entry: nil)
+      # update_column, not update!, for the reason DecksController#share writes its flag that way:
+      # severing a link the claimant put there has no business asking whether the *rest* of the row
+      # is still valid, and a row really can go invalid after it was written — lower the event's
+      # masters field below a placement already recorded and update! raises RecordInvalid, which
+      # nothing here rescues, so "Unlink" answered with a 500. Nothing this write could break can
+      # be broken by it: both validations that read tournament_entry return early on nil.
+      @standing.update_column(:tournament_entry_id, nil)
       redirect_to tournament_path(@tournament), notice: "Standing unlinked from your participation."
     end
 
@@ -170,9 +183,20 @@ module Tournaments
       return if decklist.strip.empty?
 
       import = current_user.imports.create!(
-        kind: "standing_list", label: "#{@standing.player_name} — #{@tournament.name}"
+        kind: "standing_list", label: "#{@standing.player_name} — #{@tournament.name}",
+        # Which event's page should list this while it runs. Without it every event page listed
+        # every field-list import the reader had in flight, wherever it was started.
+        tournament: @tournament
       )
-      Tournaments::StandingListImportJob.perform_later(@standing, decklist, current_user, import)
+      # Ids, not records: the job outlives the request, governance is wiki, so any member may
+      # delete this standing (or the event, which cascades) while it is queued. GlobalID
+      # deserialization of a deleted record raises ActiveJob::DeserializationError *before*
+      # #perform runs, which no rescue inside the method can see — the import would then sit at
+      # "pending" forever, with Admin::ImportsController#retry refusing this kind and no other way
+      # to clear it.
+      Tournaments::StandingListImportJob.perform_later(
+        @standing.id, decklist, current_user.id, import.id
+      )
     end
 
     # tournament_entry_id is deliberately absent. Permitting it would let any member attach their

@@ -6,6 +6,11 @@ module Tournaments
       include Phlex::Rails::Helpers::HiddenFieldTag
       include Phlex::Rails::Helpers::TextAreaTag
 
+      # What the division select shows when nothing prefilled it. Presentation only: the enum's
+      # `validate: true` still rejects a blank on the way in, this merely stops the browser
+      # choosing for the user.
+      DEFAULT_DIVISION = "masters"
+
       def initialize(tournament:, standing:, existing: nil, entry: nil)
         @tournament = tournament
         @standing = standing
@@ -33,8 +38,14 @@ module Tournaments
 
           render Ui::FormGroup.new do
             f.label :division, class: "form-label"
+            # An explicit selected:. DIVISIONS runs junior-senior-masters, and prefill_attributes
+            # yields no division at all for a member with no TournamentProfile — so the browser
+            # picked the first option and quietly recorded them as a Junior. Masters is the
+            # default because it is the division a standings sheet overwhelmingly records, and a
+            # wrong pre-selection here is a wiki edit away rather than a refusal.
             f.select :division,
-              TournamentStanding::DIVISIONS.map { |d| [ d.capitalize, d ] }, {}, class: "form-input"
+              TournamentStanding::DIVISIONS.map { |d| [ d.capitalize, d ] },
+              { selected: @standing.division || DEFAULT_DIVISION }, class: "form-input"
           end
 
           render Ui::ArchetypePicker.new(form: f, selected: @standing.archetype)
@@ -95,11 +106,16 @@ module Tournaments
         end
       end
 
+      # Reads the same division the select is showing, default included: with a bare
+      # @standing.division this said "leave blank if nobody remembers" for every new row whose
+      # division was not prefilled, while the select beside it already read Masters and the event
+      # knew how big that field was.
       def placement_hint
-        field = @tournament.participant_count_for(@standing.division)
+        division = @standing.division || DEFAULT_DIVISION
+        field = @tournament.participant_count_for(division)
         return "Optional — leave blank if nobody remembers the final standing." if field.blank?
 
-        "The #{@standing.division} field at this event held #{field} players."
+        "The #{division} field at this event held #{field} players."
       end
 
       # Outside the tournament_standing hash, like tournament_entry_id: the text is not an

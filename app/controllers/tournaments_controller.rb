@@ -159,11 +159,15 @@ class TournamentsController < ApplicationController
       .where.not(id: @my_entries.filter_map(&:tournament_profile_id)).exists?
   end
 
-  # Field-list imports the reader has in flight. Empty for a visitor, and never queried for one.
+  # Field-list imports the reader has in flight *at this event*. Empty for a visitor, and never
+  # queried for one. Scoped by tournament, not merely by kind: an import started at another event
+  # would otherwise be listed under this event's "Importing…" heading — and since the item's DOM
+  # id is importing-<import id>, the completion broadcast for that other event would then remove a
+  # row from a page it has nothing to do with.
   def pending_standing_imports
     return [] if current_user.nil?
 
-    current_user.imports.pending.where(kind: "standing_list").to_a
+    current_user.imports.pending.where(kind: "standing_list", tournament: @tournament).to_a
   end
 
   # The reader's own participations at this event that no standing names yet — one claim button

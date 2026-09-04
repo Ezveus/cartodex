@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_04_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_04_150000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -163,9 +163,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_04_120000) do
     t.string "kind", null: false
     t.string "label", null: false
     t.string "status", default: "pending", null: false
+    t.integer "tournament_id"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["kind", "status"], name: "index_imports_on_kind_and_status"
+    t.index ["tournament_id"], name: "index_imports_on_tournament_id"
     t.index ["user_id", "status"], name: "index_imports_on_user_id_and_status"
     t.index ["user_id"], name: "index_imports_on_user_id"
   end
@@ -344,6 +346,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_04_120000) do
   add_foreign_key "decks", "archetypes"
   add_foreign_key "decks", "standard_pools"
   add_foreign_key "decks", "users"
+  add_foreign_key "imports", "tournaments"
   add_foreign_key "imports", "users"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"

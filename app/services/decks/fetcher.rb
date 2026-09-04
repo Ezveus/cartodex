@@ -5,17 +5,25 @@ class Decks::Fetcher < ApplicationService
   CARD_LINE_RE = /\A(\d+)\s+(.+?)\s+([A-Z]{2,3})\s+(\d+)\z/
   LIMITLESS_BASE_URL = "https://limitlesstcg.com/cards"
 
-  # shared/format/standard_pool exist for the tournament field list, which is a Deck owned by
-  # nobody: it must be shared (the only listing that can show it is /decks/shared) and it is
-  # played under the *event's* format, anchored to the *event's* pool. A member's own import
-  # passes none of them and behaves exactly as it did.
-  def initialize(decklist, user, name, shared: false, format: nil, standard_pool: nil)
+  # shared/format/standard_pool/other_format_name exist for the tournament field list, which is a
+  # Deck owned by nobody: it must be shared (the only listing that can show it is /decks/shared)
+  # and it is played under the *event's* format, anchored to the *event's* pool. A member's own
+  # import passes none of them and behaves exactly as it did.
+  #
+  # other_format_name travels with format and is not optional alongside it: `validates
+  # :other_format_name, presence: true, if: :other?` makes a deck whose format is "other" and
+  # whose custom name is blank unsavable, and "other" is a format the event form really offers.
+  # Passing the format without its name made Deck.create! raise for every field list at such an
+  # event.
+  def initialize(decklist, user, name, shared: false, format: nil, standard_pool: nil,
+                 other_format_name: nil)
     @decklist = decklist
     @user = user
     @name = name
     @shared = shared
     @format = format
     @standard_pool = standard_pool
+    @other_format_name = other_format_name
   end
 
   def call
@@ -33,15 +41,17 @@ class Decks::Fetcher < ApplicationService
     serialized_transaction do
       # A member's own import never asks for a format, so the deck takes the "standard" column
       # default and is anchored to the current pool rather than left unsavable; the deck form is
-      # where the user corrects it. A field list is told both, because the event knows both —
-      # and clear_inapplicable_classification drops the pool when the format is not Standard, so
-      # a GLC event's list needs no special case here.
+      # where the user corrects it. A field list is told all of it, because the event knows all of
+      # it — and clear_inapplicable_classification drops the pool when the format is not Standard
+      # and the custom name when it is not Other, so neither a GLC event's list nor a Standard
+      # one needs a special case here.
       deck = Deck.create!(
         user: @user,
         name: @name,
         shared: @shared,
         format: @format || "standard",
-        standard_pool: @standard_pool || StandardPool.current
+        standard_pool: @standard_pool || StandardPool.current,
+        other_format_name: @other_format_name
       )
 
       card_entries.each do |entry|
