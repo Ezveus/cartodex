@@ -1,6 +1,7 @@
 module Search
   # One text query, three groups of matches: the user's decks, the whole card catalog, and the
-  # user's tournaments. Read-only, so no serialized_transaction.
+  # tournament catalog (every event, shared, not scoped to one member). Read-only, so no
+  # serialized_transaction.
   class Global < ApplicationService
     # CardSearchable lives under app/controllers/concerns but is a plain module with no controller
     # dependency. Including it here is deliberate: cards must match exactly as they do on the
@@ -83,7 +84,8 @@ module Search
     # that don't carry the same includes.
     #
     # A nil user is a visitor: nothing personal is searched, and nothing personal is queried
-    # either — Deck.none and Tournament.none never touch the database.
+    # either — Deck.none never touches the database. (Tournament.none for a visitor is a
+    # separate reason; see tournament_scope below.)
     def deck_scope
       @deck_scope ||= @user ? @user.decks.search(@query) : Deck.none
     end
@@ -92,8 +94,13 @@ module Search
       @card_scope ||= apply_card_name_filter(Card.all, @query)
     end
 
+    # The catalog is shared, so a member's group is every event, not only the ones they
+    # attended — a participation has no name of its own and is found through its event.
+    # Tournament.none for a visitor is not the deck scopes' reason (privacy) but a routing
+    # one: /tournaments still requires a session until Stage 2, and a result whose link
+    # bounces to the sign-in page is worse than no result. Stage 2 removes the branch.
     def tournament_scope
-      @tournament_scope ||= @user ? @user.tournaments.name_matching(@query) : Tournament.none
+      @tournament_scope ||= @user ? Tournament.name_matching(@query) : Tournament.none
     end
 
     # Excluding the searcher's own decks is what keeps one deck out of two groups of the same

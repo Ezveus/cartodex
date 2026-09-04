@@ -1,13 +1,8 @@
 require "test_helper"
 
 class TournamentTest < ActiveSupport::TestCase
-  setup do
-    @user = users(:one)
-    @deck = decks(:one)
-  end
-
   test "requires name and date" do
-    tournament = Tournament.new(user: @user, deck: @deck)
+    tournament = Tournament.new
     assert_not tournament.valid?
     assert_includes tournament.errors[:name], "can't be blank"
     assert_includes tournament.errors[:date], "can't be blank"
@@ -20,53 +15,9 @@ class TournamentTest < ActiveSupport::TestCase
   end
 
   test "clears other_format_name when format is not other" do
-    tournament = build_tournament(format: "standard", other_format_name: "Pocket")
+    tournament = build_tournament(format: "standard", standard_pool: standard_pools(:twm_por), other_format_name: "Pocket")
     tournament.valid?
     assert_nil tournament.other_format_name
-  end
-
-  test "rejects a placement greater than the participant count" do
-    tournament = build_tournament(participant_count: 8, placement: 9)
-    assert_not tournament.valid?
-    assert_includes tournament.errors[:placement], "can't be greater than the number of participants"
-  end
-
-  test "rejects a deck belonging to another user" do
-    tournament = build_tournament(deck: decks(:two))
-    assert_not tournament.valid?
-    assert_includes tournament.errors[:deck], "must belong to the same user"
-  end
-
-  test "rejects a tournament profile belonging to another user" do
-    tournament = build_tournament(tournament_profile: tournament_profiles(:giovanni))
-    assert_not tournament.valid?
-    assert_includes tournament.errors[:tournament_profile], "must belong to the same user"
-  end
-
-  test "suggested_championship_points looks up the reference table by tier and placement" do
-    tournament = build_tournament(tier: "regional", placement: 3)
-    assert_equal 300, tournament.suggested_championship_points
-
-    tournament = build_tournament(tier: "league_challenge", placement: 1)
-    assert_equal 0, tournament.suggested_championship_points
-  end
-
-  test "suggested_championship_points is nil without a placement" do
-    tournament = build_tournament(tier: "regional", placement: nil)
-    assert_nil tournament.suggested_championship_points
-  end
-
-  test "standard_top_cut looks up the indicative band by participant count" do
-    assert_nil build_tournament(participant_count: 8).standard_top_cut
-    assert_equal 4, build_tournament(participant_count: 16).standard_top_cut
-    assert_equal 8, build_tournament(participant_count: 64).standard_top_cut
-    assert_equal 16, build_tournament(participant_count: 226).standard_top_cut
-    assert_equal 32, build_tournament(participant_count: 1024).standard_top_cut
-    assert_equal 64, build_tournament(participant_count: 2000).standard_top_cut
-  end
-
-  test "standard_top_cut is nil without a participant count" do
-    assert_nil build_tournament(participant_count: nil).standard_top_cut
   end
 
   test "requires a standard pool when the format is standard" do
@@ -88,9 +39,67 @@ class TournamentTest < ActiveSupport::TestCase
   # that the record ends up valid. An unconditional presence validation would clear the field and
   # still fail — this is what actually proves the "if: :standard?" guard is doing its job.
   test "does not require a standard pool when the format is not standard" do
-    tournament = build_tournament(format: "expanded", standard_pool: nil)
+    assert build_tournament(format: "expanded", standard_pool: nil).valid?
+  end
 
-    assert tournament.valid?
+  test "format_label names the standard pool the tournament was played under" do
+    tournament = build_tournament(format: "standard", standard_pool: standard_pools(:twm_por))
+
+    assert_equal "Standard (TWM-POR)", tournament.format_label
+  end
+
+  test "refuses a second event with the same name on the same date" do
+    duplicate = build_tournament(name: tournaments(:one).name, date: tournaments(:one).date)
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:name], "is already catalogued for this date"
+  end
+
+  # The whole reason name_normalized exists: SQLite's LIKE and lower() fold ASCII A-Z only, so
+  # a uniqueness check written against `name` would let this row through.
+  test "the duplicate check folds case and accents" do
+    tournaments(:one).update!(name: "Régionale de Lyon")
+
+    duplicate = build_tournament(name: "RÉGIONALE DE LYON", date: tournaments(:one).date)
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:name], "is already catalogued for this date"
+  end
+
+  # (name_normalized, date) is the only thing between the catalog and two rows for one real
+  # event, and a name arrives copy-pasted — with a trailing space, or a double space where a
+  # line wrapped — far more often than it arrives typed.
+  test "the duplicate check ignores surrounding and repeated whitespace" do
+    duplicate = build_tournament(name: "  Regional   Championship ", date: tournaments(:one).date)
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:name], "is already catalogued for this date"
+  end
+
+  test "the same name on another date is a different event" do
+    assert build_tournament(name: tournaments(:one).name, date: tournaments(:one).date + 1).valid?
+  end
+
+  test "an event keeps its own name when re-saved" do
+    assert tournaments(:one).valid?, "a persisted event must not collide with itself"
+  end
+
+  test "refuses to be destroyed while a participation points at it" do
+    tournament = tournaments(:one)
+    assert_predicate tournament.entries, :any?, "sanity: the fixture has participations"
+
+    assert_no_difference -> { Tournament.count } do
+      assert_not tournament.destroy
+    end
+  end
+
+  test "is destroyed once nothing points at it" do
+    tournament = tournaments(:one)
+    tournament.entries.destroy_all
+
+    assert_difference -> { Tournament.count }, -1 do
+      assert tournament.destroy
+    end
   end
 
   # Uppercase accented letter in the stored name on purpose — see the note in DeckTest: only
@@ -104,6 +113,17 @@ class TournamentTest < ActiveSupport::TestCase
     end
   end
 
+  # The stored side and the query side share one normalization or they share none: squishing
+  # only what is saved would make a name typed with a double space unfindable.
+  test "name_matching squishes the query as well as the stored name" do
+    tournament = tournaments(:one)
+    tournament.update!(name: "Regional  Championship")
+
+    [ "regional championship", "  regional   championship " ].each do |query|
+      assert_includes Tournament.name_matching(query), tournament, "#{query.inspect} must match"
+    end
+  end
+
   test "name_matching treats LIKE metacharacters in the query as literals" do
     assert_includes Tournament.name_matching("regional"), tournaments(:one), "sanity: the plain spelling matches"
     assert_empty Tournament.name_matching("reg_onal"), "_ must not act as a wildcard"
@@ -112,26 +132,19 @@ class TournamentTest < ActiveSupport::TestCase
 
   test "every tournament fixture carries the normalization its name implies" do
     Tournament.find_each do |tournament|
-      assert_equal tournament.name.downcase, tournament.name_normalized,
+      assert_equal tournament.name.squish.downcase, tournament.name_normalized,
         "#{tournament.name.inspect} fixture is out of step"
     end
-  end
-
-  test "format_label names the standard pool the tournament was played under" do
-    tournament = build_tournament(format: "standard", standard_pool: standard_pools(:twm_por))
-
-    assert_equal "Standard (TWM-POR)", tournament.format_label
   end
 
   private
 
   def build_tournament(attrs = {})
     Tournament.new({
-      user: @user,
-      deck: @deck,
       name: "Test Tournament",
       date: Date.current,
-      tier: "regional"
+      tier: "regional",
+      format: "expanded"
     }.merge(attrs))
   end
 end

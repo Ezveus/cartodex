@@ -11,14 +11,24 @@ module Ui
   # `controller_name` and both of them named it.
   module NavLinks
     # The nav section a request belongs to. The controller name is the section for every route
-    # in the app but one: DecksController serves both deck lists, so /decks/shared is told
-    # apart from the rest of the controller by its action. A deck's own page stays in "decks" —
-    # the section says which list the page hangs off, and the visitor's navbar, which has no
-    # "Decks" entry, is served instead by its "Shared decks" link declaring both sections.
-    def self.section_for(controller_name, action_name)
-      return "shared_decks" if controller_name == "decks" && action_name == "shared"
+    # in the app except where one controller serves two lists: DecksController serves both deck
+    # lists and TournamentsController serves both the catalog and the member's own, so those
+    # are told apart by their action. A record's own page stays in the list it hangs off — the
+    # section says which list, and the visitor's navbar, which has no "Decks" entry, is served
+    # instead by its "Shared decks" link declaring both sections.
+    #
+    # A controller with no list of its own needs no row here at all: Tournaments::EntriesController
+    # (controller_name "entries") is one participation's own show/new/edit, not a list, so its
+    # pages pass through unchanged and are lit by whichever nav_link names "entries" among its
+    # own sections — "My tournaments" does, the same declare-two-sections construct as "Shared
+    # decks" above, just without an override, since nothing else is named "entries".
+    SECTION_OVERRIDES = {
+      [ "decks", "shared" ]     => "shared_decks",
+      [ "tournaments", "mine" ] => "my_tournaments"
+    }.freeze
 
-      controller_name
+    def self.section_for(controller_name, action_name)
+      SECTION_OVERRIDES.fetch([ controller_name, action_name ], controller_name)
     end
 
     private

@@ -1,26 +1,20 @@
+# NOTE: fixtures skip callbacks, so name_normalized is spelled out by hand.
+# TournamentTest asserts it stays in step with name.
+
 one:
-  user: one
-  deck: one
-  tournament_profile: ash
   name: Regional Championship
   name_normalized: regional championship
   date: 2026-03-14
   format: standard
   standard_pool: twm_por
   tier: regional
-  participant_count: 512
-  placement: 33
-  championship_points: 120
+  created_by: one
 
 two:
-  user: two
-  deck: two
   name: Local League Cup
   name_normalized: local league cup
   date: 2026-02-01
   format: standard
   standard_pool: twm_por
   tier: league_cup
-  participant_count: 12
-  placement: 1
-  championship_points: 50
+  created_by: two

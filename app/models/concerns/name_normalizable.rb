@@ -39,13 +39,21 @@ module NameNormalizable
     # truncating its output could cut a `\\` in half and leave a dangling escape that changes what
     # the pattern means.
     def normalize_for_match(query)
-      sanitize_sql_like(query.to_s.downcase.first(MAX_QUERY_LENGTH))
+      sanitize_sql_like(query.to_s.squish.downcase.first(MAX_QUERY_LENGTH))
     end
   end
 
-  # Mirror of `name`, Unicode-downcased, so name_matching can search with a plain LIKE instead of
-  # depending on the database's own case folding.
+  # Mirror of `name`, squished and Unicode-downcased, so name_matching can search with a plain
+  # LIKE instead of depending on the database's own case folding.
+  #
+  # squish, not merely downcase: on Tournament this value is half of a UNIQUE key, and a name
+  # arrives copy-pasted — with a trailing space, or a double space where a line wrapped — far
+  # more often than it arrives typed, so without it one real event gets two catalog rows that
+  # render identically. `name` itself keeps whatever the user typed; only the key is folded.
+  #
+  # The query side (normalize_for_match) squishes too, and must: fold only what is stored and a
+  # name typed with a double space becomes unfindable.
   def normalize_name
-    self.name_normalized = name&.downcase
+    self.name_normalized = name&.squish&.downcase
   end
 end

@@ -28,6 +28,11 @@ module Ui
         # lights the next (see Ui::NavLinks.section_for).
         nav_link "Shared decks", shared_decks_path, "shared_decks"
         nav_link "Tournaments", tournaments_path, "tournaments"
+        # "entries" is Tournaments::EntriesController's own controller_name (nested resources
+        # are named after the model, TournamentEntry, but the controller_name it reports is the
+        # route segment); a participation's own show/new/edit pages have no entry of their own,
+        # so they light the list they hang off, same as a deck's own page lights "Decks".
+        nav_link "My tournaments", mine_tournaments_path, "my_tournaments", "entries"
         nav_link "Cards", cards_path, "cards"
         nav_link "Collection", collections_path, "collections"
         nav_link "Profiles", tournament_profiles_path, "tournament_profiles"

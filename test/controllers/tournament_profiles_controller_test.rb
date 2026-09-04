@@ -79,11 +79,25 @@ class TournamentProfilesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "destroy removes the profile and redirects" do
+    # Not @profile (ash): it now has a participation, so this exercises misty, who has none.
+    profile = tournament_profiles(:misty)
+
     assert_difference -> { TournamentProfile.count }, -1 do
+      delete tournament_profile_path(profile)
+    end
+
+    assert_redirected_to tournament_profiles_path
+  end
+
+  test "destroy is refused while a participation remains, with a flash that counts them" do
+    assert_predicate @profile.tournament_entries, :any?, "sanity: the fixture has a participation"
+
+    assert_no_difference -> { TournamentProfile.count } do
       delete tournament_profile_path(@profile)
     end
 
     assert_redirected_to tournament_profiles_path
+    assert_match(/1 participation\b/, flash[:alert])
   end
 
   test "cannot edit another user's profile" do

@@ -1,15 +1,14 @@
 module Tournaments
   class NewView < ApplicationComponent
-    def initialize(tournament:, decks:, tournament_profiles:)
+    def initialize(tournament:, existing: nil)
       @tournament = tournament
-      @decks = decks
-      @tournament_profiles = tournament_profiles
+      @existing = existing
     end
 
     def view_template
       div(class: "deck-form-container") do
         h1 { "New Tournament" }
-        render Tournaments::Form.new(tournament: @tournament, decks: @decks, tournament_profiles: @tournament_profiles)
+        render Tournaments::Form.new(tournament: @tournament, existing: @existing)
       end
     end
   end

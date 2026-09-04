@@ -103,6 +103,24 @@ class TournamentProfileTest < ActiveSupport::TestCase
     assert_equal :masters, profile.division(on: Date.new(2026, 9, 1))
   end
 
+  test "refuses to be destroyed while a participation points at it" do
+    profile = tournament_profiles(:ash)
+    assert_predicate profile.tournament_entries, :any?, "sanity: the fixture has a participation"
+
+    assert_no_difference -> { TournamentProfile.count } do
+      assert_not profile.destroy
+    end
+  end
+
+  test "is destroyed once nothing points at it" do
+    profile = tournament_profiles(:ash)
+    profile.tournament_entries.destroy_all
+
+    assert_difference -> { TournamentProfile.count }, -1 do
+      assert profile.destroy
+    end
+  end
+
   private
 
   def build_profile(date_of_birth:)

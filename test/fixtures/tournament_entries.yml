@@ -1,0 +1,25 @@
+one:
+  user: one
+  tournament: one
+  deck: one
+  tournament_profile: ash
+  participant_count: 512
+  placement: 33
+  championship_points: 120
+
+two:
+  user: two
+  tournament: two
+  deck: two
+  participant_count: 12
+  placement: 1
+  championship_points: 50
+
+# Two members on the same event, and the profile-less branch of the uniqueness rule. Nothing
+# in the old fixtures could express either: a tournament belonged to one user.
+shared_event:
+  user: two
+  tournament: one
+  deck: two
+  participant_count: 512
+  placement: 7

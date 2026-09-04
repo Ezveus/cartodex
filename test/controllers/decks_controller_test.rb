@@ -126,6 +126,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "destroy removes the deck and redirects to index" do
+    @deck.tournament_entries.destroy_all
+
     assert_difference -> { Deck.count }, -1 do
       delete deck_path(@deck)
     end
@@ -133,7 +135,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to decks_path
   end
 
+  # Deck#tournament_entries is restrict_with_error, so #destroy answers false rather than
+  # raising — and an action that redirected with "Deck deleted." either way would report a
+  # deletion that did not happen.
+  test "destroy refuses while a participation records the deck and says how many" do
+    assert_predicate @deck.tournament_entries, :any?, "sanity: the fixture deck was played at an event"
+
+    assert_no_difference -> { Deck.count } do
+      delete deck_path(@deck)
+    end
+
+    assert_redirected_to deck_path(@deck)
+    assert_match(/1 tournament participation/, flash[:alert])
+  end
+
   test "destroy cascades to deck_cards and deck_results" do
+    @deck.tournament_entries.destroy_all
     @deck.deck_cards.destroy_all
     @deck.deck_results.destroy_all
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
@@ -142,6 +159,21 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_difference [ -> { DeckCard.count }, -> { DeckResult.count } ], -1 do
       delete deck_path(@deck)
     end
+  end
+
+  # Entry uniqueness is per Play! Pokémon profile, so one deck can carry two participations in
+  # one event — and "Name (date)" prints the same string for both, leaving a select whose two
+  # options a user cannot tell apart.
+  test "the result modal tells two participations in one event apart" do
+    second = @user.tournament_entries.create!(
+      tournament: tournaments(:one), deck: @deck, tournament_profile: tournament_profiles(:misty)
+    )
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "option[value=?]", tournament_entries(:one).id.to_s, text: /Ash Ketchum/
+    assert_select "option[value=?]", second.id.to_s, text: /Misty/
   end
 
   test "duplicate creates a new deck and redirects to it" do
@@ -550,7 +582,24 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
 
-  # The format badge names the deck's Standard pool, and StandardPool#name reads both of
+  # The result modal's tournament picker prints TournamentEntry#picker_label, which reads the
+  # event *and* the Play! Pokémon profile — so the page has to preload both. Each participation
+  # gets an event and a profile of its own on purpose: rows sharing an id issue identical SQL,
+  # which the per-request query cache serves and count_queries does not count.
+  test "show issues a constant number of queries regardless of how many participations" do
+    get deck_path(@deck) # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get deck_path(@deck) }
+
+    3.times { |i| participation_of_its_own(@deck, i) }
+
+    large = count_queries { get deck_path(@deck) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the participation count: #{small} -> #{large}"
+  end
+
+  # The format badge names the deck's Standard pool, and StandardPool#name reads both of  # The format badge names the deck's Standard pool, and StandardPool#name reads both of
   # the pool's card-set bounds — so an unpreloaded index cost three extra queries per
   # Standard deck. Each deck gets a pool of its own on purpose: decks sharing a pool id
   # issue identical SQL, which the per-request query cache serves and count_queries does
@@ -930,6 +979,19 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
   # resolve. Dated well before twm_por, so StandardPool.current is untouched.
+  # One participation, in an event and under a profile nothing else shares — see the flat-cost
+  # test above for why sharing either would hide the N+1 it guards.
+  def participation_of_its_own(deck, index)
+    event = Tournament.create!(
+      name: "Quiet Open #{index}", date: Date.new(2026, 5, 1) + index,
+      tier: "league_cup", format: "expanded", created_by: @user
+    )
+    profile = @user.tournament_profiles.create!(
+      player_name: "Player #{index}", player_id: "200000#{index}", date_of_birth: Date.new(2000, 1, 1)
+    )
+    @user.tournament_entries.create!(tournament: event, deck: deck, tournament_profile: profile)
+  end
+
   def pool_of_its_own(index)
     set = CardSet.create!(code: "Q#{index}", name: "Quiet Set #{index}", release_date: Date.new(2025, 1, 1))
     StandardPool.create!(

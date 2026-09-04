@@ -4,52 +4,53 @@ module Tournaments
 
     FRAME_ID = "tournament_results".freeze
 
-    def initialize(tournaments:, query: "")
+    def initialize(tournaments:, query: "", page: 1, pages: 1, attended_ids: Set.new, can_create: false)
       @tournaments = tournaments
       @query = query
+      @page = page
+      @pages = pages
+      @attended_ids = attended_ids
+      @can_create = can_create
     end
 
     def view_template
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "Tournaments") do
-          link_to "New Tournament", new_tournament_path, class: "btn btn-primary"
+          link_to "Add a tournament", new_tournament_path, class: "btn btn-primary" if @can_create
         end
 
         search_form
 
-        # Everything inside this frame is frame-scoped by default, so the row links
-        # (name, Edit, Delete) need data-turbo-frame="_top" or they would swap the
-        # table for a "Content missing" error instead of navigating.
+        # Rows and pager inside the frame, the search field outside it: a keystroke pays the
+        # pager's COUNT and one page of rows, not the whole surrounding page. Everything inside
+        # is frame-scoped by default, so the row links need data-turbo-frame="_top" or a click
+        # swaps the table for "Content missing".
         turbo_frame_tag(FRAME_ID) do
           if @tournaments.any?
-            render Ui::DataTable.new(columns: %w[Name Date Tier Deck Placement CP Actions]) do |t|
-              @tournaments.each do |tournament|
-                t.row do
-                  t.cell { link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" } }
-                  t.cell { localize(tournament.date, format: :long) }
-                  t.cell { tournament.tier_label }
-                  t.cell { tournament.deck.name }
-                  t.cell { placement_label(tournament) }
-                  t.cell { tournament.championship_points || "—" }
-                  t.cell do
-                    render Ui::AdminActions.new(
-                      edit_path: edit_tournament_path(tournament),
-                      delete_path: tournament_path(tournament),
-                      confirm_message: "Delete #{tournament.name}?",
-                      frame: "_top"
-                    )
-                  end
-                end
-              end
+            render Ui::DataTable.new(columns: %w[Name Date Tier Format]) do |t|
+              @tournaments.each { |tournament| row(t, tournament) }
             end
+            pagination if @pages > 1
           else
-            p { @query.present? ? "No tournaments match this search." : "No tournaments yet." }
+            p { @query.present? ? "No tournaments match this search." : "No tournaments catalogued yet." }
           end
         end
       end
     end
 
     private
+
+    def row(table, tournament)
+      table.row do
+        table.cell do
+          link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" }
+          span(class: "tournament-attended") { "You attended" } if @attended_ids.include?(tournament.id)
+        end
+        table.cell { localize(tournament.date, format: :long) }
+        table.cell { tournament.tier_label }
+        table.cell { tournament.format_label }
+      end
+    end
 
     def search_form
       form(
@@ -71,12 +72,20 @@ module Tournaments
       end
     end
 
-    def placement_label(tournament)
-      return "—" if tournament.placement.blank?
+    # Borrows the card index's pager classes, the app's only styled pager. These links sit
+    # inside FRAME_ID, so Turbo navigates the frame and leaves the address bar behind;
+    # turbo_action "replace" is what puts ?page= back into it.
+    def pagination
+      nav(class: "cards-pagination") do
+        page_link("← Previous", @page - 1) if @page > 1
+        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
+        page_link("Next →", @page + 1) if @page < @pages
+      end
+    end
 
-      label = "##{tournament.placement}"
-      label += " / #{tournament.participant_count}" if tournament.participant_count.present?
-      label
+    def page_link(label, page)
+      link_to label, tournaments_path(q: @query.presence, page: page),
+        class: "cards-pagination-link", data: { turbo_action: "replace" }
     end
   end
 end

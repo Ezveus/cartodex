@@ -183,7 +183,8 @@ class DecksController < ApplicationController
   end
 
   def edit
-    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find_by!(key: params[:id])
+    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: [],
+                                       tournament_entries: [ :tournament, :tournament_profile ]).find_by!(key: params[:id])
     authorize @deck
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
@@ -207,8 +208,16 @@ class DecksController < ApplicationController
   def destroy
     deck = current_user.decks.find_by!(key: params[:id])
     authorize deck
-    deck.destroy
-    redirect_to decks_path, notice: "Deck deleted."
+
+    if deck.destroy
+      redirect_to decks_path, notice: "Deck deleted."
+    else
+      # restrict_with_error's own message names the association, not what a reader needs to
+      # know, which is what is in the way and how much of it.
+      count = deck.tournament_entries.count
+      redirect_to deck,
+        alert: "This deck is still recorded on #{count} tournament #{"participation".pluralize(count)}."
+    end
   end
 
   def duplicate
@@ -265,12 +274,13 @@ class DecksController < ApplicationController
   # Each branch reloads with the preloads it needs. `includes` chains onto `find_by!` perfectly
   # well — that is not the reason for the second query. The reason is that authorize runs first
   # and only then does the request know which set of preloads it wants: loading the owner's up
-  # front would make a visitor's request pull deck_results and tournaments, exactly what the
-  # public view exists to avoid, and loading anything before authorize does work for a deck the
-  # caller may not see. One extra primary-key SELECT is the price of that ordering, in `export`
-  # (which has no branch) as much as here.
+  # front would make a visitor's request pull deck_results and tournament_entries, exactly what
+  # the public view exists to avoid, and loading anything before authorize does work for a deck
+  # the caller may not see. One extra primary-key SELECT is the price of that ordering, in
+  # `export` (which has no branch) as much as here.
   def owner_show
-    @deck = current_user.decks.includes(:archetype, :tournaments, deck_cards: :card, deck_results: []).find(@deck.id)
+    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: [],
+                                       tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
     # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes

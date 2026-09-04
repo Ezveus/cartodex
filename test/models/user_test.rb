@@ -229,6 +229,31 @@ class UserTest < ActiveSupport::TestCase
     assert_equal User::DEFAULT_LIFETIME_KEY, user.reload.api_token_lifetime_key
   end
 
+  # Two associations refuse dependent: :destroy while a participation still points at them —
+  # TournamentProfile#tournament_entries and Deck#tournament_entries, both restrict_with_error —
+  # and Devise's "Cancel my account" reaches this same #destroy, so either could plausibly break
+  # the whole flow. Neither does, and the only reason is declaration order: `has_many
+  # :tournament_entries, dependent: :destroy` sits ahead of both :decks and :tournament_profiles
+  # in user.rb, dependent callbacks run in the order they are declared, so every entry is gone
+  # before anything gets the chance to refuse. Moving :tournament_entries back below either of
+  # them is what should turn this test red.
+  test "cancelling the account removes the user, their entries and their profiles together" do
+    user = User.create!(email: "cancelling@example.com", password: "password123")
+    deck = Deck.create!(user: user, name: "Farewell Deck", standard_pool: standard_pools(:twm_por))
+    profile = user.tournament_profiles.create!(
+      player_name: "Departing Player", player_id: "9000001", date_of_birth: Date.new(2000, 1, 1)
+    )
+    entry = user.tournament_entries.create!(
+      tournament: tournaments(:one), deck: deck, tournament_profile: profile
+    )
+
+    assert user.destroy, user.errors.full_messages.to_sentence
+
+    assert_not User.exists?(user.id)
+    assert_not TournamentEntry.exists?(entry.id)
+    assert_not TournamentProfile.exists?(profile.id)
+  end
+
   test "an expired token records no usage" do
     user = User.create!(email: "usage-expired@example.com", password: "password123")
     raw = user.regenerate_api_token
