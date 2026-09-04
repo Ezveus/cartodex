@@ -41,4 +41,28 @@ class Admin::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "input[type=text][value=?]", "Budew (PRE 4)"
     assert_select "input[type=text][value=?]", "Teal Mask Ogerpon ex (TWM 25)"
   end
+
+  # restrict_with_error, not the destroy call it replaced: a standing is another member's
+  # public record of a real placement, so deleting the archetype tag must refuse rather than
+  # silently take that record with it.
+  test "refuses to delete an archetype named on a tournament standing" do
+    archetype = archetypes(:standings_marker)
+    assert_predicate archetype.tournament_standings, :any?, "sanity: fixture standings reference it"
+
+    assert_no_difference -> { Archetype.count } do
+      delete admin_archetype_path(archetype)
+    end
+
+    assert_redirected_to admin_archetype_path(archetype)
+    assert_equal "This archetype is still named on 2 tournament standings.", flash[:alert]
+  end
+
+  test "deletes an archetype no standing names" do
+    assert_difference -> { Archetype.count }, -1 do
+      delete admin_archetype_path(@archetype)
+    end
+
+    assert_redirected_to admin_archetypes_path
+    assert_equal "Archetype deleted.", flash[:notice]
+  end
 end

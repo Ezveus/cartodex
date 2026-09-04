@@ -16,6 +16,12 @@ class User < ApplicationRecord
   has_many :tournament_profiles, dependent: :destroy
   # :nullify, not :destroy — a catalog entry other members point at must survive its author.
   has_many :created_tournaments, class_name: "Tournament", foreign_key: :created_by_id, dependent: :nullify
+  # :nullify, for the same reason: a standing is another member's public record of a real
+  # placement, and the only trace of who typed it must not take the row down with it. No
+  # ordering constraint with :tournament_entries/:decks/:tournament_profiles above — unlike
+  # those, nothing here is restrict_with_error, so this cascade can never be raced by one of
+  # theirs refusing first.
+  has_many :created_standings, class_name: "TournamentStanding", foreign_key: :created_by_id, dependent: :nullify
 
   # Lifetime options offered when generating a token. nil means "never expires",
   # stored as a NULL api_token_expires_at. This Hash is the single definition of

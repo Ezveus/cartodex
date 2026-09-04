@@ -20,3 +20,13 @@ two:
   description: MyText
   standard_pool: twm_por
   key: deck-two-key
+
+# An ownerless deck is a tournament field list: no user, shared (so /decks/shared is a listing
+# that can show it at all) and never physical. DeckTest asserts those two rules; the audit
+# regressions in DecksControllerTest, Search::GlobalTest and the two admin tests read this row.
+field_list:
+  name: Ash Ketchum — Regional Championship (2026-03-14)
+  name_normalized: ash ketchum — regional championship (2026-03-14)
+  standard_pool: twm_por
+  key: deck-field-list-key
+  shared: true

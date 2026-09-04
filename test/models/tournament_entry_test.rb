@@ -163,6 +163,31 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert_nil result.reload.tournament_entry_id
   end
 
+  # Already true before this feature, and worth pinning now that a deck can have no owner:
+  # deck_belongs_to_user compares deck.user_id != user_id, so a field list can never be used as
+  # a member's own participation deck. The guard was there for free — this is the test that says
+  # somebody checked.
+  test "a tournament field list cannot be used as a participation deck" do
+    entry = tournament_entries(:one)
+
+    refute entry.update(deck: decks(:field_list))
+    assert_includes entry.errors[:deck], "must belong to the same user"
+  end
+
+  # :nullify, not :destroy — the opposite call from Tournament#standings, and the whole reason
+  # the two tables are separate: deleting my private participation must not erase a public row
+  # other members read.
+  test "deleting a participation unlinks its standing rather than deleting it" do
+    entry = tournament_entries(:one)
+    standing = tournament_standings(:ash_masters)
+    standing.update!(tournament_entry: entry)
+
+    assert_no_difference -> { TournamentStanding.count } do
+      entry.destroy
+    end
+    assert_nil standing.reload.tournament_entry_id
+  end
+
   private
 
   def build_entry(attrs = {})

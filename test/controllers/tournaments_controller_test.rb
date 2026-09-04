@@ -323,6 +323,36 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Moderated", @other_tournament.reload.name
   end
 
+  # F1: the three division field sizes used to be permitted by nothing and rendered by no form,
+  # so TournamentStanding#placement_within_division_field could never see one. This reads the
+  # field names off the *rendered* edit form rather than assuming the attribute names, the same
+  # idiom "the decklist field's rendered name is what the controller reads"
+  # (standings_controller_test.rb) uses for the reason named there: a hand-built params hash
+  # would pass even if the fields silently rendered under the wrong name.
+  test "the three division field sizes round-trip through the rendered form" do
+    get edit_tournament_path(@tournament)
+    assert_response :success
+
+    values = {
+      "junior_participant_count" => 32,
+      "senior_participant_count" => 64,
+      "masters_participant_count" => 128
+    }
+    params = values.each_with_object({}) do |(attr, value), memo|
+      field = css_select("input[name='tournament[#{attr}]']").first
+      assert_not_nil field, "the form must render a #{attr} field"
+      memo[field["name"]] = value
+    end
+
+    patch tournament_path(@tournament), params: params
+
+    assert_redirected_to tournament_path(@tournament)
+    @tournament.reload
+    assert_equal 32, @tournament.junior_participant_count
+    assert_equal 64, @tournament.senior_participant_count
+    assert_equal 128, @tournament.masters_participant_count
+  end
+
   test "destroy is refused while participations remain, with a flash that counts them" do
     assert_no_difference -> { Tournament.count } do
       delete tournament_path(@tournament)
@@ -406,6 +436,173 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".standard-pool-notice", count: 0
   end
 
+  test "show renders the event's standings, grouped by division and ranked" do
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h3", text: "Masters"
+    assert_select ".data-table-row", text: /Giovanni/
+    assert_select ".data-table-row", text: /Ash Ketchum/
+    # Ranked before unranked, and 7th before 33rd within the division.
+    players = css_select(".tournament-standings .data-table-row").map(&:text)
+    assert players.index { |row| row.include?("Giovanni") } <
+           players.index { |row| row.include?("Ash Ketchum") },
+      "expected the better placement first"
+  end
+
+  # Every fixture row and every record_standing row is division: "masters", so a regression to
+  # grouped.keys.each — which Hash order would give as junior, masters, senior, alphabetical —
+  # would go completely undetected by any test that only checks each heading is present
+  # somewhere. Junior and senior are added here (not to fixtures, to stay clear of the other
+  # tests and the system-suite obligation a fixture change would carry); the existing masters
+  # fixtures are what actually separates age order from alphabetical, since junior/senior sort
+  # the same way under both rules.
+  test "the sheet lists divisions in Play! Pokémon's age order, not alphabetical" do
+    archetype = archetypes(:standings_marker)
+    @tournament.standings.create!(player_name: "Junior Player", division: "junior", archetype: archetype)
+    @tournament.standings.create!(player_name: "Senior Player", division: "senior", archetype: archetype)
+
+    get tournament_path(@tournament)
+
+    assert_equal %w[Junior Senior Masters], css_select(".tournament-standings > h3").map(&:text)
+  end
+
+  test "a standing's row names its archetype and its record" do
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Giovanni/ do
+      assert_select ".badge", text: tournament_standings(:giovanni_masters).archetype.name
+      assert_select ".data-table-cell", text: "7-2-0"
+      assert_select ".data-table-cell", text: "#7"
+    end
+  end
+
+  test "a standing with a field list links to it, and one without says so" do
+    tournament_standings(:ash_masters).update!(deck: decks(:field_list))
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select "a[href=?]", deck_path(decks(:field_list)), text: "Decklist"
+    end
+    assert_select ".data-table-row", text: /Giovanni/ do
+      assert_select "a", text: "Decklist", count: 0
+    end
+  end
+
+  test "an event with no standings says so with a class the stylesheet defines" do
+    @tournament.standings.destroy_all
+
+    get tournament_path(@tournament)
+
+    assert_select "p.empty-state", text: "No standings recorded for this event yet."
+  end
+
+  test "the row of the reader's own linked participation is marked as theirs" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select ".badge", text: "You"
+    end
+  end
+
+  test "a visitor sees the sheet and no ownership marker on it" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select ".data-table-row", text: /Ash Ketchum/
+    assert_select ".badge", text: "You", count: 0
+  end
+
+  # Distinct from the nil-viewer case above: this is a signed-in reader who simply isn't the
+  # linked entry's owner. Row#mine? is `@viewer.present? && ...user_id == @viewer.id`, so a
+  # stranger's presence alone must not trip the short-circuit — a safety property on a public
+  # page worth pinning on its own rather than trusting to inspection.
+  test "a signed-in stranger to the linked participation is not marked as its owner" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+    sign_out @user
+    sign_in users(:two)
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select ".badge", text: "You", count: 0
+    end
+  end
+
+  # Ui::ArchetypeBadge reads the archetype's cards and the "You" marker reads the linked entry's
+  # user_id, so both belong in the includes. Modelled on the four tests that already guard
+  # with_standard_pool.
+  test "show issues a constant number of queries regardless of how many standings" do
+    2.times { |i| record_standing(i) }
+
+    get tournament_path(@tournament) # warm the session
+
+    small = count_queries { get tournament_path(@tournament) }
+
+    (2..7).each { |i| record_standing(i) }
+
+    large = count_queries { get tournament_path(@tournament) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the sheet: #{small} -> #{large}"
+  end
+
+  test "the event page offers to publish each participation no standing names yet" do
+    get tournament_path(@tournament)
+
+    assert_select "a[href=?]",
+      new_tournament_standing_path(@tournament, tournament_entry_id: tournament_entries(:one).id),
+      text: "Publish my participation"
+  end
+
+  test "a published participation is no longer offered for publishing" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select "a[href*=?]", "tournament_entry_id=#{tournament_entries(:one).id}", count: 0
+  end
+
+  # Plural, for the reason my_entries is: entry uniqueness is per Play! Pokémon profile, so a
+  # parent tracking two profiles has two participations here and both must be publishable.
+  test "two unpublished participations are offered separately, named by their player" do
+    second_entry_for_misty
+
+    get tournament_path(@tournament)
+
+    assert_select "a", text: /Publish Ash Ketchum's participation/
+    assert_select "a", text: /Publish Misty's participation/
+  end
+
+  # F5: publish_label used to key on @my_entries.one? while it is @claimable_entries that
+  # publish_actions actually iterates. With one of two entries already published, @my_entries
+  # stays at two but @claimable_entries drops to one — the remaining button must read
+  # unambiguously, since there is only one option left to choose from.
+  test "a reader with two entries, one already published, gets an unambiguous label for the other" do
+    second_entry_for_misty
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+
+    get tournament_path(@tournament)
+
+    assert_select "a", text: "Publish my participation"
+    assert_select "a", text: /Publish Misty's participation/, count: 0
+  end
+
+  test "a visitor is offered nothing to publish" do
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a", text: /Publish/, count: 0
+  end
+
   private
 
   # users(:one) owns two Play! Pokémon profiles; tournament_entries(:one) already spends `ash`
@@ -432,6 +629,41 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     StandardPool.create!(
       first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
       released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
+    )
+  end
+
+  # An archetype of its own per row, so two rows never issue identical SQL that the per-request
+  # query cache would serve — which is what hides an N+1 from count_queries. Likewise a
+  # TournamentEntry of its own per row, linked via tournament_entry:, so the :tournament_entry
+  # preload the controller takes is actually exercised: a nil FK never issues a query at all
+  # (belongs_to short-circuits it), which is what let a first version of this helper leave that
+  # preload's N+1 undetected — see the coordinator's fix-round-1 note.
+  #
+  # Correction to the brief: its version of this helper omits type_symbol/retreat_cost, which
+  # Card requires for card_type: "Pokémon" and raises RecordInvalid without.
+  def record_standing(index)
+    card = Card.create!(
+      name: "Quiet Pokémon #{index}", set_name: "QS#{index}", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    archetype = Archetype.create!(primary_card: card, name: "Quiet #{index}", custom_name: "1")
+    # A User (and Deck) of its own per row: deck_belongs_to_user requires the entry's deck to be
+    # owned by the entry's own user, and one_entry_per_player allows only one profile-less entry
+    # per user per event — a distinct user per row is what a shared user could not give us.
+    user = User.create!(email: "quiet-player-#{index}@example.com", password: "password123")
+    deck = Deck.create!(user: user, name: "Quiet Deck #{index}", standard_pool: standard_pools(:twm_por))
+    entry = user.tournament_entries.create!(tournament: @tournament, deck: deck)
+    # A field list of its own per row too, and ownerless-and-shared rather than a reuse of the
+    # entry's own deck: that is what Task 8's import actually produces (Deck requires an
+    # ownerless deck to be shared and non-physical), so the fixture reflects reality rather than
+    # merely satisfying a counter. Row#list_link reads this association, so it needs a distinct
+    # row per standing for the same reason the archetype and the entry do.
+    field_list = Deck.create!(
+      name: "Quiet Field List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
+    )
+    @tournament.standings.create!(
+      player_name: "Quiet Player #{index}", division: "masters",
+      placement: 100 + index, archetype: archetype, tournament_entry: entry, deck: field_list
     )
   end
 end

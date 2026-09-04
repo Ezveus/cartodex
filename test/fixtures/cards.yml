@@ -147,3 +147,15 @@ special_prism_energy_blk:
   set_name: BLK
   set_number: "8"
   rarity: Rare
+
+# Exists solely to back archetypes(:standings_marker) — see the note in archetypes.yml. Not a
+# deck card, not renamed, not destroyed, not in FLAT_COST_EXTRA_CARDS: nothing else in the
+# suite may reference this row for any reason, or it stops being safe for that fixture to use.
+standings_marker:
+  name: Standings Marker
+  name_normalized: standings marker
+  card_type: Trainer
+  set_name: ZZZ
+  set_number: "999"
+  rarity: Rare
+  fingerprint: standings_marker_fp

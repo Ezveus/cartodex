@@ -6,6 +6,25 @@
 # Fixtures skip callbacks, so name_normalized and the denormalised fingerprint pair are
 # spelled out by hand; ArchetypeTest asserts both stay in step. A missing secondary is the
 # empty string, never NULL — see the migration for why.
+#
+# The same rule extends to TournamentStanding, whose belongs_to :archetype is required and
+# whose cascade off this model is restrict_with_error (a standing is another member's public
+# record of a real placement, so an archetype delete must not silently take it out). No
+# existing archetype fixture is safe for a standing to reference — a card is unusable here if
+# any test renames it, destroys it, builds a deck from it and asserts about archetype
+# detection/creation, or lists it in ActiveSupport::TestCase::FLAT_COST_EXTRA_CARDS (those get
+# folded into decks/collections by the flat-cost helpers, so detection can fire on them too):
+#   - ogerpon, budew_ogerpon: both destroyed by other tests (DeckTest, the archetype-detector
+#     tie-break test)
+#   - froakie_cri (would-be primary): renamed to "Flittle" mid-test by ArchetypeTest's search
+#     spec, which incidentally matched a from-scratch archetype built on it — see git history
+#     for the red run
+#   - froakie_twm (would-be primary): built into a deck and asserted on by name in two system
+#     tests, test/system/archetype_any_card_test.rb and test/system/double_submit_test.rb —
+#     see git history for the red run
+# standings_marker below solves this the same way the archetype itself was solved one level up:
+# a dedicated fixture nothing else references, rather than a fourth attempt at finding a
+# "quiet" existing row. Point standing fixtures at it, never at ogerpon/budew_ogerpon.
 
 ogerpon:
   primary_card: teal_mask_ogerpon_ex
@@ -21,3 +40,14 @@ budew_ogerpon:
   secondary_fingerprint: ogerpon_shared
   name: "Budew / Teal Mask Ogerpon ex"
   name_normalized: "budew / teal mask ogerpon ex"
+
+# Exists solely to back test/fixtures/tournament_standings.yml — see the note above. Its
+# member card, cards(:standings_marker), exists solely to back this archetype in turn: neither
+# is referenced anywhere else in the suite, so neither can be broken by a future test mutating
+# a row it shares with something unrelated.
+standings_marker:
+  primary_card: standings_marker
+  primary_fingerprint: standings_marker_fp
+  secondary_fingerprint: ""
+  name: "Standings Marker"
+  name_normalized: "standings marker"

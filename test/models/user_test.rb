@@ -254,6 +254,22 @@ class UserTest < ActiveSupport::TestCase
     assert_not TournamentProfile.exists?(profile.id)
   end
 
+  # created_by is the only trace of who typed a standing, on a wiki-editable public sheet
+  # anyone may correct — unlike :tournament_entries above, TournamentStanding#created_by is
+  # optional, so this is :nullify, not :destroy, and it carries none of that association's
+  # declaration-order weight: nothing here is restrict_with_error, so nothing can race it.
+  test "cancelling the account nullifies created_by on a standing they typed, leaving the standing itself" do
+    user = User.create!(email: "scorekeeper@example.com", password: "password123")
+    standing = tournaments(:one).standings.create!(
+      player_name: "Departing Scorekeeper", division: "senior", archetype: archetypes(:standings_marker), created_by: user
+    )
+
+    assert user.destroy, user.errors.full_messages.to_sentence
+
+    assert TournamentStanding.exists?(standing.id)
+    assert_nil standing.reload.created_by_id
+  end
+
   test "an expired token records no usage" do
     user = User.create!(email: "usage-expired@example.com", password: "password123")
     raw = user.regenerate_api_token

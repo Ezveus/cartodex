@@ -68,6 +68,33 @@ module Tournaments
           f.text_field :other_format_name, class: "form-input", placeholder: "e.g. Pocket, Theme…"
         end
 
+        # A standing's placement is capped against its own division's field, per
+        # Tournament#participant_count_for — never against the event's total attendance, which
+        # is what TournamentEntry#participant_count already records per participation. Grouped
+        # under one label and hint so a user reads all three as one question, "how many players
+        # in this division", rather than three unrelated counters.
+        render Ui::FormGroup.new(
+          label: "Field size per age division",
+          hint: "How many players competed in each division at this event — not the event's " \
+            "total attendance. Leave a division blank if nobody remembers. Caps a standing's " \
+            "placement in that division."
+        ) do
+          div(class: "form-row") do
+            render Ui::FormGroup.new do
+              f.label :junior_participant_count, "Junior", class: "form-label"
+              f.number_field :junior_participant_count, class: "form-input", min: 1
+            end
+            render Ui::FormGroup.new do
+              f.label :senior_participant_count, "Senior", class: "form-label"
+              f.number_field :senior_participant_count, class: "form-input", min: 1
+            end
+            render Ui::FormGroup.new do
+              f.label :masters_participant_count, "Masters", class: "form-label"
+              f.number_field :masters_participant_count, class: "form-input", min: 1
+            end
+          end
+        end
+
         div(class: "form-actions deck-form-actions") do
           f.submit class: "btn btn-primary"
           link_to "Cancel", tournaments_path, class: "btn btn-secondary"

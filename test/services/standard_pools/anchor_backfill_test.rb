@@ -16,7 +16,9 @@ class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
     result = StandardPools::AnchorBackfill.call
 
     assert_equal StandardPool.current, decks(:one).reload.standard_pool
-    assert_equal 2, result.decks
+    # Three deck fixtures now: the two members' decks and the ownerless field list, all
+    # Standard by default.
+    assert_equal 3, result.decks
   end
 
   test "anchors tournaments to the pool legal on their date" do
@@ -52,7 +54,8 @@ class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
     result = StandardPools::AnchorBackfill.call
 
     assert_equal standard_pools(:twm_asc), decks(:one).reload.standard_pool
-    assert_equal 1, result.decks
+    # Two remaining nil-anchored Standard decks: decks(:two) and the ownerless field list.
+    assert_equal 2, result.decks
   end
 
   test "reports rather than writes when there is no pool at all" do

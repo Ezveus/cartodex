@@ -56,6 +56,14 @@ class TournamentsController < ApplicationController
     authorize @tournament
     @my_entries = my_entries
     @can_record_another = unrecorded_profile?
+    # Exactly the three legs the render touches, each pinned by its own leg of the flat-cost
+    # test below: Row#list_link reads :deck, the "You" marker reads :tournament_entry's user_id,
+    # and Ui::ArchetypeBadge reads only the archetype's name and primary_energy_type (which
+    # reads primary_card) — never secondary_card or parent, so those two are not preloaded here.
+    @standings = @tournament.standings.as_a_sheet
+      .includes(:deck, :tournament_entry, archetype: :primary_card).to_a
+    @pending_standing_imports = pending_standing_imports
+    @claimable_entries = claimable_entries
   end
 
   def mine
@@ -137,7 +145,7 @@ class TournamentsController < ApplicationController
     return [] if current_user.nil?
 
     current_user.tournament_entries.where(tournament: @tournament)
-      .includes(:tournament_profile).order(:id).to_a
+      .includes(:tournament_profile, :standing).order(:id).to_a
   end
 
   # Whether the reader still has a player this event holds no participation for. Deliberately
@@ -149,6 +157,25 @@ class TournamentsController < ApplicationController
 
     current_user.tournament_profiles
       .where.not(id: @my_entries.filter_map(&:tournament_profile_id)).exists?
+  end
+
+  # Field-list imports the reader has in flight *at this event*. Empty for a visitor, and never
+  # queried for one. Scoped by tournament, not merely by kind: an import started at another event
+  # would otherwise be listed under this event's "Importing…" heading — and since the item's DOM
+  # id is importing-<import id>, the completion broadcast for that other event would then remove a
+  # row from a page it has nothing to do with.
+  def pending_standing_imports
+    return [] if current_user.nil?
+
+    current_user.imports.pending.where(kind: "standing_list", tournament: @tournament).to_a
+  end
+
+  # The reader's own participations at this event that no standing names yet — one claim button
+  # each. Plural for the reason my_entries is: entry uniqueness is per profile.
+  def claimable_entries
+    return [] if current_user.nil?
+
+    @my_entries.reject(&:standing)
   end
 
   # One grouped query for the whole page, and none at all for a visitor.
@@ -179,7 +206,8 @@ class TournamentsController < ApplicationController
 
   def tournament_params
     params.require(:tournament).permit(
-      :name, :date, :format, :other_format_name, :standard_pool_id, :tier
+      :name, :date, :format, :other_format_name, :standard_pool_id, :tier,
+      :junior_participant_count, :senior_participant_count, :masters_participant_count
     )
   end
 end

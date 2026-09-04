@@ -191,4 +191,22 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_predicate deck.association(:standard_pool), :loaded?
     assert_predicate deck.association(:archetype), :loaded?
   end
+
+  # `where.not(user: @user)` compiles to `user_id != ?`, which SQL evaluates to NULL — not true —
+  # for an ownerless row, so every field list vanished from a signed-in member's spotlight.
+  test "an ownerless shared deck reaches a signed-in member's shared results" do
+    decks(:field_list).update!(name: "Zoroark Field List", shared: true)
+
+    result = Search::Global.call(user: users(:one), query: "Zoroark")
+
+    assert_includes result.shared_decks.map(&:name), "Zoroark Field List"
+  end
+
+  test "a visitor sees an ownerless shared deck too" do
+    decks(:field_list).update!(name: "Zoroark Field List", shared: true)
+
+    result = Search::Global.call(user: nil, query: "Zoroark")
+
+    assert_includes result.shared_decks.map(&:name), "Zoroark Field List"
+  end
 end

@@ -7,3 +7,10 @@ two:
   deck: two
   card: doublade
   quantity: 1
+
+# The ownerless field-list deck needs at least one card of its own: DecksControllerTest's
+# public-page regression asserts against a real .deck-card-item, not an empty decklist.
+field_list:
+  deck: field_list
+  card: teal_mask_ogerpon_ex
+  quantity: 1

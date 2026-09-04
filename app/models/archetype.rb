@@ -7,6 +7,15 @@ class Archetype < ApplicationRecord
   has_many :children, class_name: "Archetype", foreign_key: :parent_id, dependent: :nullify
   has_many :deck_results, dependent: :nullify
   has_many :decks, dependent: :nullify
+  # restrict_with_error, unlike this model's :nullify cascades above — archetype_id is NOT NULL
+  # on a standing, so nullifying is not available. A standing is another member's public record
+  # of a real placement, and deleting an archetype *tag* does not remove the reason that
+  # placement exists; destroying it behind a confirmation that only ever said "Archetype" is the
+  # bug StandardPool#decks, Tournament#entries, TournamentProfile#tournament_entries and
+  # Deck#tournament_entries all carry this same cascade to avoid. Leaving the association off
+  # entirely is not the neutral option it looks like: the admin panel has a reachable destroy and
+  # the FK carries no on_delete, so it would raise a bare ActiveRecord::InvalidForeignKey.
+  has_many :tournament_standings, dependent: :restrict_with_error
 
   validates :name, presence: true
   # These two are denormalised copies of the member cards' fingerprints, and they

@@ -2,11 +2,15 @@
 
 module Ui
   class ImportingList < ApplicationComponent
-    def initialize(pending_imports: [], item_id_prefix: "importing", list_target: nil, extra_data: {})
+    # list_id, because the id is a DOM id and two lists on one page must not share one: the
+    # event page renders a standings list beside the deck grid's own vocabulary.
+    def initialize(pending_imports: [], item_id_prefix: "importing", list_target: nil,
+                   extra_data: {}, list_id: "importing-decks")
       @pending_imports = pending_imports
       @item_id_prefix = item_id_prefix
       @list_target = list_target
       @extra_data = extra_data
+      @list_id = list_id
     end
 
     def view_template
@@ -14,7 +18,7 @@ module Ui
       div(class: "importing-section", style: (visible ? nil : "display: none;"), data: { controller: "importing-list" }) do
         h3 { "Importing\u2026" }
         ul(
-          id: "importing-decks",
+          id: @list_id,
           data: { importing_list_target: "list", **@extra_data },
           class: "importing-list"
         ) do

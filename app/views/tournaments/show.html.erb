@@ -1,4 +1,9 @@
 <%= render Tournaments::ShowView.new(tournament: @tournament, my_entries: @my_entries,
+                                     standings: @standings,
                                      can_record: policy(Tournament).create?,
                                      can_record_another: @can_record_another,
-                                     can_edit: policy(@tournament).edit?) %>
+                                     can_edit: policy(@tournament).edit?,
+                                     can_edit_standings: policy(TournamentStanding).create?,
+                                     viewer: current_user,
+                                     pending_standing_imports: @pending_standing_imports,
+                                     claimable_entries: @claimable_entries) %>

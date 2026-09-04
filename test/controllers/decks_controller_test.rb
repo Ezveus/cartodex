@@ -975,6 +975,19 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_nil session["user_return_to"]
   end
 
+  # `@deck.user_id == current_user&.id` was true with both sides nil, so an ownerless field list
+  # served the owner's page — inline editing, allocation steppers and all — to the public.
+  test "a visitor on an ownerless shared deck gets the public page, not the owner's" do
+    sign_out @user
+
+    get deck_path(decks(:field_list))
+
+    assert_response :success
+    assert_select ".deck-card-item"
+    assert_select "form.deck-form", count: 0
+    assert_select ".deck-actions-dropdown", count: 0
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
@@ -998,5 +1011,42 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
       released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
     )
+  end
+end
+
+# The picker was soldered to a deck: it read @deck.key for the Suggest button and
+# @deck.archetype&.name for the input's value. A standings row has an archetype and no deck, and
+# a degraded copy of this picker was the alternative to extracting it.
+class DecksControllerArchetypePickerTest < ActionDispatch::IntegrationTest
+  test "the archetype picker renders without a deck, minus the Suggest button" do
+    # Rendered through a form for a record that is not a Deck, which is the whole point.
+    html = ApplicationController.render(
+      inline: <<~ERB,
+        <%= form_with(model: TournamentStanding.new, url: "/nowhere") do |f| %>
+          <%= render Ui::ArchetypePicker.new(form: f) %>
+        <% end %>
+      ERB
+      layout: false
+    )
+
+    assert_includes html, "data-controller=\"archetype-picker\""
+    assert_includes html, "archetype-picker-target=\"input\""
+    refute_includes html, ">Suggest<"
+    # Never a stale deck key: the Suggest handler is the only reader, and it must see nothing.
+    refute_includes html, "archetype-picker-deck-key-value"
+  end
+
+  test "the archetype picker keeps its Suggest button when given a deck key" do
+    html = ApplicationController.render(
+      inline: <<~ERB,
+        <%= form_with(model: Deck.new, url: "/nowhere") do |f| %>
+          <%= render Ui::ArchetypePicker.new(form: f, deck_key: "abc123") %>
+        <% end %>
+      ERB
+      layout: false
+    )
+
+    assert_includes html, ">Suggest<"
+    assert_includes html, "archetype-picker-deck-key-value=\"abc123\""
   end
 end

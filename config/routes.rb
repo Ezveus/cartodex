@@ -78,6 +78,24 @@ Rails.application.routes.draw do
         delete :detach_result
       end
     end
+
+    # `resources :standings`, not `:tournament_standings`: the URL reads
+    # /tournaments/:tournament_id/standings/:id, the same call the entries block makes — and with
+    # the same cost, that polymorphic form_with cannot derive the path from the TournamentStanding
+    # class name, so the standings form passes an explicit `url:`.
+    #
+    # No show and no index: the sheet lives inside tournaments#show, and a row is six fields —
+    # the call Admin::StandardPoolsController makes for a five-field pool.
+    #
+    # These routes leave the app-wide `authenticate :user` block by nesting alone, exactly as
+    # entries do. Tournaments::StandingsController keeps authenticate_user! as its only gate.
+    resources :standings, only: %i[new create edit update destroy],
+              controller: "tournaments/standings" do
+      member do
+        post :claim
+        delete :unclaim
+      end
+    end
   end
 
   # Authenticated routes

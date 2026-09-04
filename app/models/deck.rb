@@ -1,7 +1,11 @@
 class Deck < ApplicationRecord
   include NameNormalizable
 
-  belongs_to :user
+  # Nullable since tournament standings: a field list belongs to an event, not to a member.
+  # Every allocation service that reads deck.user sits behind an owner-only policy that a nil
+  # user can never satisfy, so all of them are unreachable for such a deck by construction
+  # rather than by convention — see ownerless_deck_is_shared_and_virtual below.
+  belongs_to :user, optional: true
   belongs_to :archetype, optional: true
   # Which Standard the deck was built for. Standard rotates, so its name alone
   # does not identify a card pool; every other format is eternal and has no anchor.
@@ -16,6 +20,15 @@ class Deck < ApplicationRecord
   # User#tournament_entries is declared ahead of User#decks precisely so account cancellation
   # empties the entries before it reaches this rule — see the note there.
   has_many :tournament_entries, dependent: :restrict_with_error
+  # :nullify, the reverse direction of #destroy_if_ownerless (called by
+  # TournamentStanding#destroy_ownerless_deck on destroy, and by
+  # Tournaments::StandingListImportJob when a re-import replaces a standing's field list).
+  # Nothing else in the app destroys an ownerless deck — there is no Admin::DecksController
+  # destroy action, and every other deck write is scoped to a member's own decks, which an
+  # ownerless deck is in none of — so this is the backstop for any future caller: without it, a
+  # deck destroyed some other way would leave the standing pointing at a dangling deck_id and its
+  # row's list link 404ing.
+  has_one :tournament_standing, dependent: :nullify
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
 
@@ -35,6 +48,7 @@ class Deck < ApplicationRecord
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
   validates :key, presence: true
+  validate :ownerless_deck_is_shared_and_virtual
 
   before_validation :clear_inapplicable_classification
   before_validation :assign_key, if: -> { key.blank? }
@@ -76,6 +90,19 @@ class Deck < ApplicationRecord
     return base unless standard? && standard_pool
 
     "#{base} (#{standard_pool.name})"
+  end
+
+  # Who to print in the admin panel's three deck listings. Named here rather than repeated as
+  # `deck.user&.email || "…"` in each of them: all three read `deck.user.email` and all three
+  # raised the day user_id became nullable.
+  def owner_label = user&.email || "Tournament field list"
+
+  # The one destroy path an ownerless deck has. Guarded here rather than left to each caller,
+  # because both of today's callers (TournamentStanding#destroy_ownerless_deck,
+  # Tournaments::StandingListImportJob replacing a standing's field list) need the identical
+  # guard against a future caller detonating a member's own deck by mistake.
+  def destroy_if_ownerless
+    destroy if user_id.nil?
   end
 
   def to_param = key
@@ -143,6 +170,17 @@ class Deck < ApplicationRecord
   end
 
   private
+
+  # An ownerless deck is a tournament field list: it belongs to an event, not to a member. It
+  # must be shared, because /decks/shared is the only listing that can show it, and it must not
+  # be physical, because `physical` is what makes a deck consume a collection and there is no
+  # collection to consume.
+  def ownerless_deck_is_shared_and_virtual
+    return if user_id.present?
+
+    errors.add(:shared, "must be true for a deck with no owner") unless shared?
+    errors.add(:physical, "must be false for a deck with no owner") if physical?
+  end
 
   # Drops classification fields that don't apply to the current state so we never persist a stale
   # custom format name once the format is no longer "other".

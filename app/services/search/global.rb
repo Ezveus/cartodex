@@ -103,10 +103,14 @@ module Search
     # Excluding the searcher's own decks is what keeps one deck out of two groups of the same
     # result list — and Search::ResultsList derives its option ids from the deck, so a
     # duplicate would emit one DOM id twice.
+    #
+    # The NULL branch is not decoration: `where.not(user: @user)` compiles to `user_id != ?`,
+    # which SQL evaluates to NULL rather than true for an ownerless field list, so every one of
+    # them vanished from a signed-in member's spotlight while a visitor still saw them.
     def shared_deck_scope
       @shared_deck_scope ||= begin
         scope = Deck.shared
-        scope = scope.where.not(user: @user) if @user
+        scope = scope.where(user_id: nil).or(scope.where.not(user_id: @user.id)) if @user
         scope.search(@query)
       end
     end

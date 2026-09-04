@@ -36,8 +36,15 @@ module Admin
     end
 
     def destroy
-      @archetype.destroy
-      redirect_to admin_archetypes_path, notice: "Archetype deleted."
+      if @archetype.destroy
+        redirect_to admin_archetypes_path, notice: "Archetype deleted."
+      else
+        # restrict_with_error's own message names the association, not what a reader needs to
+        # know, which is what is in the way and how much of it.
+        count = @archetype.tournament_standings.count
+        redirect_to admin_archetype_path(@archetype),
+          alert: "This archetype is still named on #{count} tournament #{"standing".pluralize(count)}."
+      end
     end
 
     private
