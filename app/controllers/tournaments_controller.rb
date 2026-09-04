@@ -2,15 +2,18 @@
 # member writes. Both halves live here, the shape DecksController already has.
 class TournamentsController < ApplicationController
   include Searchable
+  include PubliclyReachable
 
   CATALOG_PER_PAGE = 24
 
   before_action :set_tournament, only: %i[show edit update destroy]
 
+  publicly_reachable :index, :show
+
   # An event's existence is public — it is listed at /tournaments — so "not yours" answers with
-  # somewhere to go rather than with the deck rule's 404. Stage 2 adds PubliclyReachable, whose
-  # own handler routes RecordNotFound and NotAuthorizedError onto one static 404; declaring
-  # this here wins for NotAuthorizedError alone, because rescue_from is consulted in reverse
+  # somewhere to go rather than with the deck rule's 404. PubliclyReachable's own handler routes
+  # RecordNotFound and NotAuthorizedError onto one static 404; declaring this here, after the
+  # include, wins for NotAuthorizedError alone, because rescue_from is consulted in reverse
   # order of declaration.
   rescue_from Pundit::NotAuthorizedError, with: :refuse_with_redirect
 

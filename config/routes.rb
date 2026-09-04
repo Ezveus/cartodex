@@ -60,6 +60,26 @@ Rails.application.routes.draw do
     get :image, on: :member
   end
 
+  # index and show only; the rest of the resource, and every nested entry route, gates itself
+  # through Devise. The entry routes ride out of `authenticate :user` by nesting alone, the
+  # same way deck_results do under decks.
+  resources :tournaments do
+    # Declared before the member routes are emitted, so /tournaments/mine is not swallowed
+    # by /tournaments/:id.
+    get :mine, on: :collection
+    # `resources :entries`, not `:tournament_entries`: the URL reads
+    # /tournaments/:tournament_id/entries/:id. The cost is that polymorphic form_with cannot
+    # derive the path from the TournamentEntry class name, so the entry forms pass an
+    # explicit `url:` — see Tournaments::Entries::Form.
+    resources :entries, only: %i[new create show edit update destroy],
+              controller: "tournaments/entries" do
+      member do
+        post :attach_results
+        delete :detach_result
+      end
+    end
+  end
+
   # Authenticated routes
   authenticate :user do
     resource :settings, only: [ :show ]
@@ -73,22 +93,6 @@ Rails.application.routes.draw do
       post :reallocate, on: :collection
     end
     resources :tournament_profiles, except: [ :show ]
-    resources :tournaments do
-      # Declared before the member routes are emitted, so /tournaments/mine is not swallowed
-      # by /tournaments/:id.
-      get :mine, on: :collection
-      # `resources :entries`, not `:tournament_entries`: the URL reads
-      # /tournaments/:tournament_id/entries/:id. The cost is that polymorphic form_with cannot
-      # derive the path from the TournamentEntry class name, so the entry forms pass an
-      # explicit `url:` — see Tournaments::Entries::Form.
-      resources :entries, only: %i[new create show edit update destroy],
-                controller: "tournaments/entries" do
-        member do
-          post :attach_results
-          delete :detach_result
-        end
-      end
-    end
 
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do

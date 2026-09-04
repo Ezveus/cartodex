@@ -75,6 +75,34 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal 2, Deck.count
   end
 
+  test "the tournament writes send a visitor to sign in" do
+    name_was = tournaments(:one).name
+
+    post tournaments_path, params: { tournament: { name: "x", date: "2026-05-01" } }
+    assert_redirected_to new_user_session_path
+
+    patch tournament_path(tournaments(:one)), params: { tournament: { name: "x" } }
+    assert_redirected_to new_user_session_path
+
+    delete tournament_path(tournaments(:one))
+    assert_redirected_to new_user_session_path
+
+    post tournament_entries_path(tournaments(:one)), params: { tournament_entry: { deck_id: decks(:one).id } }
+    assert_redirected_to new_user_session_path
+
+    assert_equal name_was, tournaments(:one).reload.name
+    assert_equal 2, Tournament.count
+  end
+
+  # An event's existence is public, so this is the opposite answer from a deck's: not the
+  # static 404 that hides whether the record exists, but a real 404 for an id that does not
+  # exist — and, for one that does, the redirect Stage 1 wrote.
+  test "an unknown tournament answers 404 to a visitor" do
+    get tournament_path(id: 999_999)
+
+    assert_response :not_found
+  end
+
   test "a visitor is sent to sign in for a private deck and an unknown key alike" do
     get deck_path(@deck)
     assert_redirected_to new_user_session_path
@@ -168,7 +196,9 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "cards index" => cards_path,
       "card show" => card_path(@card),
       "deck show (shared)" => deck_path(@deck),
-      "shared decks index" => shared_decks_path
+      "shared decks index" => shared_decks_path,
+      "tournament catalog" => tournaments_path,
+      "tournament page" => tournament_path(tournaments(:one))
     }
   end
 
@@ -181,7 +211,12 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "deck matchups" => matchups_decks_path,
       "deck results" => deck_deck_results_path(@deck),
       "deck compare" => compare_decks_path(ids: [ @deck.key ]),
-      "collections" => collections_path
+      "collections" => collections_path,
+      "my tournaments" => mine_tournaments_path,
+      "new tournament" => new_tournament_path,
+      "edit tournament" => edit_tournament_path(tournaments(:one)),
+      "tournament entry" => tournament_entry_path(tournaments(:one), tournament_entries(:one)),
+      "edit tournament entry" => edit_tournament_entry_path(tournaments(:one), tournament_entries(:one))
     }
   end
 end

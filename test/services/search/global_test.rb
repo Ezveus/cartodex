@@ -96,14 +96,11 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_includes result.tournaments, tournaments(:two)
   end
 
-  # Deliberately still empty in this stage. /tournaments is behind Devise until Stage 2, so
-  # offering a visitor a result whose link bounces to the sign-in page would be worse than
-  # offering nothing. Stage 2 deletes this branch and this test with it.
-  test "a visitor gets no tournament results while the catalog still requires a session" do
+  test "a visitor's search finds tournaments in the catalog" do
     result = Search::Global.call(user: nil, query: "regional")
 
-    assert_empty result.tournaments
-    assert_equal 0, result.tournament_total
+    assert_includes result.tournaments, tournaments(:one)
+    assert_equal 1, result.tournament_total
   end
 
   test "searches the whole card catalog, not just the user's collection" do
