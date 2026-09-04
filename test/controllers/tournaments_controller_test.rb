@@ -420,6 +420,23 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
       "expected the better placement first"
   end
 
+  # Every fixture row and every record_standing row is division: "masters", so a regression to
+  # grouped.keys.each — which Hash order would give as junior, masters, senior, alphabetical —
+  # would go completely undetected by any test that only checks each heading is present
+  # somewhere. Junior and senior are added here (not to fixtures, to stay clear of the other
+  # tests and the system-suite obligation a fixture change would carry); the existing masters
+  # fixtures are what actually separates age order from alphabetical, since junior/senior sort
+  # the same way under both rules.
+  test "the sheet lists divisions in Play! Pokémon's age order, not alphabetical" do
+    archetype = archetypes(:standings_marker)
+    @tournament.standings.create!(player_name: "Junior Player", division: "junior", archetype: archetype)
+    @tournament.standings.create!(player_name: "Senior Player", division: "senior", archetype: archetype)
+
+    get tournament_path(@tournament)
+
+    assert_equal %w[Junior Senior Masters], css_select(".tournament-standings > h3").map(&:text)
+  end
+
   test "a standing's row names its archetype and its record" do
     get tournament_path(@tournament)
 
@@ -470,6 +487,22 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".data-table-row", text: /Ash Ketchum/
     assert_select ".badge", text: "You", count: 0
+  end
+
+  # Distinct from the nil-viewer case above: this is a signed-in reader who simply isn't the
+  # linked entry's owner. Row#mine? is `@viewer.present? && ...user_id == @viewer.id`, so a
+  # stranger's presence alone must not trip the short-circuit — a safety property on a public
+  # page worth pinning on its own rather than trusting to inspection.
+  test "a signed-in stranger to the linked participation is not marked as its owner" do
+    tournament_standings(:ash_masters).update!(tournament_entry: tournament_entries(:one))
+    sign_out @user
+    sign_in users(:two)
+
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row", text: /Ash Ketchum/ do
+      assert_select ".badge", text: "You", count: 0
+    end
   end
 
   # Ui::ArchetypeBadge reads the archetype's cards and the "You" marker reads the linked entry's
@@ -540,9 +573,17 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     user = User.create!(email: "quiet-player-#{index}@example.com", password: "password123")
     deck = Deck.create!(user: user, name: "Quiet Deck #{index}", standard_pool: standard_pools(:twm_por))
     entry = user.tournament_entries.create!(tournament: @tournament, deck: deck)
+    # A field list of its own per row too, and ownerless-and-shared rather than a reuse of the
+    # entry's own deck: that is what Task 8's import actually produces (Deck requires an
+    # ownerless deck to be shared and non-physical), so the fixture reflects reality rather than
+    # merely satisfying a counter. Row#list_link reads this association, so it needs a distinct
+    # row per standing for the same reason the archetype and the entry do.
+    field_list = Deck.create!(
+      name: "Quiet Field List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
+    )
     @tournament.standings.create!(
       player_name: "Quiet Player #{index}", division: "masters",
-      placement: 100 + index, archetype: archetype, tournament_entry: entry
+      placement: 100 + index, archetype: archetype, tournament_entry: entry, deck: field_list
     )
   end
 end

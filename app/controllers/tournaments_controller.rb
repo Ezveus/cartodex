@@ -56,11 +56,12 @@ class TournamentsController < ApplicationController
     authorize @tournament
     @my_entries = my_entries
     @can_record_another = unrecorded_profile?
-    # The preload the table actually reads: Ui::ArchetypeBadge reads the archetype's lead card
-    # (and the parent, for a sub-archetype's name), and the "You" marker reads the linked entry's
-    # user_id. A flat-cost test guards it, like the four that already guard with_standard_pool.
+    # Exactly the three legs the render touches, each pinned by its own leg of the flat-cost
+    # test below: Row#list_link reads :deck, the "You" marker reads :tournament_entry's user_id,
+    # and Ui::ArchetypeBadge reads only the archetype's name and primary_energy_type (which
+    # reads primary_card) — never secondary_card or parent, so those two are not preloaded here.
     @standings = @tournament.standings.as_a_sheet
-      .includes(:deck, :tournament_entry, archetype: %i[primary_card secondary_card parent]).to_a
+      .includes(:deck, :tournament_entry, archetype: :primary_card).to_a
     @pending_standing_imports = pending_standing_imports
     @claimable_entries = claimable_entries
   end
