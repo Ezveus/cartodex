@@ -9,11 +9,22 @@
 #
 # The same rule extends to TournamentStanding, whose belongs_to :archetype is required and
 # whose cascade off this model is restrict_with_error (a standing is another member's public
-# record of a real placement, so an archetype delete must not silently take it out): ogerpon
-# and budew_ogerpon are both destroyed by other tests (DeckTest, the archetype-detector
-# tie-break test), so neither may be referenced by test/fixtures/tournament_standings.yml.
-# froakie is the one kept free of any destroy call for exactly that reason — point standing
-# fixtures at it, not at the two above.
+# record of a real placement, so an archetype delete must not silently take it out). No
+# existing archetype fixture is safe for a standing to reference — a card is unusable here if
+# any test renames it, destroys it, builds a deck from it and asserts about archetype
+# detection/creation, or lists it in ActiveSupport::TestCase::FLAT_COST_EXTRA_CARDS (those get
+# folded into decks/collections by the flat-cost helpers, so detection can fire on them too):
+#   - ogerpon, budew_ogerpon: both destroyed by other tests (DeckTest, the archetype-detector
+#     tie-break test)
+#   - froakie_cri (would-be primary): renamed to "Flittle" mid-test by ArchetypeTest's search
+#     spec, which incidentally matched a from-scratch archetype built on it — see git history
+#     for the red run
+#   - froakie_twm (would-be primary): built into a deck and asserted on by name in two system
+#     tests, test/system/archetype_any_card_test.rb and test/system/double_submit_test.rb —
+#     see git history for the red run
+# standings_marker below solves this the same way the archetype itself was solved one level up:
+# a dedicated fixture nothing else references, rather than a fourth attempt at finding a
+# "quiet" existing row. Point standing fixtures at it, never at ogerpon/budew_ogerpon.
 
 ogerpon:
   primary_card: teal_mask_ogerpon_ex
@@ -30,15 +41,13 @@ budew_ogerpon:
   name: "Budew / Teal Mask Ogerpon ex"
   name_normalized: "budew / teal mask ogerpon ex"
 
-# Nothing destroys this one — see the note above. Kept as a single-member archetype on a card
-# no other archetype fixture references. froakie_cri, not froakie_twm, is deliberately avoided
-# too: ArchetypeTest renames that card's name to "Flittle" mid-test to prove the search scope
-# reads the secondary Pokémon's column, and a second archetype whose *primary* is that same
-# card would incidentally match "Flittle" through its own primary_card join and break the
-# "must not match without the secondary" half of that test.
-froakie:
-  primary_card: froakie_twm
-  primary_fingerprint: froakie_twm_fp
+# Exists solely to back test/fixtures/tournament_standings.yml — see the note above. Its
+# member card, cards(:standings_marker), exists solely to back this archetype in turn: neither
+# is referenced anywhere else in the suite, so neither can be broken by a future test mutating
+# a row it shares with something unrelated.
+standings_marker:
+  primary_card: standings_marker
+  primary_fingerprint: standings_marker_fp
   secondary_fingerprint: ""
-  name: "Froakie"
-  name_normalized: "froakie"
+  name: "Standings Marker"
+  name_normalized: "standings marker"

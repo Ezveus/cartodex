@@ -46,7 +46,7 @@ class Admin::ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # public record of a real placement, so deleting the archetype tag must refuse rather than
   # silently take that record with it.
   test "refuses to delete an archetype named on a tournament standing" do
-    archetype = archetypes(:froakie)
+    archetype = archetypes(:standings_marker)
     assert_predicate archetype.tournament_standings, :any?, "sanity: fixture standings reference it"
 
     assert_no_difference -> { Archetype.count } do

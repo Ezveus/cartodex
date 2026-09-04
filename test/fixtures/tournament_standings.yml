@@ -4,9 +4,10 @@
 # Two rows on tournaments(:one) — the event tournament_entries(:one) and (:shared_event) point
 # at — so a controller test has both a claimed-to-be and an unclaimed row to work with.
 
-# archetype: froakie on both rows, deliberately — see the note in archetypes.yml. Neither
-# ogerpon nor budew_ogerpon may be referenced here: both are destroyed by other tests, and
-# TournamentStanding's cascade off Archetype is restrict_with_error.
+# archetype: standings_marker on both rows, deliberately — see the note in archetypes.yml.
+# Neither ogerpon nor budew_ogerpon may be referenced here, and neither may any other existing
+# archetype fixture: TournamentStanding's cascade off Archetype is restrict_with_error, so this
+# needs a fixture nothing else in the suite destroys, renames, or builds decks from.
 
 ash_masters:
   tournament: one
@@ -17,7 +18,7 @@ ash_masters:
   wins: 6
   losses: 3
   ties: 0
-  archetype: froakie
+  archetype: standings_marker
   created_by: one
 
 giovanni_masters:
@@ -29,5 +30,5 @@ giovanni_masters:
   wins: 7
   losses: 2
   ties: 0
-  archetype: froakie
+  archetype: standings_marker
   created_by: two

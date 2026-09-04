@@ -88,7 +88,7 @@ class ArchetypeTest < ActiveSupport::TestCase
   # standing, so :nullify (this model's cascade for deck_results/decks) is not available here —
   # unlike those two, this is restrict_with_error.
   test "refuses to be destroyed while a standing names it" do
-    archetype = archetypes(:froakie)
+    archetype = archetypes(:standings_marker)
     assert_predicate archetype.tournament_standings, :any?, "sanity: fixture standings reference it"
 
     assert_no_difference -> { Archetype.count } do

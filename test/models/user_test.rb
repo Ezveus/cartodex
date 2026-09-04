@@ -261,7 +261,7 @@ class UserTest < ActiveSupport::TestCase
   test "cancelling the account nullifies created_by on a standing they typed, leaving the standing itself" do
     user = User.create!(email: "scorekeeper@example.com", password: "password123")
     standing = tournaments(:one).standings.create!(
-      player_name: "Departing Scorekeeper", division: "senior", archetype: archetypes(:froakie), created_by: user
+      player_name: "Departing Scorekeeper", division: "senior", archetype: archetypes(:standings_marker), created_by: user
     )
 
     assert user.destroy, user.errors.full_messages.to_sentence
