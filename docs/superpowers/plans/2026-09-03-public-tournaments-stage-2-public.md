@@ -263,6 +263,8 @@ git commit -m "Show a visitor the event and nothing they cannot use"
 
 Create `test/controllers/tournaments_rate_limit_test.rb`. It mirrors `test/controllers/decks_rate_limit_test.rb`: the test environment's cache store is `:null_store`, which makes `rate_limit` a no-op, so a real store has to stand in.
 
+**`with_real_rate_limit_store` is not a shared helper** — it is a private method duplicated verbatim in four test files (`decks_rate_limit_test.rb:60`, `cards_rate_limit_test.rb:36`, `mcp_server_test.rb:276`, `oauth/registrations_controller_test.rb:145`). Copy the one from `decks_rate_limit_test.rb` into this file as a fifth private copy, which is the repository's established pattern here. Do **not** extract it to `test_helper.rb`: that would touch four test files unrelated to tournaments and turn this diff into a test refactor. It is worth its own cleanup one day, and this comment is the note saying so.
+
 ```ruby
 require "test_helper"
 
