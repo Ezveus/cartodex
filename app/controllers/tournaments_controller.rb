@@ -202,7 +202,8 @@ class TournamentsController < ApplicationController
 
   def tournament_params
     params.require(:tournament).permit(
-      :name, :date, :format, :other_format_name, :standard_pool_id, :tier
+      :name, :date, :format, :other_format_name, :standard_pool_id, :tier,
+      :junior_participant_count, :senior_participant_count, :masters_participant_count
     )
   end
 end

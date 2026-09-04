@@ -323,6 +323,36 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Moderated", @other_tournament.reload.name
   end
 
+  # F1: the three division field sizes used to be permitted by nothing and rendered by no form,
+  # so TournamentStanding#placement_within_division_field could never see one. This reads the
+  # field names off the *rendered* edit form rather than assuming the attribute names, the same
+  # idiom "the decklist field's rendered name is what the controller reads"
+  # (standings_controller_test.rb) uses for the reason named there: a hand-built params hash
+  # would pass even if the fields silently rendered under the wrong name.
+  test "the three division field sizes round-trip through the rendered form" do
+    get edit_tournament_path(@tournament)
+    assert_response :success
+
+    values = {
+      "junior_participant_count" => 32,
+      "senior_participant_count" => 64,
+      "masters_participant_count" => 128
+    }
+    params = values.each_with_object({}) do |(attr, value), memo|
+      field = css_select("input[name='tournament[#{attr}]']").first
+      assert_not_nil field, "the form must render a #{attr} field"
+      memo[field["name"]] = value
+    end
+
+    patch tournament_path(@tournament), params: params
+
+    assert_redirected_to tournament_path(@tournament)
+    @tournament.reload
+    assert_equal 32, @tournament.junior_participant_count
+    assert_equal 64, @tournament.senior_participant_count
+    assert_equal 128, @tournament.masters_participant_count
+  end
+
   test "destroy is refused while participations remain, with a flash that counts them" do
     assert_no_difference -> { Tournament.count } do
       delete tournament_path(@tournament)

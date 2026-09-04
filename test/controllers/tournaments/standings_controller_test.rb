@@ -58,6 +58,28 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     assert_nil @standing.tournament_entry_id
   end
 
+  # F1: the event's division field sizes used to be permitted by nothing and rendered by no
+  # form, so this validation was exercised only by tests that set the column directly and never
+  # by a real request — the field could never actually be set in production, and this test would
+  # not have caught that if it did the same thing. So the field size is set here through
+  # TournamentsController#update itself, exactly as a member would from the event form: if
+  # tournament_params ever stops permitting the three counts, this goes red because the field
+  # stays nil and the placement below is silently accepted.
+  test "the placement cap fires end-to-end once the event's division field size is set" do
+    patch tournament_path(@tournament), params: { tournament: { masters_participant_count: 8 } }
+    assert_equal 8, @tournament.reload.masters_participant_count
+
+    assert_no_difference -> { TournamentStanding.count } do
+      post tournament_standings_path(@tournament), params: { tournament_standing: {
+        player_name: "Brock", division: "masters", placement: 9,
+        archetype_id: archetypes(:ogerpon).id
+      } }
+    end
+
+    assert_response :unprocessable_entity
+    assert_select ".form-errors li", text: /masters field of 8/
+  end
+
   test "the uniqueness error renders a link to the clashing row" do
     assert_no_difference -> { TournamentStanding.count } do
       post tournament_standings_path(@tournament), params: { tournament_standing: {
