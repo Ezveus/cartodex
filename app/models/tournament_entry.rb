@@ -6,7 +6,15 @@ class TournamentEntry < ApplicationRecord
   belongs_to :deck
   belongs_to :tournament_profile, optional: true
   has_many :deck_results, dependent: :nullify
+  # :nullify, not :destroy — the opposite call from Tournament#standings, and for the reason the
+  # two tables are separate at all: deleting my private participation must not erase a public row
+  # other members read, only unlink it.
+  has_one :standing, class_name: "TournamentStanding", dependent: :nullify
 
+  # The event now carries a field size per division, and this column looks like a duplicate of
+  # it. It is not derivable: an entry with no tournament_profile has no division, so there is
+  # nothing on the event to read. Play! Pokémon ranks a placement against the size of *that
+  # player's* age division, which is why the number is here at all — see CLAUDE.md.
   validates :participant_count, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :placement, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :championship_points, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true

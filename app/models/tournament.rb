@@ -12,6 +12,11 @@ class Tournament < ApplicationRecord
   # restrict_with_error, unlike Archetype's :nullify: another member's participation must not
   # vanish because the creator of the catalog entry decided to delete it.
   has_many :entries, class_name: "TournamentEntry", dependent: :restrict_with_error
+  # :destroy, unlike :entries' restrict_with_error, and the difference is the whole point of the
+  # split: an entry is somebody's private record of having been there, a standing is a line of the
+  # event's own public sheet. Deleting the event takes the sheet with it — and still refuses while
+  # any participation survives.
+  has_many :standings, class_name: "TournamentStanding", dependent: :destroy
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
   enum :tier, {
@@ -72,6 +77,15 @@ class Tournament < ApplicationRecord
     [ 1025..Float::INFINITY, 64 ]
   ].freeze
 
+  # The event's field size per age division. On the event rather than on each standing, because
+  # two players in one division at one event are ranked against the same number — unlike
+  # TournamentEntry#participant_count, which survives beside these (see the note there).
+  DIVISION_COUNT_COLUMNS = {
+    "junior" => :junior_participant_count,
+    "senior" => :senior_participant_count,
+    "masters" => :masters_participant_count
+  }.freeze
+
   # The catalog prints format_label, which for a Standard event names the pool, and
   # StandardPool#name reads both of its bounds — so preloading the pool alone still costs two
   # queries per distinct pool. Deliberately a twin of Deck.with_standard_pool rather than a
@@ -82,6 +96,8 @@ class Tournament < ApplicationRecord
   validates :date, presence: true
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
+  validates :junior_participant_count, :senior_participant_count, :masters_participant_count,
+    numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :name_and_date_are_unique
 
   # NameNormalizable normalizes in a before_save, which is too late for the uniqueness check
@@ -104,6 +120,13 @@ class Tournament < ApplicationRecord
 
   def tier_label
     TIER_LABELS.fetch(tier, tier.to_s.humanize)
+  end
+
+  # The size of one age division's field, or nil when nobody has typed it in. Keyed on the
+  # division *name* so a standing can ask with its own column value whatever its type.
+  def participant_count_for(division)
+    column = DIVISION_COUNT_COLUMNS[division.to_s]
+    column && public_send(column)
   end
 
   private

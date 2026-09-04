@@ -137,6 +137,44 @@ class TournamentTest < ActiveSupport::TestCase
     end
   end
 
+  test "participant_count_for reads the column for the division it is handed" do
+    tournament = tournaments(:one)
+    tournament.update!(junior_participant_count: 12, senior_participant_count: 30,
+                       masters_participant_count: 512)
+
+    assert_equal 12, tournament.participant_count_for("junior")
+    assert_equal 30, tournament.participant_count_for(:senior)
+    assert_equal 512, tournament.participant_count_for("masters")
+    assert_nil tournament.participant_count_for("mystery")
+  end
+
+  test "a field size must be a positive integer when given" do
+    tournament = tournaments(:one)
+
+    refute tournament.update(masters_participant_count: 0)
+    assert_includes tournament.errors.attribute_names, :masters_participant_count
+    assert tournament.update(masters_participant_count: nil)
+  end
+
+  # :destroy, unlike :entries' restrict_with_error: a standing is a line of the event's own
+  # public sheet, not somebody's private record of having been there.
+  test "deleting an event takes its standings with it" do
+    tournament = tournaments(:one)
+    tournament.entries.destroy_all
+
+    assert_difference -> { TournamentStanding.count }, -tournament.standings.count do
+      assert tournament.destroy
+    end
+  end
+
+  test "an event still refuses to be deleted while a participation survives" do
+    tournament = tournaments(:one)
+
+    assert_no_difference -> { TournamentStanding.count } do
+      refute tournament.destroy
+    end
+  end
+
   private
 
   def build_tournament(attrs = {})

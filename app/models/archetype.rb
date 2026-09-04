@@ -7,6 +7,11 @@ class Archetype < ApplicationRecord
   has_many :children, class_name: "Archetype", foreign_key: :parent_id, dependent: :nullify
   has_many :deck_results, dependent: :nullify
   has_many :decks, dependent: :nullify
+  # :destroy, not :nullify like the two above: TournamentStanding#archetype is required (a
+  # standing without an archetype records nothing useful), so nullifying it on an archetype
+  # delete would just trade one constraint violation for another. Losing the standing row along
+  # with the archetype it named is the same call Tournament#standings' own :destroy makes.
+  has_many :tournament_standings, dependent: :destroy
 
   validates :name, presence: true
   # These two are denormalised copies of the member cards' fingerprints, and they

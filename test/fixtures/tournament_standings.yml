@@ -1,0 +1,29 @@
+# NOTE: fixtures skip callbacks, so player_name_normalized is spelled out by hand.
+# TournamentStandingTest asserts it stays in step with player_name.
+#
+# Two rows on tournaments(:one) — the event tournament_entries(:one) and (:shared_event) point
+# at — so a controller test has both a claimed-to-be and an unclaimed row to work with.
+
+ash_masters:
+  tournament: one
+  player_name: Ash Ketchum
+  player_name_normalized: ash ketchum
+  division: masters
+  placement: 33
+  wins: 6
+  losses: 3
+  ties: 0
+  archetype: ogerpon
+  created_by: one
+
+giovanni_masters:
+  tournament: one
+  player_name: Giovanni
+  player_name_normalized: giovanni
+  division: masters
+  placement: 7
+  wins: 7
+  losses: 2
+  ties: 0
+  archetype: budew_ogerpon
+  created_by: two

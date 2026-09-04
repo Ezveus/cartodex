@@ -20,6 +20,11 @@ class Deck < ApplicationRecord
   # User#tournament_entries is declared ahead of User#decks precisely so account cancellation
   # empties the entries before it reaches this rule — see the note there.
   has_many :tournament_entries, dependent: :restrict_with_error
+  # :nullify, and the reverse direction of TournamentStanding#destroy_ownerless_deck.
+  # Admin::DecksController#destroy is unscoped by design, so an admin can delete an ownerless
+  # deck from the panel; without this the standing keeps a dangling deck_id and its row's list
+  # link 404s.
+  has_one :tournament_standing, dependent: :nullify
 
   enum :format, { standard: "standard", glc: "glc", expanded: "expanded", other: "other" }, validate: true
 
