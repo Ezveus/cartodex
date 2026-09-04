@@ -316,6 +316,19 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to tournaments_path
   end
 
+  # Entries cleared first, same as the success case above: restrict_with_error would save the
+  # row on its own with the entry still attached, and that is not what this test is proving.
+  # It is authorization, not the dependency guard, that must keep a stranger from deleting it.
+  test "another member cannot delete the event" do
+    @other_tournament.entries.destroy_all
+
+    assert_no_difference -> { Tournament.count } do
+      delete tournament_path(@other_tournament)
+    end
+
+    assert_redirected_to tournament_path(@other_tournament)
+  end
+
   # The pool notice tests below are the ones the old suite carried; they move with the form and
   # keep their reasoning. For a tournament the comparison is the pool legal on its date, not
   # the newest one: a March 2026 event anchored to the latest pool is a data-entry error.

@@ -215,6 +215,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "my tournaments" => mine_tournaments_path,
       "new tournament" => new_tournament_path,
       "edit tournament" => edit_tournament_path(tournaments(:one)),
+      "new tournament entry" => new_tournament_entry_path(tournaments(:one)),
       "tournament entry" => tournament_entry_path(tournaments(:one), tournament_entries(:one)),
       "edit tournament entry" => edit_tournament_entry_path(tournaments(:one), tournament_entries(:one))
     }

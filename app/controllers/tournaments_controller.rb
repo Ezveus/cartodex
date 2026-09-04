@@ -154,16 +154,21 @@ class TournamentsController < ApplicationController
       .pluck(:tournament_id).to_set
   end
 
-  # rescue_from covers every action, and four of them — index, mine, new, create — carry no :id.
-  # Those policies can only refuse a nil user, which Stage 1's `authenticate :user` block already
-  # prevents; Stage 2 lifts that gate, and without the branch the same refusal becomes an
-  # ActionController::UrlGenerationError 500 rather than the redirect it was written to be.
+  # rescue_from covers every action, and four of them — index, mine, new, create — carry no :id,
+  # so a redirect helper that assumed one would turn a refusal into an UrlGenerationError 500.
+  # Reachable from a collection action in principle only: index/mine/create authorize against
+  # index?/create?/mine?, none of which can currently fail for a signed-in user, and
+  # `publicly_reachable :index, :show` leaves authenticate_user! on new/create/mine, so a visitor
+  # is bounced to sign-in before any of this runs. `.present?` rather than a bare truth test:
+  # `?id=` on a collection action hands over "", which is truthy and which tournament_path
+  # refuses. The id-less message therefore says nothing about sessions — nobody without one gets
+  # here — and the id-ful one names both verbs this handler serves, edit and destroy alike.
   def refuse_with_redirect
     if params[:id].present?
       redirect_to tournament_path(params[:id]),
-        alert: "Only the member who catalogued this tournament can edit it."
+        alert: "Only the member who catalogued this tournament can change or delete it."
     else
-      redirect_to tournaments_path, alert: "You need to be signed in to do that."
+      redirect_to tournaments_path, alert: "You don't have access to that."
     end
   end
 
