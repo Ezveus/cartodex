@@ -17,7 +17,13 @@ module Decks
         format_group
         standard_pool_field
         other_format_field
-        render Decks::ArchetypeField.new(form: @form, deck: @deck)
+        render Ui::ArchetypePicker.new(
+          form: @form, selected: @deck.archetype,
+          # nil on an unsaved deck: /api/decks/:key/suggested_archetype needs a persisted deck to
+          # read a line-up from, which is the condition the old component spelled as
+          # `if @deck.persisted?`.
+          deck_key: (@deck.key if @deck.persisted?)
+        )
       end
     end
 
