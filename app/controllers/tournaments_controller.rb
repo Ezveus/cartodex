@@ -8,8 +8,13 @@ class TournamentsController < ApplicationController
 
   # 60/min, the number DecksController#shared carries, because the catalog is the same shape
   # and the same cost: a field debounced at 300ms driving a paginated listing behind a Turbo
-  # Frame, so a keystroke pays the pager's COUNT and one page of rows. #show gets none — one
-  # page load per click, with no live control behind it, exactly as decks#show has none.
+  # Frame, so a keystroke pays the pager's COUNT and one page of rows. The cost half of that
+  # only became true with the index on tournaments.date (20260904083908): #index orders by it,
+  # and the (name_normalized, date) UNIQUE key leads with the wrong column to serve that sort.
+  # Unlike decks#shared there is no `return if frame_request?` here, and none is needed —
+  # nothing renders or queries outside the frame, so a frame request costs what a plain one
+  # does (measured: 4 queries either way). #show gets none — one page load per click, with no
+  # live control behind it, exactly as decks#show has none.
   CATALOG_RATE_LIMIT_TO = 60
   RATE_LIMIT_WITHIN = 1.minute
 

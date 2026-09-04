@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_03_203025) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_04_083908) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -277,6 +277,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_03_203025) do
     t.string "tier", default: "regional", null: false
     t.datetime "updated_at", null: false
     t.index ["created_by_id"], name: "index_tournaments_on_created_by_id"
+    t.index ["date"], name: "index_tournaments_on_date"
     t.index ["name_normalized", "date"], name: "index_tournaments_on_name_normalized_and_date", unique: true
     t.index ["standard_pool_id"], name: "index_tournaments_on_standard_pool_id"
   end
