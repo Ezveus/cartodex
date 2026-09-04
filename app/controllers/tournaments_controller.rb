@@ -6,6 +6,17 @@ class TournamentsController < ApplicationController
 
   CATALOG_PER_PAGE = 24
 
+  # 60/min, the number DecksController#shared carries, because the catalog is the same shape
+  # and the same cost: a field debounced at 300ms driving a paginated listing behind a Turbo
+  # Frame, so a keystroke pays the pager's COUNT and one page of rows. #show gets none — one
+  # page load per click, with no live control behind it, exactly as decks#show has none.
+  CATALOG_RATE_LIMIT_TO = 60
+  RATE_LIMIT_WITHIN = 1.minute
+
+  rate_limit to: CATALOG_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "tournaments-index", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :index
+
   before_action :set_tournament, only: %i[show edit update destroy]
 
   publicly_reachable :index, :show
