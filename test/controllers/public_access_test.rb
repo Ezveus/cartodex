@@ -117,6 +117,24 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     delete tournament_entry_path(tournaments(:one), entry)
     assert_redirected_to new_user_session_path
 
+    standing = tournament_standings(:ash_masters)
+    standing_placement_was = standing.placement
+
+    post tournament_standings_path(tournaments(:one)), params: { tournament_standing: {
+      player_name: "x", division: "masters", archetype_id: archetypes(:ogerpon).id
+    } }
+    assert_redirected_to new_user_session_path
+
+    patch tournament_standing_path(tournaments(:one), standing),
+      params: { tournament_standing: { placement: 1 } }
+    assert_redirected_to new_user_session_path
+
+    delete tournament_standing_path(tournaments(:one), standing)
+    assert_redirected_to new_user_session_path
+
+    assert_equal standing_placement_was, standing.reload.placement
+    assert_equal 2, TournamentStanding.count
+
     assert_equal name_was, tournaments(:one).reload.name
     assert_equal 2, Tournament.count
     assert_equal placement_was, entry.reload.placement
@@ -252,7 +270,13 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       # relies on verify_authorized, and Tournaments::EntriesController does not include
       # PubliclyReachable and therefore has none (deliberately — see CLAUDE.md).
       "tournament entry" => tournament_entry_path(tournaments(:one), tournament_entries(:one)),
-      "edit tournament entry" => edit_tournament_entry_path(tournaments(:one), tournament_entries(:one))
+      "edit tournament entry" => edit_tournament_entry_path(tournaments(:one), tournament_entries(:one)),
+      # Like the three entry rows, these cannot catch a missing `authorize`:
+      # Tournaments::StandingsController does not include PubliclyReachable and therefore has no
+      # verify_authorized (deliberately — see CLAUDE.md). Worth having as a smoke test.
+      "new tournament standing" => new_tournament_standing_path(tournaments(:one)),
+      "edit tournament standing" =>
+        edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters))
     }
   end
 end

@@ -1,0 +1,143 @@
+module Tournaments
+  # One line of an event's public standings sheet. Wiki-governed: every write is open to any
+  # signed-in member, so there is no owner scope on the *standing* — but the *participation* a row
+  # is linked to is always looked up through current_user.tournament_entries, so a stranger's
+  # entry is a RecordNotFound rather than a policy question.
+  #
+  # These routes leave the app-wide `authenticate :user` block by nesting under `tournaments`
+  # alone. This controller therefore does NOT include PubliclyReachable: it keeps
+  # authenticate_user! as its only gate and calls authorize in every action — the same deliberate
+  # exception Tournaments::EntriesController and DeckResultsController are, with the same
+  # consequence that nothing enforces the authorize call being present, which is what
+  # test/controllers/public_access_test.rb covers per action.
+  class StandingsController < ApplicationController
+    before_action :set_tournament
+    # claim/unclaim land in Task 7 — Rails 7.1+'s raise_on_missing_callback_actions rejects an
+    # :only list naming an action that does not exist yet, so they are added here only once
+    # they are implemented.
+    before_action :set_standing, only: %i[edit update destroy]
+
+    # Preflight ruling 3. See #refuse_with_redirect below for why this controller carries its own
+    # handler rather than leaning on a shared one.
+    rescue_from Pundit::NotAuthorizedError, with: :refuse_with_redirect
+
+    def new
+      @entry = scoped_entry(params[:tournament_entry_id])
+      @standing = @tournament.standings.build(prefill_attributes(@entry))
+      authorize @standing, :create?
+    end
+
+    def create
+      @standing = @tournament.standings.build(standing_params)
+      authorize @standing, :create?
+      @entry = scoped_entry(params[:tournament_entry_id])
+      @standing.created_by = current_user
+      @standing.tournament_entry = @entry
+
+      if @standing.save
+        redirect_to tournament_path(@tournament), notice: "Standing recorded."
+      else
+        @existing = existing_standing
+        render :new, status: :unprocessable_entity
+      end
+    end
+
+    def edit
+      authorize @standing
+    end
+
+    def update
+      authorize @standing
+
+      if @standing.update(standing_params)
+        redirect_to tournament_path(@tournament), notice: "Standing updated."
+      else
+        @existing = existing_standing
+        render :edit, status: :unprocessable_entity
+      end
+    end
+
+    def destroy
+      authorize @standing
+      @standing.destroy
+      redirect_to tournament_path(@tournament), notice: "Standing deleted."
+    end
+
+    private
+
+    def set_tournament
+      # Unscoped: the event is public, and cataloguing its field is open to every member.
+      @tournament = Tournament.with_standard_pool.find(params[:tournament_id])
+    end
+
+    # An event and its sheet are public — the event is *listed* at /tournaments — so a refusal
+    # must say so and give the member somewhere to go, not answer with the deck rule's 404.
+    # The same call TournamentsController#refuse_with_redirect makes, and this controller needs
+    # its own: nothing outside PubliclyReachable rescues this exception, and the app's other
+    # non-public controllers never reach a real Pundit refusal because their lookups are
+    # user-scoped (every refusal there is already a RecordNotFound). Only #unclaim can refuse a
+    # signed-in member here, and unrescued it would be a 500.
+    #
+    # params[:tournament_id] is always present: every route in this controller is nested.
+    def refuse_with_redirect
+      redirect_to tournament_path(params[:tournament_id]),
+        alert: "Only the member whose participation is linked can unlink it."
+    end
+
+    def set_standing
+      # Scoped by @tournament, not merely by id: a row belonging to another event must 404 rather
+      # than render under this event's header — the reason Tournaments::EntriesController scopes
+      # its entry by both.
+      @standing = @tournament.standings.find(params[:id])
+    end
+
+    # A participation named by a request parameter, resolved through the reader's *own* entries at
+    # *this* event, so a stranger's id is a RecordNotFound and never a policy question. nil when
+    # no id was given, which is the ordinary "I am recording somebody else's row" case.
+    def scoped_entry(id)
+      return if id.blank?
+
+      current_user.tournament_entries.find_by!(id: id, tournament_id: @tournament.id)
+    end
+
+    # Values *copied* from the reader's own participation, never derived from it: editing the
+    # private record afterwards must not silently republish. The row is wiki-editable, so
+    # correcting it is an ordinary edit — there is no resync mechanism, by design.
+    #
+    # The W-L-T is deliberately not prefilled: a participation records a placement and CP, not a
+    # match record, and the reader's DeckResults are not the event's official line.
+    def prefill_attributes(entry)
+      return {} if entry.nil?
+
+      profile = entry.tournament_profile
+      {
+        player_name: profile&.player_name,
+        # A division is fixed for the whole season, so it is asked of the *event's* date rather
+        # than of today — and #division answers with a Symbol the enum column will not take.
+        division: profile&.division(on: @tournament.date)&.to_s,
+        placement: entry.placement,
+        archetype_id: entry.deck.archetype_id
+      }.compact
+    end
+
+    # The row the failed save collided with, so the form can link to it and offer to claim it
+    # instead of merely refusing — what TournamentsController#create does for a duplicate event.
+    # nil unless the failure really was the uniqueness rule.
+    def existing_standing
+      return if @standing.errors[:player_name].none?
+
+      @tournament.standings.find_by(
+        player_name_normalized: @standing.player_name_normalized, division: @standing.division
+      )
+    end
+
+    # tournament_entry_id is deliberately absent. Permitting it would let any member attach their
+    # own participation to a row naming somebody else, or detach yours: the link is written only
+    # by #claim and #unclaim, from an id resolved through scoped_entry.
+    def standing_params
+      params.require(:tournament_standing).permit(
+        :player_name, :division, :placement, :wins, :losses, :ties, :archetype_id
+      )
+    end
+  end
+end

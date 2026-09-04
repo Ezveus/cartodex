@@ -3,7 +3,7 @@
                                      can_record: policy(Tournament).create?,
                                      can_record_another: @can_record_another,
                                      can_edit: policy(@tournament).edit?,
-                                     can_edit_standings: false,
+                                     can_edit_standings: policy(TournamentStanding).create?,
                                      viewer: current_user,
                                      pending_standing_imports: @pending_standing_imports,
                                      claimable_entries: []) %>
