@@ -3,9 +3,11 @@ module Tournaments
   # entry count, no deck anybody played. The only thing it knows about its reader is whether
   # they have a participation of their own to go to.
   class ShowView < ApplicationComponent
-    def initialize(tournament:, my_entries: [], can_record_another: false, can_edit: false)
+    def initialize(tournament:, my_entries: [], can_record: false,
+                   can_record_another: false, can_edit: false)
       @tournament = tournament
       @my_entries = my_entries
+      @can_record = can_record
       @can_record_another = can_record_another
       @can_edit = can_edit
     end
@@ -26,10 +28,16 @@ module Tournaments
 
     private
 
-    # A reader has as many participations here as they have Play! Pokémon profiles that attended,
-    # so this is a list, not a link — and the "record" button survives alongside it, since a
-    # second profile has no other route to a form.
+    # Two rules meet here. A reader has as many participations as they have Play! Pokémon
+    # profiles that attended, so this is a list, not a link — and the "record" button survives
+    # alongside it, since a second profile has no other route to a form. A visitor gets none of
+    # it: `can_record` guards the whole method rather than the `empty?` branch alone, because a
+    # visitor's `my_entries` is `[]` by construction, and "Record your participation" would then
+    # be a link to the sign-in page dressed as a primary action. Inviting somebody to sign in is
+    # the navbar's job, not this page's.
     def entry_action
+      return unless @can_record
+
       if @my_entries.empty?
         link_to "Record your participation", new_tournament_entry_path(@tournament), class: "btn btn-primary"
         return

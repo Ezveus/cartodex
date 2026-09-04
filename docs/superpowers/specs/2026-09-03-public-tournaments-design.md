@@ -252,6 +252,8 @@ rate_limit to: CATALOG_RATE_LIMIT_TO, within: 1.minute,
 
 60/min because the catalog has exactly the shape and cost `decks#shared` was measured at — a debounced field driving a paginated listing behind a Turbo Frame. `show` gets none: one page load per click, no live control behind it, the same reasoning that leaves `decks#show` unlimited.
 
+The cost half of that parity had to be *made* true. `decks#shared` was given index support for its sort deliberately, with the reason written into `20260902155701_add_shared_to_decks.rb`; `tournaments` carried only `created_by_id` and the `(name_normalized, date)` UNIQUE key, whose leading column cannot serve `ORDER BY date DESC`, so every anonymous catalog request sorted the whole table. `add_index :tournaments, :date` (`20260904083908`) closes it, because the doctrine written into CLAUDE.md — the `/cards` story — is to remove the amplifier before rationing it, not to ration one that is still there. The `LIKE '%…%'` search stays a scan either way, as `NameNormalizable` documents. Unlike `decks#shared`, `#index` needs no `return if …frame_request?` short-circuit: nothing renders or queries outside its frame, so a frame request costs what a plain one does — `decks#shared` has one because its archetype-options query sits outside its own frame.
+
 ## Views and navigation
 
 The current 147-line, ten-field form splits along the same line as the model.
@@ -313,7 +315,7 @@ CLAUDE.md is updated in the same commit as the code it describes, in four places
 
 **Stage 1 — the identity split.** Migration, models, policies (with `authorize` called everywhere), routes and controllers, the view split, the `deck_results` foreign key rename and its five call sites, search, navbar and nav sections, fixtures and tests. Everything stays inside `authenticate :user`: the catalog is shared between members, not yet open to visitors. Observable behaviour barely moves, which is what makes this stage testable on its own.
 
-**Stage 2 — the public opening.** `PubliclyReachable`, the local `rescue_from`, the rate limit, `Ui::PublicNavbar`, `public_access_test.rb` and the visitor system test. No schema change. If stage 1 goes wrong, no half-finished public surface has been exposed.
+**Stage 2 — the public opening.** `PubliclyReachable`, the local `rescue_from`, the rate limit, `Ui::PublicNavbar`, `public_access_test.rb` and the visitor system test. The only schema change is the index the rate limit's reasoning depends on (`add_index :tournaments, :date`); no table, column or model moves. If stage 1 goes wrong, no half-finished public surface has been exposed.
 
 ## Notes
 

@@ -181,7 +181,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     Tournament.singleton_class.send(:remove_method, :policy_class)
   end
 
-  # An event page says nothing about anybody else — decision 4 of the spec.  # An event page says nothing about anybody else — decision 4 of the spec.
+  # An event page says nothing about anybody else — decision 4 of the spec.
   test "show names no other member and no other deck" do
     get tournament_path(@tournament)
 
@@ -193,6 +193,55 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     get tournament_path(id: 999_999)
 
     assert_response :not_found
+  end
+
+  test "a visitor sees the event and no control that would bounce them to sign in" do
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h1", text: @tournament.name
+    assert_select ".tournament-details", text: /#{@tournament.tier_label}/
+    assert_select "a[href=?]", new_tournament_entry_path(@tournament), count: 0
+    assert_select "a[href=?]", edit_tournament_path(@tournament), count: 0
+  end
+
+  # The same assertion for the reader who *has* a session but did not catalogue the event. It
+  # is a different gate — policy(@tournament).edit? rather than the absence of a user — and
+  # only the visitor half was pinned.
+  test "a signed-in stranger sees no way to change an event they did not catalogue" do
+    sign_in users(:two)
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "h1", text: @tournament.name
+    assert_select "a[href=?]", edit_tournament_path(@tournament), count: 0
+  end
+
+  test "a visitor's catalog offers no way to add a tournament" do
+    sign_out @user
+
+    get tournaments_path
+
+    assert_response :success
+    assert_select ".data-table-row", count: 2
+    assert_select "a[href=?]", new_tournament_path, count: 0
+    assert_select ".tournament-attended", count: 0
+  end
+
+  # The other half of that: attended_ids is commented "none at all for a visitor", and the
+  # markup assertion above cannot see the difference between returning early and querying
+  # anyway. This is the one that can — a variant which runs the grouped query for a visitor
+  # renders exactly the same page.
+  test "a visitor's catalog never queries the participations" do
+    sign_out @user
+
+    sql = capture_queries { get tournaments_path }
+
+    assert_response :success
+    assert_empty sql.grep(/tournament_entries/i)
   end
 
   test "mine lists the reader's own participations only" do
@@ -291,6 +340,19 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to tournaments_path
+  end
+
+  # Entries cleared first, same as the success case above: restrict_with_error would save the
+  # row on its own with the entry still attached, and that is not what this test is proving.
+  # It is authorization, not the dependency guard, that must keep a stranger from deleting it.
+  test "another member cannot delete the event" do
+    @other_tournament.entries.destroy_all
+
+    assert_no_difference -> { Tournament.count } do
+      delete tournament_path(@other_tournament)
+    end
+
+    assert_redirected_to tournament_path(@other_tournament)
   end
 
   # The pool notice tests below are the ones the old suite carried; they move with the form and
