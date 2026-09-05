@@ -163,6 +163,19 @@ class CardLabels::ImporterTest < ActiveSupport::TestCase
     assert_equal [], result.unlisted_fingerprints
   end
 
+  # An empty result is not special-cased into silence: if the source affirmatively lists nothing,
+  # every row already on the label genuinely is no longer listed, and the same "report, never
+  # delete" rule applies at that edge rather than a different one — `where.not(fingerprint: [])`
+  # is `1=1`, so this is the honest reading of an empty page rather than an accident of the guard.
+  test "an empty source result reports every currently-imported row as unlisted, keeping them" do
+    import([ printing_for(@honedge), printing_for(@doublade) ])
+
+    result = import([])
+
+    assert_equal %w[doublade_fp honedge_fp].sort, result.unlisted_fingerprints.sort
+    assert_equal 2, @label.assignments.count
+  end
+
   private
 
   def printing_for(card) = Printing.new(set_code: card.set_name, number: card.set_number)

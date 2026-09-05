@@ -47,21 +47,32 @@ class CardLabels::Importer < ApplicationService
 
   private
 
-  # One query for the whole label rather than one per printing: is:ex is 986 of them. Not the
-  # obvious "(set_name = ? AND set_number = ?) OR ..." chain — that is a left-deep expression tree,
-  # and it blows SQLite's compile-time SQLITE_MAX_EXPR_DEPTH. Measured against this exact query
-  # shape on sqlite3 3.51: 995 terms parse, 1000 raise "Expression tree is too large (maximum depth
-  # 1000)", and is:ex's 986 printings sit close enough that one new set of ex cards would cross it
-  # from an unrescued admin action. A row-value IN list is one expression holding an ExprList
-  # rather than a chain of ORs, so its terms cost no depth regardless of count (checked at 1200).
+  # One query for the whole label rather than one per printing: is:ex is 986 of them. Built in Arel
+  # rather than a "(set_name = ? AND set_number = ?) OR ..." string — that chain is a left-deep
+  # expression tree and blows SQLite's compile-time SQLITE_MAX_EXPR_DEPTH. Measured against this
+  # exact query shape on sqlite3 3.53.2 (gem sqlite3 2.9.6): 995 terms parse, 1000 raise
+  # "Expression tree is too large (maximum depth 1000)", and is:ex's 986 printings sit close enough
+  # that one new set of ex cards would cross it from an unrescued admin action. A row-value IN list
+  # is one expression holding an ExprList rather than a chain of ORs, so its terms cost no depth
+  # regardless of count — checked at 986, 1200 and 5000. It has to be built in Arel and not as an
+  # interpolated "(set_name, set_number) IN (#{...})" string: Brakeman correctly flags that shape as
+  # SQL injection (it folds a joined fragment back into the interpolation too, so de-interpolating
+  # does not satisfy it), because nothing in a plain string shows it the values are bound rather
+  # than spliced in. Building the identical predicate in Arel keeps it visibly parameterised, so
+  # the check can actually read this method rather than needing a suppression — do not "simplify"
+  # this back into a string.
   def resolve(printings)
-    # Not a crash guard against the row-value IN below — "(set_name, set_number) IN ()" is valid
-    # SQLite and simply matches nothing — just a wasted query worth skipping outright.
+    # Not a crash guard against the IN below — "(set_name, set_number) IN ()" is valid SQLite and
+    # simply matches nothing — just a wasted query worth skipping outright.
     return { cards: [], missing: [], unfingerprinted: [] } if printings.empty?
 
     pairs = printings.map { |printing| [ printing.set_code, printing.number ] }
-    values = pairs.map { "(?, ?)" }.join(", ")
-    cards = Card.where("(set_name, set_number) IN (#{values})", *pairs.flatten)
+    table = Card.arel_table
+    key = Arel::Nodes::Grouping.new([ table[:set_name], table[:set_number] ])
+    tuples = pairs.map { |code, number|
+      Arel::Nodes::Grouping.new([ Arel::Nodes.build_quoted(code), Arel::Nodes.build_quoted(number) ])
+    }
+    cards = Card.where(Arel::Nodes::In.new(key, tuples))
                 .index_by { |card| [ card.set_name, card.set_number ] }
 
     missing = pairs.reject { |pair| cards.key?(pair) }.map { |set_code, number| "#{set_code} #{number}" }
@@ -96,7 +107,13 @@ class CardLabels::Importer < ApplicationService
   end
 
   # Only rows this importer wrote: a curated assignment the source never listed is not a stray, it
-  # is somebody's decision.
+  # is somebody's decision. An empty `cards` is not special-cased into reporting nothing: if the
+  # source affirmatively lists no printings at all, every currently-imported row on the label
+  # genuinely is unlisted, and reporting all of them — never deleting — is the same rule applied at
+  # its edge rather than a different one. (`where.not(fingerprint: [])` is `1=1`, so this really
+  # does return every imported fingerprint on the label in that case.) Unreachable through the real
+  # LimitlessSearch today, which raises ParseError on an empty grid before this is ever called, but
+  # `search:` exists precisely so another reader can be injected without that guard.
   def unlisted(cards)
     @label.assignments.imported.where.not(fingerprint: cards.map(&:fingerprint)).pluck(:fingerprint)
   end
