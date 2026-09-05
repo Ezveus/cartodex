@@ -131,23 +131,29 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
       "(link bottom #{link_bottom}, note top #{note_top})"
   end
 
-  # The card report's row is `li.archetype-card-row`, not `.data-table`, so the online note's own
-  # trap (a sibling flex item lands on the badge's line below 768px) does not apply the same way
-  # here — but `.archetype-card-name` is itself `display: flex` with no wrap, so a badge added
-  # beside the name text is still a flex sibling on one line, and only geometry proves it stays
-  # small rather than squeezing the name to fit.
-  test "the label badge does not squeeze the card name on a narrow screen" do
+  # `.archetype-card-label` carries `flex-basis: 100%`, so it always lands on a line of its own
+  # below the name text — deterministically, not "when the browser happens to run out of room",
+  # which is why this holds at both sides of the sweep rather than needing a pinned width. Checked
+  # against the name *text* specifically (a span added for exactly this), not the name cell as a
+  # whole: the cell's own box already contains the badge once it wraps beneath it, so comparing
+  # the badge to the cell can never fail for a badge sharing the name's line — only the text's own
+  # box tells the two layouts apart.
+  test "the label badge sits on its own line, below the card name" do
     archetype = labelled_archetype
 
     visit archetype_path(archetype)
     assert_selector "h1", text: archetype.name
 
     row = find(".archetype-card-row", text: "ACE SPEC")
-    name = row.find(".archetype-card-name")
+    name_text = row.find(".archetype-card-name-text")
     badge = row.find(".archetype-card-label")
 
-    assert_operator badge.rect.width, :<, name.rect.width / 2,
-      "the badge is taking half the name cell"
+    name_bottom = evaluate_script("arguments[0].getBoundingClientRect().bottom", name_text)
+    badge_top = evaluate_script("arguments[0].getBoundingClientRect().top", badge)
+
+    assert_operator badge_top, :>=, name_bottom - 1,
+      "the badge sits beside the name instead of below it " \
+      "(name bottom #{name_bottom}, badge top #{badge_top})"
   end
 
   private

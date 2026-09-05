@@ -3404,10 +3404,15 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 
 /* Each of the three cells may take the whole line when the row runs out of room, which is what
    makes the row legible at 390px without a breakpoint of its own. min-width: 0 is what lets a
-   long card name shrink instead of pushing the row past the body. */
+   long card name shrink instead of pushing the row past the body.
+   flex-wrap is what lets a type label (flex-basis: 100% below) claim a line of its own rather
+   than sharing this one with the name and the fixed flag — harmless to the printing sub-rows
+   that reuse this class with no label to wrap, since wrapping only happens when a child actually
+   demands it. */
 .archetype-card-name {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   flex: 1 1 12rem;
   min-width: 0;
@@ -3502,9 +3507,16 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 /* Same shape as .archetype-fixed-flag — flex-shrink: 0 so it cannot be what squeezes the name
    beside it — on a different token, so a type label does not read as a second "fixed". Neutral
    rather than a per-energy-type token: this page's own comment above already rules those out for
-   anything but the header badge, and a card's *label* has nothing to do with its energy type. */
+   anything but the header badge, and a card's *label* has nothing to do with its energy type.
+
+   flex-basis: 100% is what puts it on a line of its own, deterministically rather than "when the
+   browser happens to run out of room" — the same call .deck-card-alloc makes on a phone, made
+   here unconditionally because .archetype-card-name never gets a media query (see the section
+   comment above .archetype-identity). It depends on the flex-wrap added to .archetype-card-name
+   above; without that, a 100% basis here would not break the line, it would just overflow it. */
 .archetype-card-label {
   flex-shrink: 0;
+  flex-basis: 100%;
   background: var(--paper);
   color: var(--ink-700);
   border: 1px solid var(--line);

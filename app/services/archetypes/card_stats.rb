@@ -197,11 +197,17 @@ module Archetypes
     # printing of Prime Catcher is an ACE SPEC, and the report already groups on the same key. A
     # card the key cannot fold (GROUPING_KEY's 'card:<id>' fallback) matches no assignment and is
     # simply unlabelled — which is honest, and is the state a labelled row could not describe.
+    #
+    # `eager_load`, not `includes`: nothing else in this scope references `card_labels`, so
+    # `includes` preloads it in its own second SELECT rather than joining — one query on an
+    # unlabelled sample and two on a labelled one, which is exactly the number that would not
+    # show up against fixtures with no assignment at all. `eager_load` forces the LEFT OUTER JOIN
+    # unconditionally, so the query count no longer depends on whether any row happens to match.
     def labels_by_fingerprint
       @labels_by_fingerprint ||= CardLabelAssignment
         .active
+        .eager_load(:card_label)
         .where(fingerprint: rows_by_key.keys)
-        .includes(:card_label)
         .group_by(&:fingerprint)
         .transform_values { |assignments| assignments.map(&:card_label).sort_by { |l| [ l.position, l.slug ] } }
     end

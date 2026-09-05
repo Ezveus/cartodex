@@ -29,7 +29,7 @@ module Archetypes
     def main_line
       div(class: "archetype-card-main") do
         div(class: "archetype-card-name") do
-          plain @group.name
+          span(class: "archetype-card-name-text") { @group.name }
           fixed_flag if fixed_group?
           label_flags
         end
@@ -59,11 +59,17 @@ module Archetypes
     end
 
     # A type label annotates the card and never opens a section: an ACE SPEC is still an Item,
-    # and moving it out would stop the category counts being a partition of the list. Read off
-    # the group's first entry, since a name group's printings share a fingerprint whenever the
-    # group is not split, and a split group's printings are genuinely different cards.
+    # and moving it out would stop the category counts being a partition of the list. Reads
+    # every entry's labels, not just one printing's — a split group's printings are genuinely
+    # different cards, and each keeps its own — then re-sorts by [position, slug] once several
+    # entries' labels are concatenated, restoring the ordering `CardStats` already guarantees
+    # within one entry but not across several.
+    #
+    # Filtered to `type?` here rather than in the service: `CardStats` loads both families in one
+    # query so stage 2's role mode can reuse the same load, and only this render layer knows
+    # stage 1 badges type labels alone.
     def type_labels
-      @group.entries.flat_map(&:labels).uniq
+      @group.entries.flat_map(&:labels).select(&:type?).uniq.sort_by { |label| [ label.position, label.slug ] }
     end
 
     def label_flags

@@ -333,18 +333,25 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     assert_empty entry_for(card).labels
   end
 
+  # Every card here carries its own distinct label, on purpose: ten cards sharing one label would
+  # repeat the identical "card_labels WHERE id = ?" statement, which the per-request query cache
+  # serves after the first and count_queries never sees — hiding the exact N+1 this test exists
+  # to catch. Distinct labels mean distinct SQL, so a query that runs once per card rather than
+  # once for the whole report cannot hide behind the cache.
   test "labels cost one query however many cards the report holds" do
     archetype = archetype_of_its_own
     event = standard_event
 
-    record(event, archetype, deck: field_list(pokemon("Query Card") => 1))
-    one_card_queries = count_queries { stats_for(archetype) }
+    record(event, archetype, deck: field_list(label_card(pokemon("Query Card")) => 1))
+    one_card_queries = capture_queries { stats_for(archetype) }
 
-    extra_cards = 9.times.map { |i| pokemon("Query Card Extra #{i}") }
+    extra_cards = 9.times.map { |i| label_card(pokemon("Query Card Extra #{i}")) }
     record(event, archetype, deck: field_list(extra_cards.index_with { 1 }))
-    ten_card_queries = count_queries { stats_for(archetype) }
+    ten_card_queries = capture_queries { stats_for(archetype) }
 
-    assert_equal one_card_queries, ten_card_queries
+    assert_equal one_card_queries.size, ten_card_queries.size
+    assert_equal 1, one_card_queries.count { |sql| sql.include?("card_label") }
+    assert_equal 1, ten_card_queries.count { |sql| sql.include?("card_label") }
   end
 
   # Helpers below `private`, where a `test` declaration would never run.
@@ -373,6 +380,17 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     record(standard_event, archetype, deck: field_list(card => 1))
 
     entry_named(stats_for(archetype), card.name)
+  end
+
+  # A fresh label per call, not one shared across cards — see the query-count test above for why
+  # that distinctness is load-bearing. Hands the card straight back, so it chains inside a
+  # `field_list(...)` call the way a bare card does.
+  def label_card(card)
+    index = next_index
+    label = CardLabel.create!(slug: "query-label-#{index}", name: "Query Label #{index}",
+                               family: "type", position: index)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    card
   end
 
   def archetype_of_its_own
