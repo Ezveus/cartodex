@@ -31,6 +31,7 @@ module Archetypes
         div(class: "archetype-card-name") do
           plain @group.name
           fixed_flag if fixed_group?
+          label_flags
         end
         share(@group.inclusion_pct, @group.inclusion_count)
         div(class: "archetype-card-copies") { name_copies_text }
@@ -55,6 +56,20 @@ module Archetypes
     def fixed_flag
       span(class: "badge badge-format archetype-fixed-flag",
            title: "Played by every list in this sample, always in the same number") { "fixed" }
+    end
+
+    # A type label annotates the card and never opens a section: an ACE SPEC is still an Item,
+    # and moving it out would stop the category counts being a partition of the list. Read off
+    # the group's first entry, since a name group's printings share a fingerprint whenever the
+    # group is not split, and a split group's printings are genuinely different cards.
+    def type_labels
+      @group.entries.flat_map(&:labels).uniq
+    end
+
+    def label_flags
+      type_labels.each do |label|
+        span(class: "badge archetype-card-label", title: label.description) { label.name }
+      end
     end
 
     def name_copies_text

@@ -131,6 +131,25 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
       "(link bottom #{link_bottom}, note top #{note_top})"
   end
 
+  # The card report's row is `li.archetype-card-row`, not `.data-table`, so the online note's own
+  # trap (a sibling flex item lands on the badge's line below 768px) does not apply the same way
+  # here — but `.archetype-card-name` is itself `display: flex` with no wrap, so a badge added
+  # beside the name text is still a flex sibling on one line, and only geometry proves it stays
+  # small rather than squeezing the name to fit.
+  test "the label badge does not squeeze the card name on a narrow screen" do
+    archetype = labelled_archetype
+
+    visit archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+
+    row = find(".archetype-card-row", text: "ACE SPEC")
+    name = row.find(".archetype-card-name")
+    badge = row.find(".archetype-card-label")
+
+    assert_operator badge.rect.width, :<, name.rect.width / 2,
+      "the badge is taking half the name cell"
+  end
+
   private
 
   # One paper standing and one online one, so the note has a mixture to describe.
@@ -167,6 +186,25 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype = Archetype.create!(primary_card: cards(:doublade))
     event = tournament("Lone Record", Date.new(2026, 2, 14), standard_pools(:twm_por))
     standing(event, archetype, "Only Player")
+
+    archetype
+  end
+
+  # A fresh primary card, not one of this file's shared fixtures — Archetype's
+  # (primary_fingerprint, secondary_fingerprint) pair is UNIQUE, and the fixture set already holds
+  # an archetype anchored to teal_mask_ogerpon_ex.
+  def labelled_archetype
+    card = Card.create!(
+      name: "Labelled Primary", set_name: "LBL", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    archetype = Archetype.create!(primary_card: card)
+    event = tournament("Label Cup", Date.new(2026, 2, 14), standard_pools(:twm_por))
+    place = standing(event, archetype, "Label Player")
+
+    labelled_card = place.deck.deck_cards.first.card
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    label.assignments.create!(fingerprint: labelled_card.fingerprint, card: labelled_card, source: "imported")
 
     archetype
   end

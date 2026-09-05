@@ -64,7 +64,7 @@ module Archetypes
     # "3", and silently picking one would state a consensus the sample does not hold.
     Entry = Struct.new(
       :card, :fingerprint, :inclusion_count, :inclusion_pct,
-      :min_copies, :max_copies, :modes, :core,
+      :min_copies, :max_copies, :modes, :core, :labels,
       keyword_init: true
     ) do
       def single_quantity? = min_copies == max_copies
@@ -191,6 +191,21 @@ module Archetypes
       @rows_by_key ||= rows.group_by { |_deck_id, key, _copies| key }
     end
 
+    # fingerprint -> the labels on that card, in one query for the whole report.
+    #
+    # Keyed on the fingerprint and not on the card id because that is what a label is about: every
+    # printing of Prime Catcher is an ACE SPEC, and the report already groups on the same key. A
+    # card the key cannot fold (GROUPING_KEY's 'card:<id>' fallback) matches no assignment and is
+    # simply unlabelled — which is honest, and is the state a labelled row could not describe.
+    def labels_by_fingerprint
+      @labels_by_fingerprint ||= CardLabelAssignment
+        .active
+        .where(fingerprint: rows_by_key.keys)
+        .includes(:card_label)
+        .group_by(&:fingerprint)
+        .transform_values { |assignments| assignments.map(&:card_label).sort_by { |l| [ l.position, l.slug ] } }
+    end
+
     # key -> the lists playing it. Kept beside the entries so a name group can count the union of
     # its printings' lists rather than re-deriving it from a name, which is how the two halves
     # came to disagree: keyed on a name the query chose and looked up by the name of the printing
@@ -217,7 +232,8 @@ module Archetypes
         min_copies: copies.min,
         max_copies: copies.max,
         modes: modes_of(copies),
-        core: inclusion == lists_count
+        core: inclusion == lists_count,
+        labels: labels_by_fingerprint.fetch(key, [])
       )
     end
 

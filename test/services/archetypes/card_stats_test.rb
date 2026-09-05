@@ -314,6 +314,39 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     refute_predicate result, :any?
   end
 
+  test "an entry carries the type labels of the card it reports" do
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    card = cards(:honedge)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+
+    entry = entry_for(card)
+
+    assert_equal [ "ACE SPEC" ], entry.labels.map(&:name)
+  end
+
+  # A human's refusal is a row, not an absence, and the report must read it as the refusal it is.
+  test "a rejected assignment is not a label" do
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    card = cards(:honedge)
+    label.assignments.create!(fingerprint: card.fingerprint, source: "curated", rejected: true)
+
+    assert_empty entry_for(card).labels
+  end
+
+  test "labels cost one query however many cards the report holds" do
+    archetype = archetype_of_its_own
+    event = standard_event
+
+    record(event, archetype, deck: field_list(pokemon("Query Card") => 1))
+    one_card_queries = count_queries { stats_for(archetype) }
+
+    extra_cards = 9.times.map { |i| pokemon("Query Card Extra #{i}") }
+    record(event, archetype, deck: field_list(extra_cards.index_with { 1 }))
+    ten_card_queries = count_queries { stats_for(archetype) }
+
+    assert_equal one_card_queries, ten_card_queries
+  end
+
   # Helpers below `private`, where a `test` declaration would never run.
   private
 
@@ -330,6 +363,16 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
 
   def entry_named(result, name)
     group_named(result, name).entries.sole
+  end
+
+  # An archetype and a single-list sample built purely to read one card's report entry back — the
+  # label tests care about `Entry#labels`, not about inclusion or copies, so one list of one card
+  # is the whole fixture.
+  def entry_for(card)
+    archetype = Archetype.create!(primary_card: card)
+    record(standard_event, archetype, deck: field_list(card => 1))
+
+    entry_named(stats_for(archetype), card.name)
   end
 
   def archetype_of_its_own

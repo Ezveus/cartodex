@@ -242,7 +242,9 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # association issue identical SQL, which the per-request query cache serves and count_queries
   # does not count — which is exactly what would hide an N+1. The pool is shared, deliberately:
   # it is what keeps the default sample growing with the rows instead of moving to a new pool
-  # holding one list. Measured at 16 queries, unchanged from 3 lists to 10.
+  # holding one list. Measured at 17 queries, unchanged from 3 lists to 10 — 16 of those plus one
+  # more since the card report started grouping-and-loading `card_label_assignments` in its own
+  # single query, keyed on the fingerprints the report already holds.
   test "show issues a constant number of queries regardless of how many lists" do
     archetype = quiet_archetype(200, name: "Reported Archetype")
     3.times { |i| listed_standing_for(archetype, i) }
@@ -258,6 +260,19 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".archetype-card-row", minimum: 1
     assert_equal small, large, "query count grew with the sample: #{small} -> #{large}"
+  end
+
+  test "show badges a card's type label on its row" do
+    archetype = quiet_archetype(400, name: "Labelled Archetype")
+    standing = listed_standing_for(archetype, 400)
+    card = standing.deck.deck_cards.first.card
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
   end
 
   # The blend neither the sample selector nor the performance panel can show any other way: the

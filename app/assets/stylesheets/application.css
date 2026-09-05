@@ -3499,6 +3499,20 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-size: 0.7rem;
 }
 
+/* Same shape as .archetype-fixed-flag — flex-shrink: 0 so it cannot be what squeezes the name
+   beside it — on a different token, so a type label does not read as a second "fixed". Neutral
+   rather than a per-energy-type token: this page's own comment above already rules those out for
+   anything but the header badge, and a card's *label* has nothing to do with its energy type. */
+.archetype-card-label {
+  flex-shrink: 0;
+  background: var(--paper);
+  color: var(--ink-700);
+  border: 1px solid var(--line);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+}
+
 .archetype-method {
   margin-top: 2.5rem;
   color: var(--ink-500);
