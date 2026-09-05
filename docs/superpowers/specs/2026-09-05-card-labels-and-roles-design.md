@@ -65,8 +65,15 @@ the argument for the type vocabulary being **data**: Ancient and Future arrived 
 Scarlet & Violet, ACE SPEC was revived from Black & White in the middle of the same block, and
 Fusion Strike arrived late in Sword & Shield. A closed list in code is a deploy per set.
 
-`?page=2` and `?page=3` answer, and the result page prints its own total in plain text
-(`46 cards`) — so a run knows both when to stop and whether it saw everything.
+**One request reads a whole label.** The result page carries a `show` control whose `all` value
+returns every match at once, and the `.search-summary` block states the count in plain text
+(`46 cards found where …`). Measured: `is:ace` 46 links for an announced 46 in 25 KB, `is:tera`
+151 for 151 in 50 KB, and the largest plausible label, `is:ex`, 986 for 986 in 234 KB — a quarter
+of the 1.1 MB standings page `HttpFetcher` already reads inside its 30-second read timeout. So
+there is no pagination to write, no page cap to tune, and the announced total is a real integrity
+check rather than a stopping condition: a run that read 46 of 46 knows it is complete.
+
+The links live in `.card-search-grid` as `<a href="/cards/<SET>/<NUM>">`, one per printing.
 
 `cards.set_name` holds the set **code** (`PRE`, `TEF`), so the `/cards/<SET>/<NUM>` links the
 search returns resolve with `Card.find_by(set_name:, set_number:)` — the same pair
@@ -213,12 +220,11 @@ card_label_assignments    card_label_id (FK), fingerprint (NOT NULL), card_id (F
 
 **Services:**
 
-- `CardLabels::LimitlessSearch` — fetches and parses `/cards?q=<token>&page=N` through
-  `HttpFetcher`, returns the `(set_code, number)` pairs **and the total the page announces**. That
-  total is an integrity check, the same gesture `Tournaments::OnlineDecklist` makes when it checks
-  a column's heading subtotal before the 60: a run that read 46 of 46 knows it is complete, and one
-  that read 47 of 92 says so in the receipt instead of implying the source lost half its cards.
-  `max_pages:` is a keyword so a test can prove the refusal with 2.
+- `CardLabels::LimitlessSearch` — fetches `/cards?q=<token>&show=all` through `HttpFetcher` in
+  **one** request and returns the `(set_code, number)` pairs **and the total the page announces**.
+  That total is an integrity check, the same gesture `Tournaments::OnlineDecklist` makes when it
+  checks a column's heading subtotal before the 60: a run that read 47 of an announced 92 says so
+  in the receipt instead of implying the source lost half its cards.
 - `CardLabels::Importer` — resolves each pair with `Card.find_by(set_name:, set_number:)`, writes
   `imported` assignments on the fingerprint, counts the printings not held, and reports (never
   deletes) the ones the source no longer lists.
