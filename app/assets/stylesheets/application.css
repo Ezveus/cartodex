@@ -3385,11 +3385,17 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-weight: 600;
 }
 
+/* A fixed basis, and the copies cell absorbs the slack instead — not the other way round. A bar
+   whose length depends on how long the text beside it happens to be cannot be compared with the
+   bar on the next row, which is the only thing a bar is for: two cards both at 100% drew visibly
+   different bars because "1 copy" and "2-3 copies · most often 2 / 3 — tied" left them different
+   room. `1` on the shrink factor keeps it collapsible below the breakpoint, where the cells wrap
+   onto their own lines anyway. */
 .archetype-card-share {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex: 1 1 11rem;
+  flex: 0 1 14rem;
   min-width: 0;
 }
 
@@ -3415,8 +3421,11 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* Grows so the row still reaches the right edge, and stays right-aligned so the copy counts line
+   up with each other down the column rather than starting wherever the bar above them ended. */
 .archetype-card-copies {
-  flex: 0 1 auto;
+  flex: 1 1 10rem;
+  text-align: right;
   font-size: 0.85rem;
   color: var(--ink-700);
   font-variant-numeric: tabular-nums;
