@@ -209,4 +209,60 @@ class Search::GlobalTest < ActiveSupport::TestCase
 
     assert_includes result.shared_decks.map(&:name), "Zoroark Field List"
   end
+
+  # The fifth group. Archetype.search spans three columns — the archetype's own name and both
+  # member cards' — so the two paths into it are tested apart: a custom-named archetype is the
+  # only way to have a name that does *not* contain its lead card's, which is what makes
+  # "found by name" and "found by card" distinguishable at all.
+  test "a member finds an archetype by its own name" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: true,
+                                  name: "Metal Toolbox")
+
+    result = Search::Global.call(user: @user, query: "metal toolbox")
+
+    assert_equal [ archetype ], result.archetypes
+    assert_equal 1, result.archetype_total
+  end
+
+  test "a member finds an archetype through a member card's name" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: true,
+                                  name: "Metal Toolbox")
+
+    result = Search::Global.call(user: @user, query: "doublade")
+
+    assert_includes result.archetypes, archetype,
+      "the archetype's own name does not contain \"doublade\" — only its lead card's does"
+  end
+
+  test "the archetype group carries the preloads its rows need" do
+    Archetype.create!(primary_card: cards(:doublade), custom_name: true, name: "Metal Toolbox")
+
+    archetype = Search::Global.call(user: @user, query: "metal toolbox").archetypes.first
+
+    # A row prints both member cards' printing_labels, which is two queries per archetype
+    # without these.
+    assert_predicate archetype.association(:primary_card), :loaded?
+    assert_predicate archetype.association(:secondary_card), :loaded?
+  end
+
+  # /archetypes is inside the `authenticate :user` block, so an option here would be a link to a
+  # sign-in wall. Deck.none is the pattern archetype_scope copies, and the point of it is that
+  # nothing is *queried* either: the assertion below is on the SQL, not just on the result.
+  #
+  # The regex is deliberately narrow. Deck.search embeds `Archetype.search(q).select(:id)` as a
+  # subquery, so the shared-deck query mentions the archetypes table for a visitor too and always
+  # has — what must not appear is a query that selects archetype *rows*.
+  test "a visitor gets no archetypes, and none are queried for" do
+    Archetype.create!(primary_card: cards(:doublade), custom_name: true, name: "Metal Toolbox")
+
+    sql = capture_queries { @result = Search::Global.call(user: nil, query: "metal toolbox") }
+
+    # Asserted before the two below, so that a regression is reported as "the database was
+    # touched" rather than as "the list was not empty" — the second is a consequence, and the
+    # first is the claim.
+    assert_empty sql.grep(/SELECT (DISTINCT )?"archetypes"\.\*/i),
+      "a visitor's spotlight loaded archetype rows"
+    assert_empty @result.archetypes
+    assert_equal 0, @result.archetype_total
+  end
 end

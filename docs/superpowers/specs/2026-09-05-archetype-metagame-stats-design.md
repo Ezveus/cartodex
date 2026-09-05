@@ -224,11 +224,26 @@ limiter that no test can exercise is a limiter nobody knows works.
 One grouped query for the report, one for the pool options, one for the performance panel, one for
 the index counts — all flat in the size of the collection. Measured: 93 lists → 2675 rows → 23 ms.
 
-**No caching in v1**, on purpose, and with a stated threshold rather than a shrug: the honest
-version-key for a cache entry is a `MAX(updated_at)` over the archetype's standings, which is the
-kind of unindexed aggregate `Card.filter_values` had to be corrected away from. The repo's own
-rule is to make the endpoint cheap before wrapping it. If a synthetic 1500-list archetype renders
-the page above ~200 ms, caching is added and the measurement recorded here.
+**No caching in v1**, and the threshold was set before the measurement rather than after it: the
+honest version-key for a cache entry is a `MAX(updated_at)` over the archetype's standings, which
+is the kind of unindexed aggregate `Card.filter_values` had to be corrected away from, and the
+repo's own rule is to make the endpoint cheap before wrapping it. The stated test was "if a
+synthetic 1500-list archetype renders above ~200 ms, add caching".
+
+Measured, on a synthetic 1500-list archetype (39 000 `deck_cards` rows) built and rolled back in
+one transaction:
+
+| service | queries | time |
+|---|---|---|
+| `MetagameScope` | 4 | 15.6 ms |
+| `CardStats` | 3 | 137.3 ms |
+| `Performance` | 4 | 6.1 ms |
+| `IndexCounts` | 1 | 2.0 ms |
+
+≈161 ms for twelve queries, and the query count does not move with the sample. Under the
+threshold, so no cache — and the next person to wonder has the number rather than the argument.
+`CardStats` is 85 % of it and is where a cache would go if the collection grows past roughly twice
+this size.
 
 ## Testing
 

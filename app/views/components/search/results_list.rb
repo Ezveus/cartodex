@@ -1,5 +1,5 @@
 module Search
-  # Three groups of options, a "no matches" line, or — when the query was too short to search —
+  # Five groups of options, a "no matches" line, or — when the query was too short to search —
   # nothing at all.
   class ResultsList < ApplicationComponent
     def initialize(results:)
@@ -15,6 +15,7 @@ module Search
           shared_deck_group
           card_group
           tournament_group
+          archetype_group
         end
       else
         p(class: "spotlight-empty") { "No matches." }
@@ -83,6 +84,25 @@ module Search
           path: tournament_path(tournament),
           name: tournament.name,
           meta: "#{localize(tournament.date, format: :long)} · #{tournament.tier_label}"
+        )
+      end
+    end
+
+    def archetype_group
+      render ResultGroup.new(
+        key: "archetypes", label: "ARCHETYPES", records: @results.archetypes,
+        total: @results.archetype_total, index_path: archetypes_path(q: query),
+        see_all_label: see_all_label(@results.archetype_total, "archetype")
+      ) do |archetype|
+        option_row(
+          # Its own prefix, like the shared-deck group above: these ids are derived from the
+          # record id, and two groups sharing a prefix emit the same DOM id twice, which breaks
+          # the keyboard walk. Archetype ids and Deck ids overlap freely.
+          dom_id: "spotlight-option-archetype-#{archetype.id}",
+          path: archetype_path(archetype),
+          name: archetype.name,
+          meta: [ archetype.primary_card, archetype.secondary_card ].compact
+            .map(&:printing_label).join(" · ")
         )
       end
     end

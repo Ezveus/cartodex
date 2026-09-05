@@ -51,7 +51,7 @@ module Search
           aria_expanded: "false",
           aria_autocomplete: "list",
           aria_controls: ResultsView::FRAME_ID,
-          aria_label: "Search decks, cards and tournaments",
+          aria_label: "Search decks, cards, tournaments and archetypes",
           data: {
             dashboard_search_target: "input",
             search_overlay_target: "field",

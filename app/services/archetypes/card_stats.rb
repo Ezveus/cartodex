@@ -24,12 +24,16 @@ module Archetypes
     # catalogue — all 4720 cards categorise — and exists so that a Trainer subtype the scraper
     # learns tomorrow surfaces as a labelled bucket instead of vanishing from a report that still
     # sums to a plausible-looking 60.
+    #
+    # Supporter, Item, Tool, Stadium is the order Decks::ShowView already prints a decklist in —
+    # it renders by iterating TRAINER_SUBTYPE_LABELS — and a member reading both pages should not
+    # have to re-find the sections.
     CATEGORIES = [
       [ :pokemon,        "Pokémon" ],
       [ :supporter,      "Supporter" ],
       [ :item,           "Item" ],
-      [ :stadium,        "Stadium" ],
       [ :tool,           "Tool" ],
+      [ :stadium,        "Stadium" ],
       [ :special_energy, "Special Energy" ],
       [ :basic_energy,   "Basic Energy" ],
       [ :other,          "Other" ]
@@ -88,9 +92,15 @@ module Archetypes
       def any? = lists_count.positive?
     end
 
-    # Takes the standings relation rather than deck ids so the caller cannot accidentally hand it
-    # a population the report may not speak for; the `deck_id` filter is applied here rather than
-    # trusted, for the same reason.
+    # Takes the standings relation rather than deck ids, so the caller cannot hand this a
+    # population the report may not speak for.
+    #
+    # The `deck_id` filter states that intent; it does not enforce it, and no test can pretend
+    # otherwise. Both queries below consume `@standings` as an `IN (SELECT deck_id …)` subquery,
+    # and SQL's NULL semantics already drop the bare rows — removing this line leaves every test
+    # green (checked). It stays as the declaration of what this service is allowed to see, so
+    # that a future query reading `@standings` some other way inherits the restriction instead of
+    # having to rediscover it.
     def initialize(standings:)
       @standings = standings.where.not(deck_id: nil)
     end

@@ -51,6 +51,7 @@ module Styleguide
         sharing_section
         printing_picker_section
         standard_pool_section
+        metagame_section
         settings_section
         tokens_section
       end
@@ -246,7 +247,15 @@ module Styleguide
           Deck.new(id: 3, key: "sg-zoroark-box", name: "Zoroark Box", format: "standard",
                    archetype: Archetype.new(name: "Zoroark Control"))
         ],
-        shared_deck_total: 1
+        shared_deck_total: 1,
+        # The fifth group. Its rows print both member cards' printing_labels, so the sample
+        # archetype carries real Card objects rather than a bare name.
+        archetypes: [
+          Archetype.new(id: 1, name: "Teal Mask Ogerpon ex",
+                        primary_card: Card.new(name: "Teal Mask Ogerpon ex",
+                                               set_name: "TWM", set_number: "25"))
+        ],
+        archetype_total: 1
       )
     end
 
@@ -346,6 +355,74 @@ module Styleguide
           )
         end
       end
+    end
+
+    # Le rapport de cartes d'un archétype, rendu depuis les vrais composants et les vraies
+    # Structs du service — pas de markup recopié : la barre de proportion et la ligne à
+    # sous-lignes sont les deux seules formes que cette page ajoute au système, et une copie
+    # figée ici mentirait dès la première retouche.
+    #
+    # Les deux lignes montrées sont les deux cas qui comptent. La première est « figée » : jouée
+    # par toutes les listes, toujours au même nombre. La seconde est un nom éclaté sur trois
+    # impressions — les chiffres sont ceux mesurés en production sur Hoothoot — et ses parts
+    # totalisent 111,9 %, ce que la note sous les sous-lignes dit explicitement : ce n'est pas
+    # une décomposition du total.
+    def metagame_section
+      sg_section("Composants", "Rapport de cartes d'un archétype",
+              "Chaque ligne dit à quelle fréquence une carte est jouée et en combien " \
+              "d'exemplaires. Les pourcentages portent sur l'échantillon choisi au-dessus — " \
+              "jamais sur le champ d'un tournoi, que la base ne voit pas.") do
+        div(class: "sg-stack") do
+          # Inerte comme les panneaux de réglages plus bas : le formulaire est un vrai GET vers
+          # /archetypes/6, et changer l'échantillon depuis le styleguide quitterait la page.
+          settings_panel { render Archetypes::SampleSelector.new(scope: sg_metagame_scope) }
+          ul(class: "archetype-card-list") do
+            render Archetypes::NameGroupRow.new(group: sg_fixed_group)
+            render Archetypes::NameGroupRow.new(group: sg_split_group)
+          end
+        end
+      end
+    end
+
+    # Un échantillon volontairement minuscule : c'est la vue par défaut d'un archétype
+    # fraîchement importé, et donc l'état où l'encart d'avertissement doit être visible.
+    def sg_metagame_scope
+      Archetypes::MetagameScope::Result.new(
+        archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
+        standings: nil, listed_standings: nil,
+        pool: StandardPool.new(id: 9), lists_count: 3, standings_count: 3,
+        options: [
+          Archetypes::MetagameScope::Option.new(value: "9", label: "TEF-PBL — 3 lists", lists_count: 3),
+          Archetypes::MetagameScope::Option.new(value: "8", label: "TEF-CRI — 22 lists", lists_count: 22),
+          Archetypes::MetagameScope::Option.new(value: Archetypes::MetagameScope::ALL,
+                                                label: "All formats — 93 lists", lists_count: 93)
+        ]
+      )
+    end
+
+    def sg_fixed_group
+      entry = sg_entry("Raging Bolt ex", "PRE", "166", 68, 100.0, 1, 1, [ 1 ], core: true)
+      Archetypes::CardStats::NameGroup.new(name: "Raging Bolt ex", inclusion_count: 68,
+                                           inclusion_pct: 100.0, entries: [ entry ])
+    end
+
+    def sg_split_group
+      Archetypes::CardStats::NameGroup.new(
+        name: "Hoothoot", inclusion_count: 68, inclusion_pct: 73.1,
+        entries: [
+          sg_entry("Hoothoot", "SCR", "114", 65, 69.9, 2, 3, [ 2 ]),
+          sg_entry("Hoothoot", "PRE", "77", 37, 39.8, 1, 2, [ 1 ]),
+          sg_entry("Hoothoot", "TEF", "126", 2, 2.2, 1, 3, [ 1, 3 ])
+        ]
+      )
+    end
+
+    def sg_entry(name, set_name, set_number, count, pct, min, max, modes, core: false)
+      Archetypes::CardStats::Entry.new(
+        card: Card.new(name: name, set_name: set_name, set_number: set_number),
+        fingerprint: "sg-#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
+        min_copies: min, max_copies: max, modes: modes, core: core
+      )
     end
 
     def pool(id, first, last, released_on)

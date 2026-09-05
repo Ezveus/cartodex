@@ -285,7 +285,15 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       # verify_authorized (deliberately — see CLAUDE.md). Worth having as a smoke test.
       "new tournament standing" => new_tournament_standing_path(tournaments(:one)),
       "edit tournament standing" =>
-        edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters))
+        edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters)),
+      # "owner-only" is this hash's historical name; what it tests is "a session is required, and
+      # the action authorizes once there is one", which is exactly the archetype pages' rule.
+      # Unlike the entry and standing rows above, these two *can* catch a missing `authorize`:
+      # ArchetypesController carries after_action :verify_authorized. The day the pages open to
+      # visitors — three edits, listed atop that controller — these two rows move into
+      # public_gets.
+      "archetypes index" => archetypes_path,
+      "archetype show" => archetype_path(archetypes(:standings_marker))
     }
   end
 end

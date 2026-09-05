@@ -17,7 +17,20 @@ module Decks
         span(class: "badge badge-format") { @deck.format_label }
         # Owner views only — this component is never rendered on a public surface.
         span(class: "badge") { "Shared" } if @deck.shared?
-        render Ui::ArchetypeBadge.new(archetype: @deck.archetype) if @deck.archetype
+        # Linked unconditionally: as the line above says, this row is owner-only and therefore
+        # always behind a session, which is exactly what /archetypes needs. Decks::PublicBadges,
+        # the row a visitor can reach, deliberately passes no href.
+        #
+        # The route helper is called as a module method, exactly as Decks::DeckCard calls
+        # deck_path: Decks::ImportJob renders that card — and this row inside it — with a bare
+        # Phlex `.call`, and Phlex::Rails::Helpers::Routes resolves a _path helper through
+        # url_options, which delegates to a view_context that does not exist outside a request.
+        if @deck.archetype
+          render Ui::ArchetypeBadge.new(
+            archetype: @deck.archetype,
+            href: Rails.application.routes.url_helpers.archetype_path(@deck.archetype)
+          )
+        end
         span(class: "badge") { "Physical" } if @deck.physical?
         span(class: "badge") { "TCG Live" } if @deck.tcg_live?
         proxies_badge
