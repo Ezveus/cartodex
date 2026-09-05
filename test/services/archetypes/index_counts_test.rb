@@ -36,6 +36,37 @@ class Archetypes::IndexCountsTest < ActiveSupport::TestCase
     assert_equal 2, counts.lists
   end
 
+  # The index's four figures all blend the two sources — an imported online event contributes a
+  # standing, a distinct event, a list and possibly the latest date — and nothing on that page said
+  # so. The count qualifies the row; the archetype's own page breaks the composition down per
+  # sample.
+  test "counts the standings that came from online play" do
+    archetype = archetype_of_its_own
+    record(standard_event(date: Date.new(2026, 5, 1)), archetype, deck: field_list)
+    record(online_event(date: Date.new(2026, 6, 1)), archetype, deck: field_list, division: "open")
+    record(online_event(date: Date.new(2026, 6, 8)), archetype, deck: field_list, division: "open")
+
+    counts = Archetypes::IndexCounts.call(archetype_ids: [ archetype.id ]).fetch(archetype.id)
+
+    assert_equal 3, counts.standings
+    assert_equal 2, counts.online_standings
+    assert counts.online?
+  end
+
+  # The negative control, and the reason `online?` exists rather than a bare `.positive?` at the
+  # call site: an archetype recorded only at paper events must report a zero the view can stay
+  # silent on, not a nil it would have to guard.
+  test "an archetype recorded only at paper events reports no online standings" do
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list)
+
+    counts = Archetypes::IndexCounts.call(archetype_ids: [ archetype.id ]).fetch(archetype.id)
+
+    assert_equal 0, counts.online_standings
+    assert_not counts.online?
+    assert_not Archetypes::IndexCounts::Counts.zero.online?
+  end
+
   # MAX() over a date column comes back as a String from SQLite: the aggregate carries no column
   # type for Rails to cast from, so the conversion has to happen in the service.
   test "last_event_on is the most recent event's date, as a Date" do
@@ -104,9 +135,17 @@ class Archetypes::IndexCountsTest < ActiveSupport::TestCase
                        created_by: users(:one))
   end
 
-  def record(event, archetype, deck: nil)
+  # An imported online event: not in the public catalog, and its standings carry the "open"
+  # division because online play has no age divisions.
+  def online_event(date: Date.new(2026, 6, 1))
+    Tournament.create!(name: "Weekly #{next_index}", date: date, format: "standard",
+                       standard_pool: standard_pools(:twm_por), tier: "other", online: true,
+                       created_by: users(:one))
+  end
+
+  def record(event, archetype, deck: nil, division: "masters")
     TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
-                               player_name: "Player #{next_index}", division: "masters",
+                               player_name: "Player #{next_index}", division: division,
                                created_by: users(:one))
   end
 

@@ -58,12 +58,33 @@ module Archetypes
           link_to archetype_path(archetype), data: { turbo_frame: "_top" } do
             render Ui::ArchetypeBadge.new(archetype: archetype)
           end
+          online_note(counts)
         end
         table.cell { member_cards(archetype) }
         table.cell { number(counts.standings) }
         table.cell { number(counts.events) }
         table.cell { number(counts.lists) }
         table.cell { counts.last_event_on ? localize(counts.last_event_on, format: :long) : DASH }
+      end
+    end
+
+    # Outside the row's link and under the badge, because it qualifies the *row* and not any one
+    # of its four figures: an imported online event contributes a standing, a distinct event, a
+    # list and possibly the latest date, so a note beside "Standings" would imply "Events" is
+    # clean — and on the first archetype to carry both, Events is the figure the blend distorts
+    # most (13 of 16). The detail page is where the composition is broken down per sample; this
+    # only has to stop a reader taking the row for a record of real events, and stop the index's
+    # ordering — by standings count — reading as a statement about attendance.
+    #
+    # Silent at zero, unlike the DASH the number columns print: an em dash there says "nothing
+    # recorded", which is information the reader asked for by looking at the column, while a row
+    # with no online results has nothing to qualify and 61 of 62 archetypes are that row.
+    def online_note(counts)
+      return unless counts.online?
+
+      p(class: "archetype-row-note text-muted") do
+        "Includes #{counts.online_standings} #{'result'.pluralize(counts.online_standings)} " \
+          "from online play."
       end
     end
 

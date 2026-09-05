@@ -3275,6 +3275,13 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   color: var(--ink-500);
 }
 
+/* Sits under the badge in the catalog's first cell and qualifies the whole row, so it must not
+   push the row's height around: colour and size come from .text-muted, and this only takes the
+   <p>'s default margins off inside a table cell. */
+.archetype-row-note {
+  margin: 0.15rem 0 0;
+}
+
 /* Loud enough to be read before the percentages it qualifies, which is the whole point: the
    default view of a freshly imported archetype is very often a three-list sample. */
 .archetype-notice {

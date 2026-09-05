@@ -43,6 +43,47 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The index's four figures all blend paper events with imported online ones — a weekly online
+  # tournament contributes a standing, a distinct event, a list and possibly the "Last event" date
+  # — and the ordering key is the standings count, so the blend also decides which archetype leads
+  # the page. Measured on production when the first online import landed: 106 standings and 16
+  # events for one archetype, of which 13 and 13 came from online play, with nothing on the page
+  # saying so.
+  #
+  # The note qualifies the row rather than any one figure, which is why it is asserted inside the
+  # Archetype cell and not beside a number.
+  test "index says when a row's figures include online play" do
+    archetype = archetypes(:standings_marker)
+    online_event = Tournament.create!(
+      name: "Pumpkaweekly Index", date: Date.new(2026, 4, 18), tier: "other", online: true,
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    online_event.standings.create!(
+      player_name: "JRobrueda", division: "open", placement: 1, archetype: archetype,
+      created_by: @user
+    )
+
+    get archetypes_path
+
+    assert_select ".data-table-row", text: /Standings Marker/ do
+      assert_select ".archetype-row-note", text: /Includes 1 result from online play/
+      # The blend is still counted in, not filtered out — the note names it, it does not hide it.
+      assert_select ".data-table-cell[data-label=Standings]", text: "3"
+    end
+  end
+
+  # The negative control. 61 of the 62 archetypes in production carry no online result, so a note
+  # that renders unconditionally would be noise on almost every row — and this assertion is what
+  # would catch it.
+  test "index says nothing about online play on a row that has none" do
+    get archetypes_path
+
+    assert_select ".data-table-row", text: /Standings Marker/ do
+      assert_select ".archetype-row-note", count: 0
+    end
+    assert_no_match(/online play/, response.body)
+  end
+
   test "index links each row to the archetype's page and escapes the frame" do
     get archetypes_path
 
