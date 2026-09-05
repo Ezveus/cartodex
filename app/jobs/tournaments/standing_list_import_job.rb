@@ -98,6 +98,12 @@ module Tournaments
     # outer rescue exists for Decks::Fetcher raising or a bad decklist, not for a broadcast that
     # merely failed to tell the page about a deck that already landed. Logged rather than
     # silently swallowed: the contributor's page will just not update until they reload.
+    #
+    # Since the sheet is paginated, the replace is also a no-op whenever the row is not on the page
+    # the contributor happens to be looking at — Turbo finds no element and does nothing, while the
+    # "Importing…" item (importing-<import id>, rendered on every page) still clears and the flash
+    # still fires. The common case is covered by the redirect after #create, which lands the member
+    # on the row's own page; the rest is a reload of the right page away.
     def broadcast_success(standing, deck, contributor, import)
       remove_importing_item(contributor, import)
       broadcast_flash(contributor, "flash-notice",

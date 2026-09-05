@@ -33,7 +33,7 @@ module Decks
             div(class: "decks-grid") do
               @decks.each { |deck| render Decks::DeckCard.new(deck: deck, with_actions: false, public_listing: true) }
             end
-            pagination if @pages > 1
+            pagination
           else
             p(class: "empty-state") { "No shared decks yet." }
           end
@@ -71,16 +71,10 @@ module Decks
     # reader was looking at. (The deck rows escape the frame the other way, through
     # Decks::DeckCard's own data-turbo-frame="_top".)
     def pagination
-      nav(class: "cards-pagination") do
-        page_link("← Previous", @page - 1) if @page > 1
-        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
-        page_link("Next →", @page + 1) if @page < @pages
-      end
-    end
-
-    def page_link(label, page)
-      link_to label, shared_decks_path(**@filters.compact, page: page),
-        class: "cards-pagination-link", data: { turbo_action: "replace" }
+      render Ui::Pagination.new(
+        page: @page, pages: @pages, turbo_action: "replace",
+        href: ->(page) { shared_decks_path(**@filters.compact, page: page) }
+      )
     end
   end
 end

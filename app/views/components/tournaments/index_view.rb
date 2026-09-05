@@ -30,7 +30,7 @@ module Tournaments
             render Ui::DataTable.new(columns: %w[Name Date Tier Format]) do |t|
               @tournaments.each { |tournament| row(t, tournament) }
             end
-            pagination if @pages > 1
+            pagination
           else
             p { @query.present? ? "No tournaments match this search." : "No tournaments catalogued yet." }
           end
@@ -72,20 +72,13 @@ module Tournaments
       end
     end
 
-    # Borrows the card index's pager classes, the app's only styled pager. These links sit
-    # inside FRAME_ID, so Turbo navigates the frame and leaves the address bar behind;
-    # turbo_action "replace" is what puts ?page= back into it.
+    # These links sit inside FRAME_ID, so Turbo navigates the frame and leaves the address bar
+    # behind; turbo_action "replace" is what puts ?page= back into it.
     def pagination
-      nav(class: "cards-pagination") do
-        page_link("← Previous", @page - 1) if @page > 1
-        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
-        page_link("Next →", @page + 1) if @page < @pages
-      end
-    end
-
-    def page_link(label, page)
-      link_to label, tournaments_path(q: @query.presence, page: page),
-        class: "cards-pagination-link", data: { turbo_action: "replace" }
+      render Ui::Pagination.new(
+        page: @page, pages: @pages, turbo_action: "replace",
+        href: ->(page) { tournaments_path(q: @query.presence, page: page) }
+      )
     end
   end
 end

@@ -3,12 +3,15 @@ module Tournaments
   # entry count, no deck anybody played. The only thing it knows about its reader is whether
   # they have a participation of their own to go to.
   class ShowView < ApplicationComponent
-    def initialize(tournament:, my_entries: [], standings: [], can_record: false,
-                   can_record_another: false, can_edit: false, can_edit_standings: false,
-                   viewer: nil, pending_standing_imports: [], claimable_entries: [])
+    def initialize(tournament:, my_entries: [], standings: [], sheet_page: 1, sheet_pages: 1,
+                   can_record: false, can_record_another: false, can_edit: false,
+                   can_edit_standings: false, viewer: nil, pending_standing_imports: [],
+                   claimable_entries: [])
       @tournament = tournament
       @my_entries = my_entries
       @standings = standings
+      @sheet_page = sheet_page
+      @sheet_pages = sheet_pages
       @can_record = can_record
       @can_record_another = can_record_another
       @can_edit = can_edit
@@ -60,6 +63,12 @@ module Tournaments
           render Tournaments::Standings::Table.new(
             standings: @standings, viewer: @viewer,
             can_edit: @can_edit_standings, claimable_entries: @claimable_entries
+          )
+          # No turbo_action: this pager is not inside a frame, so the link navigates and updates
+          # the address bar by itself — see Ui::Pagination for why "replace" would break Back.
+          render Ui::Pagination.new(
+            page: @sheet_page, pages: @sheet_pages,
+            href: ->(page) { tournament_path(@tournament, page: page) }
           )
         else
           p(class: "empty-state") { "No standings recorded for this event yet." }

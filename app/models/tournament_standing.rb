@@ -50,13 +50,51 @@ class TournamentStanding < ApplicationRecord
   # detonating a member's own deck through a standings delete.
   before_destroy :destroy_ownerless_deck
 
-  # The sheet's order: ranked rows first, then the unplaced, then alphabetically. `placement IS
-  # NULL` is what puts the unplaced last — SQLite sorts NULL *first* on a plain ASC. The index on
-  # (tournament_id, division, placement) serves the equality and the division, not the computed
-  # expression.
+  # Play! Pokémon reads the divisions junior, senior, masters — DIVISIONS' own order, and not the
+  # alphabetical one a plain `ORDER BY division` gives, which is why Standings::Table has always
+  # regrouped them for display. Ordering them the same way in SQL is what makes the sheet
+  # paginable at all: with the two orders disagreeing, a page boundary drawn in SQL falls
+  # somewhere the reader never sees, and page 2 of a Worlds sheet would open in the middle of a
+  # division that page 1 appeared to have finished.
+  #
+  # An Arel CASE rather than an interpolated Arel.sql string. The values are Ruby symbols from
+  # TournamentProfile::DIVISIONS, so neither form can carry user input — but the interpolated one
+  # is indistinguishable from one that could, and Brakeman (a CI check, clean until now) says so.
+  # Arel quotes them itself and leaves nothing to read as a warning.
+  def self.division_order
+    DIVISIONS.each_with_index
+      .inject(Arel::Nodes::Case.new(arel_table[:division])) { |node, (division, index)|
+        node.when(division).then(index)
+      }.else(DIVISIONS.size)
+  end
+
+  # The sheet's page size. It lives on the model rather than on either controller because it is a
+  # fact about the sheet and two copies would drift: TournamentsController renders a page with it
+  # and Tournaments::StandingsController works out which page to send an editor back to, and the
+  # day one changed, a member who added a row would land on a page that does not hold it.
+  SHEET_PER_PAGE = 50
+
+  # The sheet's order: divisions as players read them, then ranked rows, then the unplaced, then
+  # alphabetically. `placement IS NULL` is what puts the unplaced last — SQLite sorts NULL *first*
+  # on a plain ASC. The index on (tournament_id, division, placement) still serves the equality,
+  # but the CASE costs its `division` term: measured on a 3000-row event, the old order sorted
+  # only the trailing terms ("USE TEMP B-TREE FOR LAST 3 TERMS OF ORDER BY") while this one sorts
+  # all of them. Paid knowingly — it is one event's field, and page_of over 3000 rows measures
+  # 0.4 ms — and it buys a page boundary the reader can see.
   scope :as_a_sheet, -> {
-    order(:division, Arel.sql("placement IS NULL"), :placement, :player_name)
+    order(division_order.asc, Arel.sql("placement IS NULL"), :placement, :player_name)
   }
+
+  # Which page of its own event's sheet this row falls on. One pluck of ids over a bounded set —
+  # one event's field — rather than a COUNT of the rows that sort before it: that predicate would
+  # have to spell out the division CASE and `placement IS NULL` a second time, and the two copies
+  # would disagree the first time as_a_sheet changed.
+  def self.page_of(standing)
+    position = where(tournament_id: standing.tournament_id).as_a_sheet.pluck(:id).index(standing.id)
+    return 1 if position.nil?
+
+    (position / SHEET_PER_PAGE) + 1
+  end
 
   # The W-L-T as players write it, or nothing at all when no game was recorded. A missing half of
   # a partially typed record reads better as 0 than as a blank cell beside two numbers.

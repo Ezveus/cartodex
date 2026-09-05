@@ -144,6 +144,33 @@ class TournamentStandingTest < ActiveSupport::TestCase
     assert_equal %w[First Second Unplaced], names
   end
 
+  # Read by both controllers that put a member back on the sheet after a write. It counts in the
+  # sheet's own order, which is why it asks as_a_sheet rather than reproducing the ordering: a
+  # COUNT predicate would have to spell out the division CASE and `placement IS NULL` again, and
+  # the copy would go stale the first time the scope changed.
+  test "a row knows which page of its own sheet it falls on" do
+    first = build_standing(player_name: "First", placement: 1)
+    first.save!
+    last = nil
+    (2..TournamentStanding::SHEET_PER_PAGE).each do |i|
+      last = build_standing(player_name: "Player #{i}", placement: i)
+      last.save!
+    end
+
+    assert_equal 1, TournamentStanding.page_of(first)
+    # The fixtures put two more masters rows on this event, so the row placed SHEET_PER_PAGE-th is
+    # already over the boundary.
+    assert_equal 2, TournamentStanding.page_of(last)
+  end
+
+  test "a row that is no longer on its sheet reports page one" do
+    standing = build_standing(player_name: "Gone", placement: 1)
+    standing.save!
+    standing.destroy!
+
+    assert_equal 1, TournamentStanding.page_of(standing)
+  end
+
   test "destroying a standing destroys its ownerless field list" do
     standing = build_standing(deck: decks(:field_list))
     standing.save!
