@@ -20,11 +20,64 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
       } }
     end
 
-    assert_redirected_to tournament_path(@tournament)
     standing = TournamentStanding.order(:id).last
+    assert_redirected_to_row standing
     assert_equal "Brock", standing.player_name
     assert_equal "brock", standing.player_name_normalized
     assert_equal users(:two), standing.created_by
+  end
+
+  # Since the sheet grew a pager, "back to the event" is the top of page one — which need not hold
+  # the row that was just written. A member who records the fifty-first standing has to be answered
+  # with the page it is on, or their own row is invisible and they will type it again.
+  test "recording a row on the second page of the sheet lands on that page" do
+    TournamentStanding::SHEET_PER_PAGE.times do |i|
+      @tournament.standings.create!(player_name: "Filler #{i}", division: "masters", placement: i + 1,
+        archetype: archetypes(:standings_marker))
+    end
+
+    post tournament_standings_path(@tournament), params: { tournament_standing: {
+      player_name: "Latecomer", division: "masters", placement: 900,
+      archetype_id: archetypes(:standings_marker).id
+    } }
+
+    standing = TournamentStanding.find_by!(player_name: "Latecomer")
+    assert_equal 2, TournamentStanding.page_of(standing)
+    assert_redirected_to tournament_path(@tournament, page: 2,
+      anchor: Tournaments::Standings::Row.dom_id(standing))
+  end
+
+  # Saving returns the member to their row; cancelling should not cost them their place. A new row
+  # has no place yet, so its Cancel still points at the event.
+  test "Cancel returns to the row being edited, not to the top of the sheet" do
+    get edit_tournament_standing_path(@tournament, @standing)
+
+    assert_select "a.btn-secondary[href=?]",
+      tournament_path(@tournament, **Tournaments::Standings::Row.sheet_position(@standing)), text: "Cancel"
+
+    get new_tournament_standing_path(@tournament)
+
+    assert_select "a.btn-secondary[href=?]", tournament_path(@tournament), text: "Cancel"
+  end
+
+  # Deleting the only row of the last page leaves a ?page= that no longer exists. #show clamps what
+  # it *renders*, so the page looks right — but the address bar keeps saying page two, and a reload
+  # or a shared link repeats it.
+  test "deleting the last row of the last page does not leave a page behind" do
+    # Two short of a full page, because the fixtures already put two rows on this event: the row
+    # created next is then the fifty-first and the only one on page two.
+    (TournamentStanding::SHEET_PER_PAGE - 2).times do |i|
+      @tournament.standings.create!(player_name: "Filler #{i}", division: "masters", placement: i + 1,
+        archetype: archetypes(:standings_marker))
+    end
+    last = @tournament.standings.create!(player_name: "Only On Page Two", division: "masters",
+      placement: 900, archetype: archetypes(:standings_marker))
+    assert_equal 2, TournamentStanding.page_of(last)
+
+    delete tournament_standing_path(@tournament, last)
+
+    # Page one, and the bare URL: page two no longer exists.
+    assert_redirected_to tournament_path(@tournament)
   end
 
   # Wiki governance, decision 3: correcting a public record is not a property question.
@@ -32,7 +85,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     patch tournament_standing_path(@tournament, @standing),
       params: { tournament_standing: { placement: 3 } }
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row @standing
     assert_equal 3, @standing.reload.placement
 
     assert_difference -> { TournamentStanding.count }, -1 do
@@ -53,7 +106,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
       placement: 5, tournament_entry_id: tournament_entries(:one).id
     } }
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row @standing
     assert_equal 5, @standing.reload.placement
     assert_nil @standing.tournament_entry_id
   end
@@ -89,7 +142,10 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_entity
     assert_select ".form-hint", text: /already has a standing/
-    assert_select ".form-hint a[href=?]", tournament_path(@tournament)
+    # At the clashing row, not at the event: telling a member their name is taken and then landing
+    # them on a page that does not hold the row is the whole hint wasted.
+    assert_select ".form-hint a[href=?]",
+      tournament_path(@tournament, **Tournaments::Standings::Row.sheet_position(tournament_standings(:giovanni_masters)))
   end
 
   test "new prefills from the reader's own participation" do
@@ -121,7 +177,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row TournamentStanding.order(:id).last
     assert_equal tournament_entries(:one), TournamentStanding.order(:id).last.tournament_entry
   end
 
@@ -160,7 +216,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     post claim_tournament_standing_path(@tournament, @standing,
       tournament_entry_id: tournament_entries(:one).id)
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row @standing
     assert_equal tournament_entries(:one), @standing.reload.tournament_entry
   end
 
@@ -193,7 +249,9 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     post claim_tournament_standing_path(@tournament, tournament_standings(:ash_masters),
       tournament_entry_id: tournament_entries(:one).id)
 
-    assert_redirected_to tournament_path(@tournament)
+    # The refused row is still standing, so the alert has to arrive next to it rather than at the
+    # top of page one.
+    assert_redirected_to_row tournament_standings(:ash_masters)
     assert_match(/already linked/, flash[:alert])
     assert_nil tournament_standings(:ash_masters).reload.tournament_entry_id
     assert_equal tournament_entries(:one), @standing.reload.tournament_entry
@@ -222,7 +280,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
 
     delete unclaim_tournament_standing_path(@tournament, @standing)
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row @standing
     assert_nil @standing.reload.tournament_entry_id
   end
 
@@ -253,7 +311,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
 
     delete unclaim_tournament_standing_path(@tournament, @standing)
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row @standing
     assert_nil @standing.reload.tournament_entry_id
   end
 
@@ -266,7 +324,7 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     post claim_tournament_standing_path(@tournament, tournament_standings(:ash_masters),
       tournament_entry_id: tournament_entries(:one).id)
 
-    assert_redirected_to tournament_path(@tournament)
+    assert_redirected_to_row tournament_standings(:ash_masters)
     assert_match(/masters field/, flash[:alert])
     assert_nil tournament_standings(:ash_masters).reload.tournament_entry_id
   end
@@ -383,6 +441,15 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  # Every write that leaves a row standing now answers with the page that row falls on, anchored to
+  # the row itself: on a sheet with a pager, plain `tournament_path` is the top of page one, which
+  # is not where the member was and need not hold what they just did.
+  def assert_redirected_to_row(standing)
+    page = TournamentStanding.page_of(standing)
+    assert_redirected_to tournament_path(@tournament, page: (page unless page == 1),
+      anchor: Tournaments::Standings::Row.dom_id(standing))
+  end
 
   def get_standing_form
     get new_tournament_standing_path(@tournament)

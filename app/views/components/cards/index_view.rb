@@ -129,25 +129,10 @@ module Cards
     end
 
     def pagination_controls
-      return unless @pages && @pages > 1
-
-      div(class: "cards-pagination") do
-        if @page > 1
-          link_to cards_path(**search_query_params, page: @page - 1),
-                  class: "cards-pagination-link",
-                  data: { turbo_action: "replace" } do
-            "← Previous"
-          end
-        end
-        span(class: "cards-pagination-info") { "Page #{@page} / #{@pages}" }
-        if @page < @pages
-          link_to cards_path(**search_query_params, page: @page + 1),
-                  class: "cards-pagination-link",
-                  data: { turbo_action: "replace" } do
-            "Next →"
-          end
-        end
-      end
+      render Ui::Pagination.new(
+        page: @page, pages: @pages, turbo_action: "replace",
+        href: ->(page) { cards_path(**search_query_params, page: page) }
+      )
     end
 
     def search_query_params

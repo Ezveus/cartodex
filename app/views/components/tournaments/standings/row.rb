@@ -9,6 +9,19 @@ module Tournaments
 
       def self.dom_id(standing) = "standing-#{standing.id}"
 
+      # Where this row lives in the sheet, as options for tournament_path. Three callers need it —
+      # the controller's redirects after a write, the duplicate-name hint on the form, and Cancel —
+      # and each of them used to point at the event, which was the same place as the row until the
+      # sheet grew a pager. It lives beside dom_id because the anchor *is* the row's identity, and
+      # in one place because three copies of "which page is it on" drift.
+      #
+      # nil for page one, so the ordinary case keeps the bare, shareable URL it has always had:
+      # url_for drops a nil param.
+      def self.sheet_position(standing)
+        page = TournamentStanding.page_of(standing)
+        { page: (page unless page == 1), anchor: dom_id(standing) }
+      end
+
       def initialize(standing:, viewer: nil, can_edit: false, claimable_entries: [])
         @standing = standing
         @viewer = viewer

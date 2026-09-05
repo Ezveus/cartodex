@@ -450,13 +450,14 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
       "expected the better placement first"
   end
 
-  # Every fixture row and every record_standing row is division: "masters", so a regression to
-  # grouped.keys.each — which Hash order would give as junior, masters, senior, alphabetical —
-  # would go completely undetected by any test that only checks each heading is present
-  # somewhere. Junior and senior are added here (not to fixtures, to stay clear of the other
-  # tests and the system-suite obligation a fixture change would carry); the existing masters
-  # fixtures are what actually separates age order from alphabetical, since junior/senior sort
-  # the same way under both rules.
+  # This pins the *view's* half of the rule and only that: Standings::Table iterates DIVISIONS and
+  # looks each up in group_by, so these headings come out in age order whatever SQL did — reverting
+  # as_a_sheet to alphabetical leaves this test green (checked). The SQL half is pinned by "a page
+  # boundary falls where the reader expects it", below, which is the only place the two can be told
+  # apart. Junior and senior are added here (not to fixtures, to stay clear of the other tests and the
+  # system-suite obligation a fixture change would carry); the existing masters fixtures are what
+  # actually separates age order from alphabetical, since junior/senior sort the same way under
+  # both rules.
   test "the sheet lists divisions in Play! Pokémon's age order, not alphabetical" do
     archetype = archetypes(:standings_marker)
     @tournament.standings.create!(player_name: "Junior Player", division: "junior", archetype: archetype)
@@ -488,6 +489,78 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".data-table-row", text: /Giovanni/ do
       assert_select "a", text: "Decklist", count: 0
     end
+  end
+
+  # A hand-typed sheet is a handful of rows and an imported one is a Worlds field. The page is
+  # public and deliberately carries no rate limit ("one page load per click"), which was only ever
+  # safe while nothing could make one click expensive.
+  test "the sheet renders one page at a time" do
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE + 5)
+
+    get tournament_path(@tournament)
+
+    assert_equal TournamentStanding::SHEET_PER_PAGE, css_select(".tournament-standings .data-table-row").size
+    assert_select ".cards-pagination-info", text: "Page 1 / 2"
+  end
+
+  test "the second page holds the rest of the sheet" do
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE + 5)
+    first_page_players = page_players(1)
+
+    players = page_players(2)
+
+    assert_equal 7, players.size # 5 added + the two fixture rows, which sort last by placement
+    assert_empty players & first_page_players
+  end
+
+  # The URL is public, so something will try `?page=99`. Running off the end renders an empty
+  # table under "No standings recorded for this event yet.", which is false.
+  test "a page past the end of the sheet shows the last page rather than an empty one" do
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE + 5)
+
+    get tournament_path(@tournament, page: 99)
+
+    assert_response :success
+    assert_select ".cards-pagination-info", text: "Page 2 / 2"
+    assert_select "p.empty-state", count: 0
+  end
+
+  # The catalog is public and paginated too, and its out-of-range page told the same lie the
+  # sheet's did: "No tournaments catalogued yet." over a catalog that is not empty.
+  test "a page past the end of the catalog shows the last page rather than an empty one" do
+    get tournaments_path(page: 99)
+
+    assert_response :success
+    assert_select ".data-table-row", minimum: 1
+    assert_select "p", text: "No tournaments catalogued yet.", count: 0
+  end
+
+  test "a sheet that fits on one page has no pager" do
+    get tournament_path(@tournament)
+
+    assert_select ".cards-pagination", count: 0
+  end
+
+  # The order the divisions are read in lives in SQL now, and this is why it had to move there:
+  # `ORDER BY division` is alphabetical (junior, masters, senior) while players read junior,
+  # senior, masters, so a page boundary drawn in SQL falls somewhere the reader never sees — page
+  # two of a Worlds sheet opening in the middle of a division page one appeared to finish.
+  #
+  # Asserted on the rows and not on the headings, because the headings cannot see this: the table
+  # regroups whatever it is handed into DIVISIONS order, so both rules print "Senior" above
+  # "Masters" on whichever page their rows landed. Thirty of each, so the two orders disagree
+  # about which side of the boundary the seniors fall on: read as players do they all fit on page
+  # one, read alphabetically twelve of them are pushed onto page two behind the masters.
+  test "a page boundary falls where the reader expects it, not where the alphabet does" do
+    fill_sheet(30, division: "senior", prefix: "Senior")
+    fill_sheet(30, division: "masters", prefix: "Master")
+
+    page_one = page_players(1)
+    page_two = page_players(2)
+
+    assert_equal 30, rows_naming(page_one, "Senior"), "page one should hold every senior"
+    assert_equal 0, rows_naming(page_two, "Senior"),
+      "a senior was pushed onto page two, which is what the alphabetical order does"
   end
 
   test "an event with no standings says so with a class the stylesheet defines" do
@@ -641,6 +714,25 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   #
   # Correction to the brief: its version of this helper omits type_symbol/retreat_cost, which
   # Card requires for card_type: "Pokémon" and raises RecordInvalid without.
+  # Deliberately lighter than record_standing: these tests care about how many rows a page holds,
+  # not about what is in them, and record_standing builds a card, an archetype, a user and a deck
+  # for every single row.
+  def fill_sheet(count, division: "masters", prefix: "Player")
+    count.times do |i|
+      @tournament.standings.create!(
+        player_name: "#{prefix} #{i}", division: division, placement: i + 1,
+        archetype: archetypes(:standings_marker)
+      )
+    end
+  end
+
+  def rows_naming(players, prefix) = players.count { |row| row.include?(prefix) }
+
+  def page_players(page)
+    get tournament_path(@tournament, page: page)
+    css_select(".tournament-standings .data-table-row").map(&:text)
+  end
+
   def record_standing(index)
     card = Card.create!(
       name: "Quiet Pokémon #{index}", set_name: "QS#{index}", set_number: "1",

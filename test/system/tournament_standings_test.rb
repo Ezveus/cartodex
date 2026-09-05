@@ -229,4 +229,27 @@ class TournamentStandingsTest < ApplicationSystemTestCase
     assert_no_selector "form.deck-form"
     assert_no_selector ".deck-actions-dropdown"
   end
+
+  # An imported Worlds field is a thousand rows on a public page that carries no rate limit, so the
+  # sheet pages. The pager is a plain link and not a Turbo Frame — nothing here fires on its own,
+  # and a frame would capture every link inside the rows — which is exactly what this checks: the
+  # click has to be an ordinary navigation that lands on page two.
+  test "an oversized sheet pages, and the pager walks it" do
+    TournamentStanding::SHEET_PER_PAGE.times do |i|
+      @tournament.standings.create!(player_name: "Filler #{i}", division: "masters",
+        placement: i + 1, archetype: archetypes(:standings_marker))
+    end
+    @tournament.standings.create!(player_name: "Last In Line", division: "masters",
+      placement: 900, archetype: archetypes(:standings_marker))
+
+    visit tournament_path(@tournament)
+
+    assert_text "Page 1 / 2"
+    assert_no_text "Last In Line"
+
+    click_on "Next →"
+
+    assert_text "Page 2 / 2"
+    assert_text "Last In Line"
+  end
 end
