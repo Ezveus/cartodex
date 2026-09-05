@@ -46,12 +46,29 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
     assert_match "doublade_fp", printed
   end
 
+  # The fingerprint assertion is the load-bearing half: the task's only write path is
+  # update_column, which does not bump updated_at in this Rails version, so a
+  # maximum(:updated_at) assertion here would pass identically whether the resolved assignment was
+  # correctly skipped or wrongly moved onto some other fingerprint — verified directly:
+  # update_column-ing this very row to a wrong fingerprint left maximum(:updated_at) unchanged.
+  # The printed-output assertions back the test's other claim, that a clean run says nothing
+  # beyond its own moved count. The rescue exists because a SystemExit here would itself be the
+  # bug (a clean run must not abort) and minitest treats SystemExit as a passthrough it never
+  # turns into a failure — left unrescued, a regression here would kill the whole suite instead of
+  # failing this one test.
   test "it says nothing and changes nothing when every assignment resolves" do
-    @label.assignments.create!(fingerprint: @card.fingerprint, card: @card, source: "imported")
+    assignment = @label.assignments.create!(fingerprint: @card.fingerprint, card: @card, source: "imported")
 
-    assert_no_changes "CardLabelAssignment.maximum(:updated_at)" do
-      run_task
+    begin
+      assert_no_changes -> { assignment.reload.fingerprint } do
+        run_task
+      end
+    rescue SystemExit
+      flunk "resync_fingerprints reported something for an assignment that already resolved:\n#{printed}"
     end
+
+    assert_match "Moved 0 assignments.", printed
+    assert_no_match "could not be moved", printed
   end
 
   private
