@@ -15,7 +15,9 @@ module Admin
     UNRETRYABLE_REASONS = {
       "standing_list" => "A tournament field list cannot be retried: its decklist text is not stored.",
       "limitless_standings" => "A bulk standings import cannot be retried: the run's filters are not stored. " \
-                               "Run it again from the import form."
+                               "Run it again from the import form.",
+      "card_labels" => "A card-label import cannot be retried: run it again from the label, which " \
+                       "is where the search token lives."
     }.freeze
 
     def index
