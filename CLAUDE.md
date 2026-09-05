@@ -346,13 +346,11 @@ deck id must match `/\A\d+\z/` before it is interpolated into a URL.
 
 **Still out of scope, and worth knowing:** `play.limitlesstcg.com`'s online "best finishes" (they
 are online-only tournaments with no age divisions, and cataloguing them would fill the public
-`/tournaments` list with events no member attended); attendance and W/L/T, which the results page
-does not carry; and **pagination of `tournaments#show`'s standings sheet**, which renders
-`as_a_sheet` with no limit and no rate limit. That is fine for a hand-typed sheet and stops being
-fine once several archetypes have been imported into one Worlds event — it is a prerequisite for
-using this feature at full scale. A sheet imported from one archetype's page is also a *partial*
-sheet, and nothing says so; that is a property it shares with every hand-typed sheet, and marking
-one complete would mean knowing when it is.
+`/tournaments` list with events no member attended); and attendance and W/L/T, which the results
+page does not carry. Pagination of `tournaments#show`'s sheet *was* the prerequisite named here and
+ships alongside this — see the paragraph on `SHEET_PER_PAGE` above. A sheet imported from one
+archetype's page is still a *partial* sheet and nothing says so; that is a property it shares with
+every hand-typed sheet, and marking one complete would mean knowing when it is.
 
 `StandardPool` is one period of the rotating Standard calendar: two `CardSet` bounds — the oldest legal set, moved by the annual rotation, and the newest, moved by every release — plus the legal `regulation_marks` and **two** dates. `(first_card_set_id, last_card_set_id)` is UNIQUE because that pair *is* the pool's name, `TEF-PBL`, which is what players call it. `released_on` says the cards exist and drives `StandardPool.current`, the anchor a new deck is pre-selected to; `legal_on` says Play! Pokémon considers the pool legal and drives `StandardPool.at(date)`, which is what a tournament asks — a set is tournament-legal about two weeks after it ships, so neither date derives from the other. `Deck` and `Tournament` each carry a `standard_pool_id`, required by validation when the format is `standard` and cleared otherwise (the `other_format_name` pattern): **only Standard rotates**, the other three formats are eternal and have no anchor. The anchor is **pinned** — nothing moves it automatically, and `Ui::StandardPoolNotice` merely invites the user to. `has_many :decks, dependent: :restrict_with_error`, unlike `Archetype`'s `:nullify`, because a NULL anchor on a Standard deck is unsavable on its next edit. Deck-construction rules are deliberately **not** here: see #61.
 

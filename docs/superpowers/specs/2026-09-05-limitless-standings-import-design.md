@@ -296,5 +296,10 @@ when it is complete, which nothing does.
 **`tournaments#show` renders its standings sheet unpaginated** (`@tournament.standings.as_a_sheet`,
 no limit, no pager, and deliberately no rate limit because it is "one page load per click"). That
 is fine for a hand-typed sheet and stops being fine once ten archetypes have been imported into one
-Worlds event. Pagination there is a prerequisite for using this feature at full scale, and it is
-not built here.
+Worlds event.
+
+*Resolved before merge.* It was built after all and merged into this branch, because a prerequisite
+that lands separately is a window in which the feature is unusable at the scale it was written for.
+The sheet pages at `TournamentStanding::SHEET_PER_PAGE`; `as_a_sheet` had to order the divisions in
+SQL for a page boundary to fall where the reader sees it, and everything that points at a row now
+points at the page it is on. See CLAUDE.md's paragraph on the sheet.
