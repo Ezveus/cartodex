@@ -430,6 +430,58 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "open", standing.division
   end
 
+  # §4 fixed the *edit* case — a select carrying the row's own value — and the new-row case is a
+  # different door onto the same lie: a new standing takes its division from the reader's
+  # TournamentProfile or from DEFAULT_DIVISION, neither of which can produce "open", so an online
+  # event's form offered junior/senior/masters and a member completing an imported sheet filed an
+  # online result under an age division that Archetypes::Performance#by_division then reports as
+  # fact. The options are asked of the event: an online one has "open" and no age divisions.
+  test "the new-standing form on an online event offers Open and no age division" do
+    event = online_event
+
+    get new_tournament_standing_path(event)
+
+    assert_response :success
+    assert_select "select[name=?] option", "tournament_standing[division]", count: 1
+    assert_select "select[name=?] option[selected][value=?]",
+      "tournament_standing[division]", "open", count: 1
+  end
+
+  # The negative control, both halves: a paper event must still be offered its three age
+  # divisions and must never be offered "open" — the rule §4 wrote, which this change must not
+  # trade for the mirror image of the same lie.
+  test "the new-standing form on a paper event still offers the three age divisions and not Open" do
+    get new_tournament_standing_path(@tournament)
+
+    assert_response :success
+    assert_select "select[name=?] option", "tournament_standing[division]", count: 3
+    assert_select "select[name=?] option[value=?]",
+      "tournament_standing[division]", "open", count: 0
+  end
+
+  # The end-to-end half, and the value posted is read off the *rendered* form the way a browser
+  # would choose it — the pre-selected option, or the first when nothing is pre-selected — rather
+  # than hand-built, since a hand-built "open" would pass with the bug in place.
+  test "a member adding a row to an imported online sheet files it under no age division" do
+    event = online_event
+
+    get new_tournament_standing_path(event)
+    options = css_select("select[name='tournament_standing[division]'] option")
+    assert_not_empty options
+    chosen = options.find { |option| option["selected"] } || options.first
+
+    assert_difference -> { TournamentStanding.count }, 1 do
+      post tournament_standings_path(event), params: { tournament_standing: {
+        player_name: "Aruarupokeka", division: chosen["value"], placement: 3,
+        archetype_id: archetypes(:ogerpon).id
+      } }
+    end
+
+    standing = event.standings.order(:id).last
+    assert_equal "open", standing.division
+    assert_not_includes TournamentStanding::AGE_DIVISIONS, standing.division
+  end
+
   test "the event page shows the reader's field-list import in flight" do
     @user.imports.create!(kind: "standing_list", label: "Brock's list", tournament: @tournament)
 
@@ -485,16 +537,20 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     Nokogiri::HTML(response.body)
   end
 
-  # What the online import writes: an event that is `online`, forced to tier "other", carrying an
-  # open field size, and a row in the "open" division. Built here rather than as a fixture because
-  # public_access_test.rb asserts hard record counts.
-  def online_standing
-    event = Tournament.create!(
+  # What the online import writes: an event that is `online`, forced to tier "other" and carrying
+  # an open field size. Built here rather than as a fixture because public_access_test.rb asserts
+  # hard record counts.
+  def online_event
+    Tournament.create!(
       name: "Pumpkaweekly #12", date: Date.new(2026, 4, 18), tier: "other",
       format: "other", other_format_name: "Standard (Online)", online: true,
       open_participant_count: 259
     )
-    event.standings.create!(
+  end
+
+  # One row of such an event's imported sheet, in the "open" division.
+  def online_standing
+    online_event.standings.create!(
       player_name: "JRobrueda", division: "open", placement: 2,
       wins: 8, losses: 0, ties: 0, archetype: archetypes(:standings_marker)
     )

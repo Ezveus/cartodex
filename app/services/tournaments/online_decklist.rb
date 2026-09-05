@@ -6,12 +6,22 @@ require "nokogiri"
 # where a printing lives. The page (https://play.limitlesstcg.com/tournament/<id>/player/<name>/decklist)
 # renders three columns, each headed with its own subtotal:
 #
-#   <div class="decklist"><div class="column"><div class="cards">
-#     <div class="heading">Pokémon (19)</div>
-#     <p><a href="https://limitlesstcg.com/cards/MEG/104">4 Mega Kangaskhan ex (MEG-104)</a></p>
-#     ...
-#     <div class="heading">Trainer (27)</div>
-#     <p><a href="https://limitlesstcg.com/cards/SCR/133">4 Crispin</a></p>
+#   <div class="decklist">
+#     <div class="column"><div class="cards">
+#       <div class="heading">Pokémon (19)</div>
+#       <p><a href="https://limitlesstcg.com/cards/MEG/104">4 Mega Kangaskhan ex (MEG-104)</a></p>
+#       ...
+#     </div></div>
+#     <div class="column"><div class="cards">
+#       <div class="heading">Trainer (27)</div>
+#       <p><a href="https://limitlesstcg.com/cards/SCR/133">4 Crispin</a></p>
+#       ...
+#     </div></div>
+#   </div>
+#
+# One heading per column, which is what #heading's `at_css` and the per-column subtotal check both
+# assume — the nesting is spelled out above rather than elided because a sketch showing two
+# headings inside one `.cards` describes a page this parser would always refuse.
 #
 # Only the **Pokémon** lines print a "(SET-NUM)" in their visible text. A Trainer reads "4 Crispin"
 # and an Energy "7 Grass Energy", with no printing at all — it exists only in the href. So the

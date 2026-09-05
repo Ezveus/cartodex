@@ -56,6 +56,13 @@ module Tournaments
       div(class: "tournament-standings") do
         div(class: "admin-header") do
           h2 { "Standings" }
+          # "Add a standing" survives on an online event, unlike the three participation
+          # invitations above, and the difference is the record each one creates: a participation
+          # is an age-division Play! Pokémon record that means nothing online and makes the event
+          # undeletable, while a standing is wiki-governed public data on a sheet that arrives
+          # imported, de-duplicated and therefore partial — with Edit and Delete already on every
+          # row. Tournaments::Standings::Form#offered_divisions is what keeps the row honest once
+          # the member is in the form: an online event offers "open" and no age division.
           if @can_edit_standings
             link_to "Add a standing", new_tournament_standing_path(@tournament),
               class: "btn btn-primary btn-sm"

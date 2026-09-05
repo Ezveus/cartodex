@@ -54,8 +54,8 @@ class Tournaments::StandingsImportPlan < ApplicationService
   end
 
   EventPlan = Struct.new(
-    :name, :date, :tier, :format, :other_format_name, :standard_pool, :online, :participant_count,
-    :tournament, :blocked_reason, :similar_tournaments, :rows,
+    :name, :date, :external_key, :tier, :format, :other_format_name, :standard_pool, :online,
+    :participant_count, :tournament, :blocked_reason, :similar_tournaments, :rows,
     keyword_init: true
   ) do
     def blocked? = blocked_reason.present?
@@ -85,11 +85,11 @@ class Tournaments::StandingsImportPlan < ApplicationService
   end
 
   def call
-    groups = grouped_rows
-    @catalogued = load_catalogued(groups.keys)
+    groups = grouped_rows.values
+    @catalogued = load_catalogued(groups.flatten)
     @standings = load_standings
 
-    events = groups.map { |(name, date), rows| build_event(name, date, rows) }
+    events = groups.map { |rows| build_event(rows) }
     Plan.new(events: events.sort_by { |event| event.date }.reverse, max_rows: @max_rows)
   end
 
@@ -108,10 +108,10 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # reason: recognising the events it created last time is the whole of the idempotence property —
   # a re-import that could not find them would plan every surviving row as :create and lose to the
   # UNIQUE key row by row instead of skipping.
-  def load_catalogued(keys)
-    return [] if keys.empty?
+  def load_catalogued(rows)
+    return [] if rows.empty?
 
-    dates = keys.map(&:last)
+    dates = rows.map(&:event_date)
     scope = @online ? Tournament.where(online: true) : Tournament.catalogued
     scope.with_standard_pool
       .where(date: (dates.min - SIMILAR_DATE_WINDOW)..(dates.max + SIMILAR_DATE_WINDOW)).to_a
@@ -124,17 +124,43 @@ class Tournaments::StandingsImportPlan < ApplicationService
     TournamentStanding.where(tournament_id: ids).group_by(&:tournament_id)
   end
 
+  # An event is a name and a date for the paper source, and its own Limitless id for the online
+  # one. Grouping an online run on the name and date is what merged two genuinely different
+  # tournaments into a single event: online names are arbitrary and repeat weekly
+  # ("Pumpkaweekly", "CrownOfSpain #4"), so one day really does hold two of them — after which
+  # the merged event takes its attendance from whichever row came first and refuses the other
+  # event's rows for a placement above a field size that was never theirs.
+  #
+  # The id *replaces* the pair rather than joining it: an id is an identity, and a key holding
+  # both would split one event again the moment two of its rows spelled its name differently. A
+  # source that publishes no id per row keys on the pair, which is exactly what the paper source
+  # has always done.
   def grouped_rows
     filtered = @rows
     filtered = filtered.select { |row| @event_filters.any? { |f| row.event_name.downcase.include?(f) } } if
       @event_filters.any?
 
-    filtered.group_by { |row| [ row.event_name, row.event_date ] }
+    filtered.group_by { |row| external_key_of(row) || [ row.event_name, row.event_date ] }
   end
 
-  def build_event(name, date, rows)
+  # Only an online run has one. Asking the row rather than branching on @online for the same
+  # reason #participant_count does: the two sources share a contract of eight fields and the
+  # online one adds to it.
+  def external_key_of(row)
+    return unless @online
+
+    row.event_key.presence if row.respond_to?(:event_key)
+  end
+
+  # The name and the date are read off the group's first row rather than off its key, because for
+  # an online run the key is the id alone. Which row that is decides nothing: they are the rows of
+  # one event, and the plan renders the name only.
+  def build_event(rows)
+    name = rows.first.event_name
+    date = rows.first.event_date
+    external_key = external_key_of(rows.first)
     normalized = name.squish.downcase
-    tournament = @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
+    tournament = find_catalogued(normalized, date, external_key)
     derived = classification(rows, date)
     # Taken whole from an existing event, or derived whole — never field by field. Mixing them
     # produces records like format "standard" carrying an other_format_name, which is meaningless
@@ -142,7 +168,7 @@ class Tournaments::StandingsImportPlan < ApplicationService
     settled = tournament ? classification_of(tournament) : derived
 
     event = EventPlan.new(
-      name: name, date: date, tournament: tournament,
+      name: name, date: date, external_key: external_key, tournament: tournament,
       tier: tournament&.tier || tier_for(name),
       online: @online, participant_count: participant_count(rows),
       **settled,
@@ -152,6 +178,17 @@ class Tournaments::StandingsImportPlan < ApplicationService
     )
     event.rows = build_rows(event, capped(rows))
     event
+  end
+
+  # An online event is looked up by the id the source gave it and never by its name — the run
+  # that created it wrote that id, so this is what makes a re-import find its own events and skip
+  # them instead of planning every row :create and losing to the UNIQUE key one at a time.
+  # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
+  # half.
+  def find_catalogued(normalized, date, external_key)
+    return @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
+
+    @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
   end
 
   def classification(rows, date)

@@ -85,7 +85,12 @@ class Tournaments::OnlineResults < ApplicationService
     rows = parse_rows(table)
     # An invalid (rotation, set) pair answers with a perfectly valid page holding zero rows rather
     # than with an error. Silence must never be read as "this archetype has no online finishes".
-    raise ParseError, "no finishes found at #{url} — the format, rotation or set may not exist" if rows.empty?
+    #
+    # Two different causes reach this line and they need different answers. An empty <tbody> is
+    # the parameter case above. A table full of <tr>s that every row guard rejected is a layout
+    # change — and telling that admin to correct a rotation and a set that were fine sends them to
+    # fix the one thing that is not broken.
+    raise ParseError, empty_reason(table) if rows.empty?
 
     rows
   end
@@ -110,19 +115,38 @@ class Tournaments::OnlineResults < ApplicationService
     }
   end
 
-  # Strict per page, lenient per row: an unreadable date, player or placement costs its own row
-  # rather than the whole import — one malformed entry among twenty is not a layout change.
+  # A table holding data rows this parser threw away is a layout change; a table holding none at
+  # all is the (rotation, set) pair. The discriminator is "any <tr> with a <td> in it" and not the
+  # CELL_COUNT test itself — a row that gained a seventh cell is exactly the layout change to
+  # report, and asking the same question that rejected it would answer "your parameters".
+  def empty_reason(table)
+    return "no finishes found at #{url} — the format, rotation or set may not exist" if
+      table.css("tr").none? { |tr| tr.css("td").any? }
+
+    "no readable finishes at #{url} — every row was rejected, so the page layout may have changed"
+  end
+
+  # Strict per page, lenient per row: an unreadable date, player, placement or event name costs
+  # its own row rather than the whole import — one malformed entry among twenty is not a layout
+  # change.
+  #
+  # The name is guarded like the rest and not merely read, unlike LimitlessResults, which cannot
+  # produce a nil one (its name comes out of a matched HEADING_RE). Here it is an attribute that
+  # may simply be absent, and StandingsImportPlan#build_event calls `name.squish` on it — so a
+  # <tr> with no data-tournament is a NoMethodError inside a preview whose rescue only knows
+  # ParseError and FetchError, i.e. the 500 that rescue exists to prevent.
   def build_row(tr, cells)
     date = parse_date(tr["data-date"])
+    name = tr["data-tournament"].to_s.squish.presence
     player = parse_player(cells[PLAYER_CELL])
     placement, attendance = parse_placement(cells[PLACEMENT_CELL])
-    return if date.nil? || player.nil? || placement.nil?
+    return if date.nil? || name.nil? || player.nil? || placement.nil?
 
     wins, losses, ties = parse_record(cells[RECORD_CELL])
     tournament_id, slug = player
 
     Row.new(
-      event_name: tr["data-tournament"].to_s.squish.presence,
+      event_name: name,
       event_date: date,
       division: DIVISION,
       division_suffix: nil,

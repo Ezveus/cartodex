@@ -203,6 +203,47 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     assert_nil plan_for([ row ]).events.first.participant_count
   end
 
+  # Online event names are arbitrary and repeat weekly, so [name, date] — the paper source's
+  # identity rule — merges two genuinely different tournaments into one. The merged event then
+  # takes its attendance from whichever row came first, and the other event's row is refused for a
+  # placement above a field size that was never its own.
+  test "groups an online run by the event's own id, not by its name and date" do
+    plan = online_plan_for([
+      online_row(player_name: "Small", placement: 8, attendance: 10, event_key: "aaa"),
+      online_row(player_name: "Large", placement: 150, attendance: 200, event_key: "bbb")
+    ])
+
+    assert_equal 2, plan.events.size
+    assert_equal [ "aaa", "bbb" ], plan.events.map(&:external_key).sort
+    assert_equal [ 10, 200 ], plan.events.map(&:participant_count).sort
+  end
+
+  # The other half: two rows of one event stay one event however its name is spelled, because the
+  # id is what is asked, and a paper run keeps the pair it always used.
+  test "groups an online run's rows by that id even when the names differ" do
+    plan = online_plan_for([
+      online_row(player_name: "A", event_name: "Pumpkaweekly #12"),
+      online_row(player_name: "B", event_name: "Pumpkaweekly  #12 ")
+    ])
+
+    assert_equal 1, plan.events.size
+    assert_equal 2, plan.events.sole.rows.size
+    assert_nil plan_for([ row ]).events.first.external_key
+  end
+
+  # An online run re-reading its own leaderboard has to recognise the events it created last time,
+  # which is the whole of the idempotence property — and by the id it wrote, never by a name two
+  # weeklies share.
+  test "finds an online event it created before by its external key" do
+    existing = Tournament.create!(name: "Something else entirely", date: Date.new(2026, 2, 20),
+      online: true, tier: "other", format: "standard", standard_pool: standard_pools(:twm_por),
+      external_key: "aaa")
+
+    event = online_plan_for([ online_row(event_key: "aaa") ]).events.sole
+
+    assert_equal existing, event.tournament
+  end
+
   # #similar_tournaments is an O(events x catalogued) Ruby scan, and this source writes twenty
   # events per archetype per pool — so an unscoped load lists online weeklies as "similar
   # tournaments" noise on every paper preview, over a set that grows without bound as it is used.

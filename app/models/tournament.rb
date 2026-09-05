@@ -160,10 +160,19 @@ class Tournament < ApplicationRecord
   # labour as (set_name, set_number) on Card. The error is added to :name rather than to
   # :name_normalized, which is a column no user has ever heard of, and TournamentsController
   # re-finds the offending event from these two values so the form can link to it.
+  #
+  # Scoped to the catalogue on both sides, because the index it mirrors is partial (WHERE
+  # online = 0) and a validation that outran its index would refuse rows the database accepts.
+  # The rule is about the *public catalog* — two members must not catalogue one real event twice
+  # — and it was never a claim about the world: online event names are arbitrary and repeat
+  # weekly, so two different tournaments really do share a name and a date, and an online event
+  # sharing one with a paper event is a coincidence rather than a duplicate. What keeps one online
+  # event to one row is external_key, whose own partial UNIQUE index is the guarantee.
   def name_and_date_are_unique
+    return if online?
     return if name_normalized.blank? || date.blank?
 
-    clash = Tournament.where(name_normalized: name_normalized, date: date)
+    clash = Tournament.catalogued.where(name_normalized: name_normalized, date: date)
     clash = clash.where.not(id: id) if persisted?
     errors.add(:name, "is already catalogued for this date") if clash.exists?
   end

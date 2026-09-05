@@ -700,6 +700,52 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "button", text: /This is me/, count: 0
   end
 
+  # The other half of decision §3, and the half nothing else asserts: an online event is
+  # catalogued because a standing needs a Tournament, not because anybody went to it. One
+  # archetype's leaderboard is 20 of them and the online index lists 139 archetypes, so left in
+  # the catalog they bury the handful of events members actually attend. #show stays reachable —
+  # an event's existence is not a secret, and hiding it would be a new rule.
+  #
+  # The paper assertion is the negative control: without it this passes when the catalog is empty
+  # for every event.
+  test "the catalog lists a paper event and never an imported online one, which still has a page" do
+    event, = online_event_with_unclaimed_row
+
+    get tournaments_path
+
+    assert_response :success
+    assert_select ".data-table-row a", text: @tournament.name, minimum: 1
+    assert_select ".data-table-row a", text: event.name, count: 0
+
+    get tournament_path(event)
+    assert_response :success
+  end
+
+  # The three withheld invitations and the "Back to Tournaments" link to a catalog that does not
+  # contain this event are four absences with one cause, and until the page named it they read as
+  # four bugs. EventDetails prints the venue beside the date, tier and format — the facts, where a
+  # fact about the event belongs, and on both pages that print them.
+  test "an online event's page names its venue and says what follows from it" do
+    event, = online_event_with_unclaimed_row
+
+    get tournament_path(event)
+
+    assert_response :success
+    assert_select ".tournament-details .data-table-row", text: /Venue/ do
+      assert_select ".data-table-cell", text: /Online play/
+      assert_select ".data-table-cell", text: /not in the tournament catalog/
+    end
+  end
+
+  # The negative control, and it has to be worded on the row rather than on the word "Online":
+  # a paper event's Format cell legitimately reads whatever other_format_name holds.
+  test "a paper event's page names no venue" do
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select ".tournament-details .data-table-row", text: /Venue/, count: 0
+  end
+
   # The negative control. Without it the test above passes just as happily when the whole entry
   # section has been broken for every event, online or not.
   test "a paper event's page proposes both" do

@@ -122,6 +122,24 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal 1, result.tournament_total
   end
 
+  # An imported online event is a row in this table but not an event anybody attended, and one
+  # archetype's leaderboard is 20 of them. Without the scope the spotlight answers "pitch black"
+  # with a wall of weekly online tournaments the searcher has never heard of, five at a time,
+  # ahead of nothing. The paper twin is the negative control: without it this passes when the
+  # whole tournament group is broken.
+  test "the spotlight answers with a catalogued event and never with an imported online one" do
+    attributes = { date: Date.new(2026, 4, 2), format: "standard",
+                   standard_pool: standard_pools(:twm_por), tier: "other", created_by: @user }
+    paper = Tournament.create!(name: "Pitch Black Regional", **attributes)
+    online = Tournament.create!(name: "Pitch Black Tourney #10", online: true, **attributes)
+
+    result = Search::Global.call(user: @user, query: "pitch black")
+
+    assert_includes result.tournaments, paper
+    assert_not_includes result.tournaments, online
+    assert_equal 1, result.tournament_total
+  end
+
   # A page that came back short of the cap is the whole result set, so its size is the total and
   # the COUNT — a second full LIKE scan of the card catalog — is skipped. Shrinking the cap to 1
   # fills every non-empty group, which is what makes the extra queries appear.

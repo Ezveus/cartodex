@@ -26,7 +26,10 @@ module Admin
     ROTATION_RE = Tournaments::OnlineResults::ROTATION_RE
     SET_RE = Tournaments::OnlineResults::SET_RE
 
-    ONLINE_SOURCE = "online".freeze
+    # Borrowed, not re-spelled, like the three regexes above it: this string is the contract
+    # between the form, the POST and the job, and two copies of it drift silently — the screen
+    # would go on enqueuing "online" runs that the job read as paper.
+    ONLINE_SOURCE = Tournaments::LimitlessImportJob::ONLINE_SOURCE
     DEFAULT_SOURCE = "paper".freeze
 
     before_action :read_form_params

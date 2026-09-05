@@ -108,9 +108,37 @@ So the run begins by fetching the decklist of **every row of every unblocked eve
 included**, and grouping the lot. The winner of a group is the lowest `placement`, ties broken by
 earliest date then by the event's own id — a total order that reads off the source alone.
 
-The consequence is the property that matters: **which rows survive is a pure function of the
-leaderboard, not of what is already in the database.** Run it twice and the same 13 rows are
-chosen; the second run finds them present and skips them, and the same 7 are dropped again.
+The consequence is that **which rows survive is a pure function of the leaderboard** — run the same
+page twice and the same 13 are chosen, the second run finds them present and skips them, the same 7
+are dropped again.
+
+#### That invariant is necessary and it is not sufficient — the key is in the database
+
+An adversarial review reproduced the hole and it is the important paragraph of this document. The
+pre-pass is pure in the *leaderboard*; the **database is not**, because the leaderboard is a rolling
+top-20 that moves. When the survivor a run elected later falls off the board — twenty better
+finishes appear, which is the ordinary life of a live page — the next run elects a different member
+of the same group, does not find it, and creates it. The first survivor's row stays. Measured:
+
+```
+run 1  rows W1@4, W2@7, W3@9  → created 1, duplicates 2   standings [W1]
+run 2  rows W2@7, W3@9        → created 1, duplicates 1   standings [W1, W2]
+```
+
+One player, one 60, two lists in the sample. Two smaller doors onto the same accretion, because the
+group is only ever "this run's rows": an admin who splits a large run with `event_filters` (the
+natural way around the 300-row cap) de-duplicates only *within* each filter; and a single transient
+fetch failure leaves its row un-keyed and therefore kept, so the next healthy run enriches it rather
+than removing it.
+
+So the dedup key lives **on the standing**, not only in memory: `player_slug` and `list_digest`, both
+nullable, both written by the online importer alone. A NULL is "not an online import" and never
+participates. The check becomes one indexed lookup against
+`(archetype_id, player_slug, list_digest)` *before* the in-run grouping, so a row whose twin is
+already recorded is dropped whatever page, filter or run produced it.
+
+Without that column "de-duplicated" is a property of one run against one snapshot of a page that
+moves, and the archetype card report is what pays for the difference.
 
 Rows are dropped **before** `import_event`, so an event left with no surviving row is never
 created. The prefetch is what the run would have spent on those rows anyway, and its cost is
@@ -178,6 +206,22 @@ changes. In particular:
   existing entry from the only page that links to it, which is the bug the plural `my_entries`
   work fixed.
 
+- **And the page has to say why**, which an earlier draft of this section left out entirely. It
+  enumerated what stops being proposed and never asked what the event's own fiche then looks like:
+  Date, Tier, Format and nothing else, so an imported weekly renders as an ordinary event with
+  three missing buttons, a sheet whose only division heading is "Open", and a "Back to Tournaments"
+  link to a catalog this very decision removed it from. Four absences with one cause and no cause
+  given reads as a bug. `Tournaments::EventDetails` therefore prints a **Venue** row on an online
+  event, with the sentence that explains the other three — a detail row and not a header badge,
+  because it is a fact about the event like its date, and the participation page renders the same
+  component.
+
+  There is deliberately **no form control for `online` and no `tournament_params` permit**, and the
+  parallel with `open_participant_count` does not hold: that is a scraped number that can be wrong
+  and that caps every placement above it, while this is a fact about which importer wrote the row.
+  A checkbox would let any member move an event into or out of the public catalog, which is the one
+  thing the column is for.
+
 ### 4. Divisions: a fourth value, and a narrower list for forms
 
 Online play has no age divisions, and `tournament_standings.division` is `NOT NULL` behind
@@ -192,7 +236,16 @@ about which they want:
 | reader | list |
 |---|---|
 | the enum, `division_order`, `Standings::Table`, `Performance#by_division` | `DIVISIONS` |
-| `Tournaments::Standings::Form`'s select, `prefill_attributes` | `AGE_DIVISIONS` |
+| `Tournaments::Standings::Form`'s select | `AGE_DIVISIONS` on a paper event, `open` on an online one |
+| `prefill_attributes` | `AGE_DIVISIONS` |
+
+The form's entry is per **event**, not one list — an earlier draft of this table wrote it flat and
+that was the bug's hiding place. The paragraph below fixes only the *edit* case, by adding the
+row's own value; a **new** row has no value to read, so on an online event a flat `AGE_DIVISIONS`
+offers three age divisions and nothing else, and the member adding a missing row to an imported
+sheet files an online result as a Junior. The two lists are mutually exclusive per venue, which is
+this section's rule in mirror: offering junior/senior/masters on an event that has none is the same
+lie in the other direction.
 
 A member typing a paper sheet must not be offered "Open"; a report covering online events must not
 drop them.
@@ -236,6 +289,24 @@ exactly 1 of 94 standings carries a W-L-T") and CLAUDE.md's matching paragraph.
 through to `other` today — but a name containing "Regional" would be filed as a Regional, and
 `Tournament::CP_REFERENCE` would then offer Championship Points for an online event. Online events
 are written `tier: "other"` unconditionally.
+
+### 6b. An online event is identified by its own id, not by its name and date
+
+`Row#event_key` carries the tournament's own Limitless id, and until an adversarial review said so
+**nothing read it**: the plan still grouped on `[event_name, event_date]`, which is the paper
+source's identity rule. Online event names are arbitrary and repeat weekly — `Pumpkaweekly`,
+`CrownOfSpain #4` — so two genuinely different tournaments on one day merge into a single event.
+Measured: two rows from two events plan as one, the event takes its `participant_count` from
+whichever row came first, and the other event's row is then refused for a placement above a field
+size that was never its own.
+
+So an online event is keyed on `event_key`, stored as `tournaments.external_key`. Which forces the
+catalog's own identity rule to become explicit rather than universal: `(name_normalized, date)`
+UNIQUE becomes **partial**, `WHERE online = 0`. That rule is about the public catalog — two members
+must not catalogue one event twice — and it was never a claim about the world. A second partial
+UNIQUE index on `external_key WHERE external_key IS NOT NULL` is what actually keeps one online
+event to one row (partial, because SQLite treats NULLs as distinct — the trap `Archetype`'s old
+index fell into).
 
 ### 7. The archetype pages must say how much of the sample is online
 
@@ -281,9 +352,13 @@ New:
   W-L-T, online: true, standard pool code, forced tier).
 - `Tournaments::OnlineDecklist` — decklist page → the `QUANTITY NAME SET NUMBER` text
   `Decks::Fetcher` already parses, taking set and number from the `href`.
-- One migration: `tournaments.online`, `tournaments.open_participant_count`, and a composite
-  `(online, date)` index. The division needs no migration at all — `division` is a string column
-  and the enum lives only in Ruby. The index does: `#index` becomes
+- Three migrations. `tournaments.online`, `tournaments.open_participant_count` and a composite
+  `(online, date)` index; `tournament_standings.player_slug` and `list_digest` with an index on
+  `(archetype_id, player_slug, list_digest)` (§1, the stored dedup key); and
+  `tournaments.external_key`, which turns `(name_normalized, date)` UNIQUE partial and adds a
+  second partial UNIQUE index of its own (§6b). The division needs no migration at all —
+  `division` is a string column and the enum lives only in Ruby. The `(online, date)` index does:
+  `#index` becomes
   `where(online: false).order(date: :desc)` on the one table this feature fills with 20 rows per
   archetype per pool, and it is public, anonymous and rate-limited at 60/min. The plain date index
   cannot serve that filter, and CLAUDE.md's note on this very endpoint says what happens then —
@@ -328,13 +403,19 @@ both, so both runs are `limitless_standings` and the `label` says which source t
   *Limitless's* aggregates over *their* field, not a figure this database can compute;
   republishing someone else's number under a heading reading "recorded in Cartodex" is a
   different decision and a different issue.
-- **Dedup across leaderboards.** The pre-pass makes a run idempotent against itself, which is what
-  fixes the re-import case. It does not span *different* leaderboards: the same player's same list
-  reached through another pool's page is a different event and becomes a second row. (Not, as an
-  earlier draft of this said, a second row at the *same* event — that one is impossible, since
-  `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan marks it `:skip`.)
-  Closing it needs the player slug stored on the standing, a column this change does not add.
-- **A venue axis on the archetype pages.** See §7: the blend is named, not yet separable.
+- **Dedup across leaderboards.** The stored key (§1) closes the churn and the split run: a
+  (player, list) pair already recorded for the archetype is dropped whatever page, filter or run
+  produced it. What it does not span is *different leaderboards*: the key is
+  `(archetype_id, player_slug, list_digest)` and a run against another pool's page writes the same
+  pair for a different pool, which is correct — a list played under TEF-CRI is not the list played
+  under TEF-PBL — but it also means the same player's genuinely unchanged 60 appears once per pool
+  page imported. Adding `standard_pool_id` to the key would say which of those two it is; nothing
+  measures it yet. (Not, as an earlier draft said, a second row at the *same* event — that is
+  impossible, since `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan
+  marks it `:skip`.)
+- **A venue axis on the archetype pages.** See §7: the blend is named on `/archetypes/:id`, not yet
+  separable — and **not named at all on `/archetypes`**, whose events column, "last event" date and
+  standings-count ordering `Archetypes::IndexCounts` still blends silently.
 - **A win rate anywhere**, though the data to compute one now exists.
 - **Any online-only tournament reaching `/tournaments`, search, or the dashboard.**
 - **Keeping online field lists out of `/decks/shared`.** Every imported row builds a `shared: true`

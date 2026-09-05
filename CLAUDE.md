@@ -389,12 +389,48 @@ dropped), and it leaves an empty `Tournament` behind per dropped row — which `
 never deletes and no screen can remove. So every row of every unblocked event, **`:skip` rows
 included**, is fetched and grouped first, on `(player slug, sorted multiset of (set, number,
 quantity))` — a multiset, because the decklist text is in DOM column order. Which rows survive is
-then **a pure function of the leaderboard, not of database state**. The ordering invariant is kept
+then a pure function of the leaderboard.
+
+**That invariant is necessary and not sufficient, and the gap is the whole reason
+`tournament_standings.player_slug` and `list_digest` exist.** The pre-pass is pure in the
+*leaderboard*; the database is not, because the board is a **rolling** top-20. When the survivor a
+run elected later falls off it, the next run elects a different member of the same group, does not
+find it, and creates it — the first row stays. Measured: three runs of a board losing one row each
+time wrote three standings for one player's one list. Two smaller doors onto the same accretion:
+an admin splitting a big run with `event_filters` de-duplicates only within each filter, and one
+transient decklist fetch failure leaves a row un-keyed and therefore kept, so the next healthy run
+*enriches* it instead of removing it. So the key is stored — nullable, written by the online
+importer alone, indexed as `(archetype_id, player_slug, list_digest)` — and checked in one `pluck`
+**before** the in-run grouping. Two rules that are not obvious: a row is never a duplicate of its
+**own** standing (or a plain re-import reports every row as `duplicate` instead of `skipped`), and
+the key is written on the **enrich** path too, or a row whose first fetch failed stays un-keyed
+forever. `StandingsImporter.list_digest` is the single definition both the in-memory key and the
+stored one call, because two spellings of "the same 60" drift silently. The ordering invariant is kept
 rather than inverted: it is `Decks::Fetcher` committing a deck that creates an unreachable orphan,
 and fetching *text* commits nothing, so the prefetch may go first while the deck build,
 `confirm_attached!` and `discard_orphaned_list` stay exactly where they were. `StandingsImportPlan`
 still never fetches, so the preview shows the count *before* de-duplication and the run reports
 `duplicates` as its own number.
+
+**That invariant is necessary and it is not sufficient — the key lives in the database.** The
+pre-pass is pure in the *leaderboard*; the leaderboard is a rolling top-20 that moves. When the
+survivor a run elected falls off the board the next run elects a different member of the same
+group, does not find it, and creates it while the first run's row stays — measured, run 1 over
+W1@4/W2@7/W3@9 writes W1 and run 2 over W2@7/W3@9 writes W2, one player's one 60 as two lists in
+the sample. Two smaller doors onto the same accretion, because an in-memory group is only ever
+this run's rows: an admin splitting a large run with `event_filters` (the natural way around the
+300-row cap) de-duplicates within each filter alone, and a transient fetch failure leaves its row
+un-keyed and kept, so the next healthy run enriches it. So `tournament_standings.player_slug` and
+`list_digest` are written by the online importer alone, and one indexed lookup against
+`(archetype_id, player_slug, list_digest)` runs *before* the in-run grouping. **A NULL never
+participates** — the paper source publishes no slug and two paper rows sharing a 60 are two real
+people who both played it — which is why both columns are nullable and why the SQL excludes them
+rather than the Ruby. `list_digest` is a SHA-256 of the same sorted multiset the in-run key
+compares, through `StandingsImporter.list_digest`, **one method**: two spellings would drift and
+cross-run de-duplication would stop silently while every run still reported duplicates within
+itself. The key is written on an *enrichment* too, not only on a create, or a row whose first
+fetch failed stays invisible to every later run. A row is never a duplicate of its **own**
+standing, which is what keeps a re-import reporting `skipped` rather than `duplicate`.
 
 **The pool comes from the `set` parameter and never from the date.** `StandardPool.at` reads
 `legal_on` — when Play! Pokémon considers a pool legal, about two weeks after the cards ship — and
@@ -420,6 +456,25 @@ and rate-limited at 60/min — the plain date index cannot serve that filter. `S
 lookups are **partitioned** rather than scoped to `catalogued`: a paper run looks at paper events and
 an online run at online ones, because a blanket `catalogued` would stop an online re-import finding
 the events its own first run created, turning every skip into a uniqueness failure.
+
+**An online event is identified by `tournaments.external_key`, its own Limitless id, and not by
+its name and date.** `Row#event_key` carried that id from the start and nothing read it: the plan
+grouped on `[event_name, event_date]`, which is the *paper* source's identity rule. Online names
+are arbitrary and repeat weekly ("Pumpkaweekly", "CrownOfSpain #4"), so two genuinely different
+tournaments on one day merged into one event, which then took its attendance from whichever row
+came first and refused the other event's rows for a placement above a field size that was never
+theirs. The id **replaces** the pair in the group key rather than joining it — a key holding both
+splits one event again the moment two of its rows spell its name differently — and
+`find_or_create_tournament` and `catalogued_meanwhile` both key on it too, so a re-import finds
+its own events. Which forces the catalog's identity rule to become explicit rather than universal:
+`(name_normalized, date)` UNIQUE is **partial**, `WHERE online = 0`, with
+`Tournament#name_and_date_are_unique` scoped to match (it returns early for an online record and
+reads `Tournament.catalogued` for the clash) — that rule is about the public catalog, two members
+must not catalogue one event twice, and it was never a claim about the world. A paper Regional and
+an online weekly may now share a name and a date, and the online run writes onto its own row. A
+second partial UNIQUE index on `external_key WHERE external_key IS NOT NULL` is what keeps one
+online event to one row — partial, because SQLite treats NULLs as distinct, the trap `Archetype`'s
+old index fell into.
 
 **`TournamentStanding::DIVISIONS` gained a fourth value, `"open"`, and split from
 `AGE_DIVISIONS`.** Online play has no age divisions and `division` is `NOT NULL` behind a validating
@@ -448,12 +503,16 @@ tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#t
 `/archetypes/:id` stays at its pinned **16 queries**. The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
 blended population. **Splitting the sample by venue — a second selector beside the pool one — is
-deliberately out**, and is the obvious next issue.
+deliberately out**, and is the obvious next issue. So is the *index*: `Archetypes::IndexCounts` is
+untouched, so `/archetypes` still blends the two in its events column, its "last event" date and
+the standings count it orders by. That ordering was already "a statement about who has run an
+import"; it now also depends on which *kind* of import they ran, and nothing on that page says so.
 
-**Also out:** de-duplication across *different* leaderboards (the pre-pass makes a run idempotent
-against itself, not against another pool's page; closing it needs the player slug stored on the
-standing), any win rate, and keeping online field lists out of `/decks/shared`, which now receives
-one authorless shared deck per imported row.
+**Also out:** de-duplication across *leaderboards*. The stored key closes the churn and the split
+run, but it is keyed on the archetype and not on the pool, so one player's unchanged 60 still
+appears once per pool page imported — correct as far as it goes (a TEF-CRI list is not a TEF-PBL
+list) and unmeasured either way. Also out: any win rate, and keeping online field lists out of
+`/decks/shared`, which now receives one authorless shared deck per imported row.
 
 **The archetype catalog and one archetype's metagame report** (`/archetypes`, `/archetypes/:id`)
 are the aggregation the two sections above deferred, and they add **no column** — everything they

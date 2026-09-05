@@ -112,6 +112,17 @@ class Tournaments::OnlineResultsTest < ActiveSupport::TestCase
   # The important one. An invalid (rotation, set) pair answers with a perfectly valid page holding
   # zero rows rather than with an error, so silence must never be read as "this archetype has no
   # online finishes".
+  # The other empty case, and it must not answer with the other message: a table full of rows this
+  # parser rejected is a layout change, and telling the admin to correct a rotation and a set that
+  # were fine sends them to fix the one thing that is not broken.
+  test "refuses a table whose every row was rejected, and blames the layout rather than the parameters" do
+    stub_http(RESULTS_HTML.gsub("</td>", "</td><td>surprise</td>"))
+
+    error = assert_raises(Tournaments::OnlineResults::ParseError) { call }
+    assert_match(/layout/, error.message)
+    assert_no_match(/rotation or set/, error.message)
+  end
+
   test "refuses a table that holds no row at all" do
     stub_http(<<~HTML)
       <html><body><table><thead>
@@ -121,6 +132,7 @@ class Tournaments::OnlineResultsTest < ActiveSupport::TestCase
 
     error = assert_raises(Tournaments::OnlineResults::ParseError) { call }
     assert_match(/no finishes/, error.message)
+    assert_match(/rotation or set/, error.message)
   end
 
   # Strict per page, lenient per row: one unreadable cell costs its own row, not the whole import.
@@ -130,6 +142,23 @@ class Tournaments::OnlineResultsTest < ActiveSupport::TestCase
 
     assert_equal 5, rows.size
     assert_empty rows.select { |r| r.event_key == "dddd4444" }
+  end
+
+  # Guarded like the date, the player and the placement, and not merely read — unlike the paper
+  # source, which cannot produce a nil name because its own comes out of a matched HEADING_RE.
+  # Here it is an attribute that may simply be absent, and StandingsImportPlan#build_event calls
+  # `name.squish` on whatever arrives: an unguarded nil is a NoMethodError raised inside a preview
+  # whose rescue knows only ParseError and FetchError, which is the 500 that rescue exists to
+  # prevent.
+  test "skips a row carrying no event name rather than letting a nil reach the plan" do
+    stub_http(RESULTS_HTML.sub(%(data-tournament="Moujii's Dojo"), %(data-tournament="")))
+    rows = call
+
+    assert_equal 5, rows.size
+    assert_empty rows.select { |r| r.event_key == "dddd4444" }
+    assert(rows.all? { |r| r.event_name.present? })
+    # The whole point: the plan this feeds does not raise on it.
+    assert_nothing_raised { Tournaments::StandingsImportPlan.call(rows: rows, online: true) }
   end
 
   # Every one of these is interpolated into a URL, which is the reason
