@@ -215,8 +215,9 @@ card_label_assignments    card_label_id (FK), fingerprint (NOT NULL), card_id (F
                           UNIQUE (card_label_id, fingerprint); index on fingerprint
 ```
 
-**Models:** `CardLabel` (`FAMILIES`, `ROLES`, validations, ordered scopes) and
-`CardLabelAssignment` (`SOURCES`, refuses a blank fingerprint).
+**Models:** `CardLabel` (`FAMILIES`, validations, ordered scopes — `ROLES` arrives with stage 2,
+since stage 1 seeds no role row) and `CardLabelAssignment` (`SOURCES`, refuses a blank
+fingerprint).
 
 **Services:**
 
