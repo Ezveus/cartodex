@@ -83,6 +83,23 @@ class CardLabels::ImportJobTest < ActiveJob::TestCase
     assert_nothing_raised { perform }
   end
 
+  # The assignments are already committed by the time the broadcast runs, so a Turbo hiccup here
+  # must not rewrite the completed status or overwrite the receipt with the broadcast's own error.
+  test "a broadcast failure does not overwrite a completed import" do
+    stub_search([ Printing.new(set_code: "POR", number: "56") ])
+    original_broadcast = Turbo::StreamsChannel.method(:broadcast_append_to)
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_append_to) { |*_args, **_kwargs|
+      raise "Solid Cable is down"
+    }
+
+    perform
+
+    assert_equal "completed", @import.reload.status
+    assert_match "1 card labelled", @import.error_message
+  ensure
+    Turbo::StreamsChannel.define_singleton_method(:broadcast_append_to, original_broadcast)
+  end
+
   private
 
   def perform = CardLabels::ImportJob.perform_now(@import.id, @label.id, @user.id)

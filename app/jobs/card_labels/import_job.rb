@@ -18,16 +18,16 @@ class CardLabels::ImportJob < ApplicationJob
     label = CardLabel.find_by(id: card_label_id)
     raise LabelDeleted, "That card label no longer exists." if label.nil?
 
-    finish(import, user, CardLabels::Importer.call(label), label)
+    finish(import, user, CardLabels::Importer.call(label))
   rescue StandardError => e
     report_failure(import, user, e)
   end
 
   private
 
-  def finish(import, user, result, label)
+  def finish(import, user, result)
     import.update!(status: "completed", error_message: summarise(result))
-    broadcast(user, "flash-notice", %(Import of "#{label.name}" finished: #{outcome(result)}.))
+    broadcast(user, "flash-notice", %(Import of "#{import.label}" finished: #{outcome(result)}.))
   end
 
   # Every clause is stated only when it applies: a run with nothing missing should not have to
@@ -80,5 +80,11 @@ class CardLabels::ImportJob < ApplicationJob
       target: "flash-messages",
       html: %(<div class="flash #{css_class}">#{ERB::Util.html_escape(message)}</div>)
     )
+  rescue StandardError => e
+    # A failed broadcast must not rewrite a successful import: the work is the assignments,
+    # already committed by the time this runs, and the broadcast is only a notification about
+    # them. Unrescued, this exception would reach #perform's own rescue and flip a completed
+    # import back to "failed" over nothing more than a Turbo hiccup.
+    Rails.logger.error("CardLabels::ImportJob: broadcast failed: #{e.message}")
   end
 end
