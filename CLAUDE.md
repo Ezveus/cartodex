@@ -352,6 +352,109 @@ ships alongside this — see the paragraph on `SHEET_PER_PAGE` above. A sheet im
 archetype's page is still a *partial* sheet and nothing says so; that is a property it shares with
 every hand-typed sheet, and marking one complete would mean knowing when it is.
 
+**The online "best finishes"** (`play.limitlesstcg.com/decks/<slug>?format=&rotation=&set=`) are the
+second source for the same importer, chosen from the same admin screen. The plan and the importer
+were already source-agnostic in shape — `StandingsImportPlan.call(rows:)` takes anything carrying
+the eight `Row` fields — so the change is two parsers plus two keywords: `decklist_service:` on the
+importer and `source`/`slug`/`rotation`/`set` in the job's options. `Import::KINDS` gains
+**nothing**: `StandingsImportUndo`, `Admin::ImportsController#undo` and two places in the admin
+imports view all gate on the literal `"limitless_standings"`, so a new kind would produce runs that
+look identical in the table and silently cannot be undone — which is the only way back out of a bad
+bulk run. The design record is
+`docs/superpowers/specs/2026-09-05-online-best-finishes-import-design.md`.
+
+**Three things in that markup are not what they look like, and each was measured rather than
+inferred** — `tmp/limitless_scraper.py`, the only prior description of this source, is wrong on two
+of them. `data-place` is the row's **rank in the leaderboard** (1..N in order), not the finish: a row
+carrying `data-place="13"` reads `2nd of 197`, so reading the attribute files a second place as a
+thirteenth. `data-score` is only the **wins**; the `W - L - T` is the fifth cell's text. And on the
+decklist page only the **Pokémon** lines carry `(SET-NUM)` in their text — `4 Crispin`,
+`7 Grass Energy` carry nothing — so the set and number come from each line's `href` and never from
+its text, or every Trainer and Energy in every list loses its printing. `Tournaments::OnlineDecklist`
+also checks each column against its own heading subtotal *before* the 60, because a column that
+loses a line and one that gains one still sum to 60. A player is identified by the **slug in the
+href**: 20 measured rows carry 13 display names for 12 slugs, `JRobrueda` and `Jose Rueda` being one
+person.
+
+**De-duplication is what makes this source usable at all, and it is a pre-pass rather than a per-row
+check.** The page is a leaderboard of one player's *best finishes*, not a field: 20 rows hold **8
+distinct 60-card contents**, and one player holds 8 of them with six carrying the identical 60 — one
+list entered into six weekly tournaments. Imported as they stand, one person's deck is weighted at
+30 % of the sample, and `COUNT(DISTINCT deck_id)` cannot see it because each standing gets its own
+`Deck`. Deciding row by row is wrong three times over, all three because the importer never sees the
+run whole: it cannot keep the best finish (`import_event` is the loop unit while the plan regroups by
+event and re-sorts twice), it is **not idempotent** (a `:skip` row never fetches its list, so a
+second run compares the survivors against an empty set and re-creates every row the first one
+dropped), and it leaves an empty `Tournament` behind per dropped row — which `StandingsImportUndo`
+never deletes and no screen can remove. So every row of every unblocked event, **`:skip` rows
+included**, is fetched and grouped first, on `(player slug, sorted multiset of (set, number,
+quantity))` — a multiset, because the decklist text is in DOM column order. Which rows survive is
+then **a pure function of the leaderboard, not of database state**. The ordering invariant is kept
+rather than inverted: it is `Decks::Fetcher` committing a deck that creates an unreachable orphan,
+and fetching *text* commits nothing, so the prefetch may go first while the deck build,
+`confirm_attached!` and `discard_orphaned_list` stay exactly where they were. `StandingsImportPlan`
+still never fetches, so the preview shows the count *before* de-duplication and the run reports
+`duplicates` as its own number.
+
+**The pool comes from the `set` parameter and never from the date.** `StandardPool.at` reads
+`legal_on` — when Play! Pokémon considers a pool legal, about two weeks after the cards ship — and
+online play follows the **release**: measured, 3 of 20 rows dated before `PBL`'s `legal_on` would be
+anchored to the previous pool, into a sample whose other lists could not legally contain their cards.
+It must resolve to **exactly one** pool or the run is blocked, because the UNIQUE key is the bound
+*pair* and a rotation landing between two releases leaves two pools sharing a last set. The tier is
+likewise **forced** to `other` rather than guessed: online names are arbitrary, and one containing
+"Regional" would be filed as a Regional and offered Championship Points through `CP_REFERENCE`.
+
+**`tournaments.online` is catalogued but not listed**, through a `Tournament.catalogued` scope read
+by `TournamentsController#index` and `Search::Global` — one archetype's leaderboard is 20 events and
+the online index lists 139 archetypes, so left visible they bury the events members actually attend.
+`#show` stays reachable (an event's existence is not a secret). **No policy gains a clause, but the
+page does**: `tournaments#show` withholds its three participation invitations and the sheet's "This
+is me" on an online event, because offering to attach a Play! Pokémon *age-division* profile to an
+event with no age divisions is wrong, and `has_many :entries, dependent: :restrict_with_error` means
+one member accepting makes the imported event permanently undeletable. Withheld, not refused — and
+only the *invitations*: a participation the member already holds keeps its link. The migration's
+composite `(online, date)` index is load-bearing: `#index` becomes `where(online: false).order(date:
+:desc)` on the one table this fills with 20 rows per archetype per pool, and it is public, anonymous
+and rate-limited at 60/min — the plain date index cannot serve that filter. `StandingsImportPlan`'s
+lookups are **partitioned** rather than scoped to `catalogued`: a paper run looks at paper events and
+an online run at online ones, because a blanket `catalogued` would stop an online re-import finding
+the events its own first run created, turning every skip into a uniqueness failure.
+
+**`TournamentStanding::DIVISIONS` gained a fourth value, `"open"`, and split from
+`AGE_DIVISIONS`.** Online play has no age divisions and `division` is `NOT NULL` behind a validating
+enum, so `masters` would be a lie `Archetypes::Performance#by_division` then reports as fact.
+`AGE_DIVISIONS` stays derived from `TournamentProfile::DIVISIONS` — it must not drift from the list
+that decides a real player's division — and `DIVISIONS` is those plus `"open"`. The split is what
+keeps each reader honest: the enum, `division_order`, `Standings::Table` and `by_division` need all
+four or an online row is silently dropped from a report that still looks complete, while the
+standings form's select needs only the three **plus the record's own value**. That last clause is not
+a nicety: the form is shared by new and edit, standings are wiki-governed, and `standing_params`
+permits `:division` — so a select built from `AGE_DIVISIONS` alone renders no option matching
+`"open"`, the browser pre-selects Junior, and a member fixing a typo in a player name silently
+refiles an online result as a Junior one. `tournaments.open_participant_count` joins the three
+age-division columns in `DIVISION_COUNT_COLUMNS` (so `placement_within_division_field` still caps a
+placement), and it is **five** hand-written places, not one: that constant, the `numericality`
+validation, `tournament_params`, `Tournaments::Form`'s inputs, and that group's own label, which
+stops being "per **age** division" the moment Open joins it. Attendance and `wins`/`losses`/`ties`
+are written because this source publishes all four — the first thing ever to write any of them.
+
+**`/archetypes/:id` says how much of its sample is online**, and that is not decoration:
+`Archetypes::MetagameScope` buckets on `tournaments.standard_pool_id` alone, so an online weekly and
+a Regional anchored to the same pool land in the same bucket and the card report's percentages would
+describe a mixture nothing names — the same defect the pool scoping itself exists to prevent, on a
+second axis. Both counters ride inside the existing grouped queries (`COUNT(DISTINCT CASE WHEN
+tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
+`/archetypes/:id` stays at its pinned **16 queries**. The events figure stays whole with the split
+named beside it rather than split in two, because every other number on the panel is over the same
+blended population. **Splitting the sample by venue — a second selector beside the pool one — is
+deliberately out**, and is the obvious next issue.
+
+**Also out:** de-duplication across *different* leaderboards (the pre-pass makes a run idempotent
+against itself, not against another pool's page; closing it needs the player slug stored on the
+standing), any win rate, and keeping online field lists out of `/decks/shared`, which now receives
+one authorless shared deck per imported row.
+
 **The archetype catalog and one archetype's metagame report** (`/archetypes`, `/archetypes/:id`)
 are the aggregation the two sections above deferred, and they add **no column** — everything they
 read already exists. Four services, all two levels deep: `Archetypes::MetagameScope` (which

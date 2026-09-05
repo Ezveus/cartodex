@@ -63,6 +63,45 @@ class StandingsImportTest < ApplicationSystemTestCase
     assert_button "Import 4 rows as #{@archetype.name}"
   end
 
+  # The online source on the same screen. Worth a browser and not just a request test for the
+  # reason the paper one is: the source select and the three fields it governs are all rendered
+  # together and come back filled in above the plan, and an admin who picked "online" has to see
+  # the run they described rather than retype it.
+  #
+  # It also puts the leaderboard's one genuinely deceptive column in front of a human. The fixture
+  # row for "Moujii's Dojo" carries data-place="4" and really finished 2nd; a parser that read the
+  # attribute would render "4" here and nothing else in the app would ever disagree with it.
+  test "an admin previews an online run, and the plan shows real finishes rather than leaderboard ranks" do
+    html = File.read(Rails.root.join("test/fixtures/files/limitless_online_results.html"))
+    HttpFetcher.define_singleton_method(:call) { |_url| html }
+
+    visit new_admin_standings_import_path
+
+    select "Online best finishes — play.limitlesstcg.com/decks/<slug>", from: "Source"
+    fill_in "Leaderboard slug (online)", with: "raging-bolt-ogerpon"
+    fill_in "Rotation (online)", with: "2026"
+    fill_in "Set (online)", with: card_sets(:por).code
+    select @archetype.name, from: "Archetype"
+    click_on "Preview"
+
+    # Every row of an online event is "open": online play has no age divisions, and writing
+    # "masters" would be a lie Archetypes::Performance#by_division reports as fact.
+    assert_selector "[data-label=Division]", text: "open", minimum: 1
+    assert_no_selector "[data-label=Division]", text: "masters"
+
+    # The trap, on screen: six rows carry data-place 1..6, and two of them finished 2nd.
+    assert_selector "[data-label=Placement]", text: "2", minimum: 1
+    assert_no_selector "[data-label=Placement]", text: "6"
+
+    # The form still carries what produced the plan, source included.
+    assert_field "Leaderboard slug (online)", with: "raging-bolt-ogerpon"
+    assert_field "Set (online)", with: card_sets(:por).code
+
+    # The count the admin approves is the plan's, before de-duplication — which happens in the run,
+    # because the plan never fetches a decklist and a preview must not be 21 HTTP requests.
+    assert_button "Import 6 rows as #{@archetype.name}"
+  end
+
   # A plan with nothing to write offers no button at all. "Regional Antwerp" predates every
   # Standard pool in the fixtures, so its only row is blocked — and an admin who can click a
   # button that writes nothing learns that the button sometimes does nothing, which is the wrong
