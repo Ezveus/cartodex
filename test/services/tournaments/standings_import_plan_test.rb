@@ -152,6 +152,110 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     assert_equal [ tournaments(:one) ], event.similar_tournaments
   end
 
+  # ---- the online source -------------------------------------------------------------------
+
+  # TIER_PATTERNS reads an event *name*, and online event names are arbitrary — "TOURNAMENT OF
+  # DOOM! WORLDS LCQ!", "CrownOfSpain #4". A name holding "Regional" would be filed as a Regional
+  # and Tournament::CP_REFERENCE would then offer championship points for an online event.
+  test "forces an online event's tier instead of reading it out of the name" do
+    name = "Regional Rumble Weekly #4"
+
+    assert_equal "other", online_plan_for([ online_row(event_name: name) ]).events.first.tier
+    # The same name on the paper source still reads as a Regional: the tier is forced, not removed.
+    assert_equal "regional", plan_for([ row(event_name: name) ]).events.first.tier
+  end
+
+  # StandardPool.at reads legal_on — the date Play! Pokemon considers a pool legal, about two weeks
+  # after the cards ship — while online play follows the release. Measured: 3 of 20 rows of one PBL
+  # leaderboard predate that pool's legal_on, so anchoring by date files them under the previous
+  # pool, in a sample whose other lists could not legally hold their cards.
+  test "anchors an online event to the leaderboard's own pool, not to the pool its date was legal under" do
+    date = Date.new(2026, 1, 20)
+    # The premise of the test: on this date the two answers really do differ.
+    assert_equal standard_pools(:twm_asc), StandardPool.at(date)
+
+    event = online_plan_for([ online_row(event_date: date) ], standard_pool: standard_pools(:twm_por)).events.first
+
+    assert_equal standard_pools(:twm_por), event.standard_pool
+    assert_not event.blocked?
+  end
+
+  test "blocks an online Standard event with no pool, naming the set rather than the date" do
+    event = online_plan_for([ online_row ], standard_pool: nil).events.first
+
+    assert event.blocked?
+    assert_match(/set/, event.blocked_reason)
+    # Naming the date would send the admin looking for a pool that covers it, which is neither what
+    # is missing nor anything an online run reads.
+    assert_no_match(/\d{4}-\d{2}-\d{2}/, event.blocked_reason)
+  end
+
+  test "carries the online classification and the leaderboard's attendance onto the event" do
+    event = online_plan_for([
+      online_row(attendance: nil), online_row(player_name: "B", attendance: 197)
+    ]).events.first
+
+    assert event.online
+    assert_equal 197, event.participant_count
+    # The paper source publishes no attendance at all, which is why every event imported from it
+    # has nil participant counts — and why the field is asked for rather than assumed.
+    assert_not plan_for([ row ]).events.first.online
+    assert_nil plan_for([ row ]).events.first.participant_count
+  end
+
+  # Online event names are arbitrary and repeat weekly, so [name, date] — the paper source's
+  # identity rule — merges two genuinely different tournaments into one. The merged event then
+  # takes its attendance from whichever row came first, and the other event's row is refused for a
+  # placement above a field size that was never its own.
+  test "groups an online run by the event's own id, not by its name and date" do
+    plan = online_plan_for([
+      online_row(player_name: "Small", placement: 8, attendance: 10, event_key: "aaa"),
+      online_row(player_name: "Large", placement: 150, attendance: 200, event_key: "bbb")
+    ])
+
+    assert_equal 2, plan.events.size
+    assert_equal [ "aaa", "bbb" ], plan.events.map(&:external_key).sort
+    assert_equal [ 10, 200 ], plan.events.map(&:participant_count).sort
+  end
+
+  # The other half: two rows of one event stay one event however its name is spelled, because the
+  # id is what is asked, and a paper run keeps the pair it always used.
+  test "groups an online run's rows by that id even when the names differ" do
+    plan = online_plan_for([
+      online_row(player_name: "A", event_name: "Pumpkaweekly #12"),
+      online_row(player_name: "B", event_name: "Pumpkaweekly  #12 ")
+    ])
+
+    assert_equal 1, plan.events.size
+    assert_equal 2, plan.events.sole.rows.size
+    assert_nil plan_for([ row ]).events.first.external_key
+  end
+
+  # An online run re-reading its own leaderboard has to recognise the events it created last time,
+  # which is the whole of the idempotence property — and by the id it wrote, never by a name two
+  # weeklies share.
+  test "finds an online event it created before by its external key" do
+    existing = Tournament.create!(name: "Something else entirely", date: Date.new(2026, 2, 20),
+      online: true, tier: "other", format: "standard", standard_pool: standard_pools(:twm_por),
+      external_key: "aaa")
+
+    event = online_plan_for([ online_row(event_key: "aaa") ]).events.sole
+
+    assert_equal existing, event.tournament
+  end
+
+  # #similar_tournaments is an O(events x catalogued) Ruby scan, and this source writes twenty
+  # events per archetype per pool — so an unscoped load lists online weeklies as "similar
+  # tournaments" noise on every paper preview, over a set that grows without bound as it is used.
+  test "never names an online event as a similar tournament" do
+    Tournament.create!(name: "Regional Championship 2026 Weekly", date: Date.new(2026, 3, 15),
+      online: true, tier: "other", format: "standard", standard_pool: standard_pools(:twm_por))
+
+    event = plan_for([ row(event_name: "Regional Championship 2026", event_date: Date.new(2026, 3, 15)) ]).events.first
+
+    assert_equal [ tournaments(:one) ], event.similar_tournaments
+  end
+
   private
 
   def row(**overrides)
@@ -167,5 +271,24 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
 
   def plan_for(rows, **options)
     Tournaments::StandingsImportPlan.call(rows: rows, **options)
+  end
+
+  # The online source's own Row: the same eight fields the plan reads, plus the five
+  # Tournaments::OnlineResults adds — the slug that is the player's real identity, the attendance,
+  # the record, and the tournament id that breaks a tie between two events on one date.
+  def online_row(**overrides)
+    Tournaments::OnlineResults::Row.new(
+      **{
+        event_name: "Pumpkaweekly #12", event_date: Date.new(2026, 2, 20),
+        division: "open", division_suffix: nil, format: "standard",
+        player_name: "JRobrueda", placement: 2,
+        list_url: "https://play.limitlesstcg.com/tournament/aaa/player/jrobrueda/decklist",
+        player_slug: "jrobrueda", attendance: 197, wins: 8, losses: 0, ties: 0, event_key: "aaa"
+      }.merge(overrides)
+    )
+  end
+
+  def online_plan_for(rows, standard_pool: standard_pools(:twm_por), **options)
+    Tournaments::StandingsImportPlan.call(rows: rows, online: true, standard_pool: standard_pool, **options)
   end
 end

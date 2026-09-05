@@ -6,9 +6,13 @@ module Admin
     # above it, and an admin who reads "this event has no Standard pool" needs the filter field in
     # the same viewport to narrow the run and try again.
     class NewView < ApplicationComponent
-      def initialize(deck_id:, archetype_id:, event_filters:, limit_per_event:, archetypes:,
-                     plan: nil, archetype: nil)
+      def initialize(source:, deck_id:, slug:, rotation:, set:, archetype_id:, event_filters:,
+                     limit_per_event:, archetypes:, plan: nil, archetype: nil)
+        @source = source
         @deck_id = deck_id
+        @slug = slug
+        @rotation = rotation
+        @set = set
         @archetype_id = archetype_id
         @event_filters = event_filters
         @limit_per_event = limit_per_event
@@ -23,13 +27,15 @@ module Admin
           lead
 
           render Admin::StandingsImports::Form.new(
-            deck_id: @deck_id, archetype_id: @archetype_id, event_filters: @event_filters,
+            source: @source, deck_id: @deck_id, slug: @slug, rotation: @rotation, set: @set,
+            archetype_id: @archetype_id, event_filters: @event_filters,
             limit_per_event: @limit_per_event, archetypes: @archetypes
           )
 
           if @plan
             render Admin::StandingsImports::PlanTable.new(
-              plan: @plan, archetype: @archetype, deck_id: @deck_id,
+              plan: @plan, archetype: @archetype, source: @source, deck_id: @deck_id,
+              slug: @slug, rotation: @rotation, set: @set,
               event_filters: @event_filters, limit_per_event: @limit_per_event
             )
           end
@@ -40,9 +46,10 @@ module Admin
 
       def lead
         p(class: "settings-section-lead") do
-          plain "Reads one archetype's tournament history off limitlesstcg.com and turns it into "
-          plain "public standings rows. Preview first: everything a run writes lands in the "
-          plain "catalog every member reads, where nothing tells an import from a hand-typed row."
+          plain "Reads one archetype's results off limitlesstcg.com — its paper tournament history, "
+          plain "or its best online finishes in one card pool — and turns them into public "
+          plain "standings rows. Preview first: everything a run writes lands in the catalog every "
+          plain "member reads, where nothing tells an import from a hand-typed row."
         end
       end
     end

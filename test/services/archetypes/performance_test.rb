@@ -143,15 +143,76 @@ class Archetypes::PerformanceTest < ActiveSupport::TestCase
     assert_equal [ [ Tournament::TIER_LABELS.fetch("regional"), 2 ] ], result.by_tier
   end
 
+  # The events figure stays whole — an online weekly is as distinct an event as a Regional — so the
+  # split has to come back as its own pair of numbers or the panel has nothing to name it with.
+  # `by_tier` cannot stand in: the online import forces `tier: "other"`, which is also where a
+  # paper event with no tier lands.
+  test "counts the online standings and the online events beside the whole figures" do
+    archetype = archetype_of_its_own
+    paper = standard_event(date: Date.new(2026, 5, 1))
+    record(paper, archetype, placement: 1)
+    record(paper, archetype, placement: 4)
+    first_online = online_event(date: Date.new(2026, 5, 10))
+    2.times { record(first_online, archetype, placement: 2) }
+    record(online_event(date: Date.new(2026, 5, 17)), archetype, placement: 3)
+
+    result = performance_for(archetype)
+
+    assert_equal 5, result.standings_count
+    assert_equal 3, result.events_count
+    assert_equal 3, result.online_standings_count
+    assert_equal 2, result.online_events_count
+    assert_predicate result, :online?
+    refute_predicate result, :all_events_online?
+  end
+
+  # A sample of paper events must say nothing about online play, so the counts have to be zero and
+  # the predicate false rather than the panel deciding by subtraction.
+  test "a sample holding no online event reports zero and answers online? false" do
+    archetype = archetype_of_its_own
+    event = standard_event
+    2.times { record(event, archetype, placement: 1) }
+
+    result = performance_for(archetype)
+
+    assert_equal 2, result.standings_count
+    assert_equal 0, result.online_standings_count
+    assert_equal 0, result.online_events_count
+    refute_predicate result, :online?
+    refute_predicate result, :all_events_online?
+  end
+
+  # The case the panel words differently: "3 of the 3 events" is a strange way to say "all of
+  # them", so the service answers the question rather than leaving the view to compare two numbers.
+  test "all_events_online? is true only when every event in the sample is online" do
+    archetype = archetype_of_its_own
+    2.times { |i| record(online_event(date: Date.new(2026, 5, 1) + i), archetype) }
+
+    all_online = performance_for(archetype)
+
+    assert_equal 2, all_online.events_count
+    assert_equal 2, all_online.online_events_count
+    assert_predicate all_online, :all_events_online?
+
+    record(standard_event(date: Date.new(2026, 6, 1)), archetype)
+
+    assert_not_predicate performance_for(archetype), :all_events_online?
+  end
+
   test "an archetype with no standings answers zero without raising" do
     result = performance_for(archetype_of_its_own)
 
     refute_predicate result, :any?
     # placed_count included: `pick` answers nil for every column on an empty relation, so each of
     # these is a `to_i` away from being nil on a page that prints it.
-    assert_equal [ 0, 0, 0, 0, 0, 0 ],
+    assert_equal [ 0, 0, 0, 0, 0, 0, 0, 0 ],
       [ result.standings_count, result.events_count, result.lists_count, result.unlisted_count,
-        result.placed_count, result.unplaced_count ]
+        result.placed_count, result.unplaced_count,
+        result.online_standings_count, result.online_events_count ]
+    refute_predicate result, :online?
+    # events_count is zero here, so the equality online_events_count == events_count holds and
+    # would answer "every event is online" for an archetype with no event at all.
+    refute_predicate result, :all_events_online?
     assert_nil result.best_placement
     assert_nil result.first_date
     assert_nil result.last_date
@@ -179,6 +240,15 @@ class Archetypes::PerformanceTest < ActiveSupport::TestCase
   def standard_event(date: Date.new(2026, 5, 1), tier: "regional")
     Tournament.create!(name: "Performance Event #{next_index}", date: date, format: "standard",
                        standard_pool: standard_pools(:twm_por), tier: tier,
+                       created_by: users(:one))
+  end
+
+  # Anchored to the same real pool as the paper events, and `tier: "other"`, which is what the
+  # online import writes: on both axes this panel groups by, an online event is indistinguishable
+  # from a paper one.
+  def online_event(date: Date.new(2026, 5, 1))
+    Tournament.create!(name: "Performance Event #{next_index}", date: date, format: "standard",
+                       standard_pool: standard_pools(:twm_por), tier: "other", online: true,
                        created_by: users(:one))
   end
 

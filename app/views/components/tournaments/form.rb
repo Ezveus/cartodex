@@ -71,12 +71,19 @@ module Tournaments
         # A standing's placement is capped against its own division's field, per
         # Tournament#participant_count_for — never against the event's total attendance, which
         # is what TournamentEntry#participant_count already records per participation. Grouped
-        # under one label and hint so a user reads all three as one question, "how many players
-        # in this division", rather than three unrelated counters.
+        # under one label and hint so a user reads all four as one question, "how many players
+        # in this division", rather than four unrelated counters.
+        #
+        # "Open" is the fourth and is not an age division — it is the field of an online event,
+        # which has none. It gets an input here for the same reason the other three do, and more
+        # urgently: it is the only one anything ever writes on its own (the online import), and a
+        # wrong value caps every standing above it out of the wiki edit form with no other way
+        # anywhere in the app to correct the number.
         render Ui::FormGroup.new(
-          label: "Field size per age division",
+          label: "Field size per division",
           hint: "How many players competed in each division at this event — not the event's " \
-            "total attendance. Leave a division blank if nobody remembers. Caps a standing's " \
+            "total attendance. “Open” is the single field of an online event, which has no age " \
+            "divisions. Leave a division blank if nobody remembers. Caps a standing's " \
             "placement in that division."
         ) do
           div(class: "form-row") do
@@ -91,6 +98,10 @@ module Tournaments
             render Ui::FormGroup.new do
               f.label :masters_participant_count, "Masters", class: "form-label"
               f.number_field :masters_participant_count, class: "form-input", min: 1
+            end
+            render Ui::FormGroup.new do
+              f.label :open_participant_count, "Open (online)", class: "form-label"
+              f.number_field :open_participant_count, class: "form-input", min: 1
             end
           end
         end

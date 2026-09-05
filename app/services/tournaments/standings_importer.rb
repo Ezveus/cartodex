@@ -17,26 +17,65 @@ class Tournaments::StandingsImporter < ApplicationService
   # nothing about that row succeeded.
   CONSECUTIVE_FAILURE_LIMIT = 5
 
-  # The four counts answer four different questions and deliberately do not sum to the row count.
+  # The content half of the de-duplication key, and the *only* definition of it: #group_key
+  # compares it in memory and #dedup_key_of stores it on the standing, and two spellings would
+  # drift the day one of them learned about a new decklist line — after which cross-run
+  # de-duplication would stop, silently, with every run still reporting duplicates within itself.
+  #
+  # A sorted multiset of (set code, number, quantity), never the decklist text: the text is in DOM
+  # column order, so one 60 laid out differently survives a string comparison untouched. Hashed
+  # rather than stored whole because it is a database column and an index term; SHA-256 because
+  # nothing here needs it to be fast and a collision would merge two people's decks.
+  #
+  # nil for a list with no readable card lines — no list URL, a fetch that failed, a page that
+  # parsed to nothing. All three are one fact, "nothing to compare", and a row with no digest is
+  # in no group and is therefore never dropped.
+  def self.list_digest(text)
+    cards = text.to_s.lines
+      .filter_map { |line| line.strip.match(::Decks::Fetcher::CARD_LINE_RE) }
+      .map { |match| [ match[3], match[4], match[1].to_i ] }
+    return if cards.empty?
+
+    Digest::SHA256.hexdigest(cards.sort.map { |set_code, number, quantity|
+      "#{set_code} #{number} #{quantity}"
+    }.join("\n"))
+  end
+
+  # The five counts answer five different questions and deliberately do not sum to the row count.
   # `created` is "a standing row now exists" and is counted the moment it does, whether or not its
   # field list then arrived — the row is a real record either way, and its missing list is reported
   # separately in `failures`. `enriched` is "a list was attached to a row that had none", which is
-  # only true once the attach succeeds. `skipped` and `blocked` never touch the database at all.
+  # only true once the attach succeeds. `skipped`, `blocked` and `duplicates` never touch the
+  # database at all — a duplicate is a row the pre-pass dropped before any write, and it is its own
+  # count rather than folded into `skipped` because the two mean opposite things to an admin
+  # reading the receipt: skipped is "already there", duplicate is "deliberately not imported".
   Result = Struct.new(
-    :created, :enriched, :skipped, :blocked, :standing_ids, :enriched_standing_ids, :failures,
-    :aborted_reason, keyword_init: true
+    :created, :enriched, :skipped, :blocked, :duplicates, :standing_ids, :enriched_standing_ids,
+    :failures, :aborted_reason, keyword_init: true
   ) do
     def aborted? = aborted_reason.present?
     def failed_count = failures.size
   end
 
+  # `decklist_service` is the one coupling that differs between the two sources: a decklist page is
+  # `QUANTITY NAME (SET-NUM)` on limitlesstcg.com and a column layout whose set and number live only
+  # in each line's href on play.limitlesstcg.com. Everything else here reads the plan alone.
+  #
+  # `deduplicate` is off for the paper source and on for the online one, because the two sources
+  # publish different things: a paper results page is a *field*, where one player appears once, and
+  # the online leaderboard is a player's *best finishes*, where one list entered into six weekly
+  # tournaments is six rows. See #deduplicate! for what that costs and why it is a pre-pass.
+  #
   # `pause` is injectable and zero by default so tests do not sleep, but the job passes a real one:
   # a run is hundreds of requests to somebody else's site in a tight loop, and nothing else in this
   # app asks Limitless for that much at once.
-  def initialize(plan:, archetype:, user:, pause: 0.0, failure_limit: CONSECUTIVE_FAILURE_LIMIT)
+  def initialize(plan:, archetype:, user:, decklist_service: Tournaments::LimitlessDecklist,
+    deduplicate: false, pause: 0.0, failure_limit: CONSECUTIVE_FAILURE_LIMIT)
     @plan = plan
     @archetype = archetype
     @user = user
+    @decklist_service = decklist_service
+    @deduplicate = deduplicate
     @pause = pause
     @failure_limit = failure_limit
     @standing_ids = []
@@ -44,9 +83,13 @@ class Tournaments::StandingsImporter < ApplicationService
     @failures = []
     @counts = Hash.new(0)
     @consecutive_failures = 0
+    # Keyed by identity, never by value: RowPlan is a Struct, so two rows carrying the same player
+    # and status are `eql?` and would share one cache entry and one dedup slot.
+    @lists = {}.compare_by_identity
   end
 
   def call
+    deduplicate! if @deduplicate
     @plan.events.each { |event| import_event(event) }
     result
   rescue RunAborted => e
@@ -60,15 +103,204 @@ class Tournaments::StandingsImporter < ApplicationService
   def result(aborted_reason: nil)
     Result.new(
       created: @counts[:create], enriched: @counts[:enrich],
-      skipped: @counts[:skip], blocked: @counts[:blocked],
+      skipped: @counts[:skip], blocked: @counts[:blocked], duplicates: @counts[:duplicate],
       standing_ids: @standing_ids, enriched_standing_ids: @enriched_standing_ids,
       failures: @failures, aborted_reason: aborted_reason
     )
   end
 
+  # ---- de-duplication -------------------------------------------------------------------------
+
+  # The online source is a leaderboard of one player's *best finishes*, not a field: measured over
+  # 20 rows of one archetype's PBL page there are 8 distinct 60-card contents, `jrobrueda` holds 8
+  # of the rows and six of those are the identical 60 — one list entered into six weekly online
+  # tournaments. Imported as they stand, one person's deck is counted six times in the card report
+  # and every card in it weighted 30 % of the sample by one player's registration habit. So a
+  # (player slug, list content) pair is kept once — 20 rows down to 13 on that page.
+  #
+  # It is a *pre-pass*, and that is what makes it correct rather than merely cheap. Deciding row by
+  # row as the importer reaches them is wrong three times over, all three because the importer never
+  # sees the run whole:
+  #
+  #   * it cannot keep the best finish — import_event is the loop unit and StandingsImportPlan
+  #     re-sorts twice, so "the first one met" is decided by event date descending, and those six
+  #     identical lists sit in six different events;
+  #   * it is not idempotent — a row already imported is :skip, and a :skip row never fetches its
+  #     decklist, so on a second run the survivors are compared against an empty set and every row
+  #     dropped last time is created, which is the exact weighting this exists to prevent arriving
+  #     on the second click;
+  #   * it leaves empty events behind — find_or_create_tournament runs before the first row.
+  #
+  # So every row of every unblocked event, :skip and :enrich included, is fetched and grouped first,
+  # and which rows survive becomes a pure function of the leaderboard rather than of what is already
+  # in the database. They go through #remote, so the pacing and the consecutive-failure counter
+  # still apply — and the row that exhausts the run's patience is named in `failures` before the
+  # abort propagates, exactly as the per-row path names it, or the five that stopped the run would
+  # be the only failures a receipt never mentions.
+  #
+  # The fetches are *not* bounded by `max_rows`, which counts importable rows while this fetches
+  # every non-blocked one, :skip included. That is immaterial for a source whose page is 20 rows
+  # and would not be for a 300-row one, which is why it is written down rather than assumed.
+  def deduplicate!
+    candidates = dedup_candidates
+    candidates.each { |event, row_plan| prefetch(event, row_plan) }
+
+    remaining = drop_already_recorded(candidates)
+    remaining.group_by { |_event, row_plan| group_key(row_plan) }
+      .each { |key, group| drop_duplicates(group) if key && group.size > 1 }
+  end
+
+  # The in-run grouping is pure in the *leaderboard*; the database is not, because the leaderboard
+  # is a rolling top-20 that moves. When the survivor a run elected falls off the board — twenty
+  # better finishes appear, the ordinary life of a live page — the next run elects a different
+  # member of the same group, does not find it, and creates it while the first survivor's row
+  # stays. Measured: run 1 over W1@4/W2@7/W3@9 writes W1, run 2 over W2@7/W3@9 writes W2, and one
+  # player's one 60 is two lists in the sample. Two smaller doors onto the same accretion, because
+  # an in-memory group is only ever this run's rows: an admin splitting a large run with
+  # event_filters de-duplicates within each filter alone, and a transient fetch failure leaves its
+  # row un-keyed and kept, so the next healthy run enriches it rather than dropping it.
+  #
+  # So the key is looked up in the database first, before the grouping, in one indexed query per
+  # run. A row whose twin is already recorded is dropped whatever page, filter or run produced it.
+  def drop_already_recorded(candidates)
+    recorded = recorded_dedup_keys
+    return candidates if recorded.empty?
+
+    candidates.reject { |event, row_plan|
+      key = group_key(row_plan)
+      # Its *own* standing is not a twin: a row this run would have skipped anyway is honestly
+      # reported as skipped, and calling it a duplicate would say the run deliberately left out a
+      # row it had already imported. Only somebody else's row counts against it.
+      next false unless key && (recorded[key].to_a - [ row_plan.standing&.id ]).any?
+
+      drop_row(event, row_plan)
+      true
+    }
+  end
+
+  # One query over one archetype's standings *in the pools this run targets*, served by
+  # index_tournament_standings_on_dedup_key.
+  #
+  # NULLs are excluded in SQL rather than filtered afterwards, and that is the rule the whole
+  # column pair rests on: a NULL means "not an online import" — the paper source publishes no slug
+  # and two paper rows sharing a 60 are two real people who both played it — so it must never
+  # participate in de-duplication.
+  #
+  # Scoped by pool, and the scope is the difference between a true sample and a short one. The card
+  # report is bucketed on tournaments.standard_pool_id, so each pool is its own sample: a list a
+  # player kept unchanged across a rotation is a real row of *each* pool's leaderboard, and dropping
+  # it from whichever pool was imported second makes that sample report fewer lists than the source
+  # published. A list surviving a rotation untouched is also exactly the one a player keeps
+  # registering, so unscoped this would bite hardest on the pool that had just opened. The in-run
+  # grouping already honours the same boundary — a run is one `set` — and the two halves of one rule
+  # must not disagree, since the database half is the one that outlives the run.
+  def recorded_dedup_keys
+    @recorded_dedup_keys ||= TournamentStanding
+      .where(archetype_id: @archetype.id)
+      .joins(:tournament).where(tournaments: { standard_pool_id: run_pool_ids })
+      .where.not(player_slug: nil).where.not(list_digest: nil)
+      .pluck(:player_slug, :list_digest, :id)
+      .group_by { |slug, digest, _id| [ slug, digest ] }
+      .transform_values { |rows| rows.map(&:last) }
+  end
+
+  # nil is a real value here, not an absence: a GLC or Expanded online event carries no pool, and
+  # such rows must de-duplicate against each other rather than against every Standard pool at once.
+  # Rails compiles a nil inside the array to `IS NULL`, which is what makes that work.
+  def run_pool_ids
+    @run_pool_ids ||= @plan.events.reject(&:blocked?).map { |event| event.standard_pool&.id }.uniq
+  end
+
+  # A :blocked row is never written, so letting one win a group would drop a row that would have
+  # been — it is the one status excluded. :skip and :enrich are the whole point of the pre-pass.
+  def dedup_candidates
+    @plan.events.reject(&:blocked?).flat_map { |event|
+      event.rows.filter_map { |row_plan| [ event, row_plan ] if row_plan.status != :blocked }
+    }
+  end
+
+  # A row with no list has nothing to fetch, and a row whose fetch failed stores nothing. Either
+  # way #group_key finds no content, the row gets no group key, and it is therefore never dropped.
+  def prefetch(event, row_plan)
+    return if row_plan.row.list_url.blank?
+
+    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
+    # A decklist that arrived is a unit of remote work that completed, so it clears the count for
+    # the same reason a finished row does — otherwise four scattered pre-pass failures plus one
+    # later row would "give up after five consecutive fetch failures" that were never consecutive.
+    @consecutive_failures = 0
+  rescue RunAborted => e
+    # Named before the re-raise, for the reason import_row names its own: the row that finally
+    # exhausted the run's patience belongs in the report beside the four before it rather than
+    # vanishing into the abort message.
+    @failures << [ row_label(event, row_plan), e.message ]
+    raise
+  rescue StandardError
+    nil
+  end
+
+  # (player slug, list content), and both halves are measured. The display name splits `jrobrueda`
+  # in two — 20 rows carried 13 display names against 12 slugs — so a name-keyed group counts one
+  # person's single list twice. And the content is a **sorted multiset of (set, number, quantity)**,
+  # never the decklist text: the text is in DOM column order, so one 60 laid out differently
+  # survives a string comparison untouched.
+  # One guard covers all three ways a row can have no content — no list URL, a fetch that failed,
+  # and a list that parsed to nothing — because they are one fact: nothing to compare. A row with
+  # no key is in no group and is therefore never dropped.
+  def group_key(row_plan)
+    digest = self.class.list_digest(@lists[row_plan])
+    return if digest.nil?
+
+    [ player_key(row_plan.row), digest ]
+  end
+
+  # The slug when the source has one. The paper source does not, and does not de-duplicate either,
+  # so the fallback is the same normalized name TournamentStanding is keyed on rather than nothing.
+  def player_key(row)
+    slug = row.player_slug if row.respond_to?(:player_slug)
+    slug.presence || row.player_name.to_s.squish.downcase
+  end
+
+  # The survivor is the best *finish*, read off the source alone: lowest placement, ties broken by
+  # the earliest date and then by the event's own id, a total order. Not "the first row met" — that
+  # is decided by the plan's sort, and lists identical across different players are three separate
+  # groups here rather than one, because two people arriving at one 60 is a fact about the build.
+  def drop_duplicates(group)
+    _survivor, *dropped = group.sort_by { |event, row_plan| survivor_order(event, row_plan) }
+    dropped.each { |event, row_plan| drop_row(event, row_plan) }
+  end
+
+  def survivor_order(event, row_plan)
+    [ row_plan.row.placement || Float::INFINITY, event.date, event_key(row_plan.row).to_s ]
+  end
+
+  def event_key(row)
+    row.event_key if row.respond_to?(:event_key)
+  end
+
+  # Removed from the plan rather than flagged on it, so every later reader — import_event's own
+  # "is there anything left to write" guard included — sees one shape of truth.
+  def drop_row(event, row_plan)
+    event.rows = event.rows.reject { |candidate| candidate.equal?(row_plan) }
+    @counts[:duplicate] += 1
+  end
+
+  # ---- writes ---------------------------------------------------------------------------------
+
   def import_event(event)
     if event.blocked?
       @counts[:blocked] += event.rows.size
+      return
+    end
+    # Nothing this run can write points at this event: every row it had was either dropped by the
+    # de-duplication pre-pass or is one no write follows from. find_or_create_tournament runs
+    # *before* the first row, so without this guard a de-duplicated online event — the leaderboard
+    # carries roughly one row per event — leaves a Tournament nothing references, and there is no
+    # way back: StandingsImportUndo deliberately never deletes events, there is no admin tournaments
+    # screen, and an online event appears in neither the catalog nor search. The rows that remain
+    # are still counted, because a :skip or :blocked row is a decision the receipt has to show.
+    if event.tournament.nil? && event.importable_rows.empty?
+      event.rows.each { |row_plan| @counts[row_plan.status] += 1 }
       return
     end
 
@@ -98,14 +330,40 @@ class Tournaments::StandingsImporter < ApplicationService
     Tournament.create!(
       name: event.name, date: event.date, tier: event.tier, format: event.format,
       other_format_name: event.other_format_name, standard_pool: event.standard_pool,
+      # An online event is catalogued because a standing needs a Tournament, not because anybody
+      # attended it, so `online` is what keeps twenty weeklies per archetype per pool out of every
+      # listing surface. The attendance beside it is the first participant count anything in this
+      # app has ever written: the online source prints it on every row, the paper one publishes
+      # none, and TournamentStanding#placement_within_division_field is what reads it back.
+      online: event.online, open_participant_count: event.participant_count,
+      # The source's own id for the event, and for an online run it *is* the event's identity:
+      # online names are arbitrary and repeat weekly, so two different tournaments on one day are
+      # two rows here and the partial UNIQUE index on external_key is what keeps them from being
+      # four. nil for the paper source, whose events are identified by (name, date) as they always
+      # were — and nil is why that index is partial, SQLite treating NULLs as distinct.
+      external_key: event.external_key,
       created_by: @user
     )
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
     catalogued_meanwhile(event) || raise
   end
 
+  # Scoped by venue, exactly as StandingsImportPlan#load_catalogued is, and for a sharper reason
+  # than tidiness. `name_and_date_are_unique` is global, so an online event whose name and date
+  # happen to match a paper one loses `create!` — and an unscoped find_by then hands back the
+  # *paper* event, onto which this run writes a public `open`-division standing. Online names are
+  # arbitrary and repeat weekly ("Pumpkaweekly"), and the plan cannot warn: its own lookup is
+  # partitioned, so the row previews as :create with no similar-event hint and the admin sees
+  # nothing at all. Scoped, the lookup misses and the RecordInvalid re-raises, which is reported
+  # per event and is the honest answer.
   def catalogued_meanwhile(event)
-    Tournament.find_by(name_normalized: event.name.squish.downcase, date: event.date)
+    scope = Tournament.where(online: event.online.present?)
+    # By the same key the create used, or the recovery answers a different question from the
+    # collision: an online event that lost to the external_key index is not findable by a name two
+    # weeklies share, and one found by that name would be the wrong event.
+    return scope.find_by(external_key: event.external_key) if event.external_key.present?
+
+    scope.find_by(name_normalized: event.name.squish.downcase, date: event.date)
   end
 
   def import_row(tournament, event, row_plan)
@@ -123,16 +381,21 @@ class Tournaments::StandingsImporter < ApplicationService
   end
 
   def create_standing(tournament, event, row_plan)
-    row = row_plan.row
-    standing = build_standing(tournament, row)
+    standing = build_standing(tournament, row_plan)
     @standing_ids << standing.id
     @counts[:create] += 1
-    attach_field_list(standing, event, row)
+    attach_field_list(standing, event, row_plan)
   end
 
-  def build_standing(tournament, row)
+  # W-L-T is written when the source carries it, which the paper results page does not — its rows
+  # have no record at all, which is why exactly one standing in the database had one before this.
+  # `respond_to?` rather than a second Row shape: the two sources share a contract of eight fields
+  # and the online one adds to it, so asking is what keeps this readable by both.
+  def build_standing(tournament, row_plan)
+    row = row_plan.row
     tournament.standings.create!(
       player_name: row.player_name, division: row.division, placement: row.placement,
+      **record_of(row), **dedup_key_of(row_plan),
       archetype: @archetype, created_by: @user
     )
   rescue ActiveRecord::RecordNotUnique
@@ -140,6 +403,27 @@ class Tournaments::StandingsImporter < ApplicationService
     # this is a wiki — so the run reports it rather than trying to win.
     raise ActiveRecord::RecordInvalid.new(tournament.standings.new),
       "a standing for this player was created while the import was running"
+  end
+
+  def record_of(row)
+    return {} unless row.respond_to?(:wins)
+
+    { wins: row.wins, losses: row.losses, ties: row.ties }
+  end
+
+  # The de-duplication key, written onto the row it identifies so the next run can see it — which
+  # is the whole of what makes "de-duplicated" survive a leaderboard that moves. See
+  # #drop_already_recorded.
+  #
+  # Empty for a run that does not de-duplicate, which leaves both columns NULL for every paper
+  # row: a NULL is "not an online import" and never participates, because the paper source
+  # publishes no slug and two paper rows sharing a 60 are two real people who both played it.
+  # Written from #player_key and .list_digest, the same two expressions the in-run grouping
+  # compares, rather than from row.player_slug and a second parse — one definition each.
+  def dedup_key_of(row_plan)
+    return {} unless @deduplicate
+
+    { player_slug: player_key(row_plan.row), list_digest: self.class.list_digest(@lists[row_plan]) }
   end
 
   # Enrichment fills a NULL deck_id and nothing else. Every other column on an existing row was
@@ -156,7 +440,7 @@ class Tournaments::StandingsImporter < ApplicationService
     standing = TournamentStanding.find_by(id: row_plan.standing.id)
     raise ActiveRecord::RecordNotFound, "the standing was deleted while the import was running" if standing.nil?
 
-    attach_field_list(standing, event, row_plan.row)
+    attach_field_list(standing, event, row_plan)
     @enriched_standing_ids << standing.id
     @counts[:enrich] += 1
   end
@@ -166,10 +450,16 @@ class Tournaments::StandingsImporter < ApplicationService
   # the standing fails to validate — reachable on /decks/shared and deletable through no path in
   # the app. `deck` is optional on a standing, so the standing goes first and the list is attached
   # after, with the same discard guard Tournaments::StandingListImportJob already carries.
-  def attach_field_list(standing, event, row)
+  #
+  # Fetching the decklist *text* is not part of that order and never was: it creates nothing, so
+  # #deduplicate! is free to do it for every row before the first write and hand the text back
+  # here. What must stay exactly where it is — after the standing exists — is Decks::Fetcher,
+  # confirm_attached! and discard_orphaned_list, the three steps that can leave a record behind.
+  def attach_field_list(standing, event, row_plan)
+    row = row_plan.row
     return if row.list_url.blank?
 
-    text = remote { Tournaments::LimitlessDecklist.call(row.list_url) }
+    text = list_text(row_plan)
     resolve_printings(text)
     deck = ::Decks::Fetcher.call(
       text, nil, deck_name(standing, event),
@@ -177,11 +467,16 @@ class Tournaments::StandingsImporter < ApplicationService
       other_format_name: event.other_format_name
     )
 
+    # The key travels with the list, and it has to: a row *enriched* with a list is keyed for the
+    # first time here, and a row whose pre-pass fetch failed is keyed from the text its own turn
+    # finally fetched. Leave either NULL and the next run finds no twin and writes a second list —
+    # the transient-failure door onto exactly the accretion #drop_already_recorded closes.
+    #
     # Defensive: the standing was valid moments ago and its `tournament` association is already
     # loaded, so the reachable failure here is not a validation but the row having been deleted —
     # which `update!` reports by returning true, and confirm_attached! is what actually catches.
     begin
-      standing.update!(deck: deck)
+      standing.update!(deck: deck, **dedup_key_of(row_plan))
     rescue StandardError
       discard_orphaned_list(deck, standing.id)
       raise
@@ -202,6 +497,18 @@ class Tournaments::StandingsImporter < ApplicationService
 
     deck.destroy_if_ownerless
     raise ActiveRecord::RecordNotFound, "the standing was deleted while its field list was being imported"
+  end
+
+  # The pre-pass's text when it has one. A prefetch that failed stores nothing, so the row fetches
+  # its own list here and fails again — where the failure is reported against the row by name
+  # instead of against a pre-pass no receipt mentions.
+  # Stored back rather than merely returned: #dedup_key_of digests @lists, so a row whose prefetch
+  # failed would otherwise be written with a NULL digest despite having a list attached — and the
+  # next run, finding no twin, would build that list a second time on a second row.
+  def list_text(row_plan)
+    return @lists[row_plan] if @lists.key?(row_plan)
+
+    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
   end
 
   # Every printing is resolved *before* Decks::Fetcher opens its transaction. That transaction is a

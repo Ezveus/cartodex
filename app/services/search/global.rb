@@ -104,8 +104,13 @@ module Search
 
     # The catalog is public, so unlike the deck scopes above this one does not depend on who
     # is asking. A participation has no name of its own and is found through its event.
+    #
+    # `catalogued` for the reason TournamentsController#index uses it: an imported online event is
+    # a row in this table but not an event anybody attended, and the spotlight would otherwise
+    # answer "pitch black" with a wall of weekly online tournaments the searcher has never heard
+    # of, five at a time, ahead of nothing.
     def tournament_scope
-      @tournament_scope ||= Tournament.name_matching(@query)
+      @tournament_scope ||= Tournament.catalogued.name_matching(@query)
     end
 
     # Excluding the searcher's own decks is what keeps one deck out of two groups of the same

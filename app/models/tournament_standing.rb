@@ -5,10 +5,22 @@
 # account here — so it hangs off the Tournament, not off a User. Governance is wiki: any signed-in
 # member may add, correct or delete any row, and `created_by` is the only trace of who typed it.
 class TournamentStanding < ApplicationRecord
-  # The same three values a TournamentProfile resolves to, as Strings because that is what the
-  # column holds. Reused rather than re-declared: a second list would be free to drift from the
-  # one that decides a real player's division.
-  DIVISIONS = TournamentProfile::DIVISIONS.map(&:to_s).freeze
+  # The three Play! Pokémon age divisions, as Strings because that is what the column holds.
+  # Still derived from TournamentProfile rather than re-declared: this list has to keep agreeing
+  # with the one that decides a real player's division, and a second copy would be free to drift.
+  AGE_DIVISIONS = TournamentProfile::DIVISIONS.map(&:to_s).freeze
+
+  # Every value the column may hold. "open" is not an age division and has no TournamentProfile
+  # behind it: it is what an online event's standing carries, because online play has no age
+  # divisions at all and `division` is NOT NULL behind a validating enum. Writing "masters" there
+  # instead would be a lie that Archetypes::Performance#by_division then reports as fact.
+  #
+  # The two lists are separate because four readers want different halves of them, and the split
+  # is the only thing keeping each honest: the enum, `division_order`, Standings::Table and
+  # Performance#by_division must see all four or an online row is silently dropped from a report
+  # that still looks complete — while Standings::Form's select and StandingsController's prefill
+  # must see only AGE_DIVISIONS, or a member typing a paper event's sheet is offered "Open".
+  DIVISIONS = (AGE_DIVISIONS + [ "open" ]).freeze
 
   belongs_to :tournament
   belongs_to :archetype
@@ -57,8 +69,11 @@ class TournamentStanding < ApplicationRecord
   # somewhere the reader never sees, and page 2 of a Worlds sheet would open in the middle of a
   # division that page 1 appeared to have finished.
   #
-  # An Arel CASE rather than an interpolated Arel.sql string. The values are Ruby symbols from
-  # TournamentProfile::DIVISIONS, so neither form can carry user input — but the interpolated one
+  # "open" sorts last, after masters, which is where a reader looking for the age divisions
+  # expects anything that is not one.
+  #
+  # An Arel CASE rather than an interpolated Arel.sql string. The values come from a frozen
+  # constant, so neither form can carry user input — but the interpolated one
   # is indistinguishable from one that could, and Brakeman (a CI check, clean until now) says so.
   # Arel quotes them itself and leaves nothing to read as a warning.
   def self.division_order

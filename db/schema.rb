@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_170100) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -275,15 +275,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
     t.integer "created_by_id"
     t.integer "deck_id"
     t.string "division", null: false
+    t.string "list_digest"
     t.integer "losses"
     t.integer "placement"
     t.string "player_name", null: false
     t.string "player_name_normalized", null: false
+    t.string "player_slug"
     t.integer "ties"
     t.integer "tournament_entry_id"
     t.integer "tournament_id", null: false
     t.datetime "updated_at", null: false
     t.integer "wins"
+    t.index ["archetype_id", "player_slug", "list_digest"], name: "index_tournament_standings_on_dedup_key"
     t.index ["archetype_id"], name: "index_tournament_standings_on_archetype_id"
     t.index ["created_by_id"], name: "index_tournament_standings_on_created_by_id"
     t.index ["deck_id"], name: "index_tournament_standings_on_deck_id"
@@ -297,11 +300,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
     t.datetime "created_at", null: false
     t.integer "created_by_id"
     t.date "date", null: false
+    t.string "external_key"
     t.string "format", default: "standard", null: false
     t.integer "junior_participant_count"
     t.integer "masters_participant_count"
     t.string "name", null: false
     t.string "name_normalized", null: false
+    t.boolean "online", default: false, null: false
+    t.integer "open_participant_count"
     t.string "other_format_name"
     t.integer "senior_participant_count"
     t.integer "standard_pool_id"
@@ -309,7 +315,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
     t.datetime "updated_at", null: false
     t.index ["created_by_id"], name: "index_tournaments_on_created_by_id"
     t.index ["date"], name: "index_tournaments_on_date"
-    t.index ["name_normalized", "date"], name: "index_tournaments_on_name_normalized_and_date", unique: true
+    t.index ["external_key"], name: "index_tournaments_on_external_key", unique: true, where: "external_key IS NOT NULL"
+    t.index ["name_normalized", "date"], name: "index_tournaments_on_name_normalized_and_date", unique: true, where: "online = 0"
+    t.index ["online", "date"], name: "index_tournaments_on_online_and_date"
     t.index ["standard_pool_id"], name: "index_tournaments_on_standard_pool_id"
   end
 

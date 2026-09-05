@@ -11,6 +11,11 @@ module Tournaments
       # choosing for the user.
       DEFAULT_DIVISION = "masters"
 
+      # The fourth value of TournamentStanding::DIVISIONS, the one AGE_DIVISIONS does not carry.
+      # Spelled out rather than derived as DIVISIONS - AGE_DIVISIONS, which would silently offer
+      # any future fifth value on an online event whether or not it meant anything there.
+      ONLINE_DIVISION = "open"
+
       def initialize(tournament:, standing:, existing: nil, entry: nil)
         @tournament = tournament
         @standing = standing
@@ -38,14 +43,17 @@ module Tournaments
 
           render Ui::FormGroup.new do
             f.label :division, class: "form-label"
-            # An explicit selected:. DIVISIONS runs junior-senior-masters, and prefill_attributes
-            # yields no division at all for a member with no TournamentProfile — so the browser
-            # picked the first option and quietly recorded them as a Junior. Masters is the
-            # default because it is the division a standings sheet overwhelmingly records, and a
-            # wrong pre-selection here is a wiki edit away rather than a refusal.
-            f.select :division,
-              TournamentStanding::DIVISIONS.map { |d| [ d.capitalize, d ] },
-              { selected: @standing.division || DEFAULT_DIVISION }, class: "form-input"
+            # Both halves — which options and which one is pre-selected — are asked of the event,
+            # never fixed: see #offered_divisions and #default_division below.
+            #
+            # An explicit selected:. AGE_DIVISIONS runs junior-senior-masters, and
+            # prefill_attributes yields no division at all for a member with no TournamentProfile
+            # — so the browser picked the first option and quietly recorded them as a Junior.
+            # Masters is the default on a paper event because it is the division a standings sheet
+            # overwhelmingly records, and a wrong pre-selection here is a wiki edit away rather
+            # than a refusal.
+            f.select :division, division_options,
+              { selected: @standing.division || default_division }, class: "form-input"
           end
 
           render Ui::ArchetypePicker.new(form: f, selected: @standing.archetype)
@@ -78,6 +86,51 @@ module Tournaments
       end
 
       private
+
+      # What the event has, plus the row's own value when it is not one of them, and the second
+      # half is not a nicety. This form is shared by new *and* edit, standings are wiki-governed,
+      # and standing_params permits :division — so on an imported online row a select missing
+      # "open" renders no option matching it, the browser pre-selects the first, and the division
+      # travels back to the server on every save whether or not anybody touched it. A member
+      # opening the row to fix a typo in a player name silently refiles the result.
+      def division_options
+        divisions = offered_divisions
+        own = @standing.division
+        divisions += [ own ] if own.present? && divisions.exclude?(own)
+        divisions.map { |d| [ d.capitalize, d ] }
+      end
+
+      # The list is a property of the event, because the two are mutually exclusive: a paper event
+      # has three age divisions and no "open", an online one has "open" and no age divisions at
+      # all. §4 fixed the edit case by keeping the row's own value in the list; this is the same
+      # lie arriving through the *new* case, which that fix does not reach — a new standing takes
+      # its division from the reader's TournamentProfile or from DEFAULT_DIVISION, so on an
+      # imported online sheet the select offered junior/senior/masters and nothing else, and
+      # Archetypes::Performance#by_division then reports an online result as a Masters one.
+      #
+      # Offered rather than withheld — the alternative was to drop "Add a standing" on an online
+      # event, the way the participation invitations are dropped — because the two withholdings
+      # answer different questions. A participation is an age-division Play! Pokémon record that
+      # means nothing online, and accepting one makes the event permanently undeletable
+      # (`has_many :entries, dependent: :restrict_with_error`). A standing is wiki-governed public
+      # data with `dependent: :destroy` behind it, an imported online sheet is a de-duplicated
+      # top-20 and therefore partial by construction, and every row already carries Edit and
+      # Delete — a sheet a member may correct and delete rows from but never add one back to is
+      # the odd rule, not this.
+      def offered_divisions
+        return [ ONLINE_DIVISION ] if @tournament.online?
+
+        TournamentStanding::AGE_DIVISIONS
+      end
+
+      # DEFAULT_DIVISION is presentation only, so the online default costs nothing but honesty:
+      # "open" is the only option an online event offers, and pre-selecting it is what stops the
+      # browser choosing on the member's behalf — the same reason the explicit selected: exists.
+      def default_division
+        return ONLINE_DIVISION if @tournament.online?
+
+        DEFAULT_DIVISION
+      end
 
       def form_url
         return tournament_standings_path(@tournament) unless @standing.persisted?
@@ -122,7 +175,7 @@ module Tournaments
       # division was not prefilled, while the select beside it already read Masters and the event
       # knew how big that field was.
       def placement_hint
-        division = @standing.division || DEFAULT_DIVISION
+        division = @standing.division || default_division
         field = @tournament.participant_count_for(division)
         return "Optional — leave blank if nobody remembers the final standing." if field.blank?
 

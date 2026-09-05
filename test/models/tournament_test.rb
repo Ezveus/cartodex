@@ -76,6 +76,51 @@ class TournamentTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:name], "is already catalogued for this date"
   end
 
+  # (name_normalized, date) UNIQUE is a rule about the *public catalog* — two members must not
+  # catalogue one real event twice — and it was never a claim about the world. Online event names
+  # are arbitrary and repeat weekly, so the index is partial (WHERE online = 0) and the validation
+  # is scoped to match it: a paper Regional and an online weekly may share a name and a date, and
+  # neither is a duplicate of the other.
+  test "an online event may share a name and a date with a catalogued one" do
+    online = build_tournament(name: tournaments(:one).name, date: tournaments(:one).date, online: true)
+
+    assert online.valid?
+    assert_nothing_raised { online.save! }
+  end
+
+  test "two online events may share a name and a date" do
+    date = Date.current
+    Tournament.create!(name: "Pumpkaweekly #12", date: date, tier: "other", format: "expanded",
+      online: true, external_key: "aaa")
+
+    assert build_tournament(name: "Pumpkaweekly #12", date: date, online: true,
+      external_key: "bbb").valid?
+  end
+
+  # What keeps one online event to one row instead. Partial, because SQLite treats NULLs as
+  # distinct: over the whole column every paper event would collide with every other.
+  test "two events may not share an external key" do
+    date = Date.current
+    Tournament.create!(name: "Pumpkaweekly #12", date: date, tier: "other", format: "expanded",
+      online: true, external_key: "aaa")
+
+    assert_raises ActiveRecord::RecordNotUnique do
+      Tournament.create!(name: "Pumpkaweekly #13", date: date + 1, tier: "other", format: "expanded",
+        online: true, external_key: "aaa")
+    end
+  end
+
+  # The index behind the validation two tests above, and the reason to reach past the validation
+  # to reach it: making that rule partial is exactly the edit that could have made it vacuous, and
+  # a validation-only test would still pass with no index at all.
+  test "the catalogue still refuses two rows for one paper event at the database" do
+    duplicate = build_tournament(name: tournaments(:one).name, date: tournaments(:one).date)
+
+    assert_raises ActiveRecord::RecordNotUnique do
+      duplicate.save!(validate: false)
+    end
+  end
+
   test "the same name on another date is a different event" do
     assert build_tournament(name: tournaments(:one).name, date: tournaments(:one).date + 1).valid?
   end

@@ -4,6 +4,31 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
   DECKLIST_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_decklist.html")).freeze
   LIST_URL = "https://limitlesstcg.com/decks/list/28788".freeze
 
+  # The online source hands the importer a decklist *service* rather than a page, so these are the
+  # texts that service returns. LIST_A_SHUFFLED is the same cards in a different column order — the
+  # layout a decklist page really varies in, and the case a key made of the raw text cannot see.
+  URL_A = "https://play.limitlesstcg.com/tournament/aaa/player/jrobrueda/decklist".freeze
+  URL_B = "https://play.limitlesstcg.com/tournament/bbb/player/jrobrueda/decklist".freeze
+  URL_C = "https://play.limitlesstcg.com/tournament/ccc/player/jrobrueda/decklist".freeze
+
+  LIST_A = <<~TEXT.freeze
+    Pokémon: 3
+    2 Raging Bolt ex TEF 123
+    1 Teal Mask Ogerpon ex TWM 25
+
+    Trainer: 4
+    4 Crispin TWM 133
+  TEXT
+
+  LIST_A_SHUFFLED = <<~TEXT.freeze
+    Trainer: 4
+    4 Crispin TWM 133
+
+    Pokémon: 3
+    1 Teal Mask Ogerpon ex TWM 25
+    2 Raging Bolt ex TEF 123
+  TEXT
+
   setup do
     @admin = users(:one)
     @archetype = archetypes(:standings_marker)
@@ -232,11 +257,436 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     ::Decks::Fetcher.define_singleton_method(:call, original)
   end
 
+  # ---- the online source, and its de-duplication pre-pass -------------------------------------
+
+  test "writes an online event with its attendance, and the row's own record" do
+    result = online_import([ online_row(placement: 2, wins: 8, losses: 0, ties: 1) ],
+      lists: { URL_A => LIST_A })
+
+    standing = TournamentStanding.find(result.standing_ids.sole)
+    tournament = standing.tournament
+    assert tournament.online?
+    # The leaderboard prints the field size on every row; the paper source publishes none, which is
+    # why this is the first participant count anything in this app has ever written.
+    assert_equal 197, tournament.open_participant_count
+    # "other" whatever the name says, and never a guess: CP_REFERENCE would otherwise offer
+    # championship points for an online event.
+    assert_equal "other", tournament.tier
+    assert_equal standard_pools(:twm_por), tournament.standard_pool
+    assert_equal [ "open", 2, 8, 0, 1 ],
+      [ standing.division, standing.placement, standing.wins, standing.losses, standing.ties ]
+  end
+
+  # The defect that would otherwise appear only on the second click. A row already imported is
+  # :skip, and a :skip row never fetches its decklist — so a pre-pass that skipped them would
+  # compare the survivors against an empty set and create every row it dropped last time, which is
+  # the exact one-player weighting the de-duplication exists to prevent.
+  test "importing the same leaderboard twice writes the same standings the second time" do
+    lists = { URL_A => LIST_A, URL_B => LIST_A, URL_C => LIST_A }
+
+    first = online_import(one_players_three_entries, lists: lists)
+    assert_equal 1, first.created
+    assert_equal 2, first.duplicates
+
+    second = nil
+    assert_no_difference [ -> { Tournament.count }, -> { TournamentStanding.count }, -> { Deck.count } ] do
+      second = online_import(one_players_three_entries, lists: lists)
+    end
+
+    assert_equal 0, second.created
+    assert_equal 1, second.skipped
+    assert_equal 2, second.duplicates
+    assert_empty second.failures
+  end
+
+  # StandingsImportPlan sorts its events by date descending and import_event is the loop unit, so
+  # "the first row met" is decided by the event's date. Here the later event holds the worse finish,
+  # so the two orders disagree and only a survivor chosen by placement is the best finish.
+  test "keeps the best placement of a duplicate group, not the first row it reaches" do
+    result = online_import(one_players_two_entries, lists: { URL_A => LIST_A, URL_B => LIST_A })
+
+    assert_equal 1, result.created
+    assert_equal 1, result.duplicates
+    standing = TournamentStanding.find(result.standing_ids.sole)
+    assert_equal [ "Weekly A", 1 ], [ standing.tournament.name, standing.placement ]
+  end
+
+  # find_or_create_tournament runs before the first row, and the leaderboard carries roughly one row
+  # per event — so without a guard every dropped row leaves a Tournament nothing points at, which
+  # StandingsImportUndo never deletes, no admin screen lists, and neither the catalog nor search
+  # shows. Nothing anywhere in the app could remove it again.
+  test "never creates an event whose only row was de-duplicated away" do
+    # external_key and not just the name: an online event *is* its Limitless id now, so this is
+    # the row an earlier run of this same leaderboard would have left behind.
+    Tournament.create!(name: "Weekly A", date: Date.new(2026, 2, 20), online: true, tier: "other",
+      format: "standard", standard_pool: standard_pools(:twm_por), external_key: "aaa")
+
+    assert_no_difference -> { Tournament.count } do
+      result = online_import(one_players_two_entries, lists: { URL_A => LIST_A, URL_B => LIST_A })
+
+      assert_equal 1, result.created
+      assert_equal 1, result.duplicates
+    end
+
+    assert_nil Tournament.find_by(name_normalized: "weekly b")
+  end
+
+  # Two people arriving at one 60 is a fact about the build, not one person's registration habit —
+  # so the key is (player slug, content) and never the content alone.
+  test "keeps one identical list played by two different people" do
+    rows = [
+      online_row(placement: 1, list_url: URL_A),
+      online_row(player_name: "Aruaru", player_slug: "aruarupokeka", placement: 2, list_url: URL_B)
+    ]
+
+    result = online_import(rows, lists: { URL_A => LIST_A, URL_B => LIST_A })
+
+    assert_equal 2, result.created
+    assert_equal 0, result.duplicates
+  end
+
+  # A row carrying no decklist has no content to compare, so it can never be the duplicate of
+  # another one — least of all of a second contentless row belonging to the same player.
+  test "keeps every row of one player that carries no decklist at all" do
+    rows = [
+      online_row(event_name: "Weekly A", event_date: Date.new(2026, 2, 20), placement: 1,
+        list_url: URL_A, event_key: "aaa"),
+      online_row(event_name: "Weekly B", event_date: Date.new(2026, 2, 21), placement: 2,
+        list_url: nil, event_key: "bbb"),
+      online_row(event_name: "Weekly C", event_date: Date.new(2026, 2, 22), placement: 3,
+        list_url: nil, event_key: "ccc")
+    ]
+
+    result = online_import(rows, lists: { URL_A => LIST_A })
+
+    assert_equal 3, result.created
+    assert_equal 0, result.duplicates
+  end
+
+  # A pre-pass fetch that fails has no content either, so the row is kept — and it fails again on
+  # its own row, where it is reported by name rather than vanishing into a pre-pass no receipt
+  # mentions.
+  test "keeps a row whose decklist could not be fetched, and reports it by name" do
+    result = online_import(one_players_two_entries, lists: { URL_A => LIST_A })
+
+    assert_equal 2, result.created
+    assert_equal 0, result.duplicates
+    assert_equal 1, result.failed_count
+    assert_match(/JRobrueda — Weekly B/, result.failures.first.first)
+    assert_nil TournamentStanding.find_by(placement: 9).deck
+  end
+
+  # The decklist text is in DOM column order, so one 60 laid out differently survives a string
+  # comparison untouched. The key is a sorted multiset of (set, number, quantity).
+  test "de-duplicates one list served with its columns in a different order" do
+    result = online_import(one_players_two_entries, lists: { URL_A => LIST_A, URL_B => LIST_A_SHUFFLED })
+
+    assert_equal 1, result.created
+    assert_equal 1, result.duplicates
+  end
+
+  # The paper source is a *field*, where one player appears once and two rows carrying one list are
+  # two people. Its runs must be exactly what they were.
+  test "de-duplicates nothing when the source did not ask for it" do
+    result = online_import(one_players_two_entries, lists: { URL_A => LIST_A, URL_B => LIST_A },
+      deduplicate: false)
+
+    assert_equal 2, result.created
+    assert_equal 0, result.duplicates
+  end
+
+  # The stored key is scoped to the pools a run targets, and the scope is the difference between a
+  # true sample and a short one. The card report buckets on tournaments.standard_pool_id, so each
+  # pool is its own sample: a 60 a player kept unchanged across a rotation is a real row of *each*
+  # pool's leaderboard. Unscoped, the second pool imported silently loses every such player — and a
+  # list that survives a rotation untouched is exactly the one its player keeps registering, so the
+  # loss lands hardest on the pool that just opened.
+  test "a list a player kept across a rotation is recorded once per pool, not once in total" do
+    older = online_import(
+      [ online_row(event_name: "Old Weekly", event_date: Date.new(2026, 1, 10), event_key: "old") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_asc)
+    )
+    newer = online_import(
+      [ online_row(event_name: "New Weekly", event_date: Date.new(2026, 2, 20), event_key: "new") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+
+    assert_equal 1, older.created
+    assert_equal 1, newer.created, "the newer pool's leaderboard published this row too"
+    assert_equal 0, newer.duplicates
+
+    pools = TournamentStanding.where.not(player_slug: nil).joins(:tournament)
+      .pluck("tournaments.standard_pool_id").uniq
+    assert_equal 2, pools.size, "one standing in each pool"
+  end
+
+  # The other half of the same rule: within one pool the rolling-leaderboard fix must still hold,
+  # or scoping the lookup would have bought the sample back by giving up the blocker's fix.
+  test "the same list at two events of one pool is still recorded once" do
+    online_import(
+      [ online_row(event_name: "Weekly A", event_date: Date.new(2026, 2, 10), event_key: "a") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+    second = online_import(
+      [ online_row(event_name: "Weekly B", event_date: Date.new(2026, 2, 20), event_key: "b") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+
+    assert_equal 0, second.created
+    assert_equal 1, second.duplicates
+    assert_equal 1, TournamentStanding.where.not(player_slug: nil).count
+  end
+
+  # An abort inside the pre-pass names the row that caused it, like an abort anywhere else — the
+  # per-row path records its label before re-raising, and a pre-pass that named none would make
+  # the failures that stopped a run the only ones a receipt never mentions.
+  #
+  # One, not five, and deliberately: an ordinary pre-pass failure is *not* recorded, because the
+  # row is kept and will be fetched again on its own turn, where import_row reports it — recording
+  # it here as well would name every unreachable decklist twice. The aborting row is the exception
+  # precisely because nothing comes after it.
+  test "a run that gives up during the pre-pass names the row it gave up on" do
+    rows = (1..5).map { |i|
+      online_row(event_name: "Weekly #{i}", event_date: Date.new(2026, 2, 20) + i,
+        list_url: "https://play.limitlesstcg.com/tournament/#{i}/player/jrobrueda/decklist",
+        event_key: "e#{i}")
+    }
+
+    result = online_import(rows, lists: {})
+
+    assert result.aborted?
+    assert_match(/consecutive fetch failures/, result.aborted_reason)
+    assert_equal 1, result.failed_count
+    assert_equal 0, result.created
+    # Weekly 1 and not Weekly 5: the plan orders events newest first, so the fifth row the
+    # pre-pass reaches is the oldest one built here. That reordering is the same property that
+    # makes a per-row duplicate check unable to keep the best finish — it is worth seeing it once
+    # in a test rather than only in a comment.
+    assert_match(/JRobrueda — Weekly 1/, result.failures.sole.first)
+  end
+
+  # (name_normalized, date) UNIQUE is a rule about the *public catalog* — two members must not
+  # catalogue one real event twice — and never was a claim about the world, so it is partial
+  # (WHERE online = 0) and an online weekly may share a name and a date with a Regional. What must
+  # still never happen is the online run writing an `open`-division standing onto that Regional,
+  # which is what an unscoped recovery lookup used to do: the plan's own lookup is partitioned, so
+  # the row previews as :create with no similar-event hint and nothing warns at all.
+  test "an online event never writes its standings onto a paper event of the same name and date" do
+    paper = tournaments(:one)
+
+    result = online_import([
+      online_row(event_name: paper.name, event_date: paper.date, list_url: nil)
+    ])
+
+    assert_equal 1, result.created
+    assert_empty result.failures
+    # Two rows, not one, and the standing is on the online one.
+    assert_equal 0, paper.standings.where(division: "open").count
+    online = Tournament.find_by(online: true, name_normalized: paper.name_normalized, date: paper.date)
+    assert_equal 1, online.standings.where(division: "open").count
+  end
+
+  # ---- the key that survives a leaderboard moving ---------------------------------------------
+
+  # The blocker. The pre-pass makes the survivors a pure function of *the leaderboard*, and the
+  # leaderboard is a rolling top-20: the survivor a run elected drops off it as twenty better
+  # finishes appear, and the next run elects a different member of the same group, does not find
+  # it, and creates it while the first run's row stays. One player, one 60, two lists in the
+  # sample. Without the stored key this second run creates a standing.
+  test "a second run of a rolling leaderboard creates nothing once its survivor has dropped off" do
+    lists = { URL_A => LIST_A, URL_B => LIST_A, URL_C => LIST_A }
+
+    first = online_import(rolling_leaderboard, lists: lists)
+    assert_equal 1, first.created
+    assert_equal 2, first.duplicates
+    assert_equal 4, TournamentStanding.find(first.standing_ids.sole).placement
+
+    second = nil
+    assert_no_difference [ -> { Tournament.count }, -> { TournamentStanding.count }, -> { Deck.count } ] do
+      # The best finish is gone from the board; only the two rows the first run dropped remain.
+      second = online_import(rolling_leaderboard.drop(1), lists: lists)
+    end
+
+    assert_equal 0, second.created
+    assert_equal 2, second.duplicates
+    assert_empty second.failures
+  end
+
+  # event_filters is the natural way around the 300-row cap, and it splits one page into runs that
+  # cannot see each other: an in-memory group is only ever this run's rows, so the second half of
+  # a split run re-imports what the first half deliberately dropped.
+  test "two runs split by event_filters de-duplicate as one run would" do
+    lists = { URL_A => LIST_A, URL_B => LIST_A }
+    rows = one_players_two_entries
+
+    first = online_import(rows, lists: lists, event_filters: [ "Weekly A" ])
+    second = online_import(rows, lists: lists, event_filters: [ "Weekly B" ])
+
+    assert_equal 1, first.created
+    assert_equal 0, second.created
+    assert_equal 1, second.duplicates
+    # Exactly what the unsplit run of the same page writes.
+    assert_equal 1, TournamentStanding.joins(:tournament).where(tournaments: { online: true }).count
+  end
+
+  # The third door onto the same accretion, and it takes three runs to see because it needs both
+  # halves of the stored key. A transient fetch failure leaves its row created with no list and
+  # therefore un-keyed; the run that finally attaches one is an *enrichment*, so the key has to be
+  # written there too, or the row stays invisible to every later run — and the moment its twin
+  # ages off the rolling board, that twin is imported again as a second copy of a 60 the sample
+  # already holds.
+  test "a row whose decklist fetch failed is keyed when its list finally arrives" do
+    a = online_row(event_name: "Weekly A", event_date: Date.new(2026, 2, 20), placement: 2,
+      list_url: URL_A, event_key: "aaa")
+    b = online_row(event_name: "Weekly B", event_date: Date.new(2026, 2, 25), placement: 5,
+      list_url: URL_B, event_key: "bbb")
+
+    # Run 1: Limitless is having a bad minute and the decklist page does not answer.
+    first = online_import([ a ], lists: {})
+    assert_equal 1, first.created
+    assert_equal 1, first.failed_count
+    standing = TournamentStanding.find(first.standing_ids.sole)
+    assert_nil standing.deck
+    assert_nil standing.list_digest
+
+    # Run 2: the page answers. The row is enriched, and that is where it is keyed.
+    second = online_import([ a, b ], lists: { URL_A => LIST_A, URL_B => LIST_A })
+    assert_equal 1, second.enriched
+    assert_equal 1, second.duplicates
+    assert_equal Tournaments::StandingsImporter.list_digest(LIST_A), standing.reload.list_digest
+
+    # Run 3: the best finish has aged off the top 20 and only its twin is left on the board.
+    third = nil
+    assert_no_difference [ -> { TournamentStanding.count }, -> { Deck.count } ] do
+      third = online_import([ b ], lists: { URL_B => LIST_A })
+    end
+
+    assert_equal 0, third.created
+    assert_equal 1, third.duplicates
+  end
+
+  # A NULL is "not an online import" and must never participate: the paper source publishes no
+  # slug, and two paper rows carrying one 60 are two real people who both played it.
+  test "a paper run writes no dedup key and de-duplicates nothing" do
+    result = import([
+      row(player_name: "Tomi Markkula", placement: 4),
+      row(player_name: "Ian Robb", placement: 5)
+    ])
+
+    assert_equal 2, result.created
+    assert_equal 0, result.duplicates
+    standings = TournamentStanding.where(id: result.standing_ids)
+    assert_equal [ nil, nil ], standings.map(&:player_slug)
+    assert_equal [ nil, nil ], standings.map(&:list_digest)
+    # And the two rows really do hold the same 60 — otherwise this asserts nothing.
+    assert_equal 1, standings.map { |standing| standing.deck.deck_cards.pluck(:card_id, :quantity).sort }.uniq.size
+  end
+
+  # The drift guard. The digest a run *stores* and the key it *compares* are one method, and the
+  # only way to see that from outside is to make the second run compare something the first run
+  # never stored verbatim: the same 60 in a different column order, which only the sorted multiset
+  # can recognise. Spell the write differently from the comparison and this goes red.
+  test "the digest stored on a standing is the key the next run compares" do
+    first = online_import([ online_row(placement: 1, list_url: URL_A) ], lists: { URL_A => LIST_A })
+
+    standing = TournamentStanding.find(first.standing_ids.sole)
+    assert_equal "jrobrueda", standing.player_slug
+    assert_equal Tournaments::StandingsImporter.list_digest(LIST_A), standing.list_digest
+    assert_equal 64, standing.list_digest.length
+
+    second = online_import([
+      online_row(event_name: "Weekly Z", event_date: Date.new(2026, 2, 26), placement: 2,
+        list_url: URL_B, event_key: "zzz")
+    ], lists: { URL_B => LIST_A_SHUFFLED })
+
+    assert_equal 0, second.created
+    assert_equal 1, second.duplicates
+  end
+
+  # ---- an online event is its own Limitless id -------------------------------------------------
+
+  # Online event names are arbitrary and repeat weekly, so one day really does hold two of them.
+  # Grouped on [name, date] they merged into a single event, which then took its attendance from
+  # whichever row came first and refused the other event's row for a placement above a field size
+  # that was never its own.
+  test "two online events sharing a name and a date are two events" do
+    result = online_import([
+      online_row(player_name: "Small", placement: 8, attendance: 10, list_url: nil, event_key: "aaa"),
+      online_row(player_name: "Large", placement: 150, attendance: 200, list_url: nil, event_key: "bbb")
+    ])
+
+    assert_equal 2, result.created
+    assert_empty result.failures
+
+    events = Tournament.where(online: true, date: Date.new(2026, 2, 20)).order(:external_key)
+    assert_equal [ "aaa", "bbb" ], events.map(&:external_key)
+    assert_equal [ 10, 200 ], events.map(&:open_participant_count)
+    assert_equal [ [ "Small", 8 ], [ "Large", 150 ] ],
+      events.map { |event| event.standings.sole.slice(:player_name, :placement).values }
+  end
+
   private
 
   def import(rows)
     plan = Tournaments::StandingsImportPlan.call(rows: rows)
     Tournaments::StandingsImporter.call(plan: plan, archetype: @archetype, user: @admin)
+  end
+
+  def online_import(rows, lists: {}, deduplicate: true, event_filters: [],
+    standard_pool: standard_pools(:twm_por))
+    plan = Tournaments::StandingsImportPlan.call(rows: rows, online: true,
+      standard_pool: standard_pool, event_filters: event_filters)
+    Tournaments::StandingsImporter.call(
+      plan: plan, archetype: @archetype, user: @admin,
+      decklist_service: decklist_service(lists), deduplicate: deduplicate
+    )
+  end
+
+  # Stands in for Tournaments::OnlineDecklist. Which service turns a URL into decklist text is the
+  # one coupling the two sources do not share, and a URL this knows nothing about answers the way
+  # the far side going quiet does — which is what the pre-pass has to survive.
+  def decklist_service(lists)
+    ->(url) { lists.fetch(url) { raise HttpFetcher::FetchError, "HTTP 404 #{url}" } }
+  end
+
+  # The same player and the same list at two events, where the later event holds the worse finish —
+  # so "first reached" (the plan sorts events newest first) and "best placement" disagree.
+  def one_players_two_entries
+    [
+      online_row(event_name: "Weekly A", event_date: Date.new(2026, 2, 20), placement: 1,
+        list_url: URL_A, event_key: "aaa"),
+      online_row(event_name: "Weekly B", event_date: Date.new(2026, 2, 25), placement: 9,
+        list_url: URL_B, event_key: "bbb")
+    ]
+  end
+
+  # One player, one 60, three weekly events — in leaderboard order, best finish first, so that
+  # `.drop(1)` is exactly the board a week later with that finish aged off the top 20.
+  def rolling_leaderboard
+    [
+      [ "W1", 4, URL_A ], [ "W2", 7, URL_B ], [ "W3", 9, URL_C ]
+    ].each_with_index.map { |(name, placement, url), index|
+      online_row(event_name: name, event_date: Date.new(2026, 2, 20) + index, placement: placement,
+        list_url: url, event_key: name.downcase)
+    }
+  end
+
+  def one_players_three_entries
+    one_players_two_entries + [
+      online_row(event_name: "Weekly C", event_date: Date.new(2026, 2, 22), placement: 5,
+        list_url: URL_C, event_key: "ccc")
+    ]
+  end
+
+  def online_row(**overrides)
+    Tournaments::OnlineResults::Row.new(
+      **{
+        event_name: "Pumpkaweekly #12", event_date: Date.new(2026, 2, 20),
+        division: "open", division_suffix: nil, format: "standard",
+        player_name: "JRobrueda", placement: 2, list_url: URL_A,
+        player_slug: "jrobrueda", attendance: 197, wins: 8, losses: 0, ties: 0, event_key: "aaa"
+      }.merge(overrides)
+    )
   end
 
   def row(**overrides)

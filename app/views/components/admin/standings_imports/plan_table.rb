@@ -26,10 +26,15 @@ module Admin
         blocked: "blocked"
       }.freeze
 
-      def initialize(plan:, archetype:, deck_id:, event_filters:, limit_per_event:)
+      def initialize(plan:, archetype:, source:, deck_id:, slug:, rotation:, set:, event_filters:,
+                     limit_per_event:)
         @plan = plan
         @archetype = archetype
+        @source = source
         @deck_id = deck_id
+        @slug = slug
+        @rotation = rotation
+        @set = set
         @event_filters = event_filters
         @limit_per_event = limit_per_event
       end
@@ -203,16 +208,21 @@ module Admin
         end
       end
 
-      # The same four inputs again, plus the count the admin actually looked at. Carrying them as
+      # The same inputs again, plus the count the admin actually looked at. Carrying them as
       # hidden fields rather than re-reading the query string keeps the POST self-contained: what
-      # runs is what this plan was built from.
+      # runs is what this plan was built from — the source included, since the two of them read
+      # different fields and a run that lost it would silently become a paper one.
       def confirm_form
         form_with(url: admin_standings_imports_path, method: :post, class: "standings-import-confirm") do
           # `id: nil` on every one of them: hidden_field_tag derives an id from the name, and the
-          # form above this plan already carries inputs called deck_id, archetype_id,
-          # event_filters and limit_per_event. Duplicated ids break `label for=`, make
-          # `fill_in "deck_id"` ambiguous, and are invalid HTML besides.
+          # form above this plan already carries inputs called source, deck_id, slug, rotation,
+          # set, archetype_id, event_filters and limit_per_event. Duplicated ids break
+          # `label for=`, make `fill_in "deck_id"` ambiguous, and are invalid HTML besides.
+          hidden_field_tag "source", @source, id: nil
           hidden_field_tag "deck_id", @deck_id, id: nil
+          hidden_field_tag "slug", @slug, id: nil
+          hidden_field_tag "rotation", @rotation, id: nil
+          hidden_field_tag "set", @set, id: nil
           hidden_field_tag "archetype_id", @archetype.id.to_s, id: nil
           hidden_field_tag "event_filters", @event_filters, id: nil
           hidden_field_tag "limit_per_event", @limit_per_event, id: nil

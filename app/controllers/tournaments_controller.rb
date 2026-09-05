@@ -37,7 +37,7 @@ class TournamentsController < ApplicationController
     authorize Tournament, :index?
     @query = search_query
 
-    scope = Tournament.order(date: :desc)
+    scope = Tournament.catalogued.order(date: :desc)
     scope = scope.name_matching(@query) if @query.present?
 
     @pages = (scope.count / CATALOG_PER_PAGE.to_f).ceil
@@ -124,10 +124,17 @@ class TournamentsController < ApplicationController
 
   # The event the failed save collided with, so the form can link to it instead of merely
   # refusing. nil unless the failure really was the uniqueness rule.
+  # `catalogued`, because the validation that produced this error is: name_and_date_are_unique
+  # returns early for an online record and searches Tournament.catalogued, matching the now-partial
+  # UNIQUE index. Unscoped, the two disagree — an online event sharing a name and a date is
+  # returned although it is not what refused the save, and since #index no longer lists it the
+  # member follows a link to an event that is nowhere in the catalog they were just told it
+  # collides with. With no catalogued clash at all it would invent a link for an error nothing
+  # raised.
   def existing_tournament
     return if @tournament.errors[:name].none?
 
-    Tournament.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
+    Tournament.catalogued.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
   end
 
   # Plural, because entry uniqueness is per Play! Pokémon profile rather than per user: a parent
@@ -234,7 +241,12 @@ class TournamentsController < ApplicationController
   def tournament_params
     params.require(:tournament).permit(
       :name, :date, :format, :other_format_name, :standard_pool_id, :tier,
-      :junior_participant_count, :senior_participant_count, :masters_participant_count
+      :junior_participant_count, :senior_participant_count, :masters_participant_count,
+      # open_participant_count is written by the online import, and it *caps* a placement through
+      # TournamentStanding#placement_within_division_field — so a wrong value makes every standing
+      # above it unsavable through the wiki edit form, and without this permit (and the matching
+      # field on Tournaments::Form) there would be nowhere in the app to correct it.
+      :open_participant_count
     )
   end
 end

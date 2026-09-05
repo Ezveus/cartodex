@@ -5,6 +5,11 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
   RESULTS_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_deck_results.html")).freeze
+  ONLINE_RESULTS_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_online_results.html")).freeze
+  ONLINE_DECKLIST_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_online_decklist.html")).freeze
+  # The set the fixture's pool is named by: standard_pools(:twm_por) ends at POR, and exactly one
+  # pool does — which is the whole precondition an online run is anchored on.
+  ONLINE_SET = "POR".freeze
 
   setup do
     @admin = users(:one)
@@ -216,7 +221,170 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ nil, 60 ], worlds.standings.map { |s| s.deck&.deck_cards&.sum(:quantity) }.sort_by(&:to_i)
   end
 
+  # --- the online source -------------------------------------------------------------------
+  #
+  # play.limitlesstcg.com's best finishes: a slug, a rotation and a set where the paper source has
+  # one number, all three interpolated into the URL this fetches.
+
+  test "an online preview renders the plan and carries its own parameters into the confirm form" do
+    stub_http(ONLINE_RESULTS_HTML)
+
+    get preview_admin_standings_imports_path, params: online_params
+
+    assert_response :success
+    assert_equal(
+      [ "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon?format=standard&rotation=2026&set=POR" ],
+      @http_calls
+    )
+    assert_match "Pumpkaweekly", response.body
+    # Online play has no age divisions, and "open" is the fourth value that says so rather than
+    # filing every online result as a Masters one.
+    assert_select "[data-label=Division]", text: "open"
+    assert_select "form.standings-import-confirm" do
+      assert_select "input[name=source][value=online]"
+      assert_select "input[name=slug][value=raging-bolt-ogerpon]"
+      assert_select "input[name=rotation][value=2026]"
+      assert_select "input[name=set][value=?]", ONLINE_SET
+      assert_select "input[name=expected_row_count][value=6]"
+    end
+  end
+
+  # The same guarantee the deck id has, three times over: each of these is interpolated into the
+  # URL, so each is refused while there is still a form to send the admin back to. Tournaments::
+  # OnlineResults validates them too and raises ArgumentError — which is a 500 by the time it
+  # reaches a browser, and a fetch has been made by then anyway.
+  test "a slug that is not a plain identifier is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: online_params(slug: "raging-bolt/../../evil")
+
+    assert_response :success
+    assert_empty @http_calls, "no fetch may happen for a slug the guard refuses"
+    assert_match "slug must be lowercase letters", response.body
+  end
+
+  test "a rotation that is not a year is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: online_params(rotation: "2026&format=evil")
+
+    assert_response :success
+    assert_empty @http_calls, "no fetch may happen for a rotation the guard refuses"
+    assert_match "rotation must be a four-digit year", response.body
+  end
+
+  test "a set that is not a set code is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: online_params(set: "por&x=1")
+
+    assert_response :success
+    assert_empty @http_calls, "no fetch may happen for a set the guard refuses"
+    assert_match "set must be a short uppercase set code", response.body
+  end
+
+  # Tournaments::OnlineResults::ParseError is a *different constant* from the paper source's, and a
+  # source switch that rescued only the old one would answer a slug nobody has published — or a
+  # rotation and set pair that names an empty leaderboard — with a 500.
+  test "an online parse failure re-renders the form with the reason rather than 500ing" do
+    stub_http("<html><body><p>Nothing here.</p></body></html>")
+
+    get preview_admin_standings_imports_path, params: online_params
+
+    assert_response :success
+    assert_match "Could not read the online raging-bolt-ogerpon leaderboard (2026 POR)", response.body
+    assert_match "no results table", response.body
+    assert_select "input#slug"
+  end
+
+  # A pool is its *pair* of bounds, so two of them may legitimately end at one set — a rotation
+  # landing between two set releases moves the first bound and leaves the last alone. Picking one
+  # would look right up until it silently was not, so the run is blocked and both are named.
+  test "two Standard pools ending at the set block the run and name both" do
+    StandardPool.create!(first_card_set: card_sets(:asc), last_card_set: card_sets(:por),
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 1, 16), legal_on: Date.new(2026, 1, 30))
+
+    get preview_admin_standings_imports_path, params: online_params
+
+    assert_response :success
+    assert_empty @http_calls, "a run that cannot be anchored must not fetch anything"
+    assert_match "2 Standard pools end at POR", response.body
+    assert_match "TWM-POR", response.body
+    assert_match "ASC-POR", response.body
+    assert_select "form.standings-import-confirm", false
+  end
+
+  test "a set that names no Standard pool is refused with a reason" do
+    get preview_admin_standings_imports_path, params: online_params(set: "PBL")
+
+    assert_response :success
+    assert_empty @http_calls, "a run that cannot be anchored must not fetch anything"
+    assert_match "No Standard pool ends at PBL", response.body
+  end
+
+  test "confirming an online run enqueues the job with the source it was previewed from" do
+    assert_difference -> { Import.count }, 1 do
+      post admin_standings_imports_path, params: online_params(expected_row_count: "6")
+    end
+
+    import = Import.last
+    # The same kind as a paper run, deliberately: Tournaments::StandingsImportUndo and
+    # Admin::ImportsController#undo both gate on this literal, so a kind of its own would produce
+    # runs that look identical in the admin table and silently cannot be undone.
+    assert_equal "limitless_standings", import.kind
+    assert_equal "Standings Marker — online raging-bolt-ogerpon (2026 POR)", import.label
+
+    assert_enqueued_with(job: Tournaments::LimitlessImportJob, args: [
+      import.id, @admin.id,
+      {
+        "archetype_id" => @archetype.id,
+        "event_filters" => [],
+        "limit_per_event" => nil,
+        "expected_row_count" => 6,
+        "source" => "online",
+        "slug" => "raging-bolt-ogerpon",
+        "rotation" => "2026",
+        "set" => ONLINE_SET
+      }
+    ])
+  end
+
+  # The online twin of the end-to-end test above, and it exists for the same reason: a Hash key
+  # spelled differently on either side of this screen would leave every real online import failing
+  # while every other test here stayed green.
+  test "the job an online confirmation enqueues actually imports the plan the preview showed" do
+    stub_online_pages
+    stub_cards_fetcher
+
+    perform_enqueued_jobs do
+      post admin_standings_imports_path, params: online_params(expected_row_count: "6")
+    end
+
+    import = Import.limitless_standings_imports.sole
+    assert_equal "completed", import.status, import.error_message
+    # Six leaderboard rows, four rows written: jrobrueda holds three of them and one list, and one
+    # player's registration habit must not weigh their deck three times in the sample.
+    assert_equal 4, import.created_standing_ids.size
+
+    standings = TournamentStanding.where(id: import.created_standing_ids)
+    assert_equal [ "open" ], standings.map(&:division).uniq
+    # A list on every row, which is also what says the *online* decklist service ran: the paper one
+    # reads a different page shape and would have refused all four.
+    assert_equal [ 60 ], standings.map { |standing| standing.deck.deck_cards.sum(:quantity) }.uniq
+    events = Tournament.where(id: standings.map(&:tournament_id))
+    assert_equal [ true ], events.map(&:online).uniq
+    assert_equal [ standard_pools(:twm_por) ], events.map(&:standard_pool).uniq
+  end
+
   private
+
+  def online_params(**overrides)
+    { source: "online", slug: "raging-bolt-ogerpon", rotation: "2026", set: ONLINE_SET,
+      archetype_id: @archetype.id }.merge(overrides)
+  end
+
+  # The leaderboard for the leaderboard URL, a decklist for anything else.
+  def stub_online_pages
+    calls = @http_calls
+    HttpFetcher.define_singleton_method(:call) { |url|
+      calls << url
+      url.include?("/decks/") ? ONLINE_RESULTS_HTML : ONLINE_DECKLIST_HTML
+    }
+  end
 
   # The ceiling is a keyword with a constant default precisely so a test can prove the refusal
   # with two rows instead of a 300-row HTML fixture. Restored in an ensure: it is a real constant

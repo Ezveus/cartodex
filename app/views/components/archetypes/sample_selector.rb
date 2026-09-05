@@ -1,7 +1,7 @@
 module Archetypes
   # Which sample the page is reporting on, and how much that sample is worth.
   #
-  # Three rules meet here, and all three are the design's, not this component's taste. Each is a
+  # Four rules meet here, and all four are the design's, not this component's taste. Each is a
   # predicate on Archetypes::MetagameScope::Result rather than a condition assembled here, because
   # every one of them is a fact about the sample and the page must not compute it twice:
   #
@@ -19,6 +19,15 @@ module Archetypes
   #   * the small-sample notice's closing clause promises a fuller sample one click away, so it
   #     is printed only when `fuller_sample_available?` — an archetype already on its largest
   #     sample would otherwise be told to click for more of nothing.
+  #   * the online note names the one blend the selector above it cannot separate. A pool is the
+  #     only axis this control offers, and an online weekly anchored to TEF-PBL sits in the same
+  #     bucket as a Regional anchored to TEF-PBL — so "TEF-PBL — 16 lists" can be thirteen online
+  #     weeklies and three Regionals, and every percentage in the card report below would then
+  #     describe a mixture the page never named. That is the same defect pool scoping exists to
+  #     prevent, on a second axis. A venue selector is the better answer and is deliberately not
+  #     here: it needs its own measurements once there is more than one archetype's worth of
+  #     online data, and shipping the import behind an unnamed blend to get there is the one thing
+  #     that must not happen in between.
   #
   # The notice itself is not decoration. The default view of a freshly imported archetype is very
   # often exactly this case — the measured one opens on a pool holding three lists, where every
@@ -33,13 +42,18 @@ module Archetypes
     end
 
     def view_template
-      # Nothing to say at all when the archetype has one sample and it is not a small one — an
-      # empty flex wrapper would still take the block's margin above the panel below it.
-      return unless @scope.selectable? || @scope.small_sample?
+      # Nothing to say at all when the archetype has one sample, it is not a small one, and it is
+      # all paper — an empty flex wrapper would still take the block's margin above the panel
+      # below it. `online_lists?` is a third reason to have something to say, and not a refinement
+      # of the first two: an archetype whose every standing sits in one pool is not `selectable?`
+      # and a sixteen-list sample is not `small_sample?`, which is exactly the shape one online
+      # import produces, so without it the blend would be named nowhere on this page.
+      return unless @scope.selectable? || @scope.small_sample? || @scope.online_lists?
 
       div(class: "archetype-sample") do
         selector
         pool_note
+        online_note
         small_sample_notice
       end
     end
@@ -77,6 +91,24 @@ module Archetypes
 
       p(class: "archetype-sample-note") do
         "Events outside Standard carry no pool, so their lists are counted under “All formats” only."
+      end
+    end
+
+    # About lists and not standings, because this sits above the card report and the card report's
+    # denominator is lists. The performance panel names the same blend over its own population.
+    def online_note
+      return unless @scope.online_lists?
+
+      count = @scope.online_lists_count
+
+      p(class: "archetype-sample-note") do
+        if count == @scope.lists_count
+          plain "Every list in this sample comes from an online tournament. "
+        else
+          plain "#{count} of these #{@scope.lists_count} lists "
+          plain "#{count == 1 ? 'comes' : 'come'} from an online tournament. "
+        end
+        plain "The card report below counts online and paper lists together."
       end
     end
 

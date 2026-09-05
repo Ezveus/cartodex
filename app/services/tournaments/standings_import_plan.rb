@@ -54,8 +54,8 @@ class Tournaments::StandingsImportPlan < ApplicationService
   end
 
   EventPlan = Struct.new(
-    :name, :date, :tier, :format, :other_format_name, :standard_pool,
-    :tournament, :blocked_reason, :similar_tournaments, :rows,
+    :name, :date, :external_key, :tier, :format, :other_format_name, :standard_pool, :online,
+    :participant_count, :tournament, :blocked_reason, :similar_tournaments, :rows,
     keyword_init: true
   ) do
     def blocked? = blocked_reason.present?
@@ -70,19 +70,26 @@ class Tournaments::StandingsImportPlan < ApplicationService
     def over_limit? = importable_rows.size > max_rows
   end
 
-  def initialize(rows:, event_filters: [], limit_per_event: nil, max_rows: DEFAULT_MAX_ROWS)
+  # `online` and `standard_pool` travel together and only the online source passes either. They are
+  # a classification the *caller* knows and the rows cannot say: play.limitlesstcg.com's leaderboard
+  # names its card pool in the URL's `set` parameter, and its event names are arbitrary strings that
+  # must never be read for a tier. Their defaults are exactly what the paper source has always done.
+  def initialize(rows:, event_filters: [], limit_per_event: nil, max_rows: DEFAULT_MAX_ROWS,
+    online: false, standard_pool: nil)
     @rows = rows
     @event_filters = Array(event_filters).map { |filter| filter.to_s.strip.downcase }.reject(&:empty?)
     @limit_per_event = limit_per_event.presence&.to_i
     @max_rows = max_rows
+    @online = online
+    @standard_pool = standard_pool
   end
 
   def call
-    groups = grouped_rows
-    @catalogued = load_catalogued(groups.keys)
+    groups = grouped_rows.values
+    @catalogued = load_catalogued(groups.flatten)
     @standings = load_standings
 
-    events = groups.map { |(name, date), rows| build_event(name, date, rows) }
+    events = groups.map { |rows| build_event(rows) }
     Plan.new(events: events.sort_by { |event| event.date }.reverse, max_rows: @max_rows)
   end
 
@@ -92,11 +99,21 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # hold 116 events, and resolving each one on its own turned a preview into 230-odd queries in a
   # single web request — most of them spent before `over_limit?` had a chance to refuse the plan.
   # `with_standard_pool` because the plan renders each pool by name, which reads both of its bounds.
-  def load_catalogued(keys)
-    return [] if keys.empty?
+  #
+  # A paper run reads `Tournament.catalogued` and an online run reads the other half, so neither
+  # ever sees the other's events. Without the split every *paper* preview would list online weeklies
+  # as "similar tournaments" noise — #similar_tournaments is an O(events x catalogued) Ruby scan
+  # over this set, and this source fills the table with twenty events per archetype per pool, so the
+  # scan grows without bound as it is used. An online run needs its own half for the opposite
+  # reason: recognising the events it created last time is the whole of the idempotence property —
+  # a re-import that could not find them would plan every surviving row as :create and lose to the
+  # UNIQUE key row by row instead of skipping.
+  def load_catalogued(rows)
+    return [] if rows.empty?
 
-    dates = keys.map(&:last)
-    Tournament.with_standard_pool
+    dates = rows.map(&:event_date)
+    scope = @online ? Tournament.where(online: true) : Tournament.catalogued
+    scope.with_standard_pool
       .where(date: (dates.min - SIMILAR_DATE_WINDOW)..(dates.max + SIMILAR_DATE_WINDOW)).to_a
   end
 
@@ -107,17 +124,43 @@ class Tournaments::StandingsImportPlan < ApplicationService
     TournamentStanding.where(tournament_id: ids).group_by(&:tournament_id)
   end
 
+  # An event is a name and a date for the paper source, and its own Limitless id for the online
+  # one. Grouping an online run on the name and date is what merged two genuinely different
+  # tournaments into a single event: online names are arbitrary and repeat weekly
+  # ("Pumpkaweekly", "CrownOfSpain #4"), so one day really does hold two of them — after which
+  # the merged event takes its attendance from whichever row came first and refuses the other
+  # event's rows for a placement above a field size that was never theirs.
+  #
+  # The id *replaces* the pair rather than joining it: an id is an identity, and a key holding
+  # both would split one event again the moment two of its rows spelled its name differently. A
+  # source that publishes no id per row keys on the pair, which is exactly what the paper source
+  # has always done.
   def grouped_rows
     filtered = @rows
     filtered = filtered.select { |row| @event_filters.any? { |f| row.event_name.downcase.include?(f) } } if
       @event_filters.any?
 
-    filtered.group_by { |row| [ row.event_name, row.event_date ] }
+    filtered.group_by { |row| external_key_of(row) || [ row.event_name, row.event_date ] }
   end
 
-  def build_event(name, date, rows)
+  # Only an online run has one. Asking the row rather than branching on @online for the same
+  # reason #participant_count does: the two sources share a contract of eight fields and the
+  # online one adds to it.
+  def external_key_of(row)
+    return unless @online
+
+    row.event_key.presence if row.respond_to?(:event_key)
+  end
+
+  # The name and the date are read off the group's first row rather than off its key, because for
+  # an online run the key is the id alone. Which row that is decides nothing: they are the rows of
+  # one event, and the plan renders the name only.
+  def build_event(rows)
+    name = rows.first.event_name
+    date = rows.first.event_date
+    external_key = external_key_of(rows.first)
     normalized = name.squish.downcase
-    tournament = @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
+    tournament = find_catalogued(normalized, date, external_key)
     derived = classification(rows, date)
     # Taken whole from an existing event, or derived whole — never field by field. Mixing them
     # produces records like format "standard" carrying an other_format_name, which is meaningless
@@ -125,8 +168,9 @@ class Tournaments::StandingsImportPlan < ApplicationService
     settled = tournament ? classification_of(tournament) : derived
 
     event = EventPlan.new(
-      name: name, date: date, tournament: tournament,
+      name: name, date: date, external_key: external_key, tournament: tournament,
       tier: tournament&.tier || tier_for(name),
+      online: @online, participant_count: participant_count(rows),
       **settled,
       blocked_reason: blocked_reason(rows: rows, derived: derived, tournament: tournament, date: date),
       similar_tournaments: tournament ? [] : similar_tournaments(normalized, date),
@@ -136,10 +180,39 @@ class Tournaments::StandingsImportPlan < ApplicationService
     event
   end
 
+  # An online event is looked up by the id the source gave it and never by its name — the run
+  # that created it wrote that id, so this is what makes a re-import find its own events and skip
+  # them instead of planning every row :create and losing to the UNIQUE key one at a time.
+  # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
+  # half.
+  def find_catalogued(normalized, date, external_key)
+    return @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
+
+    @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
+  end
+
   def classification(rows, date)
     format, other_format_name = FORMATS.fetch(dominant_format(rows), [ nil, nil ])
     { format: format, other_format_name: other_format_name,
-      standard_pool: (StandardPool.at(date) if format == "standard") }
+      standard_pool: (standard_pool_for(date) if format == "standard") }
+  end
+
+  # StandardPool.at reads `legal_on` — the date Play! Pokemon considers a pool legal, about two
+  # weeks after the cards ship. Online play follows the *release*, so the leaderboard's own `set`
+  # parameter is the anchor and the date says nothing about it. Measured: 3 of the 20 rows of one
+  # PBL leaderboard (2026-07-28/29/30) predate TEF-PBL's legal_on of 2026-07-31, so anchoring them
+  # by date files them under TEF-CRI, in a sample whose other lists could not legally hold their
+  # cards.
+  def standard_pool_for(date)
+    @online ? @standard_pool : StandardPool.at(date)
+  end
+
+  # The leaderboard prints the field size on every row ("1st of 259"), and the rows of one event
+  # agree on it because it is the event's own attendance — so the first that carries one answers
+  # for the event. The paper source publishes none, which is why every event imported from it has
+  # nil participant counts, and why this asks the row rather than assuming the field exists.
+  def participant_count(rows)
+    rows.filter_map { |row| row.attendance if row.respond_to?(:attendance) }.first
   end
 
   def classification_of(tournament)
@@ -154,7 +227,13 @@ class Tournaments::StandingsImportPlan < ApplicationService
     rows.map(&:format).compact.tally.max_by { |_format, count| count }&.first
   end
 
+  # Forced, never guessed, for an online event. TIER_PATTERNS reads a name, and online event names
+  # are arbitrary — "TOURNAMENT OF DOOM! WORLDS LCQ!", "CrownOfSpain #4". All twenty measured names
+  # fall through to `other` today, but one holding "Regional" would be filed as a Regional and
+  # Tournament::CP_REFERENCE would then offer championship points for an online event.
   def tier_for(name)
+    return DEFAULT_TIER if @online
+
     TIER_PATTERNS.find { |pattern, _tier| pattern.match?(name) }&.last || DEFAULT_TIER
   end
 
@@ -168,6 +247,10 @@ class Tournaments::StandingsImportPlan < ApplicationService
     return if tournament
     return unless derived[:format] == "standard"
     return if derived[:standard_pool]
+    # An online run is anchored by the leaderboard's `set`, not by the date, so naming the date
+    # would send the admin to look for a pool that covers it — which is not the thing that is
+    # missing and may well already exist.
+    return "no Standard pool matches this leaderboard's set — pick a set that names one, or add the pool from Admin → Standard pools, and re-run" if @online
 
     "no Standard pool covers #{date} — add one from Admin → Standard pools and re-run"
   end
