@@ -36,6 +36,7 @@ module Ui
         nav_link "Archetypes", admin_archetypes_path, "archetypes"
         nav_link "Standard Pools", admin_standard_pools_path, "standard_pools"
         nav_link "Imports", admin_imports_path, "imports"
+        nav_link "Limitless import", new_admin_standings_import_path, "standings_imports"
         link_to "Jobs", mission_control_jobs_path, class: "navbar-link"
       end
     end

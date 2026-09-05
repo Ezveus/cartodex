@@ -72,7 +72,7 @@ module Tournaments
 
           div(class: "form-actions deck-form-actions") do
             f.submit class: "btn btn-primary"
-            link_to "Cancel", tournament_path(@tournament), class: "btn btn-secondary"
+            link_to "Cancel", cancel_path, class: "btn btn-secondary"
           end
         end
       end
@@ -85,15 +85,26 @@ module Tournaments
         tournament_standing_path(@tournament, @standing)
       end
 
+      # Back to the row being edited, not to the top of page one: saving returns the member there,
+      # and cancelling should not cost them their place. A new row has no place yet.
+      def cancel_path
+        return tournament_path(@tournament) unless @standing.persisted?
+
+        tournament_path(@tournament, **Row.sheet_position(@standing))
+      end
+
       # Being blocked is useless without being told where to go — the other half of the
       # anti-duplicate mechanism, exactly as Tournaments::Form does it for a duplicate event. The
-      # link goes to the event, where the row and its "This is me" button already are.
+      # link goes to the clashing row itself, where its "This is me" button already is.
       def clash_hint
         return if @existing.nil?
 
         p(class: "form-hint") do
           plain "#{@existing.player_name} already has a standing in this division: "
-          link_to "see the event's sheet", tournament_path(@tournament)
+          # sheet_position and not a bare tournament_path: the whole point is to put that row in
+          # front of the member, and page one is where a sheet with a pager is least likely to
+          # hold it.
+          link_to "see the event's sheet", tournament_path(@tournament, **Row.sheet_position(@existing))
         end
       end
 

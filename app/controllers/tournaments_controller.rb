@@ -40,11 +40,10 @@ class TournamentsController < ApplicationController
     scope = Tournament.order(date: :desc)
     scope = scope.name_matching(@query) if @query.present?
 
-    # to_s first: `?page[]=1` hands over an Array and `?page[a]=b` ActionController::Parameters,
-    # neither of which answers to_i. This action is anonymous in Stage 2, so that NoMethodError
-    # would be an unhandled 500 for any bot that tries the shape.
-    @page = [ params[:page].to_s.to_i, 1 ].max
     @pages = (scope.count / CATALOG_PER_PAGE.to_f).ceil
+    # Clamped for the reason the sheet is, one method below: `?page=99` otherwise renders "No
+    # tournaments catalogued yet." over a catalog that is not empty, on a public URL.
+    @page = requested_page.clamp(1, [ @pages, 1 ].max)
     # to_a, not the relation: the view asks `any?` before iterating, which on an unloaded
     # relation is a SELECT 1 … LIMIT 1 beside the query it is about to run anyway.
     @tournaments = scope.offset((@page - 1) * CATALOG_PER_PAGE).limit(CATALOG_PER_PAGE)
@@ -56,12 +55,7 @@ class TournamentsController < ApplicationController
     authorize @tournament
     @my_entries = my_entries
     @can_record_another = unrecorded_profile?
-    # Exactly the three legs the render touches, each pinned by its own leg of the flat-cost
-    # test below: Row#list_link reads :deck, the "You" marker reads :tournament_entry's user_id,
-    # and Ui::ArchetypeBadge reads only the archetype's name and primary_energy_type (which
-    # reads primary_card) — never secondary_card or parent, so those two are not preloaded here.
-    @standings = @tournament.standings.as_a_sheet
-      .includes(:deck, :tournament_entry, archetype: :primary_card).to_a
+    load_standings_page
     @pending_standing_imports = pending_standing_imports
     @claimable_entries = claimable_entries
   end
@@ -157,6 +151,39 @@ class TournamentsController < ApplicationController
 
     current_user.tournament_profiles
       .where.not(id: @my_entries.filter_map(&:tournament_profile_id)).exists?
+  end
+
+  # A hand-typed sheet is a handful of rows; an imported one is a Worlds field. This page is
+  # public, carries no rate limit (one page load per click, which is why it never needed one) and
+  # preloads three associations for every row it renders, so rendering the whole sheet was only
+  # ever fine while nothing could fill it.
+  #
+  # No Turbo Frame, unlike the three listings that have one: those wrap a debounced filter field,
+  # where a keystroke would otherwise pay for the whole surrounding page. Nothing here fires on
+  # its own, and a frame would capture every link inside the rows — the deck link, Edit, Delete,
+  # "This is me" — each of which would then need data-turbo-frame="_top" to keep working.
+  def load_standings_page
+    scope = @tournament.standings
+    @sheet_pages = (scope.count / TournamentStanding::SHEET_PER_PAGE.to_f).ceil
+    # Clamped rather than allowed to run off the end: an out-of-range page renders an empty table
+    # under "No standings recorded for this event yet.", which is false — and this URL is public,
+    # so something will try it.
+    @sheet_page = requested_page.clamp(1, [ @sheet_pages, 1 ].max)
+    # Exactly the three legs the render touches, each pinned by its own leg of the flat-cost test:
+    # Row#list_link reads :deck, the "You" marker reads :tournament_entry's user_id, and
+    # Ui::ArchetypeBadge reads only the archetype's name and primary_energy_type (which reads
+    # primary_card) — never secondary_card or parent, so those two are not preloaded here.
+    @standings = scope.as_a_sheet
+      .offset((@sheet_page - 1) * TournamentStanding::SHEET_PER_PAGE)
+      .limit(TournamentStanding::SHEET_PER_PAGE)
+      .includes(:deck, :tournament_entry, archetype: :primary_card).to_a
+  end
+
+  # to_s first: `?page[]=1` hands over an Array and `?page[a]=b` ActionController::Parameters,
+  # neither of which answers to_i. Both actions that read it are reachable without a session, so
+  # that NoMethodError would be an unhandled 500 for any bot that tries the shape.
+  def requested_page
+    [ params[:page].to_s.to_i, 1 ].max
   end
 
   # Field-list imports the reader has in flight *at this event*. Empty for a visitor, and never

@@ -1,5 +1,6 @@
 <%= render Tournaments::ShowView.new(tournament: @tournament, my_entries: @my_entries,
                                      standings: @standings,
+                                     sheet_page: @sheet_page, sheet_pages: @sheet_pages,
                                      can_record: policy(Tournament).create?,
                                      can_record_another: @can_record_another,
                                      can_edit: policy(@tournament).edit?,

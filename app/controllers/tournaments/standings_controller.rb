@@ -36,7 +36,7 @@ module Tournaments
 
       if @standing.save
         enqueue_list_import
-        redirect_to tournament_path(@tournament), notice: "Standing recorded."
+        redirect_to sheet_path(@standing), notice: "Standing recorded."
       else
         @existing = existing_standing
         render :new, status: :unprocessable_entity
@@ -52,7 +52,7 @@ module Tournaments
 
       if @standing.update(standing_params)
         enqueue_list_import
-        redirect_to tournament_path(@tournament), notice: "Standing updated."
+        redirect_to sheet_path(@standing), notice: "Standing updated."
       else
         @existing = existing_standing
         render :edit, status: :unprocessable_entity
@@ -61,8 +61,16 @@ module Tournaments
 
     def destroy
       authorize @standing
+      # Read before the row goes: the page it was on is where the rest of its neighbours still
+      # are, and it is where the member was standing when they clicked. If it was the last row of
+      # the last page, TournamentsController#show clamps the now-empty page back into range.
+      page = TournamentStanding.page_of(@standing)
       @standing.destroy
-      redirect_to tournament_path(@tournament), notice: "Standing deleted."
+      # Re-clamped after the row goes, not only when #show renders: deleting the only row of the
+      # last page leaves a ?page= in the address bar that no longer exists, which the render
+      # silently ignores and a reload or a shared link keeps repeating.
+      redirect_to tournament_path(@tournament, page: page_param(surviving_page(page))),
+        notice: "Standing deleted."
     end
 
     # The act of a member saying "the row naming this player is me". It writes the link and
@@ -76,7 +84,7 @@ module Tournaments
       @standing.tournament_entry = scoped_entry!(params[:tournament_entry_id])
 
       if @standing.save
-        redirect_to tournament_path(@tournament), notice: "Standing linked to your participation."
+        redirect_to sheet_path(@standing), notice: "Standing linked to your participation."
       else
         # full_messages, not errors[:tournament_entry]: a save re-runs *every* validation, not only
         # the one being changed, and a row can go invalid after it was written —
@@ -86,7 +94,9 @@ module Tournaments
         # nothing. There is no form to re-render for a claim (it is a button, not a page), so the
         # same redirect-with-alert shape #refuse_with_redirect gives an authorization refusal is
         # what a validation refusal gets too: somewhere to go, and the reason why.
-        redirect_to tournament_path(@tournament), alert: @standing.errors.full_messages.to_sentence
+        # sheet_path, not the bare event: a refused claim leaves the row standing, and an alert
+        # about a row the member cannot see is an alert about nothing.
+        redirect_to sheet_path(@standing), alert: @standing.errors.full_messages.to_sentence
       end
     end
 
@@ -99,7 +109,7 @@ module Tournaments
       # nothing here rescues, so "Unlink" answered with a 500. Nothing this write could break can
       # be broken by it: both validations that read tournament_entry return early on nil.
       @standing.update_column(:tournament_entry_id, nil)
-      redirect_to tournament_path(@tournament), notice: "Standing unlinked from your participation."
+      redirect_to sheet_path(@standing), notice: "Standing unlinked from your participation."
     end
 
     private
@@ -202,6 +212,22 @@ module Tournaments
     # tournament_entry_id is deliberately absent. Permitting it would let any member attach their
     # own participation to a row naming somebody else, or detach yours: the link is written only
     # by #claim and #unclaim, from an id resolved through scoped_entry.
+    # Every one of these actions used to redirect to the event, which was the same place as the row
+    # until the sheet grew a pager. A member who adds the three-hundredth standing, or claims one
+    # on page six, must not be answered with a page that does not contain the row they just acted
+    # on — so the redirect names the page it actually falls on and anchors to the row itself.
+    def sheet_path(standing)
+      tournament_path(@tournament, **Tournaments::Standings::Row.sheet_position(standing))
+    end
+
+    def surviving_page(page)
+      last = (@tournament.standings.count / TournamentStanding::SHEET_PER_PAGE.to_f).ceil
+      page.clamp(1, [ last, 1 ].max)
+    end
+
+    # nil for page one, so the ordinary case keeps the bare, shareable URL it has always had.
+    def page_param(page) = (page unless page == 1)
+
     def standing_params
       params.require(:tournament_standing).permit(
         :player_name, :division, :placement, :wins, :losses, :ties, :archetype_id

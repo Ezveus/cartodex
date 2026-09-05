@@ -59,6 +59,17 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Tournaments", tournament_path(tournaments(:one))
   end
 
+  # The admin navbar had no coverage here at all, so a new admin screen could light nothing — or
+  # two entries — and no test would notice. It is the third navbar built on Ui::NavbarShell and
+  # obeys the same rule: one entry lit, and the right one.
+  test "an admin page lights one entry in the admin navbar" do
+    @user.update!(admin: true)
+    sign_in @user
+
+    assert_active_nav_link "Archetypes", admin_archetypes_path
+    assert_active_nav_link "Limitless import", new_admin_standings_import_path
+  end
+
   private
 
   def assert_active_nav_link(label, path)

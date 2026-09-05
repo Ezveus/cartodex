@@ -49,7 +49,37 @@ Key services:
 
 **Models**: User has_many Decks, Collections, Imports, and TournamentProfiles. Deck belongs_to an optional User (`decks.user_id` is nullable — an ownerless deck is a tournament field list, see below) and an optional Archetype (its own archetype), has_many Cards through DeckCards and has_many DeckResults (win/loss tracking with optional Archetype tagging for the opposing deck). Archetype has primary/secondary cards (Card refs), parent/children hierarchy, has_many DeckResults, and has_many TournamentStandings. Import persists background import status (progress, errors) for reload-safe tracking and retry, and belongs_to an optional Tournament (set by field-list imports alone, so an event page lists only the imports in flight *there*). TournamentProfile belongs_to User (Play! Pokémon division metadata) and has_many TournamentEntries. Tournament belongs_to an optional creator, has_many TournamentEntries, and has_many TournamentStandings (an event's public sheet); TournamentEntry belongs_to User, Tournament, Deck, and an optional TournamentProfile, and has_one TournamentStanding (the public row it claims). TournamentStanding belongs_to Tournament, Archetype, an optional Deck (an ownerless field list) and an optional TournamentEntry (the claim link), plus an optional `created_by` User. CardSet has_many Cards (code/name uniqueness, release_date, `by_release` scope). `Deck.with_standard_pool` preloads the pool **and both of its bounds**, because `StandardPool#name` reads them and preloading the pool alone still costs two queries per distinct pool; it replaced the same `includes` spelled out at six call sites in four files (both deck indexes, the dashboard showcase, the spotlight's two deck groups, `ListDecksTool`), four of which re-explained the reason. Four flat-cost tests now go red if it stops preloading — two existed, two were added for the showcase and the MCP tool, which had none. Card belongs_to CardSet (optional), has_many Attacks, Abilities, and optional PokemonSubtype. Card validations are conditional on `card_type` (Pokémon vs Trainer vs Energy). **`(set_name, set_number)` is UNIQUE** — that pair identifies a printing and is what `Cards::Fetcher` looks a card up by, so a duplicate would make the lookup arbitrary and, since a known printing is never re-scraped, permanently so; the model validation exists for the readable error, the index is the guarantee. (When Japanese sets land — issue #111 — set codes stop being globally unique and this key has to grow a region or a `card_set_id`.) Card uses a `compute_fingerprint` callback for deduplication (also the equivalence key for suggesting interchangeable printings).
 
-**`Tournament` is the shared public event; `TournamentEntry` is one member's private participation in it.** Any member may catalogue an event, and every other member's entry hangs off the same row — what a given player did there belongs on the entry, not the event. `(name_normalized, date)` is UNIQUE and *is* the event's identity — the same division of labour as `(set_name, set_number)` on `Card`: the model validation exists for the readable error, the index for the guarantee. `normalize_name` runs `before_validation` here, in addition to `NameNormalizable`'s own `before_save`, because the uniqueness check has to see the normalized value before the record is validated, not only once it is saved. It **squishes** as well as downcasing, and so does the query side (`normalize_for_match`) — fold only what is stored and a name typed with a double space becomes unfindable: a name arrives copy-pasted, with a trailing space or a double space where a line wrapped, far more often than it arrives typed, and without the squish one real event gets two catalog rows that render identically and both answer the same search. The split migration's `merge_key_name` mirrors the same rule, since rows written before it carry an unsquished `name_normalized`. `participant_count` stays on `TournamentEntry`, not `Tournament`, because Play! Pokémon ranks a placement against the size of *that player's age division*, not the event's attendance — two entries at the same event legitimately carry two different counts. Entry uniqueness is two partial indexes, `(tournament_id, tournament_profile_id)` where a profile is attached and `(tournament_id, user_id)` where it is not, because SQLite treats NULLs as distinct — the same trap `Archetype`'s old `(primary_pokemon_id, secondary_pokemon_id)` index fell into (see **Archetype identity** below): a single index on `(tournament_id, tournament_profile_id)` alone would never see two profile-less entries from the same player collide. **Both ends of a participation refuse to be deleted out from under it.** `Tournament has_many :entries` and `Deck has_many :tournament_entries` are `dependent: :restrict_with_error`, as is `TournamentProfile`'s — unlike `User`'s `:destroy` or `created_tournaments`' `:nullify`. On the event that stops another member's participation vanishing because the catalog entry's creator deleted it; on the deck it stops the *player's own* record of a placement, CP and profile vanishing behind a confirmation that only ever mentioned cards and results, and it is the one cascade that used to leave the event standing while the attendance disappeared. `TournamentsController#destroy` and `DecksController#destroy` therefore both branch on `destroy`'s return value and name the count in the alert — `restrict_with_error`'s own message names the association, not what is in the way. **`User has_many :tournament_entries, dependent: :destroy` is declared ahead of `:decks` and `:tournament_profiles`, and the order is load-bearing**: dependent callbacks run in declaration order, so "Cancel my account" only works because the entries go first — `UserTest` covers exactly that, and moving the line back below either association turns it red. The other half of the same rule lives on the entry: `TournamentEntry` refuses to change `deck_id` while `deck_results` are attached to it, because `DeckResult#entry_belongs_to_same_deck` is only checked when the *result* is saved and nothing re-checks it when the entry moves underneath — the update would otherwise succeed and leave every attached match invalid. Refusing rather than detaching keeps the decision with the user, the same call the two `restrict_with_error`s make. `Tournament.with_standard_pool` is a deliberate twin of `Deck`'s, for the same measured reason — `StandardPool#name` reads both of its bounds, and dropping the scope took the catalog page from 11 queries to 23. A view that reaches the event through `entry.tournament` throws that preload away and lazily re-reads all four rows, which is why `Tournaments::Entries::ShowView` takes `tournament:` as its own keyword rather than deriving it.
+**`Tournament` is the shared public event; `TournamentEntry` is one member's private participation in it.** Any member may catalogue an event, and every other member's entry hangs off the same row — what a given player did there belongs on the entry, not the event. `(name_normalized, date)` is UNIQUE and *is* the event's identity — the same division of labour as `(set_name, set_number)` on `Card`: the model validation exists for the readable error, the index for the guarantee. `normalize_name` runs `before_validation` here, in addition to `NameNormalizable`'s own `before_save`, because the uniqueness check has to see the normalized value before the record is validated, not only once it is saved. It **squishes** as well as downcasing, and so does the query side (`normalize_for_match`) — fold only what is stored and a name typed with a double space becomes unfindable: a name arrives copy-pasted, with a trailing space or a double space where a line wrapped, far more often than it arrives typed, and without the squish one real event gets two catalog rows that render identically and both answer the same search. The split migration's `merge_key_name` mirrors the same rule, since rows written before it carry an unsquished `name_normalized`. `participant_count` stays on `TournamentEntry`, not `Tournament`, because Play! Pokémon ranks a placement against the size of *that player's age division*, not the event's attendance — two entries at the same event legitimately carry two different counts. Entry uniqueness is two partial indexes, `(tournament_id, tournament_profile_id)` where a profile is attached and `(tournament_id, user_id)` where it is not, because SQLite treats NULLs as distinct — the same trap `Archetype`'s old `(primary_pokemon_id, secondary_pokemon_id)` index fell into (see **Archetype identity** below): a single index on `(tournament_id, tournament_profile_id)` alone would never see two profile-less entries from the same player collide. **Both ends of a participation refuse to be deleted out from under it.** `Tournament has_many :entries` and `Deck has_many :tournament_entries` are `dependent: :restrict_with_error`, as is `TournamentProfile`'s — unlike `User`'s `:destroy` or `created_tournaments`' `:nullify`. On the event that stops another member's participation vanishing because the catalog entry's creator deleted it; on the deck it stops the *player's own* record of a placement, CP and profile vanishing behind a confirmation that only ever mentioned cards and results, and it is the one cascade that used to leave the event standing while the attendance disappeared. `TournamentsController#destroy` and `DecksController#destroy` therefore both branch on `destroy`'s return value and name the count in the alert — `restrict_with_error`'s own message names the association, not what is in the way. **`User has_many :tournament_entries, dependent: :destroy` is declared ahead of `:decks` and `:tournament_profiles`, and the order is load-bearing**: dependent callbacks run in declaration order, so "Cancel my account" only works because the entries go first — `UserTest` covers exactly that, and moving the line back below either association turns it red. The other half of the same rule lives on the entry: `TournamentEntry` refuses to change `deck_id` while `deck_results` are attached to it, because `DeckResult#entry_belongs_to_same_deck` is only checked when the *result* is saved and nothing re-checks it when the entry moves underneath — the update would otherwise succeed and leave every attached match invalid. Refusing rather than detaching keeps the decision with the user, the same call the two `restrict_with_error`s make. **An event's sheet is paginated** (`TournamentStanding::SHEET_PER_PAGE`, 50). A hand-typed sheet is
+a handful of rows; a Worlds field is a thousand, on a page that is public and deliberately carries
+no rate limit ("one page load per click"), and that preloads three associations for every row it
+renders. Two things had to move for a page boundary to be drawable at all. `as_a_sheet` now orders
+the divisions **in SQL** by `TournamentStanding.division_order`, an Arel CASE over `DIVISIONS` — `ORDER BY division` is
+alphabetical (junior, masters, senior) while players read junior, senior, masters, and
+`Standings::Table` had always regrouped them for display, so with the two orders disagreeing a
+boundary drawn in SQL falls where the reader never sees it: page two opening in the middle of a
+division page one appeared to finish. And **everything that points at a row now points at the page
+it is on**, anchored to it: the redirect after every write that leaves the row standing (a refused
+`#claim` included — the row is still there and the alert is about it), the duplicate-name hint on
+the form, and Cancel. "Back to the event" is the top of page one, which need not hold what the
+member just typed. `Tournaments::Standings::Row.sheet_position` is the one place that answers it,
+beside `dom_id` because the anchor *is* the row's identity, and in one place because three copies
+of "which page is it on" drift; it reads `TournamentStanding.page_of`, one `pluck` of ids over one
+event's field rather than a COUNT predicate that would restate the scope's ordering somewhere else.
+`#destroy` reads the page *before* the row goes and clamps it *after*, since deleting the only row
+of the last page otherwise leaves a `?page=` that no longer exists in the address bar and in any
+link shared from it. `#show` clamps an out-of-range `?page=` to the last page rather than rendering
+an empty table under "No standings recorded for this event yet." — which is false, and which a
+public URL will be asked for; `#index` got the same clamp for the same reason, having told the same
+lie about the catalog since it was written. There is **no Turbo Frame** here,
+unlike the three listings that have one: those wrap a debounced filter field where a keystroke
+would otherwise pay for the whole surrounding page, nothing on this page fires on its own, and a
+frame would capture every link inside the rows — the deck link, Edit, Delete, "This is me" — each
+of which would then need `data-turbo-frame="_top"`. `Ui::Pagination` is the markup all four
+listings now share; `turbo_action: "replace"` is opt-in on it, because inside a frame it is what
+puts `?page=` into the address bar at all while on an ordinary page it would only overwrite the
+history entry, so Back from page 2 would skip page 1.
+
+`Tournament.with_standard_pool` is a deliberate twin of `Deck`'s, for the same measured reason — `StandardPool#name` reads both of its bounds, and dropping the scope took the catalog page from 11 queries to 23. A view that reaches the event through `entry.tournament` throws that preload away and lazily re-reads all four rows, which is why `Tournaments::Entries::ShowView` takes `tournament:` as its own keyword rather than deriving it.
 
 **Entry uniqueness is per Play! Pokémon profile, not per user**, and every reader of it has to be plural. A parent tracking their own and their child's profiles legitimately has two participations in one event, so `TournamentsController#show` loads `@my_entries` — a singular `find_by` picked one of them arbitrarily and left the other unreachable from the only page that links to it — and the event page renders one button per entry, labelled with the player name once there is more than one to tell apart. It keeps offering "Record another participation" while the reader still owns a profile this event holds no entry for; that test is deliberately *narrower* than `one_entry_per_player` and deliberately not a restatement of it, so a reader it says no to loses a button rather than meeting a form that then refuses them. **A visitor gets none of it.** `can_record` — `policy(Tournament).create?`, passed by the ERB — guards `entry_action` as a whole rather than its `empty?` branch, because a visitor's `my_entries` is `[]` by construction and the empty case *is* the "Record your participation" button: a primary-styled link to the sign-in page, which is the navbar's job to offer and not this page's. `create?` and not `mine?` on purpose, even though both answer `user.present?` today and therefore no test can tell them apart — the question here is "may this reader record a participation", and reading it as "may they see their own list" is what would make the button vanish from every event page, silently, the day one of the two grows a condition. One **deck** can likewise carry two participations in one event, which is why `TournamentEntry#picker_label` — the label both tournament pickers print, kept on the model for the reason `Card#printing_label` is — names the profile: `"Name (date)"` alone prints the two options identically. Both pickers read the *loaded* association rather than building a fresh relation over it (`Decks::ResultModal`, `DeckResults::EditView`), because `picker_label` reads the event **and** the profile and both controllers preload the pair; a relation rebuilt with its own `includes` ignores the preload and N+1s on the profile, which a plain query count cannot see — the entry `SELECT` it repeats is served by the query cache. Flat-cost tests in `DecksControllerTest` and `DeckResultsControllerTest` are what actually hold that down.
 
@@ -221,7 +251,106 @@ and a disagreement between the two is information rather than a conflict.
 metagame breakdown, no cross-event metagame page. The archetype FK and the `division` column are
 chosen so that a breakdown is a `group` over one table when it ships. Also out: claiming a row as
 a player with no account (claiming *is* a member linking their own participation), importing
-standings from RK9 or Limitless, and Championship Points on a standing.
+standings from RK9, and Championship Points on a standing. (Importing them from Limitless is no
+longer out — see the next section.)
+
+**Bulk import of a field from Limitless TCG** (`/admin/standings_imports`) turns one archetype's
+tournament history — `limitlesstcg.com/decks/<deck_id>/results`, measured at 176 event headings and
+1569 placement rows for deck 280 — into `Tournament` and `TournamentStanding` rows. Five services
+and a job, all two levels deep like every other service here: `Tournaments::LimitlessResults`
+(fetch + parse the results page), `Tournaments::LimitlessDecklist` (one decklist → the PTCG text
+`Decks::Fetcher` already parses), `Tournaments::StandingsImportPlan` (reads, never writes),
+`Tournaments::StandingsImporter` (writes), `Tournaments::StandingsImportUndo`, and
+`Tournaments::LimitlessImportJob`. The design record is
+`docs/superpowers/specs/2026-09-05-limitless-standings-import-design.md`; the decisions that are
+not obvious from the code:
+
+**The `/JR` and `/SR` suffix on an event's href is an age division, not a different event.**
+`/tournaments/518`, `/tournaments/518/SR` and `/tournaments/518/JR` are the three halves of one
+tournament, and the heading repeats the suffix in the name — so it is stripped, and the 176
+headings collapse to 116 events (measured against the live page). Left in, every import would add
+a permanent second public catalog row per division per event, which is the one mistake here no
+later correction undoes cheaply. A suffix `DIVISION_BY_SUFFIX` does *not* know yields a **nil**
+division and keeps its name suffix, so a third division surfaces as a refused row instead of being
+filed as Masters.
+
+**The archetype is the admin's declaration, and the tier and format are guesses shown before they
+are written.** `archetype_id` is `NOT NULL` on a standing and a deck-results page *is* one
+archetype, so the admin picks it once; nothing is detected and no archetype is created (detection
+still tags the *deck*, never the standing). `tournaments.tier` defaults to `regional` in the
+schema, which would file Worlds as a Regional and then hand a claimant 350 CP instead of 600
+through `CP_REFERENCE` — so it is derived from the name by a pattern table and printed per event in
+the preview. Limitless's `standard-jp` becomes format `other` with `other_format_name`
+`"Standard (JP)"`: writing it as `standard` would force a western `StandardPool` onto a Japanese
+event, the same lie a missing pool is refused for. (The decklists are safe either way — Limitless
+normalises even a Champions League list to English set codes, so issue #111 does not bite here.)
+
+**Every printing is resolved before `Decks::Fetcher` opens its transaction.** That transaction is a
+SQLite `BEGIN IMMEDIATE`, so the database's single write lock is taken at `Deck.create!`, and
+`Cards::Fetcher` goes to the network for any printing not already held at roughly 0.7 s each — one
+list of new cards would hold the lock for 15–30 s while every other writer raises
+`SQLite3::BusyException` after `database.yml`'s `timeout: 5000`. Warmed first, the same transaction
+closes in milliseconds. `StandingsImporterTest` records the transaction depth at each simulated
+fetch and fails if any is nested.
+
+**The standing is created first and the list attached after**, because `Decks::Fetcher` commits its
+own transaction and `deck` is optional on a standing: build the list first and a row that fails
+`placement_within_division_field` leaves a shared, ownerless deck that `/decks/shared` lists and no
+path in the app can delete. The attach is then **confirmed against the database** rather than
+assumed — `update!` returns `true` even when the row it targets has been deleted, Rails does not
+raise for an UPDATE that matched nothing, and standings are wiki-governed while a run walks
+hundreds of them, so that `true` is exactly how the same orphan arrives by the other door.
+
+**An existing standing is never rewritten, but a NULL `deck_id` is filled in** — a row naming an
+archetype with no list is the common case, and attaching one overwrites nothing, so a run reports
+*created*, *enriched* and *skipped* as three different numbers. Enrichment is recorded on its own
+half of the receipt (`imports.enriched_standing_ids`) because undo treats the two oppositely: it
+deletes the rows the run *made* and only takes the field list back off the rows it did not.
+Without that split an enrich-only run was unundoable in both directions at once — the receipt was
+empty, and `standing_params` does not permit `deck_id`, so the member whose row it was could not
+detach the list either.
+
+**The event lookup is `find_by || create!`, never `find_or_create_by`**, whose `name_normalized:`
+key `before_validation :normalize_name` promptly overwrites with nil, failing validation and
+returning an unpersisted record without raising. It rescues **`RecordInvalid` as well as
+`RecordNotUnique`**, and the validation is the likely path: `name_and_date_are_unique` is a
+non-atomic `exists?` that fires long before the UNIQUE index can, so a member cataloguing the event
+between the preview and the write surfaces as `RecordInvalid` — rescuing only the index error
+blocked every row of that event instead of reusing the row somebody else had just made.
+
+**The preview is a GET and the job refuses a plan that has changed.** A POST that renders a body is
+an error to Turbo ("Form responses must redirect"), and every render-a-body branch in this app is a
+422 or JSON. The job re-fetches rather than trusting a plan carried through the browser, and the
+confirm form carries the row count the admin saw: without that check, Limitless publishing an event
+between the two clicks silently imports rows nobody approved. A run is capped (`max_rows:`, default
+300 — a keyword so a test can prove the refusal with two rows) and gives up after five consecutive
+*rows* lost to a transport failure. Per row and not per request, because a row makes up to sixteen
+of them: the card pages are fifteen sixteenths of a run's traffic, so a rate limit that lets the
+decklist page through and refuses those is still a run that has stopped working — and a counter
+cleared by any one successful request would never reach five. A decklist that merely will not parse
+is neither counted nor forgiven. The run records both halves of its receipt on the `Import`, and
+**undo lives on `Admin::ImportsController#undo`**, beside the row it acts on: it destroys the
+created rows nobody has claimed, takes the field list back off the enriched ones with
+`update_column` (for the reason `#unclaim` uses it), keeps the claimed rows and says how many, and
+leaves the events alone.
+`Import::KINDS` gains `limitless_standings`, whose `tournament_id` stays nil because a run spans
+many events, and `Admin::ImportsController#retry` became an allowlist (`deck`, `card_set`) rather
+than a chain of refusals — its `case` has no `else`, so a new kind used to destroy the row and
+enqueue nothing.
+
+**`HttpFetcher` gained a `User-Agent` and real timeouts** (10 s connect, 30 s read, against
+Net::HTTP's 60/60), and rescues timeouts and connection errors into `FetchError` — the class every
+caller already handles, so `CardsController#image` still answers 502 rather than 500. It also
+refuses a URI that is not `URI::HTTP`, the backstop behind the caller-side rule that a Limitless
+deck id must match `/\A\d+\z/` before it is interpolated into a URL.
+
+**Still out of scope, and worth knowing:** `play.limitlesstcg.com`'s online "best finishes" (they
+are online-only tournaments with no age divisions, and cataloguing them would fill the public
+`/tournaments` list with events no member attended); and attendance and W/L/T, which the results
+page does not carry. Pagination of `tournaments#show`'s sheet *was* the prerequisite named here and
+ships alongside this — see the paragraph on `SHEET_PER_PAGE` above. A sheet imported from one
+archetype's page is still a *partial* sheet and nothing says so; that is a property it shares with
+every hand-typed sheet, and marking one complete would mean knowing when it is.
 
 `StandardPool` is one period of the rotating Standard calendar: two `CardSet` bounds — the oldest legal set, moved by the annual rotation, and the newest, moved by every release — plus the legal `regulation_marks` and **two** dates. `(first_card_set_id, last_card_set_id)` is UNIQUE because that pair *is* the pool's name, `TEF-PBL`, which is what players call it. `released_on` says the cards exist and drives `StandardPool.current`, the anchor a new deck is pre-selected to; `legal_on` says Play! Pokémon considers the pool legal and drives `StandardPool.at(date)`, which is what a tournament asks — a set is tournament-legal about two weeks after it ships, so neither date derives from the other. `Deck` and `Tournament` each carry a `standard_pool_id`, required by validation when the format is `standard` and cleared otherwise (the `other_format_name` pattern): **only Standard rotates**, the other three formats are eternal and have no anchor. The anchor is **pinned** — nothing moves it automatically, and `Ui::StandardPoolNotice` merely invites the user to. `has_many :decks, dependent: :restrict_with_error`, unlike `Archetype`'s `:nullify`, because a NULL anchor on a Standard deck is unsavable on its next edit. Deck-construction rules are deliberately **not** here: see #61.
 
