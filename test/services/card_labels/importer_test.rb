@@ -19,6 +19,9 @@ class CardLabels::ImporterTest < ActiveSupport::TestCase
       @label.assignments.pluck(:fingerprint).sort
     assert_equal [ "imported" ], @label.assignments.pluck(:source).uniq
     assert_equal @honedge.id, @label.assignments.find_by(fingerprint: "honedge_fp").card_id
+    # The fake ignores nothing: it would still pass all of this suite reading @label.slug instead
+    # of source_query, and then fail in production against LimitlessSearch::TOKEN_RE.
+    assert_equal "is:ace", @search_token
   end
 
   # A printing Limitless lists and the catalogue lacks is counted, never created: acquiring cards
@@ -49,21 +52,37 @@ class CardLabels::ImporterTest < ActiveSupport::TestCase
     assert_equal 1, @result.already_present
   end
 
-  # The whole point of `source`. A human decision outranks the source, including a refusal.
+  # The whole point of `source`. A human decision outranks the source, including a refusal — and
+  # the obvious-looking "refresh the printing pointer" mutant (`assignment.update!(card:
+  # printings.first)` beside the persisted? guard) leaves source, rejected and created all
+  # correct, so this asserts the *whole row*, not the two fields that mutant happens to spare.
   test "it never touches a curated decision" do
-    @label.assignments.create!(fingerprint: "honedge_fp", source: "curated", rejected: true)
+    assignment = @label.assignments.create!(fingerprint: "honedge_fp", source: "curated", rejected: true)
 
-    result = import([ printing_for(@honedge) ])
+    result = nil
+    assert_no_changes -> { assignment.reload.attributes } do
+      result = import([ printing_for(@honedge) ])
+    end
 
-    assignment = @label.assignments.find_by(fingerprint: "honedge_fp")
+    assert_equal 0, result.created
+  end
 
-    assert_equal "curated", assignment.source
-    assert assignment.rejected?
+  # Stage 2's suggester rewrites its own suggested rows; the importer must never race it either.
+  test "it never touches a suggested decision" do
+    assignment = @label.assignments.create!(fingerprint: "honedge_fp", source: "suggested")
+
+    result = nil
+    assert_no_changes -> { assignment.reload.attributes } do
+      result = import([ printing_for(@honedge) ])
+    end
+
     assert_equal 0, result.created
   end
 
   # Reported, never deleted: a page truncated by a transport failure would otherwise depopulate a
-  # label, and an admin would have no way to tell that from the source dropping a card.
+  # label, and an admin would have no way to tell that from the source dropping a card. The row
+  # assertions catch a soft-deleting mutant (`…update_all(rejected: true)` instead of `pluck`) that
+  # would otherwise still report ["doublade_fp"] and still count 2 rows while quietly rejecting one.
   test "an assignment the source no longer lists is reported and kept" do
     import([ printing_for(@honedge), printing_for(@doublade) ])
 
@@ -71,6 +90,34 @@ class CardLabels::ImporterTest < ActiveSupport::TestCase
 
     assert_equal [ "doublade_fp" ], result.unlisted_fingerprints
     assert_equal 2, @label.assignments.count
+
+    doublade_assignment = @label.assignments.find_by(fingerprint: "doublade_fp")
+    assert_equal "imported", doublade_assignment.source
+    assert_not doublade_assignment.rejected?
+  end
+
+  # Task 5 renders unlisted_fingerprints to an admin who acts on it, so leaking another label's row
+  # into it is exactly what the card_label_id scope on @label.assignments exists to prevent — and
+  # nothing in the suite otherwise builds a second label to prove that scope is load-bearing.
+  test "an unlisted row belonging to another label is never reported here" do
+    other_label = CardLabel.create!(slug: "tera", name: "Tera", family: "type",
+                                    position: 20, source_query: "is:tera")
+    other_label.assignments.create!(fingerprint: "doublade_fp", source: "imported")
+
+    result = import([ printing_for(@honedge) ])
+
+    assert_equal [], result.unlisted_fingerprints
+  end
+
+  # The other half of the same scope: a curated row this run does not list is a human's decision,
+  # not a stray — reporting it as unlisted is exactly the rule the `.imported` scope exists to
+  # prevent, and nothing else in the suite builds a curated row that a run's printings simply omit.
+  test "a curated decision this run does not list is never reported as unlisted" do
+    @label.assignments.create!(fingerprint: "doublade_fp", source: "curated", rejected: true)
+
+    result = import([ printing_for(@honedge) ])
+
+    assert_equal [], result.unlisted_fingerprints
   end
 
   # compute_fingerprint is a before_save, so only a callback-bypassing write produces this. The
@@ -102,13 +149,29 @@ class CardLabels::ImporterTest < ActiveSupport::TestCase
     assert_not result.complete?
   end
 
+  # LimitlessSearch itself never returns this (a ParseError fires first on an empty grid), but
+  # `search:` exists precisely so another reader can be injected, and that reader carries no such
+  # guard — the empty OR-list this used to build was invalid SQL on its own, with no printings
+  # involved to make it a plausible admin-facing failure.
+  test "an empty result from the source is a no-op, not a crash" do
+    result = import([])
+
+    assert_equal 0, result.created
+    assert_equal 0, result.already_present
+    assert_equal [], result.missing_printings
+    assert_equal [], result.unfingerprinted
+    assert_equal [], result.unlisted_fingerprints
+  end
+
   private
 
   def printing_for(card) = Printing.new(set_code: card.set_name, number: card.set_number)
 
   def import(printings, announced_count: nil)
+    test = self
     search = Class.new do
-      define_singleton_method(:call) do |_token|
+      define_singleton_method(:call) do |token|
+        test.instance_variable_set(:@search_token, token)
         SearchResult.new(printings: printings, announced_count: announced_count || printings.size)
       end
     end

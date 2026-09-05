@@ -47,10 +47,21 @@ class CardLabels::Importer < ApplicationService
 
   private
 
-  # One query for the whole label rather than one per printing: is:ex is 986 of them.
+  # One query for the whole label rather than one per printing: is:ex is 986 of them. Not the
+  # obvious "(set_name = ? AND set_number = ?) OR ..." chain — that is a left-deep expression tree,
+  # and it blows SQLite's compile-time SQLITE_MAX_EXPR_DEPTH. Measured against this exact query
+  # shape on sqlite3 3.51: 995 terms parse, 1000 raise "Expression tree is too large (maximum depth
+  # 1000)", and is:ex's 986 printings sit close enough that one new set of ex cards would cross it
+  # from an unrescued admin action. A row-value IN list is one expression holding an ExprList
+  # rather than a chain of ORs, so its terms cost no depth regardless of count (checked at 1200).
   def resolve(printings)
+    # Not a crash guard against the row-value IN below — "(set_name, set_number) IN ()" is valid
+    # SQLite and simply matches nothing — just a wasted query worth skipping outright.
+    return { cards: [], missing: [], unfingerprinted: [] } if printings.empty?
+
     pairs = printings.map { |printing| [ printing.set_code, printing.number ] }
-    cards = Card.where([ pairs.map { "(set_name = ? AND set_number = ?)" }.join(" OR "), *pairs.flatten ])
+    values = pairs.map { "(?, ?)" }.join(", ")
+    cards = Card.where("(set_name, set_number) IN (#{values})", *pairs.flatten)
                 .index_by { |card| [ card.set_name, card.set_number ] }
 
     missing = pairs.reject { |pair| cards.key?(pair) }.map { |set_code, number| "#{set_code} #{number}" }
@@ -64,8 +75,9 @@ class CardLabels::Importer < ApplicationService
     }
   end
 
-  # find_or_create_by! and not upsert: leaving an existing row exactly as it is *is* the rule, and
-  # an upsert would quietly rewrite a curated decision back to "imported".
+  # find_or_initialize_by + a persisted? guard, not find_or_create_by! and not upsert: leaving an
+  # existing row exactly as it is *is* the rule, and either of those would quietly rewrite a
+  # curated decision back to "imported".
   def write(cards)
     @created = 0
     @already_present = 0
