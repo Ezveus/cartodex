@@ -403,16 +403,21 @@ both, so both runs are `limitless_standings` and the `label` says which source t
   *Limitless's* aggregates over *their* field, not a figure this database can compute;
   republishing someone else's number under a heading reading "recorded in Cartodex" is a
   different decision and a different issue.
-- **Dedup across leaderboards.** The stored key (§1) closes the churn and the split run: a
-  (player, list) pair already recorded for the archetype is dropped whatever page, filter or run
-  produced it. What it does not span is *different leaderboards*: the key is
-  `(archetype_id, player_slug, list_digest)` and a run against another pool's page writes the same
-  pair for a different pool, which is correct — a list played under TEF-CRI is not the list played
-  under TEF-PBL — but it also means the same player's genuinely unchanged 60 appears once per pool
-  page imported. Adding `standard_pool_id` to the key would say which of those two it is; nothing
-  measures it yet. (Not, as an earlier draft said, a second row at the *same* event — that is
-  impossible, since `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan
-  marks it `:skip`.)
+- **Dedup across pools, and it is a rule rather than an omission.** The stored key (§1) closes the
+  churn and the split run — a (player, list) pair already recorded is dropped whatever page, filter
+  or run produced it — and the lookup is **scoped to the pools the run targets**, so the same
+  player's genuinely unchanged 60 is recorded once *per pool*.
+
+  That is the deliberate half. The card report buckets on `tournaments.standard_pool_id`, so each
+  pool is its own sample, and a list that survived a rotation untouched is a real row of *each*
+  pool's leaderboard: de-duplicating across pools would make whichever pool was imported second
+  report fewer lists than the source published — and a list that survives a rotation unchanged is
+  exactly the one its player keeps registering, so the loss would land hardest on the pool that had
+  just opened. A review found the code doing this and the design record forbidding it, which is the
+  worst of both: the next reader trusts whichever they read first.
+
+  (Not, as an earlier draft said, a second row at the *same* event — that is impossible, since
+  `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan marks it `:skip`.)
 - **A venue axis on the archetype pages.** See §7: the blend is named on `/archetypes/:id`, not yet
   separable — and **not named at all on `/archetypes`**, whose events column, "last event" date and
   standings-count ordering `Archetypes::IndexCounts` still blends silently.

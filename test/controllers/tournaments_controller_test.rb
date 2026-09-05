@@ -298,6 +298,30 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", tournament_path(@tournament), text: /#{@tournament.name}/
   end
 
+  # The validation became partial (WHERE online = 0) when online events were allowed to share a
+  # name and a date; the helper that recovers from it has to move with it. Unscoped, cataloguing a
+  # paper event that clashes with nothing succeeds — but if an imported online weekly happens to
+  # share its name and date, an unscoped lookup would hand the form a link to an event that is not
+  # in the catalog the member is being told about, for an error nothing raised.
+  test "an online event of the same name and date neither refuses a catalog entry nor is linked as the clash" do
+    Tournament.create!(
+      name: "Pumpkaweekly #12", date: Date.new(2026, 4, 18), tier: "other", online: true,
+      format: "other", other_format_name: "Standard (Online)"
+    )
+
+    assert_difference -> { Tournament.count }, 1 do
+      post tournaments_path, params: {
+        tournament: {
+          name: "Pumpkaweekly #12", date: "2026-04-18", tier: "league_cup",
+          format: "standard", standard_pool_id: standard_pools(:twm_por).id
+        }
+      }
+    end
+
+    assert_response :redirect
+    assert_equal 1, Tournament.catalogued.where(name_normalized: "pumpkaweekly #12").count
+  end
+
   test "the creator updates the event" do
     patch tournament_path(@tournament), params: { tournament: { name: "Renamed" } }
 

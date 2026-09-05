@@ -54,10 +54,15 @@ class Tournaments::OnlineResults < ApplicationService
   # a link. The URL is rebuilt from the captures rather than passed through.
   PLAYER_HREF_RE = %r{\A/tournament/([A-Za-z0-9]+)/player/([A-Za-z0-9._-]+)(?:/decklist)?\z}
 
+  # The same shape, but the suffix is mandatory: this one answers "did this player publish a list",
+  # and PLAYER_HREF_RE cannot, since it matches the bare player link too.
+  DECKLIST_HREF_RE = %r{\A/tournament/([A-Za-z0-9]+)/player/([A-Za-z0-9._-]+)/decklist\z}
+
   CELL_COUNT = 6
   PLAYER_CELL = 0
   PLACEMENT_CELL = 3
   RECORD_CELL = 4
+  LIST_CELL = 5
 
   # Online play has no age divisions. Writing "masters" would be a lie that
   # Archetypes::Performance#by_division then reports as a fact about age divisions.
@@ -140,7 +145,8 @@ class Tournaments::OnlineResults < ApplicationService
     name = tr["data-tournament"].to_s.squish.presence
     player = parse_player(cells[PLAYER_CELL])
     placement, attendance = parse_placement(cells[PLACEMENT_CELL])
-    return if date.nil? || name.nil? || player.nil? || placement.nil?
+    player_name = parse_player_name(cells[PLAYER_CELL])
+    return if date.nil? || name.nil? || player.nil? || placement.nil? || player_name.nil?
 
     wins, losses, ties = parse_record(cells[RECORD_CELL])
     tournament_id, slug = player
@@ -151,9 +157,9 @@ class Tournaments::OnlineResults < ApplicationService
       division: DIVISION,
       division_suffix: nil,
       format: @format,
-      player_name: (cells[PLAYER_CELL].at_css("a")&.text || cells[PLAYER_CELL].text).squish.presence,
+      player_name: player_name,
       placement: placement,
-      list_url: "#{BASE_URL}/tournament/#{tournament_id}/player/#{slug}/decklist",
+      list_url: parse_list_url(cells[LIST_CELL]),
       player_slug: slug,
       attendance: attendance,
       wins: wins,
@@ -174,6 +180,33 @@ class Tournaments::OnlineResults < ApplicationService
   # Returns [tournament_id, player_slug], the row's identity, or nil when the href names no player.
   def parse_player(cell)
     PLAYER_HREF_RE.match(cell.at_css("a")&.[]("href").to_s)&.captures
+  end
+
+  # Guarded like the other four rather than left to fail downstream: `.presence` can come back nil
+  # — an <a> whose href matches but whose text is empty falls through `&.text || cell.text`, since
+  # "" is truthy — and the row is then refused far away at `create!`, on a receipt line that has no
+  # name to print. "Strict per page, lenient per row" already says a row that cannot be read costs
+  # its own row.
+  def parse_player_name(cell)
+    (cell.at_css("a")&.text || cell.text).squish.presence
+  end
+
+  # Read from the row rather than synthesised from the player's ids, and the sibling
+  # Tournaments::LimitlessResults#parse_list_url does the same. A synthesised URL is never nil, so
+  # a row whose player published no list becomes a 404 that HttpFetcher raises as a FetchError and
+  # the importer counts against its abort budget — five such rows adjacent on a leaderboard would
+  # stop a run under a message about the far side going away, when Limitless answered correctly
+  # every time. It is also what makes StandingsImporter#prefetch's own `list_url.blank?` guard
+  # reachable at all; synthesised, that line was unreachable.
+  #
+  # Measured on 2026-09-05: 145 rows over 12 leaderboards all carry a list, so this is robustness
+  # rather than a live defect — a "best finishes" board links its lists by construction. The guard
+  # costs one cell read and removes a way for the source to stop a run by being merely incomplete.
+  def parse_list_url(cell)
+    match = DECKLIST_HREF_RE.match(cell&.at_css("a")&.[]("href").to_s)
+    return if match.nil?
+
+    "#{BASE_URL}/tournament/#{match[1]}/player/#{match[2]}/decklist"
   end
 
   def parse_placement(cell)

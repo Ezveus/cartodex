@@ -124,10 +124,17 @@ class TournamentsController < ApplicationController
 
   # The event the failed save collided with, so the form can link to it instead of merely
   # refusing. nil unless the failure really was the uniqueness rule.
+  # `catalogued`, because the validation that produced this error is: name_and_date_are_unique
+  # returns early for an online record and searches Tournament.catalogued, matching the now-partial
+  # UNIQUE index. Unscoped, the two disagree — an online event sharing a name and a date is
+  # returned although it is not what refused the save, and since #index no longer lists it the
+  # member follows a link to an event that is nowhere in the catalog they were just told it
+  # collides with. With no catalogued clash at all it would invent a link for an error nothing
+  # raised.
   def existing_tournament
     return if @tournament.errors[:name].none?
 
-    Tournament.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
+    Tournament.catalogued.find_by(name_normalized: @tournament.name_normalized, date: @tournament.date)
   end
 
   # Plural, because entry uniqueness is per Play! Pokémon profile rather than per user: a parent

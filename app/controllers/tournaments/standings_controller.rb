@@ -169,7 +169,14 @@ module Tournaments
         player_name: profile&.player_name,
         # A division is fixed for the whole season, so it is asked of the *event's* date rather
         # than of today — and #division answers with a Symbol the enum column will not take.
-        division: profile&.division(on: @tournament.date)&.to_s,
+        #
+        # Dropped entirely on an online event, the way it is already dropped for a participation
+        # with no TournamentProfile: a Play! Pokémon age division means nothing there, and copying
+        # one here re-opens the defect Standings::Form#offered_divisions was written to close.
+        # `division_options` would add the copied value back as the row's "own" one — correct for
+        # the edit case it exists for — and `selected:` would prefer it over "open", so the form
+        # would offer Open *and* Masters with Masters pre-selected.
+        division: (profile&.division(on: @tournament.date)&.to_s unless @tournament.online?),
         placement: entry.placement,
         archetype_id: entry.deck.archetype_id
       }.compact

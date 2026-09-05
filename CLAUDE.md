@@ -401,7 +401,12 @@ an admin splitting a big run with `event_filters` de-duplicates only within each
 transient decklist fetch failure leaves a row un-keyed and therefore kept, so the next healthy run
 *enriches* it instead of removing it. So the key is stored — nullable, written by the online
 importer alone, indexed as `(archetype_id, player_slug, list_digest)` — and checked in one `pluck`
-**before** the in-run grouping. Two rules that are not obvious: a row is never a duplicate of its
+**before** the in-run grouping, **scoped to the pools the run targets**. That scope is the
+difference between a true sample and a short one: the card report buckets on `standard_pool_id`,
+so each pool is its own sample and a 60 a player kept unchanged across a rotation is a real row of
+*each* pool's leaderboard. Unscoped, whichever pool was imported second silently reports fewer
+lists than the source published — and a list surviving a rotation untouched is exactly the one its
+player keeps registering, so the loss lands hardest on the pool that just opened. Two rules that are not obvious: a row is never a duplicate of its
 **own** standing (or a plain re-import reports every row as `duplicate` instead of `skipped`), and
 the key is written on the **enrich** path too, or a row whose first fetch failed stays un-keyed
 forever. `StandingsImporter.list_digest` is the single definition both the in-memory key and the

@@ -395,6 +395,48 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     assert_equal 0, result.duplicates
   end
 
+  # The stored key is scoped to the pools a run targets, and the scope is the difference between a
+  # true sample and a short one. The card report buckets on tournaments.standard_pool_id, so each
+  # pool is its own sample: a 60 a player kept unchanged across a rotation is a real row of *each*
+  # pool's leaderboard. Unscoped, the second pool imported silently loses every such player — and a
+  # list that survives a rotation untouched is exactly the one its player keeps registering, so the
+  # loss lands hardest on the pool that just opened.
+  test "a list a player kept across a rotation is recorded once per pool, not once in total" do
+    older = online_import(
+      [ online_row(event_name: "Old Weekly", event_date: Date.new(2026, 1, 10), event_key: "old") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_asc)
+    )
+    newer = online_import(
+      [ online_row(event_name: "New Weekly", event_date: Date.new(2026, 2, 20), event_key: "new") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+
+    assert_equal 1, older.created
+    assert_equal 1, newer.created, "the newer pool's leaderboard published this row too"
+    assert_equal 0, newer.duplicates
+
+    pools = TournamentStanding.where.not(player_slug: nil).joins(:tournament)
+      .pluck("tournaments.standard_pool_id").uniq
+    assert_equal 2, pools.size, "one standing in each pool"
+  end
+
+  # The other half of the same rule: within one pool the rolling-leaderboard fix must still hold,
+  # or scoping the lookup would have bought the sample back by giving up the blocker's fix.
+  test "the same list at two events of one pool is still recorded once" do
+    online_import(
+      [ online_row(event_name: "Weekly A", event_date: Date.new(2026, 2, 10), event_key: "a") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+    second = online_import(
+      [ online_row(event_name: "Weekly B", event_date: Date.new(2026, 2, 20), event_key: "b") ],
+      lists: { URL_A => LIST_A }, standard_pool: standard_pools(:twm_por)
+    )
+
+    assert_equal 0, second.created
+    assert_equal 1, second.duplicates
+    assert_equal 1, TournamentStanding.where.not(player_slug: nil).count
+  end
+
   # An abort inside the pre-pass names the row that caused it, like an abort anywhere else — the
   # per-row path records its label before re-raising, and a pre-pass that named none would make
   # the failures that stopped a run the only ones a receipt never mentions.

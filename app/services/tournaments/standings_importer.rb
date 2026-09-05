@@ -178,18 +178,37 @@ class Tournaments::StandingsImporter < ApplicationService
     }
   end
 
-  # One query over one archetype's standings, served by index_tournament_standings_on_dedup_key.
+  # One query over one archetype's standings *in the pools this run targets*, served by
+  # index_tournament_standings_on_dedup_key.
+  #
   # NULLs are excluded in SQL rather than filtered afterwards, and that is the rule the whole
   # column pair rests on: a NULL means "not an online import" — the paper source publishes no slug
   # and two paper rows sharing a 60 are two real people who both played it — so it must never
   # participate in de-duplication.
+  #
+  # Scoped by pool, and the scope is the difference between a true sample and a short one. The card
+  # report is bucketed on tournaments.standard_pool_id, so each pool is its own sample: a list a
+  # player kept unchanged across a rotation is a real row of *each* pool's leaderboard, and dropping
+  # it from whichever pool was imported second makes that sample report fewer lists than the source
+  # published. A list surviving a rotation untouched is also exactly the one a player keeps
+  # registering, so unscoped this would bite hardest on the pool that had just opened. The in-run
+  # grouping already honours the same boundary — a run is one `set` — and the two halves of one rule
+  # must not disagree, since the database half is the one that outlives the run.
   def recorded_dedup_keys
     @recorded_dedup_keys ||= TournamentStanding
       .where(archetype_id: @archetype.id)
+      .joins(:tournament).where(tournaments: { standard_pool_id: run_pool_ids })
       .where.not(player_slug: nil).where.not(list_digest: nil)
       .pluck(:player_slug, :list_digest, :id)
       .group_by { |slug, digest, _id| [ slug, digest ] }
       .transform_values { |rows| rows.map(&:last) }
+  end
+
+  # nil is a real value here, not an absence: a GLC or Expanded online event carries no pool, and
+  # such rows must de-duplicate against each other rather than against every Standard pool at once.
+  # Rails compiles a nil inside the array to `IS NULL`, which is what makes that work.
+  def run_pool_ids
+    @run_pool_ids ||= @plan.events.reject(&:blocked?).map { |event| event.standard_pool&.id }.uniq
   end
 
   # A :blocked row is never written, so letting one win a group would drop a row that would have

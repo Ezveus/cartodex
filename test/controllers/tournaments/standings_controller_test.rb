@@ -447,6 +447,30 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
       "tournament_standing[division]", "open", count: 1
   end
 
+  # The one door left open into the defect §4 closed. prefill_attributes copies the member's
+  # Play! Pokémon age division off their participation, `division_options` then adds it back as the
+  # row's "own" value — correct for the edit case it was written for — and `selected:` prefers it
+  # over "open". So the form offered Open *and* Masters, with Masters pre-selected, and a member
+  # publishing their participation at an online event filed it under an age division that event
+  # does not have. Narrow (it needs an entry at that event, which the page no longer invites) and
+  # real, since no policy refuses one.
+  test "prefilling from a participation never carries an age division onto an online event" do
+    event = online_event
+    entry = @user.tournament_entries.create!(
+      tournament: event, deck: decks(:one), tournament_profile: tournament_profiles(:ash)
+    )
+
+    get new_tournament_standing_path(event, tournament_entry_id: entry.id)
+
+    assert_response :success
+    assert_select "select[name=?] option", "tournament_standing[division]", count: 1
+    assert_select "select[name=?] option[selected][value=?]",
+      "tournament_standing[division]", "open", count: 1
+    # The rest of the prefill still works — this drops one key, not the feature.
+    assert_select "input[name=?][value=?]",
+      "tournament_standing[player_name]", tournament_profiles(:ash).player_name
+  end
+
   # The negative control, both halves: a paper event must still be offered its three age
   # divisions and must never be offered "open" — the rule §4 wrote, which this change must not
   # trade for the mirror image of the same lie.

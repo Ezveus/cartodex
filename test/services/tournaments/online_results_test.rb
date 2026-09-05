@@ -112,6 +112,43 @@ class Tournaments::OnlineResultsTest < ActiveSupport::TestCase
   # The important one. An invalid (rotation, set) pair answers with a perfectly valid page holding
   # zero rows rather than with an error, so silence must never be read as "this archetype has no
   # online finishes".
+  # Read off the row, not synthesised from the player's ids. A synthesised URL is never nil, so a
+  # row whose player published no list becomes a 404 that the importer counts against its abort
+  # budget — five adjacent ones stop a run that nothing was wrong with. It is also the only thing
+  # that makes StandingsImporter#prefetch's `list_url.blank?` guard reachable.
+  #
+  # The neutered cell keeps its <a>: the point is that the *href* is not a decklist link, not that
+  # the cell is empty, and an anchor pointing at the player's match list is what the real page
+  # would carry.
+  test "reports no list url for a row whose player published none" do
+    stub_http(RESULTS_HTML.sub(
+      %(<a href="/tournament/ffff6666/player/freshgazpacho/decklist"><i class="far fa-lg fa-list-alt"></i></a>),
+      %(<a href="/tournament/ffff6666/player/freshgazpacho">—</a>)
+    ))
+    rows = call
+
+    assert_equal 6, rows.size, "the row is kept — it is a real finish, it just has no list"
+    listless = rows.find { |r| r.event_key == "ffff6666" }
+    assert_nil listless.list_url
+    assert_equal "freshgazpacho", listless.player_slug
+    assert(rows.reject { |r| r.event_key == "ffff6666" }.all? { |r| r.list_url.present? })
+  end
+
+  # Guarded like the date, the name, the player href and the placement. An <a> matching
+  # PLAYER_HREF_RE whose text is empty falls through `&.text || cell.text` — "" is truthy — and the
+  # row is refused far downstream at create!, on a receipt line with no name to print.
+  test "skips a row whose player cell carries no readable name" do
+    stub_http(RESULTS_HTML.sub(
+      %(<a href="/tournament/ffff6666/player/freshgazpacho/decklist">freshgazpacho</a>),
+      %(<a href="/tournament/ffff6666/player/freshgazpacho/decklist"> </a>)
+    ))
+    rows = call
+
+    assert_equal 5, rows.size
+    assert_empty rows.select { |r| r.event_key == "ffff6666" }
+    assert(rows.all? { |r| r.player_name.present? })
+  end
+
   # The other empty case, and it must not answer with the other message: a table full of rows this
   # parser rejected is a layout change, and telling the admin to correct a rotation and a set that
   # were fine sends them to fix the one thing that is not broken.
