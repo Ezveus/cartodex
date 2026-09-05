@@ -3275,11 +3275,33 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   color: var(--ink-500);
 }
 
-/* Sits under the badge in the catalog's first cell and qualifies the whole row, so it must not
-   push the row's height around: colour and size come from .text-muted, and this only takes the
-   <p>'s default margins off inside a table cell. */
+/* The catalog's first cell stacks the badge's link and the note under it.
+
+   What fixes the mobile layout is the wrapper *existing*, not this declaration: below the
+   breakpoint .data-table turns each row into a card whose cells are
+   `display: flex; align-items: center`, so a link and a note placed directly in the cell become
+   two flex items on one line — measured at 390px, the note took 109px of a 326px cell,
+   right-aligned, and grew the row from 29px to 64px. Wrapped, they are one flex item and stack
+   inside it however this rule says. Verified by sabotage: removing the wrapper turns the mobile
+   half of the system sweep red, while swapping this column for `display: block` does not.
+
+   Kept as a column with a gap anyway, for the reason .archetype-member-cards is one — it is the
+   same problem in the same table and the next reader should meet one answer, not two. */
+.archetype-row-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* --ink-500 and not .text-muted's --ink-300: this sentence exists to stop a misreading of the
+   numbers beside it, so it has to be readable. --ink-300 measures 2.65:1 on the surface and 2.49:1
+   on a hovered row, both under WCAG AA's 4.5:1 for normal text; --ink-500 is 5.82:1 and is what
+   .archetype-sample-note, the detail page's equivalent sentence, already uses. */
 .archetype-row-note {
-  margin: 0.15rem 0 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-500);
 }
 
 /* Loud enough to be read before the percentages it qualifies, which is the whole point: the

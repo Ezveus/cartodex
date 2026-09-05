@@ -418,9 +418,11 @@ both, so both runs are `limitless_standings` and the `label` says which source t
 
   (Not, as an earlier draft said, a second row at the *same* event — that is impossible, since
   `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan marks it `:skip`.)
-- **A venue axis on the archetype pages.** See §7: the blend is named on `/archetypes/:id`, not yet
-  separable — and **not named at all on `/archetypes`**, whose events column, "last event" date and
-  standings-count ordering `Archetypes::IndexCounts` still blends silently.
+- **A venue axis on the archetype pages.** See §7: the blend is named on both `/archetypes/:id` and
+  — since #160 — on `/archetypes`, where each row says how many of its results and events came from
+  online play. Neither page lets a reader *separate* the two, which is what #160 tracks; the
+  measurement recorded there argues against building the selector until a second pool holds both
+  venues or a blended pool's paper half exceeds `SMALL_SAMPLE`.
 - **A win rate anywhere**, though the data to compute one now exists.
 - **Any online-only tournament reaching `/tournaments`, search, or the dashboard.**
 - **Keeping online field lists out of `/decks/shared`.** Every imported row builds a `shared: true`

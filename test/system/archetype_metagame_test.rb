@@ -104,7 +104,45 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_no_text "Content missing"
   end
 
+  # The catalog's note about online play, checked as *geometry* rather than as text, and that is
+  # the point: below 768px `.data-table-row .data-table-cell` is `display: flex; align-items:
+  # center`, so a `<p>` added beside the badge's link becomes a sibling flex item and lands on the
+  # same line — right-aligned to the card's edge, squeezing the badge into three wrapped lines and
+  # growing the row from 29px to 64px. A margin cannot move it; only a column wrapper can.
+  #
+  # No system test visited /archetypes before this one, which is exactly why the mobile sweep — a
+  # CI job of its own — saw nothing. Asserting the text alone would still see nothing: the note
+  # renders either way, it renders in the *wrong place*.
+  test "the catalog's online note sits under the badge rather than beside it, on both sides of the breakpoint" do
+    archetype = archetype_with_online_results
+
+    visit archetypes_path
+    assert_text "Includes 1 standing from online play"
+
+    row = find(".data-table-row", text: archetype.name)
+    link = row.find("a", match: :first)
+    note = row.find(".archetype-row-note")
+
+    link_bottom = evaluate_script("arguments[0].getBoundingClientRect().bottom", link)
+    note_top = evaluate_script("arguments[0].getBoundingClientRect().top", note)
+
+    assert_operator note_top, :>=, link_bottom - 1,
+      "the note overlaps the badge's line instead of sitting under it " \
+      "(link bottom #{link_bottom}, note top #{note_top})"
+  end
+
   private
+
+  # One paper standing and one online one, so the note has a mixture to describe.
+  def archetype_with_online_results
+    archetype = Archetype.create!(primary_card: cards(:doublade))
+    paper = tournament("Paper Cup", Date.new(2026, 2, 7), standard_pools(:twm_por))
+    weekly = tournament("Pumpkaweekly", Date.new(2026, 2, 14), standard_pools(:twm_por), online: true)
+    standing(paper, archetype, "Paper Player")
+    standing(weekly, archetype, "Online Player", division: "open")
+
+    archetype
+  end
 
   # Two rotations, on purpose: the newest pool holds one list and the oldest twelve, which is the
   # shape the production data has (3 lists in the newest pool, 68 in the oldest) and the only one
@@ -133,21 +171,21 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype
   end
 
-  def tournament(name, date, pool)
-    Tournament.create!(name: name, date: date, tier: "regional", format: "standard",
-                       standard_pool: pool)
+  def tournament(name, date, pool, online: false)
+    Tournament.create!(name: name, date: date, tier: online ? "other" : "regional",
+                       format: "standard", standard_pool: pool, online: online)
   end
 
   # An ownerless field list: shared and never physical, which is what
   # Deck#ownerless_deck_is_shared_and_virtual requires.
-  def standing(event, archetype, player_name)
+  def standing(event, archetype, player_name, division: "masters")
     deck = Deck.create!(name: "#{player_name} — #{event.name}", shared: true, physical: false,
                         format: "standard", standard_pool: event.standard_pool)
     DeckCard.create!(deck: deck, card: cards(:teal_mask_ogerpon_ex), quantity: 2)
     DeckCard.create!(deck: deck, card: cards(:bosss_orders_meg), quantity: 1)
 
     TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
-                               player_name: player_name, division: "masters",
+                               player_name: player_name, division: division,
                                placement: 1 + TournamentStanding.where(tournament: event).count)
   end
 end

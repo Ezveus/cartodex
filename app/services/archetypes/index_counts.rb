@@ -1,9 +1,10 @@
 module Archetypes
-  # The three numbers and the date the archetype index prints per row, for a whole page of rows in
-  # one grouped query.
+  # The three numbers and the date the archetype index prints per row, plus the two that say how
+  # much of them came from online play, for a whole page of rows in one grouped query.
   #
-  # Not a counter_cache: three of the four are not plain row counts (distinct events, standings
-  # carrying a list, the latest event's date), and a cache column would have to be maintained by
+  # Not a counter_cache: most of them are not plain row counts (distinct events, standings
+  # carrying a list, the latest event's date, either online figure), and a cache column would have
+  # to be maintained by
   # every path that writes a standing — the bulk importer, its undo, the wiki-editable standings
   # controller and the cascade that takes a sheet down with its event.
   class IndexCounts < ApplicationService
@@ -13,11 +14,12 @@ module Archetypes
     # archetype to carry both sources: 106 standings and 16 events, of which 13 and 13 are online
     # — the events column is the one the blend distorts most, and the ordering key is standings,
     # so there is no single figure the note could honestly sit beside.
-    Counts = Struct.new(:standings, :events, :lists, :online_standings, :last_event_on,
-      keyword_init: true) do
-      def self.zero = new(standings: 0, events: 0, lists: 0, online_standings: 0, last_event_on: nil)
+    Counts = Struct.new(:standings, :events, :lists, :online_standings, :online_events,
+      :last_event_on, keyword_init: true) do
+      def self.zero = new(standings: 0, events: 0, lists: 0, online_standings: 0, online_events: 0,
+                          last_event_on: nil)
 
-      def online? = online_standings.to_i.positive?
+      def online? = online_standings.positive?
     end
 
     def initialize(archetype_ids:)
@@ -46,11 +48,13 @@ module Archetypes
           # second query: /archetypes is pinned at a flat 7 queries by its own test, and this
           # column is printed for every row of every page.
           Arel.sql("SUM(CASE WHEN tournaments.online THEN 1 ELSE 0 END)"),
+          Arel.sql("COUNT(DISTINCT CASE WHEN tournaments.online THEN tournaments.id END)"),
           Arel.sql("MAX(tournaments.date)")
         )
-        .to_h do |archetype_id, standings, events, lists, online, last_on|
+        .to_h do |archetype_id, standings, events, lists, online_standings, online_events, last_on|
           [ archetype_id, Counts.new(standings: standings, events: events, lists: lists,
-                                     online_standings: online.to_i, last_event_on: to_date(last_on)) ]
+                                     online_standings: online_standings, online_events: online_events,
+                                     last_event_on: to_date(last_on)) ]
         end
 
       @archetype_ids.index_with { |id| counted[id] || Counts.zero }
