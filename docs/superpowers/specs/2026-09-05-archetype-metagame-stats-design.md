@@ -159,10 +159,21 @@ may play two versions.
 ## The performance panel
 
 Counts, never rates: standings and events recorded, lists held, the period covered, the best
-placement, and breakdowns by top-cut band (`Tournament::TOP_CUT_BANDS`, already defined), by tier
-and by division. Divisions are ordered junior / senior / masters via
-`TournamentStanding.division_order`, the same business order the standings sheet uses — not
-alphabetically.
+placement, and breakdowns by placement band, by tier and by division. Divisions are ordered
+junior / senior / masters via `TournamentStanding.division_order`, the same business order the
+standings sheet uses — not alphabetically.
+
+The bands are fixed (1st, 2-4, 5-8, 9-16, 17-32, 33-64, 65+) and deliberately **not**
+`Tournament::TOP_CUT_BANDS`. That constant maps an *attendance* to a top-cut size — it is what
+`TournamentEntry#top_cut_size` reads — so answering "did this placement make the cut" needs the
+event's field size, and `Tournaments::StandingsImporter` never writes one: all three
+`*_participant_count` columns are nil on every imported event, measured. A cut-aware band would
+therefore be nil for every row the import produces.
+
+Note that the panel counts **all** standings in scope, including those with no list attached,
+while the card report counts only the listed ones. A recorded placement is a result whether or not
+anybody typed the decklist, so `Archetypes::MetagameScope` exposes both relations rather than
+letting one number stand for the other.
 
 ## `/archetypes` — the index
 

@@ -112,6 +112,11 @@ Rails.application.routes.draw do
     end
     resources :tournament_profiles, except: [ :show ]
 
+    # Member-only for now. Opening these two pages to visitors is three edits, listed above
+    # ArchetypesController: move this resource out of the `authenticate :user` block, include
+    # PubliclyReachable there, and flip ArchetypePolicy to answer true.
+    resources :archetypes, only: [ :index, :show ]
+
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do
       mount MissionControl::Jobs::Engine, at: "/admin/jobs"
