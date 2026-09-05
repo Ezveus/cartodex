@@ -557,9 +557,13 @@ somebody typed — while `play.limitlesstcg.com` publishes one on every row, and
 writes all three. So the columns are now *filled on part of a blended sample and empty on the
 rest*, and a rate computed over that would describe the online rows alone under a heading covering
 both. And there
-is **no ACE SPEC category and no functional one** (Gust, Switch, Recovery): every ACE SPEC carries
-`rarity` `"Ultra"` and so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on
-**0 of 4720** cards, and what a card *does* is not scraped at all. The categories are exactly what
+is **still no ACE SPEC category, and no functional one** (Gust, Switch, Recovery): the label
+introduced below is an annotation on the name line, not a section, and the categories stay a
+partition of the list whether or not a row in it carries one. What changed is the flag itself, not
+the report — nothing here could have derived it: every ACE SPEC carries rarity `"Ultra"` and so do
+93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on **0 of 4720** cards, the
+individual card page carries it no better than the search does, and what a card *does* is not
+scraped at all. The categories are exactly what
 `card_type` plus the scraped `subtype` know — Pokémon, Supporter, Item, **Tool, Stadium**, Special
 Energy, Basic Energy — plus an **`other` bucket that is rendered, not dropped**: it is unreachable
 on today's catalogue and exists so a Trainer subtype the scraper learns tomorrow surfaces as a
@@ -725,6 +729,32 @@ collection grows past roughly twice that size.
 **Out of scope, deliberately:** cross-archetype comparison and any page spanning archetypes (it
 would need a complete field, which no import produces), per-division card statistics (junior and
 senior hold 3 and 2 of the 94 measured standings), matchup data, and exporting the report.
+
+**The card-label store** (`CardLabel`, `CardLabelAssignment`) is a vocabulary plus a fingerprint-keyed
+join, and exists because the ACE SPEC annotation above needs somewhere to live that is not another
+guess dressed up as a column. The two families it holds are governed oppositely on purpose: a
+`type` label (ACE SPEC today) is referenced by nothing but its own `source_query`, so an admin
+adding one is a row plus a run; stage 2's `role` family is referenced by code — its suggestion
+rules are keyed on the slug — so an admin-invented role would be a label no rule can ever propose,
+and `Admin::CardLabelsController` refuses to create or delete one for exactly that reason. An
+assignment is keyed on **fingerprint**, not on a printing, because a label describes the card and
+every printing of Prime Catcher is an ACE SPEC; `card_id` still rides beside it, optional and
+nullified rather than cascaded, as the one printing the decision was actually read from — deleting
+that printing from the admin panel must not delete what was decided about the card. `source`
+(`imported`/`suggested`/`curated`) says who may overwrite whom: the importer writes `imported` rows
+and touches nothing else, stage 2's suggester will rewrite only its own `suggested` rows, and a
+`curated` row — including one with `rejected` set, a human's refusal rather than an absence of
+opinion — outranks both and is kept rather than deleted so the next run cannot quietly undo it.
+`CardLabels::Importer` follows the same restraint at the edges: it counts a printing the catalogue
+does not hold rather than fetching it (acquiring cards is `CardSets::Importer`'s job, and a known
+printing is never re-scraped anyway), and it never deletes an assignment the source stops listing,
+because a page truncated by a transport failure looks identical to a card the source genuinely
+dropped and only one of those two should depopulate a label. `CardLabels::LimitlessSearch` is what
+makes that restraint affordable: `limitlesstcg.com/cards?q=<token>&show=all` answers with the whole
+result set in one request rather than a page per printing — measured at `is:ace` 46 of 46, `is:tera`
+151 of 151, and the largest plausible label, `is:ex`, 986 of 986 in 234 KB — so there is no
+pagination to write and the page's own announced count is free to serve as an integrity check
+instead of a stopping condition.
 
 `StandardPool` is one period of the rotating Standard calendar: two `CardSet` bounds — the oldest legal set, moved by the annual rotation, and the newest, moved by every release — plus the legal `regulation_marks` and **two** dates. `(first_card_set_id, last_card_set_id)` is UNIQUE because that pair *is* the pool's name, `TEF-PBL`, which is what players call it. `released_on` says the cards exist and drives `StandardPool.current`, the anchor a new deck is pre-selected to; `legal_on` says Play! Pokémon considers the pool legal and drives `StandardPool.at(date)`, which is what a tournament asks — a set is tournament-legal about two weeks after it ships, so neither date derives from the other. `Deck` and `Tournament` each carry a `standard_pool_id`, required by validation when the format is `standard` and cleared otherwise (the `other_format_name` pattern): **only Standard rotates**, the other three formats are eternal and have no anchor. The anchor is **pinned** — nothing moves it automatically, and `Ui::StandardPoolNotice` merely invites the user to. `has_many :decks, dependent: :restrict_with_error`, unlike `Archetype`'s `:nullify`, because a NULL anchor on a Standard deck is unsavable on its next edit. Deck-construction rules are deliberately **not** here: see #61.
 

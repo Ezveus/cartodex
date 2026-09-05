@@ -36,9 +36,14 @@ marks it as such; this page must not quietly imply otherwise.
 production database: **1 of 94 standings carries a W/L/T**, the one that was typed by hand. A win
 rate computed from that column would describe the single hand-typed row and nothing else.
 
-**No ACE SPEC category.** Not derivable. Every ACE SPEC carries `rarity = "Ultra"`, but so do 93
-ordinary Trainers in the catalogue (Boss's Orders, Carmine, Buddy-Buddy Poffin…), and the string
-"ACE SPEC" appears in `effect` on **0 of 4720 cards**. There is no column that isolates them.
+**No ACE SPEC category, but the flag itself is now recorded.** The report still has no ACE SPEC
+category: the label is an annotation on the name line, not a section, and the categories below stay
+a partition of the list regardless of which of them carry it. What changed is the flag itself —
+stage 1's card-label store imports it from Limitless's card search, the only source that carries
+it, rather than deriving it here. Nothing in this report's own data could have produced it: every
+ACE SPEC carries `rarity = "Ultra"`, but so do 93 ordinary Trainers in the catalogue (Boss's Orders,
+Carmine, Buddy-Buddy Poffin…), the string "ACE SPEC" appears in `effect` on **0 of 4720 cards**, and
+the individual card page carries no better signal than the search does.
 
 **No functional categories** — Gust, Switch, Recovery, Disrupt. These describe what a card *does*,
 which the scraper does not record. The reference deck reports get them from a hand-maintained

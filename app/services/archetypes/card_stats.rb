@@ -62,11 +62,23 @@ module Archetypes
     #
     # `modes` is an Array because a tie is a real answer — 11 lists at 3 copies and 11 at 4 is not
     # "3", and silently picking one would state a consensus the sample does not hold.
+    #
+    # `labels` defaults to an empty Array rather than the bare Struct default of `nil`: this method
+    # is the only caller that ever has a real answer for "which labels does this card carry", and
+    # every other builder of an Entry — the styleguide's demo report, this component's own unit
+    # tests — has nothing to say about labels and should not have to. Left at `nil`,
+    # `NameGroupRow#type_labels`'s `flat_map(&:labels)` folds that `nil` in as a bare element
+    # instead of flattening it away, and `.select(&:type?)` raises on it — which is exactly what
+    # every one of those callers did until this default existed.
     Entry = Struct.new(
       :card, :fingerprint, :inclusion_count, :inclusion_pct,
       :min_copies, :max_copies, :modes, :core, :labels,
       keyword_init: true
     ) do
+      def initialize(labels: [], **rest)
+        super(labels: labels, **rest)
+      end
+
       def single_quantity? = min_copies == max_copies
       # Played by every list, always in the same number: the part of the deck that is not a choice.
       def fixed? = core && single_quantity?
@@ -258,11 +270,15 @@ module Archetypes
       @fixed_entries ||= entries.select(&:fixed?)
     end
 
-    # Structure the database actually knows, and nothing beyond it. There is no ACE SPEC bucket
-    # and no functional one (Gust, Switch, Recovery): every ACE SPEC carries rarity "Ultra" and so
-    # do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on 0 of 4720 cards, and
-    # what a card *does* is not scraped at all. Guessing either from a name is how a report starts
-    # stating things the data never said.
+    # Structure the database actually knows, and nothing beyond it. There is still no ACE SPEC
+    # bucket here and no functional one (Gust, Switch, Recovery): the categories stay a partition
+    # of the list, and ACE SPEC is now an annotation on the name line (CardLabelAssignment), not a
+    # section — an ACE SPEC is still an Item, and moving it out would break that partition. Nothing
+    # in this method could have derived the flag itself: every ACE SPEC carries rarity "Ultra" and
+    # so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on 0 of 4720 cards, and
+    # the individual card page carries it no better than the search does — which is why it is
+    # imported from Limitless's card search rather than guessed here. Guessing a functional
+    # category from a name is how a report starts stating things the data never said.
     def category_of(card)
       case card.card_type
       when "Pokémon" then :pokemon

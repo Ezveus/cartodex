@@ -285,6 +285,27 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
   end
 
+  # Stage 2 introduces the `role` family, and NameGroupRow#type_labels filters to it with a bare
+  # `.select(&:type?)` at the render layer rather than in the service — nothing before this test
+  # exercised a card carrying both families at once, so a role label would have silently badged
+  # beside the type one the day the seed added roles. Delete that `.select(&:type?)` call to watch
+  # this go red.
+  test "show does not badge a card's role label" do
+    archetype = quiet_archetype(420, name: "Roled Archetype")
+    standing = listed_standing_for(archetype, 420)
+    card = standing.deck.deck_cards.first.card
+    type_label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    type_label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    role_label = CardLabel.create!(slug: "attacker", name: "Attacker", family: "role", position: 10)
+    role_label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
+    assert_select ".archetype-card-row .archetype-card-label", text: "Attacker", count: 0
+  end
+
   # The blend neither the sample selector nor the performance panel can show any other way: the
   # pool axis puts an online weekly and a Regional anchored to the same pool in one bucket, and the
   # online import forces `tier: "other"`, so `by_tier` cannot tell them apart either. This is the
