@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_170100) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_180000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -45,6 +45,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_170100) do
     t.integer "position"
     t.datetime "updated_at", null: false
     t.index ["card_id"], name: "index_attacks_on_card_id"
+  end
+
+  create_table "card_label_assignments", force: :cascade do |t|
+    t.integer "card_id"
+    t.integer "card_label_id", null: false
+    t.datetime "created_at", null: false
+    t.string "fingerprint", null: false
+    t.boolean "rejected", default: false, null: false
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.index ["card_id"], name: "index_card_label_assignments_on_card_id"
+    t.index ["card_label_id", "fingerprint"], name: "index_card_label_assignments_on_card_label_id_and_fingerprint", unique: true
+    t.index ["fingerprint"], name: "index_card_label_assignments_on_fingerprint"
+  end
+
+  create_table "card_labels", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "family", null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.string "slug", null: false
+    t.string "source_query"
+    t.datetime "updated_at", null: false
+    t.index ["family", "position"], name: "index_card_labels_on_family_and_position"
+    t.index ["slug"], name: "index_card_labels_on_slug", unique: true
   end
 
   create_table "card_sets", force: :cascade do |t|
@@ -344,6 +370,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_170100) do
   add_foreign_key "archetypes", "cards", column: "primary_card_id"
   add_foreign_key "archetypes", "cards", column: "secondary_card_id"
   add_foreign_key "attacks", "cards"
+  add_foreign_key "card_label_assignments", "card_labels"
+  add_foreign_key "card_label_assignments", "cards"
   add_foreign_key "cards", "card_sets"
   add_foreign_key "cards", "pokemon_subtypes"
   add_foreign_key "collections", "cards"
