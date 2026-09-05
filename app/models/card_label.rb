@@ -19,6 +19,19 @@ class CardLabel < ApplicationRecord
   validates :name, presence: true
   validates :family, inclusion: { in: FAMILIES }
   validates :position, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  # Blank is allowed: a `role` label has no search token at all, and a curated `type` label need
+  # not either (see `importable?`). Reuses CardLabels::LimitlessSearch::TOKEN_RE rather than
+  # respelling the pattern, so the two never drift apart — without this, a typo'd token was only
+  # ever caught inside CardLabels::ImportJob, after the admin had already been told to watch the
+  # imports table for a result that was never going to come.
+  # Blank is allowed: a `role` label has no search token at all, and a curated `type` label need
+  # not either (see `importable?`). Reuses CardLabels::LimitlessSearch::TOKEN_RE rather than
+  # respelling the pattern, so the two never drift apart — without this, a typo'd token was only
+  # ever caught inside CardLabels::ImportJob, after the admin had already been told to watch the
+  # imports table for a result that was never going to come.
+  validates :source_query, format: {
+    with: CardLabels::LimitlessSearch::TOKEN_RE, message: "is not a valid Limitless search token"
+  }, allow_blank: true
 
   scope :roles, -> { where(family: "role").order(:position, :slug) }
   scope :types, -> { where(family: "type").order(:position, :slug) }

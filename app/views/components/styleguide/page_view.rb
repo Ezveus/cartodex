@@ -410,7 +410,8 @@ module Styleguide
     end
 
     def sg_fixed_group
-      entry = sg_entry("Raging Bolt ex", "PRE", "166", 68, 100.0, 1, 1, [ 1 ], core: true)
+      entry = sg_entry("Raging Bolt ex", "PRE", "166", 68, 100.0, 1, 1, [ 1 ], core: true,
+                       labels: [ sg_label ])
       Archetypes::CardStats::NameGroup.new(name: "Raging Bolt ex", inclusion_count: 68,
                                            inclusion_pct: 100.0, entries: [ entry ])
     end
@@ -426,12 +427,19 @@ module Styleguide
       )
     end
 
-    def sg_entry(name, set_name, set_number, count, pct, min, max, modes, core: false)
+    def sg_entry(name, set_name, set_number, count, pct, min, max, modes, core: false, labels: [])
       Archetypes::CardStats::Entry.new(
         card: Card.new(name: name, set_name: set_name, set_number: set_number),
         fingerprint: "sg-#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
-        min_copies: min, max_copies: max, modes: modes, core: core
+        min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
       )
+    end
+
+    # Unpersisted: .archetype-card-label is a component style like any other badge on this page,
+    # and CLAUDE.md's design-system section asks for one here the moment it exists in the app.
+    def sg_label
+      CardLabel.new(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10,
+                    description: "A deck may hold at most one.")
     end
 
     def pool(id, first, last, released_on)

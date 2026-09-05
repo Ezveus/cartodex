@@ -30,6 +30,30 @@ class CardLabelTest < ActiveSupport::TestCase
     assert_equal [ "c" ], CardLabel.roles.pluck(:slug)
   end
 
+  # Without this, a typo'd token surfaced only inside CardLabels::ImportJob, after a full
+  # round-trip through the admin form and the job queue — the form told the admin to watch the
+  # imports table for a result that was never going to come.
+  test "a source_query that is not a Limitless search token is refused" do
+    label = CardLabel.new(slug: "gust", name: "Gust", family: "type", position: 10,
+                          source_query: "not a token")
+
+    assert_not label.valid?
+    assert_includes label.errors[:source_query], "is not a valid Limitless search token"
+  end
+
+  test "a blank source_query is allowed" do
+    label = CardLabel.new(slug: "gust", name: "Gust", family: "role", position: 10, source_query: "")
+
+    assert label.valid?
+  end
+
+  test "a well-formed source_query is allowed" do
+    label = CardLabel.new(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10,
+                          source_query: "is:ace")
+
+    assert label.valid?
+  end
+
   test "destroying a label takes its assignments with it" do
     label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
     label.assignments.create!(fingerprint: "fp", source: "imported")

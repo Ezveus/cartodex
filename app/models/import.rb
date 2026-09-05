@@ -25,7 +25,6 @@ class Import < ApplicationRecord
   scope :card_set_imports, -> { where(kind: "card_set") }
   scope :standing_list_imports, -> { where(kind: "standing_list") }
   scope :limitless_standings_imports, -> { where(kind: "limitless_standings") }
-  scope :card_label_imports, -> { where(kind: "card_labels") }
 
   def pending? = status == "pending"
   def completed? = status == "completed"

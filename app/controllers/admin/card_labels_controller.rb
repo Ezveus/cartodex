@@ -4,11 +4,12 @@ module Admin
   # No Pundit call anywhere below: Admin::BaseController#require_admin! is the whole gate for this
   # namespace, and an `authorize` here would be the only one in the panel.
   #
-  # `role` labels are visible and editable but cannot be created or deleted here. They are seeded
-  # from CardLabel::ROLES because stage 2's suggestion rules key on their slugs — an invented role
-  # would be a label no rule can propose, and a deleted one would silently take a rule's output
-  # with it. A `type` label is referenced by nothing but its own search token, so it is ordinary
-  # data.
+  # `role` labels are visible and editable but cannot be created or deleted here. Stage 2 will seed
+  # them from a `CardLabel::ROLES` this stage does not ship, because its suggestion rules key on
+  # their slugs — an invented role would be a label no rule can propose, and a deleted one would
+  # silently take a rule's output with it. Until then the `role` family is reachable only by a
+  # direct database write. A `type` label is referenced by nothing but its own search token, so it
+  # is ordinary data.
   class CardLabelsController < BaseController
     SEEDED_FAMILY_MESSAGE = "Role labels are seeded from the application, not created here.".freeze
 

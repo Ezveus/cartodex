@@ -57,10 +57,11 @@ class CardLabels::Importer < ApplicationService
   # regardless of count — checked at 986, 1200 and 5000. It has to be built in Arel and not as an
   # interpolated "(set_name, set_number) IN (#{...})" string: Brakeman correctly flags that shape as
   # SQL injection (it folds a joined fragment back into the interpolation too, so de-interpolating
-  # does not satisfy it), because nothing in a plain string shows it the values are bound rather
-  # than spliced in. Building the identical predicate in Arel keeps it visibly parameterised, so
-  # the check can actually read this method rather than needing a suppression — do not "simplify"
-  # this back into a string.
+  # does not satisfy it), because nothing in a plain string shows it the values are safely quoted
+  # rather than spliced in raw. `Arel::Nodes.build_quoted` renders each one as a `connection.quote`d
+  # literal — not a bind parameter, just one Brakeman's static analysis can see is quoted rather
+  # than concatenated — so building the identical predicate in Arel is what lets the check actually
+  # read this method rather than needing a suppression; do not "simplify" this back into a string.
   def resolve(printings)
     # Not a crash guard against the IN below — "(set_name, set_number) IN ()" is valid SQLite and
     # simply matches nothing — just a wasted query worth skipping outright.
@@ -89,6 +90,13 @@ class CardLabels::Importer < ApplicationService
   # find_or_initialize_by + a persisted? guard, not find_or_create_by! and not upsert: leaving an
   # existing row exactly as it is *is* the rule, and either of those would quietly rewrite a
   # curated decision back to "imported".
+  #
+  # A side effect of that same guard: an already-`imported` row whose `card_id` went NULL (see
+  # CardLabelAssignment's own comment on that column) never regains one here, since the row is
+  # already persisted and this run skips straight past it — and `card_labels:resync_fingerprints`
+  # cannot repair it either, since it reads the fingerprint through `assignment.card`, which is
+  # exactly what is missing. Unreachable today for the same reason the NULL itself is: nothing
+  # destroys a Card.
   def write(cards)
     @created = 0
     @already_present = 0

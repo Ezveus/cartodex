@@ -29,7 +29,7 @@ module Admin
             # relies on — family is permitted only when action_name == "create".
             render Ui::FormGroup.new(hint: family_hint) do
               f.label :family, class: "form-label"
-              f.select :family, CardLabel::FAMILIES, {}, class: "form-input", disabled: @card_label.persisted?
+              f.select :family, family_options, {}, class: "form-input", disabled: @card_label.persisted?
             end
 
             render Ui::FormGroup.new do
@@ -64,7 +64,18 @@ module Admin
       def family_hint
         return "Family cannot be changed once created." if @card_label.persisted?
 
-        "Role labels are seeded from the application — pick type here."
+        "Role labels will be seeded from the application in stage 2 — pick type here."
+      end
+
+      # `new` offers only `type`: a hand-invented role would be a label no stage-2 rule can ever
+      # propose (Admin::CardLabelsController's own comment, and the create action's own refusal is
+      # the backstop for a hand-crafted POST that skips this select entirely). `edit` keeps the
+      # full list — a persisted role label's own value still has to appear as an option for the
+      # disabled select to display it, even though nothing here can submit a change to it.
+      def family_options
+        return CardLabel::FAMILIES if @card_label.persisted?
+
+        CardLabel::FAMILIES - [ "role" ]
       end
     end
   end

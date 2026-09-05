@@ -81,6 +81,17 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Limitless import", new_admin_standings_import_path
   end
 
+  # Admin::CardLabelsController reports controller_name "card_labels", which had no nav_link at
+  # all — the admin navbar lit zero entries on every one of its pages, and this is the case that
+  # would have caught it (a missing link fails the "exactly one lit" assertion the same way an
+  # extra one would).
+  test "an admin's card label pages light the card labels entry alone" do
+    @user.update!(admin: true)
+    sign_in @user
+
+    assert_active_nav_link "Card Labels", admin_card_labels_path
+  end
+
   # Admin::ArchetypesController and ArchetypesController report the *same* controller_name, and
   # both navbars carry a link on that section. That is only harmless because the two navbars are
   # never rendered together — Layouts::AdminLayout renders one, Layouts::ApplicationLayout the

@@ -11,6 +11,11 @@ class CardLabelAssignment < ApplicationRecord
   belongs_to :card_label
   # The printing the decision came from. Optional, and nullified rather than cascaded: deleting a
   # printing from the admin panel must not delete what was decided about the card.
+  #
+  # There is in fact no destroy action to trigger this anywhere in the app — `resources :cards` is
+  # index/show/edit/update in both namespaces — so today this callback and its test are purely
+  # defensive, kept for whichever future caller (a console session, a fixture teardown) does
+  # destroy a Card first.
   belongs_to :card, optional: true
 
   validates :fingerprint, presence: true

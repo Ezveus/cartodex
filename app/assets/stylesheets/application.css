@@ -3504,19 +3504,30 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-size: 0.7rem;
 }
 
-/* Same shape as .archetype-fixed-flag — flex-shrink: 0 so it cannot be what squeezes the name
-   beside it — on a different token, so a type label does not read as a second "fixed". Neutral
-   rather than a per-energy-type token: this page's own comment above already rules those out for
-   anything but the header badge, and a card's *label* has nothing to do with its energy type.
-
-   flex-basis: 100% is what puts it on a line of its own, deterministically rather than "when the
-   browser happens to run out of room" — the same call .deck-card-alloc makes on a phone, made
-   here unconditionally because .archetype-card-name never gets a media query (see the section
-   comment above .archetype-identity). It depends on the flex-wrap added to .archetype-card-name
-   above; without that, a 100% basis here would not break the line, it would just overflow it. */
-.archetype-card-label {
-  flex-shrink: 0;
+/* .archetype-card-label-line is the flex item that forces the line break; .archetype-card-label,
+   nested inside it, is the small bordered pill the reader actually sees. They have to be two
+   elements: a flex item's max-width clamps its *hypothetical main size* before the flex-wrap
+   line-breaking decision is made, so giving the visible badge both `flex-basis: 100%` (to force
+   a deterministic wrap, the same call .deck-card-alloc makes on a phone, made here
+   unconditionally because .archetype-card-name never gets a media query — see the section
+   comment above .archetype-identity) and a smaller max-width (to keep it from rendering as a
+   full-width bar) does not work on one element — measured: the browser uses the *clamped* size to
+   decide whether the line even needs to break, so a small max-width silently cancels the very
+   wrap it was meant to leave alone, and the badge sits back on the name's own line. Splitting the
+   two answers each question separately: the wrapper is full width and invisible, so it is what
+   the wrap decision sees; the badge inside it is an ordinary inline-block box sized to its own
+   content, so it is what the reader sees. */
+.archetype-card-label-line {
   flex-basis: 100%;
+  flex-shrink: 0;
+}
+
+/* Same shape as .archetype-fixed-flag — a different token, so a type label does not read as a
+   second "fixed". Neutral rather than a per-energy-type token: this page's own comment above
+   already rules those out for anything but the header badge, and a card's *label* has nothing to
+   do with its energy type. No flex properties of its own: it is a plain inline-block box (from
+   .badge) laid out in normal flow inside .archetype-card-label-line above, not a flex item. */
+.archetype-card-label {
   background: var(--paper);
   color: var(--ink-700);
   border: 1px solid var(--line);
