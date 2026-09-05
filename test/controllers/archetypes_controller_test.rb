@@ -189,6 +189,40 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the sample: #{small} -> #{large}"
   end
 
+  # The blend neither the sample selector nor the performance panel can show any other way: the
+  # pool axis puts an online weekly and a Regional anchored to the same pool in one bucket, and the
+  # online import forces `tier: "other"`, so `by_tier` cannot tell them apart either. This is the
+  # request that proves both sentences reach the rendered page rather than merely the two services.
+  test "show names how much of the sample comes from online play" do
+    archetype = quiet_archetype(300, name: "Blended Archetype")
+    2.times { |i| listed_standing_for(archetype, 300 + i) }
+    3.times { |i| listed_standing_for(archetype, 310 + i, online: true) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-sample-note",
+      text: /3 of these 5 lists come from an online tournament\./
+    assert_select ".archetype-fact",
+      text: /3 of these standings come from online tournaments, at 3 of the 5 events counted above\./
+  end
+
+  # And says nothing at all about it on a sample of paper events — a "0 online" line reads as a
+  # warning about nothing.
+  test "show says nothing about online play when the sample holds none" do
+    archetype = quiet_archetype(320, name: "Paper Archetype")
+    3.times { |i| listed_standing_for(archetype, 320 + i) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    # Against the raw body rather than assert_select: `assert_select "body", text: …, count: 0`
+    # looked like this assertion and was vacuous — the filter matches nothing on a document whose
+    # single <body> is not compared the way the option reads, so it passed with the sentence
+    # rendered. Sabotage proved it: removing the guard left this test green.
+    assert_no_match(/online/, response.body)
+  end
+
   test "show 404s on an unknown archetype" do
     get archetype_path(id: 999_999)
 
@@ -265,13 +299,17 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # The pool is the shared fixture on purpose. A pool per row would make each event its own
   # sample, and MetagameScope's default — the most recent pool — would then always hold exactly
   # one list however many rows exist, which is a flat cost proving nothing.
-  def listed_standing_for(archetype, index)
+  # `online:` writes the event the way the import does — anchored to the same pool as the paper
+  # ones, and `tier: "other"` — because the point of the two figures it feeds is that an online
+  # event is indistinguishable from a paper one on both axes this page groups by.
+  def listed_standing_for(archetype, index, online: false)
     card = Card.create!(
       name: "Report Pokémon #{index}", set_name: "RP#{index}", set_number: "1",
       card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
     )
     tournament = Tournament.create!(
-      name: "Report Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "league_cup",
+      name: "Report Cup #{index}", date: Date.new(2026, 4, 1) + index,
+      tier: online ? "other" : "league_cup", online: online,
       format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
     )
     field_list = Deck.create!(

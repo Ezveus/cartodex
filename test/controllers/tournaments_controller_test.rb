@@ -329,14 +329,21 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   # idiom "the decklist field's rendered name is what the controller reads"
   # (standings_controller_test.rb) uses for the reason named there: a hand-built params hash
   # would pass even if the fields silently rendered under the wrong name.
-  test "the three division field sizes round-trip through the rendered form" do
+  #
+  # open_participant_count joined them for the online import, and it is the one of the four
+  # anything ever writes on its own — so it is the one a wrong value really strands: it caps a
+  # placement through TournamentStanding#placement_within_division_field, and with no input here
+  # every standing above it would be unsavable through the wiki form with nowhere in the app to
+  # correct the number.
+  test "the four division field sizes round-trip through the rendered form" do
     get edit_tournament_path(@tournament)
     assert_response :success
 
     values = {
       "junior_participant_count" => 32,
       "senior_participant_count" => 64,
-      "masters_participant_count" => 128
+      "masters_participant_count" => 128,
+      "open_participant_count" => 259
     }
     params = values.each_with_object({}) do |(attr, value), memo|
       field = css_select("input[name='tournament[#{attr}]']").first
@@ -351,6 +358,16 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 32, @tournament.junior_participant_count
     assert_equal 64, @tournament.senior_participant_count
     assert_equal 128, @tournament.masters_participant_count
+    assert_equal 259, @tournament.open_participant_count
+  end
+
+  test "a negative open field size is refused" do
+    patch tournament_path(@tournament), params: {
+      tournament: { open_participant_count: -3 }
+    }
+
+    assert_response :unprocessable_entity
+    assert_nil @tournament.reload.open_participant_count
   end
 
   test "destroy is refused while participations remain, with a flash that counts them" do
@@ -667,6 +684,32 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a", text: /Publish Misty's participation/, count: 0
   end
 
+  # An online event has no age divisions, so offering to attach a Play! Pokémon profile to one is
+  # wrong on its face — and it is not cosmetic: `Tournament has_many :entries, dependent:
+  # :restrict_with_error`, so one member accepting makes an imported event permanently
+  # undeletable. Withheld, not refused: nothing here stops a member who reaches the route anyway,
+  # the page simply stops proposing it.
+  test "an online event's page proposes neither a participation nor a claim" do
+    event, standing = online_event_with_unclaimed_row
+
+    get tournament_path(event)
+
+    assert_response :success
+    assert_select ".data-table-row", text: /#{standing.player_name}/ # the sheet still renders
+    assert_select "a[href=?]", new_tournament_entry_path(event), count: 0
+    assert_select "button", text: /This is me/, count: 0
+  end
+
+  # The negative control. Without it the test above passes just as happily when the whole entry
+  # section has been broken for every event, online or not.
+  test "a paper event's page proposes both" do
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select "a[href=?]", new_tournament_entry_path(@tournament), text: /Record another/
+    assert_select "button", text: /This is me/, minimum: 1
+  end
+
   test "a visitor is offered nothing to publish" do
     sign_out @user
 
@@ -677,6 +720,27 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  # What the online import writes, plus the two things that make the withholding visible: a
+  # participation of the reader's own (so the header would otherwise offer to record another) and
+  # an unclaimed row (so the sheet would otherwise offer "This is me"). Recording that entry is
+  # exactly what the page must stop proposing — reaching the route anyway is not refused, which
+  # is why a test can set one up at all. Built here rather than as a fixture because
+  # public_access_test.rb asserts hard record counts.
+  def online_event_with_unclaimed_row
+    event = Tournament.create!(
+      name: "Pumpkaweekly #12", date: Date.new(2026, 4, 18), tier: "other",
+      format: "other", other_format_name: "Standard (Online)", online: true,
+      open_participant_count: 259
+    )
+    deck = Deck.create!(user: @user, name: "Online Deck", standard_pool: standard_pools(:twm_por))
+    @user.tournament_entries.create!(tournament: event, deck: deck)
+    standing = event.standings.create!(
+      player_name: "JRobrueda", division: "open", placement: 2,
+      wins: 8, losses: 0, ties: 0, archetype: archetypes(:standings_marker)
+    )
+    [ event, standing ]
+  end
 
   # users(:one) owns two Play! Pokémon profiles; tournament_entries(:one) already spends `ash`
   # on @tournament, so this is the second player they are legitimately tracking there.

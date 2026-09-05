@@ -401,6 +401,35 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
       text: "Masters", count: 1
   end
 
+  # The other half of the same select, and the one that loses data rather than merely mislabelling
+  # it. This form is shared by new and edit, standings are wiki-governed, and standing_params
+  # permits :division — so a select built from AGE_DIVISIONS alone renders no option matching
+  # "open", the browser pre-selects the first one, and the division travels back to the server on
+  # every save whether or not anybody touched it. A member opening an imported online row to fix a
+  # typo in the player name would silently refile an online result as a Junior one.
+  #
+  # The submitted value is read off the *rendered* form the way the browser would choose it — the
+  # pre-selected option, or the first when nothing is pre-selected — rather than hand-built, since
+  # a hand-built "open" would pass with the bug in place.
+  test "editing an imported online standing through the form leaves its division open" do
+    standing = online_standing
+
+    get edit_tournament_standing_path(standing.tournament, standing)
+    assert_response :success
+
+    options = css_select("select[name='tournament_standing[division]'] option")
+    assert_not_empty options
+    chosen = options.find { |option| option["selected"] } || options.first
+
+    patch tournament_standing_path(standing.tournament, standing), params: {
+      tournament_standing: { player_name: "Jose Rueda", division: chosen["value"] }
+    }
+
+    standing.reload
+    assert_equal "Jose Rueda", standing.player_name
+    assert_equal "open", standing.division
+  end
+
   test "the event page shows the reader's field-list import in flight" do
     @user.imports.create!(kind: "standing_list", label: "Brock's list", tournament: @tournament)
 
@@ -454,5 +483,20 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
   def get_standing_form
     get new_tournament_standing_path(@tournament)
     Nokogiri::HTML(response.body)
+  end
+
+  # What the online import writes: an event that is `online`, forced to tier "other", carrying an
+  # open field size, and a row in the "open" division. Built here rather than as a fixture because
+  # public_access_test.rb asserts hard record counts.
+  def online_standing
+    event = Tournament.create!(
+      name: "Pumpkaweekly #12", date: Date.new(2026, 4, 18), tier: "other",
+      format: "other", other_format_name: "Standard (Online)", online: true,
+      open_participant_count: 259
+    )
+    event.standings.create!(
+      player_name: "JRobrueda", division: "open", placement: 2,
+      wins: 8, losses: 0, ties: 0, archetype: archetypes(:standings_marker)
+    )
   end
 end

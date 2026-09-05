@@ -38,6 +38,18 @@ module Tournaments
 
     private
 
+    # The other half of the online withholding above. Every claim affordance on the sheet — the
+    # "This is me" button Tournaments::Standings::Row renders on an unclaimed row — is driven by
+    # this list, so emptying it here is what stops an online event inviting a participation
+    # through the sheet after entry_action stopped inviting one through the header. Emptied in
+    # the view and not in the controller for the reason entry_action is guarded there: it is the
+    # page that stops proposing, and nothing refuses a member who reaches the route anyway.
+    def claimable_entries
+      return [] unless invites_participation?
+
+      @claimable_entries
+    end
+
     # The event's public sheet. Public by the same rule the page is: the catalog does not hide an
     # event, so it does not hide what was played there either. Only the write controls are gated.
     def standings_section
@@ -62,7 +74,7 @@ module Tournaments
         if @standings.any?
           render Tournaments::Standings::Table.new(
             standings: @standings, viewer: @viewer,
-            can_edit: @can_edit_standings, claimable_entries: @claimable_entries
+            can_edit: @can_edit_standings, claimable_entries: claimable_entries
           )
           # No turbo_action: this pager is not inside a frame, so the link navigates and updates
           # the address bar by itself — see Ui::Pagination for why "replace" would break Back.
@@ -83,10 +95,21 @@ module Tournaments
     # visitor's `my_entries` is `[]` by construction, and "Record your participation" would then
     # be a link to the sign-in page dressed as a primary action. Inviting somebody to sign in is
     # the navbar's job, not this page's.
+    #
+    # An online event is offered none of the *invitations*, and that is withheld rather than
+    # refused: no policy gains a clause and no action redirects, the page simply stops proposing
+    # something wrong. Wrong twice over — an online event has no age divisions, so a Play!
+    # Pokémon profile has nothing to attach to, and `Tournament has_many :entries, dependent:
+    # :restrict_with_error` means one member accepting the invitation makes an imported event
+    # permanently undeletable. A participation the reader somehow already has keeps its link,
+    # though: hiding it would put their own record out of reach of the only page that leads to
+    # it, which is the bug the plural my_entries above exists to have fixed.
     def entry_action
       return unless @can_record
 
       if @my_entries.empty?
+        return unless invites_participation?
+
         link_to "Record your participation", new_tournament_entry_path(@tournament), class: "btn btn-primary"
         return
       end
@@ -94,11 +117,15 @@ module Tournaments
       @my_entries.each do |entry|
         link_to entry_label(entry), tournament_entry_path(@tournament, entry), class: "btn btn-primary"
       end
+      return unless invites_participation?
+
       publish_actions
       return unless @can_record_another
 
       link_to "Record another participation", new_tournament_entry_path(@tournament), class: "btn btn-secondary"
     end
+
+    def invites_participation? = !@tournament.online?
 
     # One participation needs no disambiguation and naming the profile would be noise; two need
     # it, and the player name is the only thing that tells them apart.

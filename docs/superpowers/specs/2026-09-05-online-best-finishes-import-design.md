@@ -169,6 +169,15 @@ changes. In particular:
   imported online event permanently undeletable. Nothing here refuses a member who reaches the
   route anyway; the page simply stops proposing it.
 
+  Three invitations, not two: "Publish my participation" creates a *standing* from an existing
+  entry rather than a new entry, and it is part of the same participation model that means nothing
+  online, so it goes with them.
+
+  What is withheld is the **invitations**, not the record. A member who already holds a
+  participation at that event keeps the link to it — blanket-hiding the section would hide an
+  existing entry from the only page that links to it, which is the bug the plural `my_entries`
+  work fixed.
+
 ### 4. Divisions: a fourth value, and a narrower list for forms
 
 Online play has no age divisions, and `tournament_standings.division` is `NOT NULL` behind
@@ -203,9 +212,11 @@ options are `AGE_DIVISIONS` plus the record's own value when it is not one of th
 (placement 1 against a field of 259). `wins`/`losses`/`ties` are written on the standing from the
 score cell — columns that exist, that nothing has ever written, and that the source hands over.
 
-`open_participant_count` is not one constant but **four hand-written lists**, and three of them
+`open_participant_count` is not one constant but **five hand-written places**, and four of them
 are easy to miss: `DIVISION_COUNT_COLUMNS`, the `numericality` validation that would otherwise let
-the importer write `-3`, `tournament_params`, and `Tournaments::Form`'s field-size inputs. The
+the importer write `-3`, `tournament_params`, `Tournaments::Form`'s field-size inputs — and that
+group's own label, "Field size per **age** division", which becomes false the moment the Open
+input joins it. The
 last two matter more than they look: `placement_within_division_field` *caps* a placement against
 this column, so a wrong value written by an import makes every standing above it unsavable through
 the wiki edit form — and with no input on the event form there would be no way anywhere in the app
@@ -285,10 +296,17 @@ interpolated into a fetched URL, and the online source is a **slug** plus a `rot
 different constant, so a one-line source switch turns a bad slug into the 500 the comment beneath
 that rescue says is not an acceptable answer.
 
-`StandingsImportPlan`'s two lookups read `Tournament.catalogued` as well. `load_catalogued` loads
-every event within ±3 days of the row range and `similar_tournaments` is an O(events × catalogued)
-Ruby scan over it — so without the scope every *paper* preview would list online weeklies as
-"similar tournaments" noise, and the set would grow without bound as this source is imported.
+`StandingsImportPlan`'s two lookups are **partitioned by venue**, which is not the same as reading
+`Tournament.catalogued`. `load_catalogued` loads every event within ±3 days of the row range and
+`similar_tournaments` is an O(events × catalogued) Ruby scan over it, so a paper preview must not
+see online weeklies as "similar tournaments" noise and neither set may grow without bound as this
+source is imported. But a blanket `catalogued` would contradict the idempotence argument in §1: an
+online re-import could then never find the events its own first run created, so every survivor
+would be planned `:create`, collide with `name_and_date_are_unique` and the standings UNIQUE key
+row by row, and the run would report a wall of failures where it should have reported skips. The
+database would gain nothing either way — which is exactly why a test worded only as "writes no new
+rows" would pass while the property was gone. So a paper run looks at paper events and an online
+run at online ones.
 
 Changed: the importer gains a decklist service and a dedup step; the plan learns the online
 classification; the admin form gains a source choice.

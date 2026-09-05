@@ -344,10 +344,10 @@ caller already handles, so `CardsController#image` still answers 502 rather than
 refuses a URI that is not `URI::HTTP`, the backstop behind the caller-side rule that a Limitless
 deck id must match `/\A\d+\z/` before it is interpolated into a URL.
 
-**Still out of scope, and worth knowing:** `play.limitlesstcg.com`'s online "best finishes" (they
-are online-only tournaments with no age divisions, and cataloguing them would fill the public
-`/tournaments` list with events no member attended); and attendance and W/L/T, which the results
-page does not carry. Pagination of `tournaments#show`'s sheet *was* the prerequisite named here and
+**Still out of scope, and worth knowing:** attendance and W/L/T, which the paper results page does
+not carry. (`play.limitlesstcg.com`'s online "best finishes" *were* the other item here and are
+now imported — see the next section, which is also where those two figures come from.)
+Pagination of `tournaments#show`'s sheet *was* the prerequisite named here and
 ships alongside this — see the paragraph on `SHEET_PER_PAGE` above. A sheet imported from one
 archetype's page is still a *partial* sheet and nothing says so; that is a property it shares with
 every hand-typed sheet, and marking one complete would mean knowing when it is.
@@ -364,9 +364,17 @@ the code:
 something a later reader will be tempted to add. There is **no metagame share**: a sheet imported
 from one archetype's Limitless page holds only that archetype's rows, so the database never sees
 the field and cannot produce a fraction of it — every figure is worded *recorded in Cartodex*, and
-the index's ordering is "most recorded", a statement about who has run an import. There is **no
-win rate**: `Tournaments::StandingsImporter` never writes `wins`/`losses`/`ties`, and on the
-production data exactly **1 of 94** standings carries a W-L-T, the one somebody typed. And there
+the index's ordering is "most recorded", a statement about who has run an import. (Both of those
+sentences describe what *this database* can compute, and they stayed true when a second source
+arrived: `play.limitlesstcg.com/decks` publishes a `Count / Share / Score / Win %` per archetype
+over its own online field, and none of it is imported — republishing somebody else's aggregate
+under a heading reading "recorded in Cartodex" is a different claim, and a different decision.)
+There is **no win rate**, and the reason moved rather than went away: the paper source publishes
+no record at all, so on the production data exactly **1 of 94** standings carried a W-L-T, the one
+somebody typed — while `play.limitlesstcg.com` publishes one on every row, and the online importer
+writes all three. So the columns are now *filled on part of a blended sample and empty on the
+rest*, and a rate computed over that would describe the online rows alone under a heading covering
+both. And there
 is **no ACE SPEC category and no functional one** (Gust, Switch, Recovery): every ACE SPEC carries
 `rarity` `"Ultra"` and so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on
 **0 of 4720** cards, and what a card *does* is not scraped at all. The categories are exactly what

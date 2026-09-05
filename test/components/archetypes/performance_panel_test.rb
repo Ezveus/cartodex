@@ -99,14 +99,53 @@ class Archetypes::PerformancePanelTest < ActiveSupport::TestCase
                           "speaks for the 3 lists that do."
   end
 
+  # The blend nothing else on the page can show: the pool axis puts an online weekly and a Regional
+  # in one bucket, and `by_tier` files every online event under "Other" beside the paper events
+  # that have no tier.
+  test "names how much of the sample comes from online play" do
+    html = panel(standings_count: 16, events_count: 11, lists_count: 16, placed_count: 16,
+                 online_standings_count: 13, online_events_count: 9)
+
+    assert_includes html, "13 of these standings come from online tournaments, at 9 of the 11 " \
+                          "events counted above. The counts above do not separate online play from paper."
+  end
+
+  test "says the online figure in the singular for one such standing" do
+    html = panel(standings_count: 4, events_count: 3, lists_count: 4, placed_count: 4,
+                 online_standings_count: 1, online_events_count: 1)
+
+    assert_includes html, "1 of these standings comes from an online tournament, at 1 of the 3 events"
+  end
+
+  # "3 of the 3 events" is a strange way to say "all of them", and an archetype whose every
+  # recorded event is online is exactly what one online import produces.
+  test "says every event rather than counting them all out when the sample is all online" do
+    html = panel(standings_count: 20, events_count: 3, lists_count: 20, placed_count: 20,
+                 online_standings_count: 20, online_events_count: 3)
+
+    assert_includes html, "20 of these standings come from online tournaments, at every event counted above."
+    assert_no_match(/3 of the 3/, html)
+  end
+
+  # No "0 online standings" line on an archetype nobody has imported an online result for: a
+  # sentence about an absence reads as a warning about nothing.
+  test "says nothing about online play when the sample holds none" do
+    html = panel(standings_count: 4, events_count: 2, lists_count: 4, placed_count: 4)
+
+    assert_no_match(/online/, html)
+  end
+
   private
 
   def panel(standings_count:, events_count:, lists_count:, placed_count:,
+            online_standings_count: 0, online_events_count: 0,
             by_placement: [ [ "1st", 1 ] ], by_tier: [ [ "Regional / Special Championship", 1 ] ],
             by_division: [ [ "Masters", 1 ] ])
     performance = Archetypes::Performance::Result.new(
       standings_count: standings_count, events_count: events_count, lists_count: lists_count,
-      placed_count: placed_count, first_date: Date.new(2026, 8, 28), last_date: Date.new(2026, 8, 28),
+      placed_count: placed_count, online_standings_count: online_standings_count,
+      online_events_count: online_events_count,
+      first_date: Date.new(2026, 8, 28), last_date: Date.new(2026, 8, 28),
       best_placement: 1, by_placement: by_placement, by_tier: by_tier, by_division: by_division
     )
 

@@ -387,15 +387,19 @@ module Styleguide
     # the state in which the warning notice has to be visible.
     #
     # The Struct is built by keyword and carries exactly the members it has — `standings_count` is
-    # gone, `unpooled` is new — because a stand-in that drifts from the Struct does not render a
-    # stale styleguide, it raises and takes the whole /styleguide page with it. `unpooled: true`
-    # is what makes the pool note render, and the note is one of the three things this panel is
-    # here to show.
+    # gone, `unpooled` and `online_lists_count` are new — because a stand-in that drifts from the
+    # Struct does not render a stale styleguide, it raises and takes the whole /styleguide page
+    # with it (and every test that renders it: five StyleguideControllerTest cases and four
+    # GlobalSearchTest ones, none of which name this method). Two of the four values here exist
+    # only to make a note render: `unpooled: true` for the pool note, and an `online_lists_count`
+    # short of `lists_count` for the online one — the sentence naming how much of a sample is
+    # online play rather than paper, which is one of the four things this component is here to
+    # show.
     def sg_metagame_scope
       Archetypes::MetagameScope::Result.new(
         archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
         standings: nil, listed_standings: nil,
-        pool: StandardPool.new(id: 9), lists_count: 3, unpooled: true,
+        pool: StandardPool.new(id: 9), lists_count: 3, online_lists_count: 2, unpooled: true,
         options: [
           Archetypes::MetagameScope::Option.new(value: "9", label: "TEF-PBL — 3 lists", lists_count: 3),
           Archetypes::MetagameScope::Option.new(value: "8", label: "TEF-CRI — 22 lists", lists_count: 22),

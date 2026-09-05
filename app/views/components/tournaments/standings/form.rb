@@ -48,8 +48,7 @@ module Tournaments
             # — so the browser picked the first option and quietly recorded them as a Junior.
             # Masters is the default because it is the division a standings sheet overwhelmingly
             # records, and a wrong pre-selection here is a wiki edit away rather than a refusal.
-            f.select :division,
-              TournamentStanding::AGE_DIVISIONS.map { |d| [ d.capitalize, d ] },
+            f.select :division, division_options,
               { selected: @standing.division || DEFAULT_DIVISION }, class: "form-input"
           end
 
@@ -83,6 +82,20 @@ module Tournaments
       end
 
       private
+
+      # AGE_DIVISIONS plus the row's own value when it is not one of them, and the second half is
+      # not a nicety. This form is shared by new *and* edit, standings are wiki-governed, and
+      # standing_params permits :division — so on an imported online row, a select built from
+      # AGE_DIVISIONS alone renders no option matching "open", the browser pre-selects the first
+      # (Junior), and a member opening the row to fix a typo in the player name silently refiles
+      # an online result as a Junior one. Exactly the lie the "open" division exists to refuse,
+      # arriving through the front door.
+      def division_options
+        divisions = TournamentStanding::AGE_DIVISIONS
+        own = @standing.division
+        divisions += [ own ] if own.present? && divisions.exclude?(own)
+        divisions.map { |d| [ d.capitalize, d ] }
+      end
 
       def form_url
         return tournament_standings_path(@tournament) unless @standing.persisted?

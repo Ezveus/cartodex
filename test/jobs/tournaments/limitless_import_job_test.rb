@@ -3,6 +3,11 @@ require "test_helper"
 class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
   RESULTS_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_deck_results.html")).freeze
   DECKLIST_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_decklist.html")).freeze
+  ONLINE_RESULTS_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_online_results.html")).freeze
+  ONLINE_DECKLIST_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_online_decklist.html")).freeze
+  # Six leaderboard rows in six events, of which jrobrueda holds three carrying one list.
+  ONLINE_ROWS = 6
+  ONLINE_DUPLICATES = 2
   # The fixture holds seven rows across four events; the 2024 one has no Standard pool, so six
   # rows are importable.
   IMPORTABLE = 6
@@ -146,6 +151,50 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     end
   end
 
+  # --- the online source -------------------------------------------------------------------
+
+  # A run that read twenty rows and wrote thirteen has to say where the other seven went, or its
+  # report reads like a bug. The count is the importer's, and only an online run has one.
+  test "names the rows it dropped as duplicates in what it tells the admin" do
+    stub_online_http
+
+    message = broadcast_flash { perform_online }
+
+    assert_equal ONLINE_ROWS - ONLINE_DUPLICATES, @import.reload.created_standing_ids.size
+    assert_match(/#{ONLINE_ROWS - ONLINE_DUPLICATES} created/, message)
+    assert_match(/#{ONLINE_DUPLICATES} dropped as duplicates/, message)
+  end
+
+  # The two sources' decklist pages agree on nothing but their purpose — the online one keeps a
+  # Trainer's printing in the href alone — so a run that reached for the paper parser would refuse
+  # every row it fetched while still writing the standings, which looks like a source with no
+  # published lists rather than like a bug.
+  test "reads an online run's decklists with the online parser" do
+    stub_online_http
+
+    perform_online
+
+    @import.reload
+    assert_equal "completed", @import.status, @import.error_message
+    assert_nil @import.error_message
+    standings = TournamentStanding.where(id: @import.created_standing_ids)
+    assert_equal [ 60 ], standings.map { |standing| standing.deck.deck_cards.sum(:quantity) }.uniq
+    assert_equal [ true ], Tournament.where(id: standings.map(&:tournament_id)).map(&:online).uniq
+  end
+
+  # The set is what anchors every row an online run writes, and the job resolves it again rather
+  # than being handed a pool id — so it has to refuse the same sets the admin screen refuses.
+  test "fails the import when the set names no Standard pool" do
+    stub_online_http
+
+    assert_no_difference -> { TournamentStanding.count } do
+      perform_online(set: "PBL")
+    end
+
+    assert_equal "failed", @import.reload.status
+    assert_match(/No Standard pool ends at PBL/, @import.error_message)
+  end
+
   private
 
   # The job's own report, as the admin receives it: appended to their notifications stream, never
@@ -171,6 +220,27 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
       "deck_id" => "280", "archetype_id" => @archetype.id,
       "event_filters" => [], "limit_per_event" => nil, "expected_row_count" => IMPORTABLE
     }.merge(overrides.transform_keys(&:to_s))
+  end
+
+  def perform_online(**overrides)
+    Tournaments::LimitlessImportJob.perform_now(@import.id, @admin.id, online_options(**overrides))
+  end
+
+  # No "deck_id", and the paper options carry no "source": the two sources read different keys, and
+  # the job reads the absence of a source as paper — which is also the shape of a run enqueued
+  # before this screen learned there were two of them.
+  def online_options(**overrides)
+    {
+      "source" => "online", "slug" => "raging-bolt-ogerpon", "rotation" => "2026", "set" => "POR",
+      "archetype_id" => @archetype.id, "event_filters" => [], "limit_per_event" => nil,
+      "expected_row_count" => ONLINE_ROWS
+    }.merge(overrides.transform_keys(&:to_s))
+  end
+
+  def stub_online_http
+    HttpFetcher.define_singleton_method(:call) { |url|
+      url.include?("/decks/") ? ONLINE_RESULTS_HTML : ONLINE_DECKLIST_HTML
+    }
   end
 
   def stub_http(decklist: nil)

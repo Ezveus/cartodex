@@ -24,13 +24,21 @@ module Archetypes
 
     Result = Struct.new(
       :archetype, :standings, :listed_standings, :pool, :options,
-      :lists_count, :unpooled,
+      :lists_count, :online_lists_count, :unpooled,
       keyword_init: true
     ) do
       # Whether any standing sits on an event with no Standard pool — a GLC or Expanded one. Those
       # are the lists the "All formats" option holds and no pool option can.
       def unpooled? = unpooled
       def all_formats? = pool.nil?
+
+      # Whether this sample blends online play with paper. The pool axis cannot separate them —
+      # an online weekly anchored to TEF-PBL sits in the same bucket as a Regional anchored to
+      # TEF-PBL — so a page that does not say so reports percentages over a mixture it never
+      # names, which is the very defect pool scoping exists to prevent. Splitting the sample by
+      # venue is the better answer and belongs to its own issue; naming the blend is what must
+      # not wait for it.
+      def online_lists? = online_lists_count.positive?
       def small_sample? = lists_count.positive? && lists_count < SMALL_SAMPLE
       def no_lists? = lists_count.zero?
 
@@ -65,6 +73,7 @@ module Archetypes
 
     def call
       pool = selected_pool
+      totals = totals_for(pool)
 
       Result.new(
         archetype: @archetype,
@@ -72,14 +81,16 @@ module Archetypes
         listed_standings: standings_scope(pool).where.not(deck_id: nil),
         pool: pool,
         options: options,
-        lists_count: totals_for(pool).lists,
+        lists_count: totals.lists,
+        online_lists_count: totals.online_lists,
         unpooled: buckets.any? { |bucket| bucket.pool_id.nil? }
       )
     end
 
     private
 
-    Bucket = Struct.new(:pool_id, :standings, :lists, :last_on, keyword_init: true)
+    Bucket = Struct.new(:pool_id, :standings, :lists, :online_lists, :last_on,
+                        keyword_init: true)
 
     # One grouped query, and every number the selector prints comes out of it: per Standard pool
     # (NULL for the non-Standard events, which carry no pool by design), how many standings this
@@ -88,6 +99,12 @@ module Archetypes
     # COUNT(DISTINCT deck_id) rather than COUNT(*): NULLs are ignored by DISTINCT, so this is the
     # list count and the standings count in the same pass, without a second query or a filtered
     # relation.
+    #
+    # The online count rides in the same pass for the same reason, as a CASE inside that DISTINCT:
+    # the whole page is pinned at a flat query cost, and "how much of this sample is online" is
+    # not worth a query of its own when it is a fourth term on a grouped scan already running.
+    # NULLs are ignored by DISTINCT, so the CASE's implicit ELSE NULL discards the paper rows
+    # without a WHERE and without a second relation.
     def buckets
       @buckets ||= TournamentStanding
         .where(archetype_id: @archetype.id)
@@ -97,10 +114,12 @@ module Archetypes
           Arel.sql("tournaments.standard_pool_id"),
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(DISTINCT tournament_standings.deck_id)"),
+          Arel.sql("COUNT(DISTINCT CASE WHEN tournaments.online THEN tournament_standings.deck_id END)"),
           Arel.sql("MAX(tournaments.date)")
         )
-        .map do |pool_id, standings, lists, last_on|
-          Bucket.new(pool_id: pool_id, standings: standings, lists: lists, last_on: to_date(last_on))
+        .map do |pool_id, standings, lists, online_lists, last_on|
+          Bucket.new(pool_id: pool_id, standings: standings, lists: lists,
+                     online_lists: online_lists, last_on: to_date(last_on))
         end
     end
 
@@ -169,7 +188,7 @@ module Archetypes
       return total if pool.nil?
 
       buckets.find { |bucket| bucket.pool_id == pool.id } ||
-        Bucket.new(pool_id: pool.id, standings: 0, lists: 0, last_on: nil)
+        Bucket.new(pool_id: pool.id, standings: 0, lists: 0, online_lists: 0, last_on: nil)
     end
 
     def total
@@ -177,6 +196,7 @@ module Archetypes
         pool_id: nil,
         standings: buckets.sum(&:standings),
         lists: buckets.sum(&:lists),
+        online_lists: buckets.sum(&:online_lists),
         last_on: buckets.filter_map(&:last_on).max
       )
     end

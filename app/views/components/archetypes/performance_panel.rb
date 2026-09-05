@@ -4,12 +4,24 @@ module Archetypes
   # The heading says "recorded in Cartodex" and every sentence under it repeats the frame, because
   # the numbers are otherwise read as the field's. An imported sheet holds one archetype's rows,
   # so "9 standings at 4 events" is a statement about who has run an import, not about how often
-  # the deck showed up. There is no win rate for a measured reason: the importer writes no
-  # wins/losses/ties, and 1 of 94 production standings carries any.
+  # the deck showed up. There is no win rate, for a reason Archetypes::Performance's own comment
+  # now spells out: the online source publishes a W-L-T and the paper one does not, so the columns
+  # are filled on part of any blended sample and empty on the rest — a rate over that describes the
+  # online rows while being printed under a heading that covers both.
   #
   # This panel counts *every* standing in scope, including the ones nobody typed a decklist for,
   # while the card report below counts only the listed ones. That gap is named rather than left
   # looking like a discrepancy — it is the whole reason MetagameScope exposes both relations.
+  #
+  # It counts online events with paper ones, in every figure and every breakdown, and says so in
+  # words rather than splitting the counters. `events_count` is COUNT(DISTINCT tournament_id) and
+  # a weekly on play.limitlesstcg.com is as distinct an event as a Regional; splitting that one
+  # figure would leave the standings count, the list count, the best placement and all three
+  # breakdowns describing the blended population beside a counter that did not, and `by_tier`
+  # cannot help — the online import forces `tier: "other"`, which is also where a genuine paper
+  # event with no tier lands. Splitting the *sample* by venue is a selector and its own issue; the
+  # rule this panel keeps in the meantime is the page's rule everywhere else, that no number
+  # quietly implies another.
   class PerformancePanel < ApplicationComponent
     def initialize(performance:)
       @performance = performance
@@ -54,6 +66,7 @@ module Archetypes
     def facts
       div(class: "archetype-facts") do
         period
+        online
         unlisted
       end
     end
@@ -73,6 +86,33 @@ module Archetypes
           strong { localize(@performance.last_date, format: :long) }
           plain "."
         end
+      end
+    end
+
+    # How much of this sample is online play rather than paper, named because nothing else on the
+    # page can show it: the pool axis puts an online weekly and a Regional in one bucket whenever
+    # they share a Standard pool, and `by_tier` files every online event under "Other" beside the
+    # paper events that have no tier. Printed only when there is a blend to name — a "0 online"
+    # line on an archetype nobody has imported an online result for is noise that reads as a
+    # warning about nothing.
+    def online
+      return unless @performance.online?
+
+      count = @performance.online_standings_count
+
+      p(class: "archetype-fact archetype-fact-muted") do
+        plain(count == 1 ? "1 of these standings comes from an online tournament" :
+                           "#{count} of these standings come from online tournaments")
+        plain ", at "
+        # "N of the N events" is a strange way to say "all of them", and on an archetype whose
+        # every recorded event is online that is the sentence this would otherwise print.
+        plain(if @performance.all_events_online?
+                "every event counted above. "
+        else
+                "#{@performance.online_events_count} of the #{@performance.events_count} " \
+                  "#{'event'.pluralize(@performance.events_count)} counted above. "
+        end)
+        plain "The counts above do not separate online play from paper."
       end
     end
 

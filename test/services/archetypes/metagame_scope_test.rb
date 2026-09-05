@@ -213,6 +213,86 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_equal 3, result.options.last.lists_count
   end
 
+  # The blend the pool axis cannot see: an online weekly and a Regional anchored to the same pool
+  # land in the same bucket, so "TEF-PBL — 4 lists" would be three weeklies and one Regional with
+  # nothing on the page saying so. The count is per sample, not per archetype — switching pools
+  # must move it.
+  test "online_lists_count counts the lists in the sample that come from an online event" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    paper = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    record(paper, archetype, deck: field_list)
+    3.times do |i|
+      record(online_event(pool: pool, date: Date.new(2026, 5, 10) + i), archetype, deck: field_list)
+    end
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal pool, result.pool
+    assert_equal 4, result.lists_count
+    assert_equal 3, result.online_lists_count
+    assert_predicate result, :online_lists?
+  end
+
+  # The figure has to follow the selector, or the sentence under it describes a sample the reader
+  # is not looking at.
+  test "online_lists_count is scoped to the selected pool, and All formats blends both" do
+    archetype = archetype_of_its_own
+    old_pool = standard_pools(:twm_asc)
+    2.times do |i|
+      record(standard_event(pool: old_pool, date: Date.new(2025, 6, 1) + i), archetype,
+             deck: field_list)
+    end
+    new_pool = standard_pools(:twm_por)
+    record(online_event(pool: new_pool, date: Date.new(2026, 5, 1)), archetype, deck: field_list)
+
+    default = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal new_pool, default.pool
+    assert_equal [ 1, 1 ], [ default.lists_count, default.online_lists_count ]
+
+    older = Archetypes::MetagameScope.call(archetype: archetype, pool_param: old_pool.id.to_s)
+
+    assert_equal [ 2, 0 ], [ older.lists_count, older.online_lists_count ]
+    refute_predicate older, :online_lists?
+
+    blended = Archetypes::MetagameScope.call(archetype: archetype,
+                                             pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_equal [ 3, 1 ], [ blended.lists_count, blended.online_lists_count ]
+    assert_predicate blended, :online_lists?
+  end
+
+  # A sample of paper events must say nothing about online play — a "0 online lists" line on an
+  # archetype nobody has imported an online result for is noise that reads as a warning.
+  test "a sample holding no online event reports zero and answers online_lists? false" do
+    archetype = archetype_of_its_own
+    event = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    2.times { record(event, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal 2, result.lists_count
+    assert_equal 0, result.online_lists_count
+    refute_predicate result, :online_lists?
+  end
+
+  # COUNT(DISTINCT deck_id) and not COUNT(*): an online standing with no list is a standing, not a
+  # list, and the selector's sentence is about the card report's denominator.
+  test "an online standing with no list is not counted as an online list" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    online = online_event(pool: pool, date: Date.new(2026, 5, 1))
+    record(online, archetype)
+    record(online, archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal 2, result.standings.count
+    assert_equal 1, result.lists_count
+    assert_equal 1, result.online_lists_count
+  end
+
   test "an archetype nobody has recorded yields no options but All formats and no pool" do
     result = Archetypes::MetagameScope.call(archetype: archetype_of_its_own)
 
@@ -242,6 +322,13 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
   def standard_event(pool:, date:, tier: "regional")
     Tournament.create!(name: "Metagame Event #{next_index}", date: date, format: "standard",
                        standard_pool: pool, tier: tier, created_by: users(:one))
+  end
+
+  # Anchored to a real pool, like the import writes them: the whole point is that an online event
+  # is indistinguishable from a paper one on the axis this service buckets by.
+  def online_event(pool:, date:)
+    Tournament.create!(name: "Metagame Event #{next_index}", date: date, format: "standard",
+                       standard_pool: pool, tier: "other", online: true, created_by: users(:one))
   end
 
   def unpooled_event(date:, tier: "league_cup")

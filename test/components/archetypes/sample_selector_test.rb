@@ -1,6 +1,6 @@
 require "test_helper"
 
-# Three independent predicates decide what this component draws, and each of them was, until this
+# Four independent predicates decide what this component draws, and each of them was, until this
 # file existed, only ever exercised in the one combination the production data happens to hold.
 # Every test below pins one of them against a scope built by hand.
 #
@@ -74,9 +74,58 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_no_match(/archetype-sample/, html)
   end
 
+  # The blend the selector itself cannot separate: a pool is the only axis it offers, and an online
+  # weekly anchored to TEF-PBL sits in the same bucket as a Regional anchored to TEF-PBL. Said
+  # above the card report because the card report's denominator is lists.
+  test "names how much of the sample comes from online play" do
+    html = selector(lists_count: 16, online_lists_count: 13,
+                    options: [ pool_option("9", 16), pool_option("8", 22), all_option(38) ])
+
+    assert_includes html, "13 of these 16 lists come from an online tournament. The card report " \
+                          "below counts online and paper lists together."
+  end
+
+  test "says it in the singular for one such list" do
+    html = selector(lists_count: 4, online_lists_count: 1,
+                    options: [ pool_option("9", 4), pool_option("8", 22), all_option(26) ])
+
+    assert_includes html, "1 of these 4 lists comes from an online tournament."
+  end
+
+  # "16 of these 16 lists" is a strange way to say "all of them", and one online import produces
+  # exactly that sample.
+  test "says every list rather than counting them all out when the sample is all online" do
+    html = selector(lists_count: 16, online_lists_count: 16,
+                    options: [ pool_option("9", 16), pool_option("8", 22), all_option(38) ])
+
+    assert_includes html, "Every list in this sample comes from an online tournament."
+    assert_no_match(/16 of these 16/, html)
+  end
+
+  # No "0 online lists" line on an archetype nobody has imported an online result for: a sentence
+  # about an absence reads as a warning about nothing.
+  test "says nothing about online play when the sample holds none" do
+    html = selector(lists_count: 3, options: [ pool_option("9", 3), pool_option("8", 22), all_option(25) ])
+
+    assert_no_match(/online/, html)
+  end
+
+  # The reason `online_lists?` had to join the guard rather than ride on the other two: a sample of
+  # sixteen lists all sitting in one pool is neither selectable nor small, so the wrapper this note
+  # lives in was not drawn at all — which is exactly the shape one online import produces.
+  test "draws the wrapper for the online note even with no choice and no small sample" do
+    html = selector(lists_count: 40, online_lists_count: 40,
+                    options: [ pool_option("9", 40), all_option(40) ])
+
+    assert_includes html, "archetype-sample"
+    assert_no_match(/<select/, html)
+    assert_no_match(/Small sample/, html)
+    assert_includes html, "Every list in this sample comes from an online tournament."
+  end
+
   private
 
-  def selector(lists_count:, options:, unpooled: false, pool: :default)
+  def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0)
     # Unpersisted on purpose: the component reads an id off each of these and nothing else —
     # `archetype_path` through `to_param`, and the pool only to decide which option is selected —
     # so this file never touches the database and cannot be broken by a fixture another test
@@ -84,7 +133,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     scope = Archetypes::MetagameScope::Result.new(
       archetype: Archetype.new(id: 6, name: "Sample"), standings: nil, listed_standings: nil,
       pool: pool == :default ? StandardPool.new(id: 9) : pool,
-      options: options, lists_count: lists_count, unpooled: unpooled
+      options: options, lists_count: lists_count, online_lists_count: online_lists_count,
+      unpooled: unpooled
     )
 
     ApplicationController.renderer.render(

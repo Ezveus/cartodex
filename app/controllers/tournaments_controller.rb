@@ -234,7 +234,12 @@ class TournamentsController < ApplicationController
   def tournament_params
     params.require(:tournament).permit(
       :name, :date, :format, :other_format_name, :standard_pool_id, :tier,
-      :junior_participant_count, :senior_participant_count, :masters_participant_count
+      :junior_participant_count, :senior_participant_count, :masters_participant_count,
+      # open_participant_count is written by the online import, and it *caps* a placement through
+      # TournamentStanding#placement_within_division_field — so a wrong value makes every standing
+      # above it unsavable through the wiki edit form, and without this permit (and the matching
+      # field on Tournaments::Form) there would be nowhere in the app to correct it.
+      :open_participant_count
     )
   end
 end
