@@ -84,6 +84,26 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_selector ".stat", text: /1\s+list\z/
   end
 
+  # A browser test because nothing else can tell the two outcomes apart. Decks::HeaderFrame renders
+  # the badge row inside `turbo_frame_tag("deck-header")`, so an anchor without a breakout is
+  # frame-scoped: Turbo fetches /archetypes/N, finds no frame of that id in the response, and
+  # replaces the deck header with its missing-frame error. The markup is identical either way, and
+  # a request test sees a 200 for a page nobody ever reaches.
+  test "the archetype badge on a deck page leaves its frame and opens the archetype" do
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+    deck = decks(:one)
+    deck.update!(user: @user, archetype: archetype)
+
+    visit deck_path(deck)
+    assert_selector "h1", text: deck.name
+
+    click_on archetype.name
+
+    assert_current_path archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+    assert_no_text "Content missing"
+  end
+
   private
 
   # Two rotations, on purpose: the newest pool holds one list and the oldest twelve, which is the

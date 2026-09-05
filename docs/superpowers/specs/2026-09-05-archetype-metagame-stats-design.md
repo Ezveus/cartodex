@@ -265,11 +265,24 @@ today's refusal turn round with them.
 
 1. **`Ui::AppNavbar`** — `nav_link "Archetypes", archetypes_path, "archetypes"`. The member navbar
    only; the visitor navbar gets none while the pages need a session.
-2. **`Ui::ArchetypeBadge`** gains an optional `href:`. Passed from `Decks::ClassificationBadges`
-   (an owner-only surface) and from `Tournaments::Standings::Row` **only when `viewer:` is
-   present** — that row already receives the viewer, so no component learns to call a policy.
-   `Decks::PublicBadges` is deliberately left alone: it renders on a page a visitor can reach, and
-   a link to a sign-in wall is worse than no link.
+2. **`Ui::ArchetypeBadge`** gains an optional `href:`, and its anchor carries
+   `data-turbo-frame="_top"`. The breakout belongs to the component and not to its callers: every
+   surface that passes an href renders the badge inside a Turbo Frame, and frame-scoped the click
+   fetches `/archetypes/N`, finds no frame of that id, and swaps the deck header for Turbo's
+   missing-frame error instead of navigating. Only a system test can tell those two outcomes
+   apart — the markup is identical and a request test sees a 200 for a page nobody reaches.
+
+   The href is passed from `Tournaments::Standings::Row` **only when `viewer:` is present** — that
+   row already receives the viewer, so no component learns to call a policy — and from
+   `Decks::ClassificationBadges` **only when its caller asks** (`linked:`), because that row is
+   rendered on two surfaces with opposite constraints. `Decks::HeaderFrame` renders it in a plain
+   div and asks for the link; `Decks::DeckCard` wraps its whole card body in `a.deck-item-link`
+   and must not, since an HTML5 parser closes the outer anchor at the second start tag — the deck
+   link would end after the `<h2>`, dropping the description and the card count out of it. That
+   is invisible to `assert_select`, which parses HTML4 and nests anchors happily, so the guard is
+   a controller test that parses with `Nokogiri::HTML5`. `Decks::PublicBadges` is left alone
+   entirely: it renders on a page a visitor can reach, and a link to a sign-in wall is worse than
+   no link.
 3. **`Search::Global`** gains a fifth group. `Archetype.none` for a visitor, exactly as
    `deck_scope` already does, so a visitor's spotlight never offers a link they cannot follow.
    Option ids are prefixed `spotlight-option-archetype-` — `Search::ResultsList` derives ids from

@@ -492,7 +492,17 @@ same commit; and the two archetype links a public page withholds today, `Tournam
 `if @viewer.present?` guard and `Decks::PublicBadges` (which passes no `href:` at all) — the
 standings sheet and a shared deck are both public, and a link to a sign-in wall is worse than no
 link, right up until the wall is gone. `Ui::ArchetypeBadge` gained the optional `href:` that all
-three sites pass or withhold; `Search::Global`'s fifth group prefixes its option ids
+three sites pass or withhold, and its anchor carries `data-turbo-frame="_top"` — the breakout
+belongs to the component and not to a call site, because every surface that passes an href renders
+it inside a Turbo Frame, and frame-scoped the click swaps that frame for Turbo's missing-frame
+error instead of navigating; only a system test tells those two outcomes apart, since the markup is
+identical and a request test sees a 200 for a page nobody reaches. `Decks::ClassificationBadges`
+takes `linked:` rather than linking unconditionally, because its two callers have opposite
+constraints: `Decks::HeaderFrame` renders the row in a plain div, while `Decks::DeckCard` renders
+it inside `a.deck-item-link` and an `<a>` within an `<a>` makes an HTML5 parser close the outer one
+at the second start tag — the deck's own link ended after its `<h2>`, and the description and card
+count fell outside any link. `assert_select` parses HTML4 and nests anchors happily, so the guard
+is a controller test reading `Nokogiri::HTML5`. `Search::Global`'s fifth group prefixes its option ids
 `spotlight-option-archetype-` for the reason `shared_decks` had to. The two archetype rows in
 `public_access_test.rb` move from `owner_only_gets` to `public_gets` that day, and three tests
 asserting today's refusal turn round with them.

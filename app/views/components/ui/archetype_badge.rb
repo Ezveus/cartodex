@@ -32,7 +32,14 @@ module Ui
       # inline-level box — so the anchor adds no underline, and the badge's own rule keeps its
       # colour. Wrapping rather than moving the badge classes onto the <a> is what keeps the
       # href-less rendering byte-identical.
-      a(href: @href) { badge }
+      #
+      # `_top` is not a call-site decision the way Decks::ActionsDropdown's `edit_frame` is: this
+      # link always navigates to a different page, and every surface that passes an href renders
+      # this row inside a Turbo Frame — Decks::HeaderFrame inside `deck-header`, and the standings
+      # row inside a broadcast target. Frame-scoped, a click fetches /archetypes/N, finds no frame
+      # of that id in the response, and replaces the deck header with Turbo's missing-frame error
+      # instead of going anywhere. Decks::DeckCard breaks its own link out for the same reason.
+      a(href: @href, data: { turbo_frame: "_top" }) { badge }
     end
 
     private

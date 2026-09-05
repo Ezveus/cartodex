@@ -1031,6 +1031,30 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       "the public view must collapse the two Tool spellings into one heading, and file neither under Other"
   end
 
+  # Parsed with Nokogiri::HTML5 rather than `assert_select`, and that is the whole point of the
+  # test: `assert_select` uses the HTML4 parser, which nests `<a>` inside `<a>` happily, while a
+  # browser runs the adoption-agency algorithm and closes the outer anchor at the second start
+  # tag. An archetype badge rendered inside `a.deck-item-link` therefore ended the deck's own link
+  # after the `<h2>`, dropping the description and the card count out of it — a real, clickable
+  # regression that every assert_select in the suite reported as fine.
+  test "a deck card's whole body stays inside the deck's own link" do
+    @deck.update!(archetype: archetypes(:ogerpon))
+
+    get decks_path
+    assert_response :success
+
+    card = Nokogiri::HTML5(response.body).css(".deck-item").find do |node|
+      node.at_css("h2")&.text == @deck.name
+    end
+    assert card, "expected a deck card for #{@deck.name}"
+
+    link = card.at_css("a.deck-item-link")
+    assert link.at_css("p.deck-card-count"),
+      "the card count must sit inside the deck's link — a nested anchor closes it early"
+    assert_empty link.css("a"),
+      "no anchor may be nested inside the deck card's link"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
