@@ -53,7 +53,10 @@ class SpotlightSearchTest < ApplicationSystemTestCase
 
     input.send_keys(:enter)
 
-    assert_current_path tournaments_path(q: "Ogerpon")
+    # The archetype group is rendered last by Search::ResultsList, so its "see all" is the last
+    # option. Naming that group here is what makes a reordering of the groups visible instead of
+    # silent — this assertion followed the tournament group until the archetype one was appended.
+    assert_current_path archetypes_path(q: "Ogerpon")
   end
 
   private
@@ -61,7 +64,7 @@ class SpotlightSearchTest < ApplicationSystemTestCase
   # Types the query and waits for the debounced frame to land — asserting on the panel is what
   # proves the request came back, so a following assertion isn't racing it.
   def search_for(text)
-    fill_in "Search decks, cards and tournaments", with: text
+    fill_in "Search decks, cards, tournaments and archetypes", with: text
 
     assert_selector ".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox"
   end

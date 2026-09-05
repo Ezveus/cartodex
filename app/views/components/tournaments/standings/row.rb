@@ -38,7 +38,7 @@ module Tournaments
             # recognisable to the one reader it applies to.
             span(class: "badge badge-archetype") { "You" } if mine?
           end
-          cell(2) { render Ui::ArchetypeBadge.new(archetype: @standing.archetype) }
+          cell(2) { archetype_badge }
           cell(3) { @standing.record_label || "—" }
           cell(4) { list_link }
           cell(5) { actions }
@@ -57,6 +57,15 @@ module Tournaments
       # Reads the loaded association: TournamentsController#show preloads :tournament_entry
       # precisely for this, and a nil viewer is a visitor, who owns nothing.
       def mine? = @viewer.present? && @standing.tournament_entry&.user_id == @viewer.id
+
+      # Linked for a member, plain for a visitor. This sheet is public and /archetypes is not,
+      # so a bare `href:` here would hand every visitor a link to a sign-in wall. The viewer is
+      # already in hand — TournamentsController#show and StandingListImportJob both pass one —
+      # so nothing here has to call a policy to answer it.
+      def archetype_badge
+        href = archetype_path(@standing.archetype) if @viewer.present?
+        render Ui::ArchetypeBadge.new(archetype: @standing.archetype, href: href)
+      end
 
       def list_link
         return plain "—" if @standing.deck.nil?

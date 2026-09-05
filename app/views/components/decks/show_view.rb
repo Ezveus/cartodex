@@ -31,9 +31,16 @@ module Decks
 
     private
 
+    # `cards.subtype` is a free scraped string: Cards::Fetcher#parse_subtype keeps whatever
+    # follows "Trainer - " on the page, and that has been "Tool" for every one of the 76 tools in
+    # the catalogue while this table only knew "Pokémon Tool" — so every Tool fell through to the
+    # "Other" heading below. Both spellings map to one label, and the grouping is done on the
+    # label rather than on the raw subtype so a deck holding both spellings gets one section
+    # rather than two identically titled ones.
     TRAINER_SUBTYPE_LABELS = {
       "Supporter" => "Supporter",
       "Item" => "Item",
+      "Tool" => "Tool",
       "Pokémon Tool" => "Tool",
       "Stadium" => "Stadium"
     }.freeze
@@ -104,10 +111,12 @@ module Decks
     def trainer_section(group)
       div(class: "deck-section-group") do
         h2 { "Trainer" }
-        subtype_groups = group.group_by { |dc| dc.card.subtype }
+        subtype_groups = group.group_by { |dc| TRAINER_SUBTYPE_LABELS.fetch(dc.card.subtype.to_s, "Other") }
 
-        TRAINER_SUBTYPE_LABELS.each do |subtype, label|
-          subgroup = subtype_groups.delete(subtype)
+        # `uniq` keeps the table's own order — Supporter, Item, Tool, Stadium — while collapsing
+        # the two keys that share the Tool label.
+        TRAINER_SUBTYPE_LABELS.values.uniq.each do |label|
+          subgroup = subtype_groups.delete(label)
           trainer_subtype_section(label, subgroup) if subgroup.present?
         end
 

@@ -52,6 +52,17 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Cards", cards_path
   end
 
+  # ArchetypesController reports controller_name "archetypes", which Ui::NavLinks.section_for
+  # resolves with no SECTION_OVERRIDES row of its own. This pins that, instead of the reasoning
+  # that says it should — and, being an exactly-one assertion, it is also what would catch the
+  # member navbar's entry lighting on a page that is not an archetype page.
+  test "a member's archetype pages light the archetype entry alone" do
+    sign_in @user
+
+    assert_active_nav_link "Archetypes", archetypes_path
+    assert_active_nav_link "Archetypes", archetype_path(archetypes(:ogerpon))
+  end
+
   test "a visitor's tournament pages light the catalog entry" do
     assert_active_nav_link "Tournaments", tournaments_path
     # One section, not two: unlike "Shared decks", this link has no second list to stand in
@@ -68,6 +79,27 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
 
     assert_active_nav_link "Archetypes", admin_archetypes_path
     assert_active_nav_link "Limitless import", new_admin_standings_import_path
+  end
+
+  # Admin::ArchetypesController and ArchetypesController report the *same* controller_name, and
+  # both navbars carry a link on that section. That is only harmless because the two navbars are
+  # never rendered together — Layouts::AdminLayout renders one, Layouts::ApplicationLayout the
+  # other. Asserting the count as well as the label is what makes this a real check: were the
+  # admin panel ever moved onto the member layout, /admin/archetypes would light two entries and
+  # this would go red rather than merely look right.
+  test "the member and admin archetype pages do not light each other's entry" do
+    @user.update!(admin: true)
+    sign_in @user
+
+    get admin_archetypes_path
+    assert_response :success
+    assert_select "a.navbar-link[href=?]", archetypes_path, { count: 0 },
+      "the admin layout must not render the member navbar"
+
+    get archetypes_path
+    assert_response :success
+    assert_select "a.navbar-link[href=?]", admin_archetypes_path, { count: 0 },
+      "the member layout must not render the admin navbar's archetype link"
   end
 
   private

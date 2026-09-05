@@ -69,10 +69,14 @@ module Decks
     def trainer_section(group)
       div(class: "deck-section-group") do
         h2 { "Trainer" }
-        subtype_groups = group.group_by { |deck_card| deck_card.card.subtype }
+        # Grouped on the label, not the raw subtype, for the reason Decks::ShowView is: two
+        # spellings of the tool bucket reach this table, and iterating its keys would draw two
+        # sections both titled "Tool".
+        labels = Decks::ShowView::TRAINER_SUBTYPE_LABELS
+        subtype_groups = group.group_by { |deck_card| labels.fetch(deck_card.card.subtype.to_s, "Other") }
 
-        Decks::ShowView::TRAINER_SUBTYPE_LABELS.each do |subtype, label|
-          subgroup = subtype_groups.delete(subtype)
+        labels.values.uniq.each do |label|
+          subgroup = subtype_groups.delete(label)
           trainer_subtype_section(label, subgroup) if subgroup.present?
         end
 

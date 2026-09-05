@@ -22,7 +22,7 @@ class GlobalSearchTest < ApplicationSystemTestCase
 
     assert_selector "dialog.search-overlay[open]"
 
-    fill_in "Search decks, cards and tournaments", with: "Ogerpon"
+    fill_in "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
 
     assert_selector ".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox"
     find(".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox").click
@@ -36,7 +36,7 @@ class GlobalSearchTest < ApplicationSystemTestCase
   test "escape empties the field and closes the overlay in one press" do
     visit decks_path
     find(".navbar-search-trigger").click
-    fill_in "Search decks, cards and tournaments", with: "Ogerpon"
+    fill_in "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
 
     assert_selector ".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox"
 
@@ -75,7 +75,7 @@ class GlobalSearchTest < ApplicationSystemTestCase
   test "the trigger leaves results already on screen alone" do
     visit dashboard_path
 
-    fill_in "Search decks, cards and tournaments", with: "Ogerpon"
+    fill_in "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
 
     assert_selector ".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox"
 
@@ -94,14 +94,14 @@ class GlobalSearchTest < ApplicationSystemTestCase
   test "a click on the overlay's own edge leaves it open" do
     visit decks_path
     find(".navbar-search-trigger").click
-    fill_in "Search decks, cards and tournaments", with: "Ogerpon"
+    fill_in "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
 
     assert_selector ".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox"
 
     find("dialog.search-overlay").click(x: 8, y: 20, offset: :position)
 
     assert_selector "dialog.search-overlay[open]"
-    assert_field "Search decks, cards and tournaments", with: "Ogerpon"
+    assert_field "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
   end
 
   # The overlay's whole point is navigating away from it, so the snapshot Turbo caches for the
@@ -112,7 +112,7 @@ class GlobalSearchTest < ApplicationSystemTestCase
   test "coming back to a cached page does not restore the overlay" do
     visit decks_path
     find(".navbar-search-trigger").click
-    fill_in "Search decks, cards and tournaments", with: "Ogerpon"
+    fill_in "Search decks, cards, tournaments and archetypes", with: "Ogerpon"
 
     find(".spotlight-panel-open a[role=option]", text: "Ogerpon Toolbox").click
 

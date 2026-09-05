@@ -1,7 +1,7 @@
 module Search
-  # One text query, three groups of matches: the user's decks, the whole card catalog, and the
-  # tournament catalog (every event, shared, not scoped to one member). Read-only, so no
-  # serialized_transaction.
+  # One text query, five groups of matches: the user's decks, every shared deck but their own,
+  # the whole card catalog, the tournament catalog (every event, shared, not scoped to one
+  # member) and the archetype catalog. Read-only, so no serialized_transaction.
   class Global < ApplicationService
     # CardSearchable lives under app/controllers/concerns but is a plain module with no controller
     # dependency. Including it here is deliberate: cards must match exactly as they do on the
@@ -14,7 +14,7 @@ module Search
 
     Result = Data.define(
       :query, :decks, :deck_total, :cards, :card_total, :tournaments, :tournament_total,
-      :shared_decks, :shared_deck_total
+      :shared_decks, :shared_deck_total, :archetypes, :archetype_total
     ) do
       # True when the query was too short to run — the caller renders nothing at all, as opposed
       # to "searched and found nothing".
@@ -27,7 +27,7 @@ module Search
       end
 
       def total
-        deck_total + card_total + tournament_total + shared_deck_total
+        deck_total + card_total + tournament_total + shared_deck_total + archetype_total
       end
     end
 
@@ -48,6 +48,11 @@ module Search
       tournaments = tournament_scope.order(date: :desc).limit(@limit).to_a
       shared_decks = shared_deck_scope.order(:name).limit(@limit)
         .with_standard_pool.includes(:archetype).to_a
+      # A result row prints both member cards' names, which is two extra queries per archetype
+      # without the preload. `search` already left_joins those two associations for its WHERE,
+      # so this resolves as a preload rather than a second join.
+      archetypes = archetype_scope.order(:name).limit(@limit)
+        .includes(:primary_card, :secondary_card).to_a
 
       Result.new(
         query: @query,
@@ -58,7 +63,9 @@ module Search
         tournaments: tournaments,
         tournament_total: total_for(tournament_scope, tournaments),
         shared_decks: shared_decks,
-        shared_deck_total: total_for(shared_deck_scope, shared_decks)
+        shared_deck_total: total_for(shared_deck_scope, shared_decks),
+        archetypes: archetypes,
+        archetype_total: total_for(archetype_scope, archetypes)
       )
     end
 
@@ -76,7 +83,8 @@ module Search
     def empty_result
       Result.new(
         query: @query, decks: [], deck_total: 0, cards: [], card_total: 0,
-        tournaments: [], tournament_total: 0, shared_decks: [], shared_deck_total: 0
+        tournaments: [], tournament_total: 0, shared_decks: [], shared_deck_total: 0,
+        archetypes: [], archetype_total: 0
       )
     end
 
@@ -113,6 +121,14 @@ module Search
         scope = scope.where(user_id: nil).or(scope.where.not(user_id: @user.id)) if @user
         scope.search(@query)
       end
+    end
+
+    # Archetype.none for a visitor, exactly as deck_scope above: /archetypes is inside the
+    # `authenticate :user` block, so an option offered here would be a link to a sign-in wall —
+    # and, like Deck.none, it never touches the database, so a visitor pays nothing for a group
+    # they cannot use.
+    def archetype_scope
+      @archetype_scope ||= @user ? Archetype.search(@query) : Archetype.none
     end
   end
 end

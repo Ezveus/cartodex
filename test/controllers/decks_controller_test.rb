@@ -988,6 +988,73 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-actions-dropdown", count: 0
   end
 
+  # `cards.subtype` is a free scraped string and Cards::Fetcher writes whatever follows
+  # "Trainer - ": every tool in the catalogue carries "Tool", while
+  # Decks::ShowView::TRAINER_SUBTYPE_LABELS only knew "Pokémon Tool" — so all 76 of them fell
+  # through to the "Other" heading. No fixture card carried a trainer subtype at all, which is
+  # why this rendering had never been asserted on.
+  test "a deck's trainers are filed under their own subtype headings, both spellings of Tool included" do
+    [ "Supporter", "Item", "Tool", "Pokémon Tool", "Stadium" ].each_with_index do |subtype, index|
+      card = Card.create!(name: "Trainer #{index}", card_type: "Trainer", subtype: subtype,
+                          set_name: "TST", set_number: "#{index + 1}", rarity: "Common")
+      @deck.deck_cards.create!(card: card, quantity: 1)
+    end
+
+    get deck_path(@deck)
+    assert_response :success
+
+    headings = css_select(".deck-subsection h3").map { |node| node.text.split(" (").first }
+    assert_equal [ "Supporter", "Item", "Tool", "Stadium" ], headings,
+      "trainers must be filed in the decklist's own order, with the two Tool spellings collapsed"
+    # The two spellings share one heading rather than producing two identically titled sections.
+    assert_equal "Tool (2 — 2 unique)", css_select(".deck-subsection h3")[2].text
+  end
+
+  # Decks::PublicShowView is a separate file, not a flag, so it has to be fixed and asserted on
+  # separately — it groups the same cards through the same table and had the same two bugs.
+  test "a public deck's trainers are filed the same way, without a duplicate Tool heading" do
+    stranger = users(:two)
+    @deck.update!(shared: true)
+
+    [ "Supporter", "Tool", "Pokémon Tool" ].each_with_index do |subtype, index|
+      card = Card.create!(name: "Public trainer #{index}", card_type: "Trainer", subtype: subtype,
+                          set_name: "PUB", set_number: "#{index + 1}", rarity: "Common")
+      @deck.deck_cards.create!(card: card, quantity: 1)
+    end
+
+    sign_in stranger
+    get deck_path(@deck)
+    assert_response :success
+
+    headings = css_select(".deck-subsection h3").map { |node| node.text.split(" (").first }
+    assert_equal [ "Supporter", "Tool" ], headings,
+      "the public view must collapse the two Tool spellings into one heading, and file neither under Other"
+  end
+
+  # Parsed with Nokogiri::HTML5 rather than `assert_select`, and that is the whole point of the
+  # test: `assert_select` uses the HTML4 parser, which nests `<a>` inside `<a>` happily, while a
+  # browser runs the adoption-agency algorithm and closes the outer anchor at the second start
+  # tag. An archetype badge rendered inside `a.deck-item-link` therefore ended the deck's own link
+  # after the `<h2>`, dropping the description and the card count out of it — a real, clickable
+  # regression that every assert_select in the suite reported as fine.
+  test "a deck card's whole body stays inside the deck's own link" do
+    @deck.update!(archetype: archetypes(:ogerpon))
+
+    get decks_path
+    assert_response :success
+
+    card = Nokogiri::HTML5(response.body).css(".deck-item").find do |node|
+      node.at_css("h2")&.text == @deck.name
+    end
+    assert card, "expected a deck card for #{@deck.name}"
+
+    link = card.at_css("a.deck-item-link")
+    assert link.at_css("p.deck-card-count"),
+      "the card count must sit inside the deck's link — a nested anchor closes it early"
+    assert_empty link.css("a"),
+      "no anchor may be nested inside the deck card's link"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

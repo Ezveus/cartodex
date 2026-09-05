@@ -3181,3 +3181,325 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
     min-width: 0;
   }
 }
+
+/* — The archetype metagame page —
+   Nothing here beats anything. This block adds the two shapes the design system did not already
+   hold — a proportion bar, and a card row that carries sub-rows — and every one of its selectors
+   matches markup only this page emits, so it never meets a rule from the layers above.
+
+   A handful of them are two-part (.archetype-printing-row .archetype-card-name,
+   .archetypes-search .form-input) or reach an element (.archetype-category-header h3,
+   .archetype-breakdown h3, .archetype-method > summary, .archetype-method p). That is descent
+   into this page's own markup, not weight bought to outrank an earlier layer: each is scoped to
+   a container this block itself defines, and the .form-input one is the single case that touches
+   a shared class at all — it declares max-width, which .form-input itself never sets, on a field
+   inside .archetypes-search and nowhere else. It is character for character the shape
+   .tournaments-search .form-input already has, which is the listing this page was built from.
+
+   The rule these layers exist to enforce is that no override here may depend on sitting later in
+   the file, since the next appended layer would silently undo it; none of these is an override.
+
+   Deliberately absent: any energy-type colour. The one thing on this page that is typed is the
+   archetype badge in the header, and Ui::ArchetypeBadge already colours itself from
+   Card::TYPE_TOKENS. A second, page-local tint would be a literal hex by another name and would
+   drift from the palette the badge reads.
+
+   Also absent: a fixed table layout for the card report. The report is a list of rows whose
+   sub-rows nest, which a .data-table cannot express — its mobile mode turns every row into a card
+   and a nested one would render as a card inside a card. The rows here wrap instead, on both
+   sides of the 768px breakpoint, so nothing needs a media query and nothing can overflow the
+   body. The three performance breakdowns *are* .data-table, because they are genuinely two
+   columns and get their data-label mobile mode for free. */
+
+.archetype-identity {
+  margin-bottom: 1.5rem;
+}
+
+.archetype-art {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.archetype-art-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 140px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.archetype-art-image {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: var(--e1);
+}
+
+.archetype-art-label {
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--ink-500);
+}
+
+.archetype-lineage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--ink-500);
+}
+
+.archetype-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* The label wraps its select (Ui::FilterSelect emits no id to point at), so it is the flex line
+   the two of them share. */
+.archetype-sample-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.archetype-sample-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+/* Loud enough to be read before the percentages it qualifies, which is the whole point: the
+   default view of a freshly imported archetype is very often a three-list sample. */
+.archetype-notice {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid var(--timeout);
+  border-radius: 4px;
+  background: var(--timeout-bg);
+  color: var(--ink-800);
+  font-size: 0.9rem;
+}
+
+.archetype-panel {
+  margin-top: 2rem;
+}
+
+.archetype-facts {
+  margin: 0 0 1.25rem;
+}
+
+.archetype-fact {
+  margin: 0 0 0.35rem;
+}
+
+.archetype-fact-muted {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+}
+
+/* auto-fit rather than a fixed column count: three small tables side by side above the
+   breakpoint, stacked below it, without a media query that the next appended layer could
+   outrank. */
+.archetype-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.archetype-breakdown h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.archetype-summary {
+  margin: 0 0 1.25rem;
+  color: var(--ink-700);
+}
+
+.archetype-category {
+  margin-bottom: 1.75rem;
+}
+
+/* Its own class rather than .admin-header, which the tournament page borrows for the same
+   shape: that one carries a page header's 1.5rem margin, which reads as a gap between the
+   heading and the list it belongs to when it is repeated eight times down one page. */
+.archetype-category-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.archetype-category-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.archetype-category-count {
+  color: var(--ink-500);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.archetype-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archetype-card-row {
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--e1);
+}
+
+.archetype-card-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+/* Each of the three cells may take the whole line when the row runs out of room, which is what
+   makes the row legible at 390px without a breakpoint of its own. min-width: 0 is what lets a
+   long card name shrink instead of pushing the row past the body. */
+.archetype-card-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+/* A fixed basis, and the copies cell absorbs the slack instead — not the other way round. A bar
+   whose length depends on how long the text beside it happens to be cannot be compared with the
+   bar on the next row, which is the only thing a bar is for: two cards both at 100% drew visibly
+   different bars because "1 copy" and "2-3 copies · most often 2 / 3 — tied" left them different
+   room. `1` on the shrink factor keeps it collapsible below the breakpoint, where the cells wrap
+   onto their own lines anyway. */
+.archetype-card-share {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 1 14rem;
+  min-width: 0;
+}
+
+.archetype-bar {
+  flex: 1 1 auto;
+  min-width: 2.5rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.archetype-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--secondary-color);
+}
+
+.archetype-card-pct {
+  font-size: 0.8rem;
+  color: var(--ink-500);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Grows so the row still reaches the right edge, and stays right-aligned so the copy counts line
+   up with each other down the column rather than starting wherever the bar above them ended. */
+.archetype-card-copies {
+  flex: 1 1 10rem;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--ink-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rule is the only thing saying these belong to the row above; they are indented, never
+   styled as rows of their own, because they are not a decomposition of it — see NameGroupRow. */
+.archetype-printing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 2px solid var(--line);
+  list-style: none;
+}
+
+.archetype-printing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  font-size: 0.9rem;
+}
+
+.archetype-printing-row .archetype-card-name {
+  font-weight: 400;
+  color: var(--ink-700);
+}
+
+.archetype-printing-note {
+  margin: 0.5rem 0 0 0.9rem;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--ink-500);
+}
+
+.archetype-fixed-flag {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+}
+
+.archetype-method {
+  margin-top: 2.5rem;
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
+.archetype-method > summary {
+  cursor: pointer;
+}
+
+.archetype-method p {
+  max-width: 70ch;
+}
+
+/* The archetype catalog's own two rules, the pair /tournaments needed. Everything else on that
+   page is .admin-container, .data-table and .cards-pagination — a listing that needs more than
+   this is a listing that has stopped matching the other three. */
+.archetypes-search {
+  margin-bottom: 1rem;
+}
+
+.archetypes-search .form-input {
+  max-width: 22rem;
+}
+
+/* Both printing labels stack in one cell rather than sitting side by side: below the breakpoint
+   .data-table turns each row into a card, and two labels on one line is what overflows it. */
+.archetype-member-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}

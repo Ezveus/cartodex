@@ -112,6 +112,11 @@ Rails.application.routes.draw do
     end
     resources :tournament_profiles, except: [ :show ]
 
+    # Member-only for now. Moving this resource out of the `authenticate :user` block is the first
+    # of the edits that open the two pages to visitors; the rest — and the four nothing would ask
+    # for, which no test would go red over — are listed above ArchetypesController.
+    resources :archetypes, only: [ :index, :show ]
+
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do
       mount MissionControl::Jobs::Engine, at: "/admin/jobs"

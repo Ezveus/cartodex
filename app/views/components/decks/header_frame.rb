@@ -24,7 +24,10 @@ module Decks
     def display
       div do
         h1 { @deck.name }
-        render Decks::ClassificationBadges.new(deck: @deck, live: true)
+        # `linked`: this row sits in a plain div here, so the archetype badge can be an anchor.
+        # Decks::DeckCard renders the same row inside its own link and must not — see the note on
+        # ClassificationBadges#initialize.
+        render Decks::ClassificationBadges.new(deck: @deck, live: true, linked: true)
         p(class: "deck-show-description") { @deck.description } if @deck.description.present?
       end
     end

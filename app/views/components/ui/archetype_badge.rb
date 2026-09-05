@@ -6,11 +6,45 @@ module Ui
   # Extracted from Decks::ClassificationBadges so the public badge row can reuse it: the two
   # rows show different things, but an archetype looks the same on both.
   class ArchetypeBadge < ApplicationComponent
-    def initialize(archetype:)
+    # `href` is optional and defaults to nil, which renders exactly what this component has
+    # always rendered. It is opt-in rather than derived from the archetype because /archetypes
+    # requires a session: a caller knows whether its own surface is behind one, and the badge
+    # has no business asking a policy. Decks::ClassificationBadges is owner-only and always
+    # passes it; Tournaments::Standings::Row passes it only when it has a viewer, since the
+    # standings sheet is public; Decks::PublicBadges never does.
+    def initialize(archetype:, href: nil)
       @archetype = archetype
+      @href = href
     end
 
     def view_template
+      return badge if @href.nil?
+
+      # A plain `a`, not `link_to`, for the reason Decks::DeckCard writes its own anchor by
+      # hand: Decks::ImportJob broadcasts a DeckCard — and through it these badges — with a bare
+      # Phlex `.call`, outside any request. Phlex::Rails::Helpers::LinkTo delegates to a nil
+      # view_context there and raises NoMethodError, which would have turned every import of a
+      # deck the detector tagged into a failed broadcast. An element takes an href with no
+      # url_for involved, so this renders in a request and out of one alike.
+      #
+      # It needs no class of its own: .badge is inline-block and .badge-energy is inline-flex,
+      # and a text decoration propagated from an ancestor is never drawn inside an atomic
+      # inline-level box — so the anchor adds no underline, and the badge's own rule keeps its
+      # colour. Wrapping rather than moving the badge classes onto the <a> is what keeps the
+      # href-less rendering byte-identical.
+      #
+      # `_top` is not a call-site decision the way Decks::ActionsDropdown's `edit_frame` is: this
+      # link always navigates to a different page, and every surface that passes an href renders
+      # this row inside a Turbo Frame — Decks::HeaderFrame inside `deck-header`, and the standings
+      # row inside a broadcast target. Frame-scoped, a click fetches /archetypes/N, finds no frame
+      # of that id in the response, and replaces the deck header with Turbo's missing-frame error
+      # instead of going anywhere. Decks::DeckCard breaks its own link out for the same reason.
+      a(href: @href, data: { turbo_frame: "_top" }) { badge }
+    end
+
+    private
+
+    def badge
       slug = @archetype.primary_energy_type&.downcase
 
       if slug
