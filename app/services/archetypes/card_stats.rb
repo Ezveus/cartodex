@@ -2,8 +2,9 @@ module Archetypes
   # Turns a set of tournament field lists into a deck report: for every card, how many of the
   # lists play it, in how many copies, and how settled that number is.
   #
-  # The aggregation key is `cards.fingerprint`, not the card's name, and the production data
-  # demonstrates both halves of why in one measurement. Across the 93 recorded lists of
+  # The aggregation key is the card's fingerprint (see GROUPING_KEY), not its name, and the
+  # production data demonstrates both halves of why in one measurement. Across the 93 recorded
+  # lists of
   # Raging Bolt ex / Teal Mask Ogerpon ex there are 81 distinct card ids, 72 distinct fingerprints
   # and 70 distinct names:
   #
@@ -15,10 +16,11 @@ module Archetypes
   #     copies" and hidden the choice — the same conflation Decks::ArchetypeDetector was moved off
   #     names to avoid.
   #
-  # One fingerprint always means one name (for a Trainer or an Energy it hashes the name; for a
-  # Pokémon the name is part of the hash), which is what lets the grouped query pick the name with
-  # MIN() instead of carrying it in the GROUP BY. Verified on the same data: no fingerprint spans
-  # two names.
+  # One fingerprint always means one name — for a Trainer or an Energy it hashes the name, and for
+  # a Pokémon the name is part of the hash — verified on the same data: no fingerprint spans two
+  # names. The report leans on that when it groups printings under a name, and it reads that name
+  # off the representative printing rather than off the grouped query, so a card the key cannot
+  # fold (see GROUPING_KEY) still names itself.
   class CardStats < ApplicationService
     # Display order, and the whole category vocabulary. `other` is unreachable on today's
     # catalogue — all 4720 cards categorise — and exists so that a Trainer subtype the scraper
@@ -122,64 +124,94 @@ module Archetypes
       Result.new(lists_count: 0, categories: [], fixed_core_cards: 0, fixed_core_copies: 0)
     end
 
-    # (deck, fingerprint) -> copies, in one grouped query.
+    # The key every card is aggregated under. It is the fingerprint, except for a card that has
+    # none, which stands alone under its own id.
     #
-    # The SUM is not decoration. One list may hold two DeckCard rows for one fingerprint — two
-    # printings of the same card, which `(deck_id, card_id)` being UNIQUE makes perfectly legal —
-    # and they are one card in that list. Counted separately, the card would appear in more lists
-    # than exist, each at a fraction of its real copies, and nothing would raise. Measured
-    # occurrences in the production data: zero, because Limitless normalises what it publishes.
-    # The step stays for the hand-typed lists, which are under no such discipline.
+    # A bare `GROUP BY cards.fingerprint` looks equivalent and is not: SQL gathers **every** NULL
+    # into one group, so two unfingerprinted cards in one list merge into a single row whose
+    # copies are their sum and whose name is whichever MIN() picked — a Supporter reported at
+    # 6 copies, and the other card gone from the report entirely, with nothing raised. A card
+    # cannot reach that state through any callback (`compute_fingerprint` is a `before_save`), so
+    # this defends against `update_column`, `insert_all` and fixtures — the same state
+    # Decks::ArchetypeDetector already refuses to match on and Archetypes::FingerprintSync
+    # already reports rather than writes. Keeping such a card visible under its own id is the
+    # point: dropping it would be the silent disappearance in a different costume.
+    GROUPING_KEY = Arel.sql("COALESCE(cards.fingerprint, 'card:' || cards.id)").freeze
+
+    # (deck, card) -> copies, in one grouped query.
+    #
+    # The SUM is not decoration. One list may hold two DeckCard rows for one card — two printings
+    # of it, which `(deck_id, card_id)` being UNIQUE makes perfectly legal — and they are one card
+    # in that list. Counted separately, the card would appear in more lists than exist, each at a
+    # fraction of its real copies, and nothing would raise. Measured occurrences in the production
+    # data: zero, because Limitless normalises what it publishes. The step stays for the
+    # hand-typed lists, which are under no such discipline.
     def rows
       @rows ||= DeckCard
         .joins(:card)
         .where(deck_id: @standings.select(:deck_id))
-        .group("deck_cards.deck_id", "cards.fingerprint")
+        .group(Arel.sql("deck_cards.deck_id"), GROUPING_KEY)
         .pluck(
           Arel.sql("deck_cards.deck_id"),
-          Arel.sql("cards.fingerprint"),
-          Arel.sql("MIN(cards.name)"),
+          GROUPING_KEY,
           Arel.sql("SUM(deck_cards.quantity)")
         )
     end
 
+    # Counted from the standings, not from the rows above, so that this is the same number
+    # MetagameScope put in the sample selector and Performance put in the panel. Derived from the
+    # rows it would instead be "lists holding at least one card", which is the same thing right up
+    # until a list holds none — and then the page prints two listcounts and computes its
+    # percentages over the one it does not show.
     def lists_count
-      @lists_count ||= rows.map(&:first).uniq.size
+      @lists_count ||= @standings.distinct.count(:deck_id)
     end
 
-    # The printing each fingerprint is shown as: the one the most lists actually play, with the
-    # card id breaking a tie so the choice cannot change between two loads of the same page.
+    # The printing each card is shown as: the one the most lists actually play, with the card id
+    # breaking a tie so the choice cannot change between two loads of the same page.
     def representative_ids
       @representative_ids ||= DeckCard
         .joins(:card)
         .where(deck_id: @standings.select(:deck_id))
-        .group("cards.fingerprint", "deck_cards.card_id")
+        .group(GROUPING_KEY, Arel.sql("deck_cards.card_id"))
         .pluck(
-          Arel.sql("cards.fingerprint"),
+          GROUPING_KEY,
           Arel.sql("deck_cards.card_id"),
           Arel.sql("COUNT(DISTINCT deck_cards.deck_id)")
         )
         .group_by(&:first)
-        .transform_values { |group| group.max_by { |_fingerprint, card_id, lists| [ lists, -card_id ] }[1] }
+        .transform_values { |group| group.max_by { |_key, card_id, lists| [ lists, -card_id ] }[1] }
     end
 
     def cards
       @cards ||= Card.where(id: representative_ids.values).index_by(&:id)
     end
 
-    def entries
-      @entries ||= rows.group_by { |_deck_id, fingerprint, _name, _copies| fingerprint }
-                       .filter_map { |fingerprint, fingerprint_rows| entry_for(fingerprint, fingerprint_rows) }
+    def rows_by_key
+      @rows_by_key ||= rows.group_by { |_deck_id, key, _copies| key }
     end
 
-    def entry_for(fingerprint, fingerprint_rows)
-      card = cards[representative_ids[fingerprint]] or return nil
-      copies = fingerprint_rows.map(&:last)
-      inclusion = fingerprint_rows.size
+    # key -> the lists playing it. Kept beside the entries so a name group can count the union of
+    # its printings' lists rather than re-deriving it from a name, which is how the two halves
+    # came to disagree: keyed on a name the query chose and looked up by the name of the printing
+    # the report chose, an unfingerprinted card could show a group at 0% sitting above its own
+    # 100% sub-row.
+    def lists_by_key
+      @lists_by_key ||= rows_by_key.transform_values { |key_rows| key_rows.map(&:first).to_set }
+    end
+
+    def entries
+      @entries ||= rows_by_key.filter_map { |key, key_rows| entry_for(key, key_rows) }
+    end
+
+    def entry_for(key, key_rows)
+      card = cards[representative_ids[key]] or return nil
+      copies = key_rows.map(&:last)
+      inclusion = key_rows.size
 
       Entry.new(
         card: card,
-        fingerprint: fingerprint,
+        fingerprint: key,
         inclusion_count: inclusion,
         inclusion_pct: percentage(inclusion),
         min_copies: copies.min,
@@ -236,23 +268,25 @@ module Archetypes
         .sort_by { |group| [ -group.inclusion_count, group.name ] }
     end
 
-    # name -> the set of lists playing any of its printings, built in one pass over the rows.
-    # Asking per name instead would walk every row once per name, which is 70 x 37k comparisons on
-    # an archetype the size this is meant to scale to.
-    def lists_by_name
-      @lists_by_name ||= rows.each_with_object(Hash.new { |hash, key| hash[key] = Set.new }) do |(deck_id, _fingerprint, name, _copies), by_name|
-        by_name[name] << deck_id
-      end
-    end
-
+    # The union of the lists playing any of this group's printings — never the sum of their
+    # inclusion counts, since a list may play two of them. Measured on the production data,
+    # Hoothoot's three versions total 111.9% across a name played by 73.1%.
+    #
+    # Taken from the entries the group actually holds, so the number above a set of sub-rows is by
+    # construction a fact about those sub-rows and cannot drift from them.
     def name_group_for(name, name_entries)
-      lists = lists_by_name[name].size
+      lists = name_entries.reduce(Set.new) { |all, entry| all | lists_by_key.fetch(entry.fingerprint) }.size
 
       NameGroup.new(
         name: name,
         inclusion_count: lists,
         inclusion_pct: percentage(lists),
-        entries: name_entries.sort_by { |entry| [ -entry.inclusion_count, entry.card.set_number.to_s ] }
+        # set_number is a String holding a number most of the time and something like "SV107" the
+        # rest, so it is ordered numerically first and lexically only to break the ties that
+        # leaves — a plain String sort puts "114" before "77".
+        entries: name_entries.sort_by do |entry|
+          [ -entry.inclusion_count, entry.card.set_number.to_i, entry.card.set_number.to_s ]
+        end
       )
     end
   end

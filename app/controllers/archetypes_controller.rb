@@ -1,19 +1,46 @@
 # The archetype catalog and one archetype's metagame report. Everything here reads; nothing
 # writes.
 #
-# Member-only for now. Opening the two pages to visitors is exactly three gestures:
+# Member-only for now. **Opening the two pages to visitors is seven edits, not three** — the
+# three that make the route reachable, and four more that decide what a visitor then sees.
+# An earlier version of this comment listed only the first three; the list below was produced by
+# applying them for real and reading what broke and, worse, what did not. **No test asks for any
+# of the last four.** Three of them are outright silent — skip them and the suite stays green
+# while the page ships half-open — and the fourth fails the other way round, with a test that goes
+# on passing in defence of a rule that has become false.
 #
-#   1. move `resources :archetypes` out of the `authenticate :user` block in config/routes.rb,
+# Reachability — each of these is covered by a test that goes red if it is missing:
+#
+#   1. move `resources :archetypes` out of the `authenticate :user` block in config/routes.rb
+#      (its comment there says "three edits" too, and has to be corrected with this one),
 #   2. `include PubliclyReachable` here, with `publicly_reachable :index, :show`,
 #   3. flip ArchetypePolicy#index?/#show? from `user.present?` to `true`.
 #
-# A fourth belongs to that day and not to this one: a per-IP
-# `rate_limit … unless: -> { user_signed_in? }` sized like tournaments#index's 60/min, since
-# #index is the same shape and the same cost — a field debounced at 300ms driving a paginated
-# listing behind a Turbo Frame. It is deliberately *not* added now. No anonymous request can
-# reach the route while the resource sits inside the authenticate block, so nothing can exercise
-# the limiter: not a test, not a bot, not a mistake. A limiter nobody can exercise is a limiter
-# nobody knows works, and shipping one now would only make step 4 look already done.
+# What a visitor then meets — the four nothing asks for:
+#
+#   4. a per-IP `rate_limit to: 60, within: 1.minute, unless: -> { user_signed_in? },
+#      store: RateLimitStore, only: :index`, sized like tournaments#index's because #index is
+#      the same shape and the same cost: a field debounced at 300 ms driving a paginated listing
+#      behind a Turbo Frame. Deliberately absent today — no anonymous request can reach the route
+#      while the resource sits inside the authenticate block, so nothing can exercise the limiter,
+#      and a limiter nobody can exercise is a limiter nobody knows works.
+#   5. `nav_link "Archetypes", archetypes_path, "archetypes"` in Ui::PublicNavbar. Without it a
+#      visitor on /archetypes lights **zero** navbar entries — NavbarActiveSectionTest asserts
+#      "exactly one is lit" per page it names, and it names no visitor archetype page, so the
+#      hole is outside every assertion it makes.
+#   6. Search::Global#archetype_scope: drop the `Archetype.none` branch. The trap here is the
+#      opposite of a silent one — Search::GlobalTest's "a visitor gets no archetypes, and none
+#      are queried for" keeps *passing* while defending a rule that has become false, so that
+#      test has to be inverted in the same commit rather than merely watched.
+#   7. the two archetype links a public page currently withholds, because a link to a sign-in
+#      wall was worse than no link and stops being so on that day:
+#      Tournaments::Standings::Row#archetype_badge drops its `if @viewer.present?` guard, and
+#      Decks::PublicBadges starts passing `href: archetype_path(@deck.archetype)`.
+#
+# Test bookkeeping that goes with it, and that nothing else will remind anybody of: the two
+# archetype rows in public_access_test.rb move from `owner_only_gets` to `public_gets`, and three
+# tests asserting today's refusal have to be turned round — "a visitor is sent to sign in for both
+# pages" here, and ArchetypePolicyTest's two nil-user assertions.
 class ArchetypesController < ApplicationController
   include Searchable
 
@@ -64,23 +91,21 @@ class ArchetypesController < ApplicationController
   # Recorded standings descending, then name. Archetypes nobody has recorded a result for stay
   # listed, at the bottom, because they are what members tag their own decks with.
   #
-  # Two queries rather than one relation carrying `includes`, and the reason is the GROUP BY.
-  # `includes` on a grouped relation flips to `eager_load`, which JOINs `cards` and adds every one
-  # of its columns to the SELECT list while the GROUP BY names only `archetypes.id` — a query the
-  # database is entitled to refuse and, worse, one whose per-row result is arbitrary where it does
-  # not. So the order is decided in SQL over ids alone, the records are loaded and preloaded in a
-  # second query, and Ruby puts them back in the order the first decided. DecksController#compare
-  # already re-sorts a `where(key: keys)` load against the order its caller asked for, for the
-  # same reason: `IN (…)` promises nothing about order.
+  # `includes` and not `preload`, even beside the GROUP BY, and that is worth one line because the
+  # obvious fear is wrong: `includes` only escalates to `eager_load` when something references the
+  # included table (a `where`/`order` naming it, or an explicit `references`), and nothing here
+  # does. Measured on this relation — with `Archetype.all` and with `Archetype.search`, which adds
+  # `.distinct` and two more `left_joins` — `eager_loading?` is false, both associations come back
+  # preloaded, and the whole page costs three queries. An earlier version of this method plucked
+  # the ordered ids and re-loaded them in a second pass to dodge an escalation that does not
+  # happen; it cost a query and a Ruby sort to defend against nothing.
   def page_of(scope)
-    ids = scope.left_joins(:tournament_standings)
+    scope.left_joins(:tournament_standings)
       .group("archetypes.id")
       .order(Arel.sql("COUNT(tournament_standings.id) DESC"), :name)
       .offset((@page - 1) * PER_PAGE).limit(PER_PAGE)
-      .pluck("archetypes.id")
-
-    Archetype.where(id: ids).preload(:primary_card, :secondary_card)
-      .sort_by { |archetype| ids.index(archetype.id) }
+      .includes(:primary_card, :secondary_card)
+      .to_a
   end
 
   # to_s first: `?page[]=1` hands over an Array and `?page[a]=b` an

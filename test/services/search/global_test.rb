@@ -249,18 +249,43 @@ class Search::GlobalTest < ActiveSupport::TestCase
   # sign-in wall. Deck.none is the pattern archetype_scope copies, and the point of it is that
   # nothing is *queried* either: the assertion below is on the SQL, not just on the result.
   #
-  # The regex is deliberately narrow. Deck.search embeds `Archetype.search(q).select(:id)` as a
-  # subquery, so the shared-deck query mentions the archetypes table for a visitor too and always
-  # has — what must not appear is a query that selects archetype *rows*.
+  # Three query shapes mention the archetypes table for a visitor, and only one of them is the
+  # archetype *group*:
+  #
+  #   * `Deck.search` embeds `Archetype.search(q).select(:id)` as a subquery, so the shared-deck
+  #     query names archetypes inside a statement whose FROM is `decks`, and always has;
+  #   * `shared_deck_scope` carries `includes(:archetype)` — one line of master, not of this
+  #     feature — which preloads by id whenever a matching shared deck is tagged, and that is a
+  #     query the archetype group did not ask for;
+  #   * the group itself loads rows through `Archetype.search`, which is a `SELECT DISTINCT
+  #     "archetypes".*` with two LEFT OUTER JOINs onto cards.
+  #
+  # The sample below deliberately produces the second one — the earlier version of this test
+  # matched every `SELECT "archetypes".*` and passed only because no shared deck happened to
+  # match the query and carry an archetype, which is an accident of the fixtures rather than a
+  # property of the code. The preload is excluded by name, so the claim it makes is still
+  # "no archetype rows were loaded for the archetype group".
+  ARCHETYPE_ROWS = /\ASELECT (DISTINCT )?"archetypes"\.\*/i
+  ARCHETYPE_PRELOAD = /\ASELECT "archetypes"\.\* FROM "archetypes" WHERE "archetypes"\."id"/i
+
   test "a visitor gets no archetypes, and none are queried for" do
-    Archetype.create!(primary_card: cards(:doublade), custom_name: true, name: "Metal Toolbox")
+    tag = Archetype.create!(primary_card: cards(:doublade), custom_name: true,
+                            name: "Metal Toolbox")
+    # A shared deck matching the same query and tagged with an archetype: this is what makes
+    # shared_deck_scope's preload fire, and it is the shape production data has.
+    decks(:two).update!(user: users(:two), shared: true, name: "Metal Toolbox List", archetype: tag)
 
     sql = capture_queries { @result = Search::Global.call(user: nil, query: "metal toolbox") }
+
+    assert_equal [ "Metal Toolbox List" ], @result.shared_decks.map(&:name),
+      "sanity: the sample must actually reach the preload this assertion excludes"
+    assert_equal 1, sql.grep(ARCHETYPE_PRELOAD).size,
+      "sanity: the shared-deck preload is what the exclusion below is about"
 
     # Asserted before the two below, so that a regression is reported as "the database was
     # touched" rather than as "the list was not empty" — the second is a consequence, and the
     # first is the claim.
-    assert_empty sql.grep(/SELECT (DISTINCT )?"archetypes"\.\*/i),
+    assert_empty sql.grep(ARCHETYPE_ROWS).grep_v(ARCHETYPE_PRELOAD),
       "a visitor's spotlight loaded archetype rows"
     assert_empty @result.archetypes
     assert_equal 0, @result.archetype_total

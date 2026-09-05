@@ -3,8 +3,13 @@ module Archetypes
   # CategoryGroup#cards_count's own definition — three Hoothoots are three cards a player may have
   # to recognise, even though they are one name in the list below.
   class CategorySection < ApplicationComponent
-    def initialize(category:)
+    # `single_list` travels straight through to the rows: at one list the "fixed" flag is a
+    # statement about the sample size and not about the archetype, and Archetypes::CardReport has
+    # already said it once for the whole report. Defaulted so the styleguide, which renders rows
+    # standing alone, keeps showing the flag it is there to show.
+    def initialize(category:, single_list: false)
       @category = category
+      @single_list = single_list
     end
 
     def view_template
@@ -18,7 +23,7 @@ module Archetypes
 
         ul(class: "archetype-card-list") do
           @category.name_groups.each do |group|
-            render Archetypes::NameGroupRow.new(group: group)
+            render Archetypes::NameGroupRow.new(group: group, single_list: @single_list)
           end
         end
       end

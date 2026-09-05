@@ -89,6 +89,17 @@ putting the fuller samples one labelled click away, is the honest trade.
 
 An unknown or malformed `?pool=` falls back to the default rather than 404ing.
 
+**The control is dropped when there is nothing to choose**, which is not the same as "one option".
+`Result#selectable?` is `pool_options > 1 || (pool_options == 1 && unpooled?)`, deliberately not
+`options.size > 1`: an archetype with standings in exactly one pool and nowhere else offers
+"TEF-PBL — 4 lists" beside "All formats — 4 lists", two labels for one sample, and on the
+production data that is the common shape rather than a corner case. One pool *plus* an event
+outside Standard is the opposite — two labels, two genuinely different samples — while an
+archetype whose every standing sits outside Standard has "All formats" as its only option however
+many events that spans, which is why `unpooled?` cannot answer on its own. `fuller_sample_available?`
+is the same honesty applied to the notice beneath: it promises a fuller sample one click away, and
+that promise is false on the sample that is already the largest.
+
 ### Small samples say so
 
 A sample below `SMALL_SAMPLE` (10 lists) renders a notice: percentages over 3 lists are 33/67/100
@@ -123,8 +134,25 @@ counted twice at half its copies).
 
 ### Statistics
 
-`Archetypes::CardStats` runs one grouped query returning `(deck_id, fingerprint, name, SUM(quantity))`
-and derives everything in Ruby from that single pass:
+`Archetypes::CardStats` runs one grouped query returning `(deck_id, key, SUM(quantity))` and
+derives everything in Ruby from that single pass. The key is
+`COALESCE(cards.fingerprint, 'card:' || cards.id)` and not the bare column: SQL gathers every NULL
+into one group, so two unfingerprinted cards in one list would merge into a single row at their
+sum, under one of the two names, with the other card gone from a report that still totals a
+plausible 60 and nothing raised. Only a write that bypasses callbacks can produce such a card
+(`compute_fingerprint` is a `before_save`), and keeping it visible under its own id is deliberate
+— dropping it is the same silent disappearance in a different costume. The name is no longer
+carried by the query at all: it is read off the representative printing, which is the only card
+the report actually displays.
+
+The denominator is **not** derived from those rows. `lists_count` is
+`standings.distinct.count(:deck_id)`, which costs a fourth query and buys agreement: derived from
+the rows it would be "lists holding at least one card", and a field list that resolved no printing
+would leave the page printing two list counts and computing its percentages over the one it does
+not show. `COUNT(DISTINCT deck_id)` for the same reason in all four services — two standings may
+point at one deck, `index_tournament_standings_on_deck_id` is not unique.
+
+From that single pass:
 
 - inclusion count and percentage of lists,
 - range of copies **when played** (the zero case is excluded — that is what "when played" means),
@@ -142,7 +170,15 @@ Item, Tool, Stadium, Special Energy, Basic Energy, **Other**.
 
 `subtype` is a free scraped string, not an enum. Two spellings of the tool bucket exist —
 `Cards::Fetcher#parse_subtype` can emit `"Pokémon Tool"`, while all 76 tools in the catalogue
-carry `"Tool"` — and both map to Tool, as `Decks::ShowView::TRAINER_SUBTYPE_LABELS` already does.
+carry `"Tool"` — and both map to Tool. `Decks::ShowView::TRAINER_SUBTYPE_LABELS` did **not**
+already do this, which the design assumed and the review measured: it knew `"Pokémon Tool"` alone,
+so all 76 tools in the catalogue fell under "Other" on every deck page. Fixed here, in passing,
+along with grouping that section on the label rather than on the raw subtype so a deck holding
+both spellings gets one "Tool" heading instead of two. `Decks::PublicShowView#trainer_section`
+still iterates the raw pairs and is the outstanding half of it.
+
+Tool comes before Stadium above because that is the order `TRAINER_SUBTYPE_LABELS` prints a
+decklist in, and a member reading both pages should not have to re-find the sections.
 
 **Other** is unreachable on today's data (all 4720 cards categorise) and exists anyway, **rendered
 visibly** rather than dropped. A new Trainer subtype must surface as a labelled bucket, not vanish
@@ -154,7 +190,12 @@ Grouping by fingerprint means Hoothoot is three rows. Sorted by inclusion, they 
 report therefore groups rows by card **name**, orders the groups by the share of lists playing
 *any* version of that name, and renders one sub-row per printing when a group holds more than one.
 The name-level share is a distinct count of lists, not the sum of the per-printing shares — a list
-may play two versions.
+may play two versions. It is computed as the **union of the group's own entries' list sets**, so
+the number above a set of sub-rows is a fact about those sub-rows by construction; looked up in a
+second index keyed on a name the query chose, the two halves could disagree, and an unfingerprinted
+card showed a group at 0 % above its own 100 % sub-row. Printings inside a group are ordered by
+`set_number.to_i` before `.to_s`: the column is a String holding a number most of the time and
+`"SV107"` the rest, and a lexical sort puts "114" above "77".
 
 ## The performance panel
 
@@ -194,12 +235,28 @@ and not a per-row count. A flat-cost test holds that down.
 `ArchetypePolicy#index?`/`#show?` answer `user.present?`. `after_action :verify_authorized` on
 every action, and `authorize` in each.
 
-**Opening the pages to visitors later is three edits**, and the controller carries a comment
-saying so: move the resource out of the `authenticate :user` block; `include PubliclyReachable` and
-`publicly_reachable :index, :show`; flip the policy to `true`. A fourth step belongs to that day
-and not to this one — a per-IP `rate_limit … unless: -> { user_signed_in? }` sized like
-`tournaments#index`'s 60/min. It is not added now: no anonymous request can reach the route, and a
-limiter that no test can exercise is a limiter nobody knows works.
+**Opening the pages to visitors later is seven edits, not three**, and the controller carries the
+full list. Three make the route reachable and are each covered by a test that goes red without
+them: move the resource out of the `authenticate :user` block; `include PubliclyReachable` and
+`publicly_reachable :index, :show`; flip the policy to `true`. **Four more decide what a visitor
+then sees, and no test would report any of them missing** — the confidentiality review found them
+by applying the first three for real:
+
+- a per-IP `rate_limit … unless: -> { user_signed_in? }` sized like `tournaments#index`'s 60/min,
+  not added now because no anonymous request can reach the route and a limiter no test can
+  exercise is a limiter nobody knows works;
+- `nav_link "Archetypes"` in `Ui::PublicNavbar`, without which a visitor on either page lights
+  **zero** navbar entries — `NavbarActiveSectionTest` names no visitor archetype page, so the hole
+  falls outside every assertion it makes;
+- dropping `Search::Global#archetype_scope`'s `Archetype.none` branch, whose trap runs the other
+  way: its test keeps *passing* while defending a rule that has become false, so it has to be
+  inverted in the same commit rather than merely watched;
+- the two archetype links a public page withholds today — `Tournaments::Standings::Row`'s
+  `if @viewer.present?` guard and `Decks::PublicBadges`, which passes no `href:` at all.
+
+Plus the bookkeeping nothing else will remind anybody of: the two archetype rows in
+`public_access_test.rb` move from `owner_only_gets` to `public_gets`, and three tests asserting
+today's refusal turn round with them.
 
 `/archetypes/:id` keys on the id, not a slug: archetype names contain `/`
 (`Froslass / Munkidori`), and unlike a deck there is nothing here to keep from being enumerated.
@@ -221,8 +278,11 @@ limiter that no test can exercise is a limiter nobody knows works.
 
 ## Performance
 
-One grouped query for the report, one for the pool options, one for the performance panel, one for
-the index counts — all flat in the size of the collection. Measured: 93 lists → 2675 rows → 23 ms.
+Each service is a handful of grouped or aggregate queries — never one per list, per card or per
+event — and the count does not move with the size of the sample: four, four, four and one, as the
+table below measures. (It is not *one* query per service, which an earlier draft of this section
+claimed two paragraphs above its own contradicting table.) Measured: 93 lists → 2675 rows →
+**23 ms**.
 
 **No caching in v1**, and the threshold was set before the measurement rather than after it: the
 honest version-key for a cache entry is a `MAX(updated_at)` over the archetype's standings, which
@@ -236,11 +296,14 @@ one transaction:
 | service | queries | time |
 |---|---|---|
 | `MetagameScope` | 4 | 15.6 ms |
-| `CardStats` | 3 | 137.3 ms |
+| `CardStats` | 3 → **4** | 137.3 ms |
 | `Performance` | 4 | 6.1 ms |
 | `IndexCounts` | 1 | 2.0 ms |
 
-≈161 ms for twelve queries, and the query count does not move with the sample. Under the
+≈161 ms, and the query count does not move with the sample. `CardStats` gained a fourth query
+after this measurement, when `lists_count` stopped being derived from the rows it had already
+fetched — one `COUNT(DISTINCT deck_id)` over one archetype's standings, served by
+`index_tournament_standings_on_archetype_id` — so the total is thirteen. Under the
 threshold, so no cache — and the next person to wonder has the number rather than the argument.
 `CardStats` is 85 % of it and is where a cache would go if the collection grows past roughly twice
 this size.
@@ -252,12 +315,16 @@ standings to `tournaments(:one)` or a third tournament would move the counts tha
 sheet's pagination tests and the tournament catalogue's tests assert on. The metagame sample is
 built per test, the way `catalog_event` and `grow_collection` already are.
 
-Coverage: controller tests (content, filter, frame, pager, `?page[]=1`, `?page=99`, flat cost),
-`ArchetypePolicy` including the `nil` user, lines in `public_access_test.rb` and
-`navbar_active_section_test.rb`, unit tests per service — including the two cases the production
-data proved matter (a name split across fingerprints must stay split; two printings of one
-fingerprint in one list must be summed, not counted twice) and the two it proved are silent (an
-uncategorised card must surface, a small sample must be labelled) — and a system test on both
+Coverage: controller tests (content, filter, frame, pager, `?page[]=1`, `?page=99`, and a
+flat-cost test on **each** page — `#index` at three queries whatever it lists, `#show` at sixteen
+whatever the sample, with an event, a field list and a card of its own per row so the per-request
+query cache cannot serve two rows one statement and hide an N+1), `ArchetypePolicy` including the
+`nil` user, lines in `public_access_test.rb` and `navbar_active_section_test.rb`, unit tests per
+service — including the cases the production data proved matter (a name split across fingerprints
+must stay split; two printings of one fingerprint in one list must be summed, not counted twice)
+and the ones it proved are silent (an uncategorised card must surface, a small sample must be
+labelled, two cards with no fingerprint must not merge into their sum, and the four services'
+"N lists" must be one number on a sample built to split them) — and a system test on both
 viewports: navbar → index → filter → archetype → switch pool.
 
 Every test that locks a mechanism is verified by sabotage: break the mechanism, watch the test go

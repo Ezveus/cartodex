@@ -12,8 +12,13 @@ module Archetypes
       @archetype = archetype
     end
 
+    # The guard asks about what would actually be drawn, not about what the archetype has.
+    # `primary_card` is a required belongs_to, so `member_cards` is never empty and the old
+    # `member_cards.empty? && lineage_parts.empty?` was a condition nothing could satisfy — while
+    # the two things inside the wrapper each return early on their own, so an archetype with no
+    # art and no lineage still got an empty <div> carrying the block's 1.5rem margin.
     def view_template
-      return if member_cards.empty? && lineage_parts.empty?
+      return if illustrated_cards.empty? && lineage_parts.empty?
 
       div(class: "archetype-identity") do
         art
@@ -27,12 +32,15 @@ module Archetypes
       @member_cards ||= [ @archetype.primary_card, @archetype.secondary_card ].compact
     end
 
+    def illustrated_cards
+      @illustrated_cards ||= member_cards.select { |card| card.image_url.present? }
+    end
+
     def art
-      illustrated = member_cards.select { |card| card.image_url.present? }
-      return if illustrated.empty?
+      return if illustrated_cards.empty?
 
       div(class: "archetype-art") do
-        illustrated.each do |card|
+        illustrated_cards.each do |card|
           link_to card_path(card), class: "archetype-art-item" do
             image_tag image_card_path(card), alt: card.name, loading: "lazy", class: "archetype-art-image"
             span(class: "archetype-art-label") { card.printing_label }

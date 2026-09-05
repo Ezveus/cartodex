@@ -3183,9 +3183,21 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 }
 
 /* — The archetype metagame page —
-   Single-class specificity throughout, like every layer above it, and nothing here is scoped to a
-   parent: the page has no rule to *beat*, it only adds the two shapes the design system did not
-   already hold — a proportion bar, and a card row that carries sub-rows.
+   Nothing here beats anything. This block adds the two shapes the design system did not already
+   hold — a proportion bar, and a card row that carries sub-rows — and every one of its selectors
+   matches markup only this page emits, so it never meets a rule from the layers above.
+
+   A handful of them are two-part (.archetype-printing-row .archetype-card-name,
+   .archetypes-search .form-input) or reach an element (.archetype-category-header h3,
+   .archetype-breakdown h3, .archetype-method > summary, .archetype-method p). That is descent
+   into this page's own markup, not weight bought to outrank an earlier layer: each is scoped to
+   a container this block itself defines, and the .form-input one is the single case that touches
+   a shared class at all — it declares max-width, which .form-input itself never sets, on a field
+   inside .archetypes-search and nowhere else. It is character for character the shape
+   .tournaments-search .form-input already has, which is the listing this page was built from.
+
+   The rule these layers exist to enforce is that no override here may depend on sitting later in
+   the file, since the next appended layer would silently undo it; none of these is an override.
 
    Deliberately absent: any energy-type colour. The one thing on this page that is typed is the
    archetype badge in the header, and Ui::ArchetypeBadge already colours itself from

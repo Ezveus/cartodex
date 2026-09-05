@@ -79,7 +79,7 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
 
     result = Archetypes::MetagameScope.call(archetype: archetype)
 
-    assert_equal 3, result.standings_count
+    assert_equal 3, result.standings.count
     assert_equal 2, result.lists_count
     assert_equal ([ bare ] + listed).map(&:id).sort, result.standings.pluck(:id).sort
     assert_equal listed.map(&:id).sort, result.listed_standings.pluck(:id).sort
@@ -111,7 +111,7 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
 
     result = Archetypes::MetagameScope.call(archetype: archetype)
 
-    assert_equal 1, result.standings_count
+    assert_equal 1, result.standings.count
     assert_predicate result, :no_lists?
     refute_predicate result, :small_sample?
   end
@@ -123,9 +123,76 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     result = Archetypes::MetagameScope.call(archetype: archetype)
 
     assert_equal [ Archetypes::MetagameScope::ALL ], result.options.map(&:value)
+    # unpooled? on its own is true here and must not carry selectable? with it: there is exactly
+    # one option, so the control the flag would render is a <select> of one.
+    assert_predicate result, :unpooled?
     refute_predicate result, :selectable?
     assert_nil result.pool
     assert_predicate result, :all_formats?
+  end
+
+  # Two options, one sample. "TEF-PBL — 4 lists" and "All formats — 4 lists" are two labels for
+  # the same four lists, and switching between them changes nothing on the page below. Measured
+  # on the production data, most archetypes carrying any standing at all are in this shape.
+  test "selectable? is false when every standing sits in the one pool" do
+    archetype = archetype_of_its_own
+    event = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    4.times { record(event, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal [ standard_pools(:twm_por).id.to_s, Archetypes::MetagameScope::ALL ],
+      result.options.map(&:value)
+    assert_equal [ 4, 4 ], result.options.map(&:lists_count)
+    refute_predicate result, :unpooled?
+    refute_predicate result, :selectable?
+  end
+
+  # The same two options, and now they name two different samples: the GLC list is counted under
+  # "All formats" and under no pool option, so the choice is real even though there is one pool.
+  test "selectable? is true when a pool and an event outside Standard both hold lists" do
+    archetype = archetype_of_its_own
+    pooled = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    record(pooled, archetype, deck: field_list)
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal [ standard_pools(:twm_por).id.to_s, Archetypes::MetagameScope::ALL ],
+      result.options.map(&:value)
+    assert_equal [ 1, 2 ], result.options.map(&:lists_count)
+    assert_predicate result, :unpooled?
+    assert_predicate result, :selectable?
+  end
+
+  # The notice under the selector promises that a fuller sample is one click away. That promise is
+  # false on the sample that is already the largest, which is where the default lands whenever the
+  # newest pool is also the best-populated one.
+  test "fuller_sample_available? is false on the largest sample and true below it" do
+    archetype = archetype_of_its_own
+    old_event = standard_event(pool: standard_pools(:twm_asc), date: Date.new(2025, 6, 1))
+    3.times { record(old_event, archetype, deck: field_list) }
+    new_event = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    record(new_event, archetype, deck: field_list)
+
+    default = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal 1, default.lists_count
+    assert_predicate default, :fuller_sample_available?
+
+    blended = Archetypes::MetagameScope.call(archetype: archetype,
+                                             pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_equal 4, blended.lists_count
+    refute_predicate blended, :fuller_sample_available?
+
+    # Not merely "ALL is the largest option": the 3-list pool is fuller than the 1-list default
+    # too, and is the one a reader would actually click.
+    fuller = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: standard_pools(:twm_asc).id.to_s)
+
+    assert_equal 3, fuller.lists_count
+    assert_predicate fuller, :fuller_sample_available?
   end
 
   # A non-Standard event carries no pool by design, so it can only ever be counted under
@@ -151,7 +218,7 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
 
     assert_equal [ Archetypes::MetagameScope::ALL ], result.options.map(&:value)
     assert_equal "All formats — 0 lists", result.options.sole.label
-    assert_equal [ 0, 0 ], [ result.lists_count, result.standings_count ]
+    assert_equal [ 0, 0 ], [ result.lists_count, result.standings.count ]
     assert_predicate result, :no_lists?
   end
 

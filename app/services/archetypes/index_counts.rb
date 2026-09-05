@@ -29,7 +29,10 @@ module Archetypes
           Arel.sql("tournament_standings.archetype_id"),
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(DISTINCT tournament_standings.tournament_id)"),
-          Arel.sql("COUNT(tournament_standings.deck_id)"),
+          # DISTINCT because two standings may point at one deck (the deck_id index is not
+          # unique), and this column has to agree with the "N lists" the archetype's own page
+          # prints for the same archetype.
+          Arel.sql("COUNT(DISTINCT tournament_standings.deck_id)"),
           Arel.sql("MAX(tournaments.date)")
         )
         .to_h do |archetype_id, standings, events, lists, last_on|

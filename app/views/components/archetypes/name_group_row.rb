@@ -12,8 +12,9 @@ module Archetypes
   # Copies live on the printing, never on the name, for the same reason: two versions of one name
   # in one list are two rows of copies, and a "1-4" spanning them would describe no list.
   class NameGroupRow < ApplicationComponent
-    def initialize(group:)
+    def initialize(group:, single_list: false)
       @group = group
+      @single_list = single_list
     end
 
     def view_template
@@ -40,7 +41,15 @@ module Archetypes
     # list at a settled count and still be a choice — which printing — so the flag would claim
     # something the data does not say.
     def fixed_group?
-      !@group.split? && @group.entries.first.fixed?
+      !@group.split? && fixed?(@group.entries.first)
+    end
+
+    # `Entry#fixed?` is `core && single_quantity?`, and `core` is `inclusion_count == lists_count`
+    # — so at one list every entry is fixed by construction and the flag reports the sample size
+    # rather than the archetype. Archetypes::CardReport says that once, in words, and the rows say
+    # nothing.
+    def fixed?(entry)
+      !@single_list && entry.fixed?
     end
 
     def fixed_flag
@@ -60,7 +69,7 @@ module Archetypes
           li(class: "archetype-printing-row") do
             div(class: "archetype-card-name") do
               plain entry.card.printing_label
-              fixed_flag if entry.fixed?
+              fixed_flag if fixed?(entry)
             end
             share(entry.inclusion_pct, entry.inclusion_count)
             div(class: "archetype-card-copies") { copies_text(entry) }

@@ -988,6 +988,49 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-actions-dropdown", count: 0
   end
 
+  # `cards.subtype` is a free scraped string and Cards::Fetcher writes whatever follows
+  # "Trainer - ": every tool in the catalogue carries "Tool", while
+  # Decks::ShowView::TRAINER_SUBTYPE_LABELS only knew "Pokémon Tool" — so all 76 of them fell
+  # through to the "Other" heading. No fixture card carried a trainer subtype at all, which is
+  # why this rendering had never been asserted on.
+  test "a deck's trainers are filed under their own subtype headings, both spellings of Tool included" do
+    [ "Supporter", "Item", "Tool", "Pokémon Tool", "Stadium" ].each_with_index do |subtype, index|
+      card = Card.create!(name: "Trainer #{index}", card_type: "Trainer", subtype: subtype,
+                          set_name: "TST", set_number: "#{index + 1}", rarity: "Common")
+      @deck.deck_cards.create!(card: card, quantity: 1)
+    end
+
+    get deck_path(@deck)
+    assert_response :success
+
+    headings = css_select(".deck-subsection h3").map { |node| node.text.split(" (").first }
+    assert_equal [ "Supporter", "Item", "Tool", "Stadium" ], headings,
+      "trainers must be filed in the decklist's own order, with the two Tool spellings collapsed"
+    # The two spellings share one heading rather than producing two identically titled sections.
+    assert_equal "Tool (2 — 2 unique)", css_select(".deck-subsection h3")[2].text
+  end
+
+  # Decks::PublicShowView is a separate file, not a flag, so it has to be fixed and asserted on
+  # separately — it groups the same cards through the same table and had the same two bugs.
+  test "a public deck's trainers are filed the same way, without a duplicate Tool heading" do
+    stranger = users(:two)
+    @deck.update!(shared: true)
+
+    [ "Supporter", "Tool", "Pokémon Tool" ].each_with_index do |subtype, index|
+      card = Card.create!(name: "Public trainer #{index}", card_type: "Trainer", subtype: subtype,
+                          set_name: "PUB", set_number: "#{index + 1}", rarity: "Common")
+      @deck.deck_cards.create!(card: card, quantity: 1)
+    end
+
+    sign_in stranger
+    get deck_path(@deck)
+    assert_response :success
+
+    headings = css_select(".deck-subsection h3").map { |node| node.text.split(" (").first }
+    assert_equal [ "Supporter", "Tool" ], headings,
+      "the public view must collapse the two Tool spellings into one heading, and file neither under Other"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

@@ -24,15 +24,35 @@ module Archetypes
 
     Result = Struct.new(
       :archetype, :standings, :listed_standings, :pool, :options,
-      :lists_count, :standings_count,
+      :lists_count, :unpooled,
       keyword_init: true
     ) do
+      # Whether any standing sits on an event with no Standard pool — a GLC or Expanded one. Those
+      # are the lists the "All formats" option holds and no pool option can.
+      def unpooled? = unpooled
       def all_formats? = pool.nil?
       def small_sample? = lists_count.positive? && lists_count < SMALL_SAMPLE
       def no_lists? = lists_count.zero?
-      # One option means the archetype has at most one pool and there is nothing to choose
-      # between; the view drops the control rather than rendering a select of one.
-      def selectable? = options.size > 1
+
+      # Whether there is a genuine choice, which is not the same as having more than one option:
+      # an archetype with standings in exactly one pool and nowhere else gets a select of
+      # "TEF-PBL — 1 list" and "All formats — 1 list", two labels for one sample. Measured on the
+      # production data, that is not a corner case — most archetypes with any standings at all are
+      # in it. One pool *plus* an event outside Standard is the opposite shape: two labels naming
+      # two genuinely different samples.
+      #
+      # `unpooled?` cannot answer on its own, which is why it is conjoined rather than or'd in: an
+      # archetype whose every standing sits outside Standard is unpooled and has "All formats" as
+      # its *only* option, however many events that spans. Promising a choice there renders a
+      # <select> of one, which is the thing Archetypes::SampleSelector drops the control to avoid.
+      def selectable?
+        pool_options = options.count { |option| option.value != ALL }
+        pool_options > 1 || (pool_options == 1 && unpooled?)
+      end
+
+      # Whether switching could actually show more, which is what the notice under the selector
+      # promises. False when the current sample is already the largest.
+      def fuller_sample_available? = options.any? { |option| option.lists_count > lists_count }
     end
 
     # `pool_param` is whatever arrived in the query string: a pool id, ALL, nil, or junk —
@@ -45,7 +65,6 @@ module Archetypes
 
     def call
       pool = selected_pool
-      bucket = totals_for(pool)
 
       Result.new(
         archetype: @archetype,
@@ -53,8 +72,8 @@ module Archetypes
         listed_standings: standings_scope(pool).where.not(deck_id: nil),
         pool: pool,
         options: options,
-        lists_count: bucket.lists,
-        standings_count: bucket.standings
+        lists_count: totals_for(pool).lists,
+        unpooled: buckets.any? { |bucket| bucket.pool_id.nil? }
       )
     end
 

@@ -162,6 +162,33 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", text: /Standings Marker/
   end
 
+  # The page the spec costs out at greatest length, and the one the index's own flat-cost test
+  # says nothing about. Four services run here — the sample selector's grouped query, the card report's
+  # two, the performance panel's four — and every one of them is a grouped or aggregate query
+  # whose cost must not move with the sample.
+  #
+  # Every row gets an event, a field list and a card of its own on purpose: rows sharing an
+  # association issue identical SQL, which the per-request query cache serves and count_queries
+  # does not count — which is exactly what would hide an N+1. The pool is shared, deliberately:
+  # it is what keeps the default sample growing with the rows instead of moving to a new pool
+  # holding one list. Measured at 16 queries, unchanged from 3 lists to 10.
+  test "show issues a constant number of queries regardless of how many lists" do
+    archetype = quiet_archetype(200, name: "Reported Archetype")
+    3.times { |i| listed_standing_for(archetype, i) }
+
+    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+
+    small = count_queries { get archetype_path(archetype) }
+
+    (3..9).each { |i| listed_standing_for(archetype, i) }
+
+    large = count_queries { get archetype_path(archetype) }
+
+    assert_response :success
+    assert_select ".archetype-card-row", minimum: 1
+    assert_equal small, large, "query count grew with the sample: #{small} -> #{large}"
+  end
+
   test "show 404s on an unknown archetype" do
     get archetype_path(id: 999_999)
 
@@ -228,6 +255,33 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
   def catalogued_archetype(index)
     record_standing_for(quiet_archetype(index), index)
+  end
+
+  # One standing of one archetype, with a card, an event and a field list of its own — distinct
+  # associations per row, so no two rows issue identical SQL that the per-request query cache
+  # would serve and count_queries would not see. Unlike record_standing_for it takes an existing
+  # archetype: the report is one archetype's, and every row has to land in it.
+  #
+  # The pool is the shared fixture on purpose. A pool per row would make each event its own
+  # sample, and MetagameScope's default — the most recent pool — would then always hold exactly
+  # one list however many rows exist, which is a flat cost proving nothing.
+  def listed_standing_for(archetype, index)
+    card = Card.create!(
+      name: "Report Pokémon #{index}", set_name: "RP#{index}", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    tournament = Tournament.create!(
+      name: "Report Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "league_cup",
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    field_list = Deck.create!(
+      name: "Report Field List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
+    )
+    field_list.deck_cards.create!(card: card, quantity: 2)
+    tournament.standings.create!(
+      player_name: "Report Player #{index}", division: "masters", placement: index + 1,
+      archetype: archetype, deck: field_list, created_by: @user
+    )
   end
 
   # Enough archetypes to push the catalog onto a second page, without any of them carrying a

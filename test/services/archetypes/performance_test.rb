@@ -88,6 +88,27 @@ class Archetypes::PerformanceTest < ActiveSupport::TestCase
     ], result.by_tier
   end
 
+  # `by_placement` has no band for "unknown", so its column sums to less than standings_count
+  # whenever a row was recorded without a placement — and on a page whose whole point is that no
+  # number quietly implies another, that gap has to be a number of its own rather than a
+  # subtraction the reader is left to make.
+  test "unplaced_count names the standings by_placement cannot show" do
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, placement: 1)
+    record(event, archetype, placement: 4)
+    2.times { record(event, archetype) }
+
+    result = performance_for(archetype)
+
+    assert_equal 4, result.standings_count
+    assert_equal 2, result.placed_count
+    assert_equal 2, result.unplaced_count
+    assert_equal [ [ "1st", 1 ], [ "2-4", 1 ] ], result.by_placement
+    assert_equal 2, result.by_placement.sum { |_band, count| count },
+      "the bands must account for the placed standings and for no others"
+  end
+
   test "best_placement is nil when no standing carries one" do
     archetype = archetype_of_its_own
     event = standard_event
@@ -126,8 +147,11 @@ class Archetypes::PerformanceTest < ActiveSupport::TestCase
     result = performance_for(archetype_of_its_own)
 
     refute_predicate result, :any?
-    assert_equal [ 0, 0, 0, 0 ],
-      [ result.standings_count, result.events_count, result.lists_count, result.unlisted_count ]
+    # placed_count included: `pick` answers nil for every column on an empty relation, so each of
+    # these is a `to_i` away from being nil on a page that prints it.
+    assert_equal [ 0, 0, 0, 0, 0, 0 ],
+      [ result.standings_count, result.events_count, result.lists_count, result.unlisted_count,
+        result.placed_count, result.unplaced_count ]
     assert_nil result.best_placement
     assert_nil result.first_date
     assert_nil result.last_date

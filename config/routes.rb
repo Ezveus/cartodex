@@ -112,9 +112,9 @@ Rails.application.routes.draw do
     end
     resources :tournament_profiles, except: [ :show ]
 
-    # Member-only for now. Opening these two pages to visitors is three edits, listed above
-    # ArchetypesController: move this resource out of the `authenticate :user` block, include
-    # PubliclyReachable there, and flip ArchetypePolicy to answer true.
+    # Member-only for now. Moving this resource out of the `authenticate :user` block is the first
+    # of the edits that open the two pages to visitors; the rest — and the four nothing would ask
+    # for, which no test would go red over — are listed above ArchetypesController.
     resources :archetypes, only: [ :index, :show ]
 
     # Admin

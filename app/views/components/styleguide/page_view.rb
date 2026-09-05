@@ -357,24 +357,23 @@ module Styleguide
       end
     end
 
-    # Le rapport de cartes d'un archétype, rendu depuis les vrais composants et les vraies
-    # Structs du service — pas de markup recopié : la barre de proportion et la ligne à
-    # sous-lignes sont les deux seules formes que cette page ajoute au système, et une copie
-    # figée ici mentirait dès la première retouche.
+    # An archetype's card report, rendered from the real components and the service's real Structs
+    # — no copied markup: the proportion bar and the row-with-sub-rows are the only two shapes
+    # this page adds to the system, and a frozen copy here would start lying at the first edit.
     #
-    # Les deux lignes montrées sont les deux cas qui comptent. La première est « figée » : jouée
-    # par toutes les listes, toujours au même nombre. La seconde est un nom éclaté sur trois
-    # impressions — les chiffres sont ceux mesurés en production sur Hoothoot — et ses parts
-    # totalisent 111,9 %, ce que la note sous les sous-lignes dit explicitement : ce n'est pas
-    # une décomposition du total.
+    # The two rows shown are the two cases that matter. The first is "fixed": played by every
+    # list, always in the same number. The second is a name split across three printings — the
+    # figures are the ones measured in production on Hoothoot — whose shares total 111.9%, which
+    # is exactly what the note under the sub-rows says out loud: they are not a decomposition of
+    # the total.
     def metagame_section
       sg_section("Composants", "Rapport de cartes d'un archétype",
               "Chaque ligne dit à quelle fréquence une carte est jouée et en combien " \
               "d'exemplaires. Les pourcentages portent sur l'échantillon choisi au-dessus — " \
               "jamais sur le champ d'un tournoi, que la base ne voit pas.") do
         div(class: "sg-stack") do
-          # Inerte comme les panneaux de réglages plus bas : le formulaire est un vrai GET vers
-          # /archetypes/6, et changer l'échantillon depuis le styleguide quitterait la page.
+          # Inert like the settings panels further down: the form is a real GET to /archetypes/6,
+          # and changing the sample from the styleguide would navigate away from it.
           settings_panel { render Archetypes::SampleSelector.new(scope: sg_metagame_scope) }
           ul(class: "archetype-card-list") do
             render Archetypes::NameGroupRow.new(group: sg_fixed_group)
@@ -384,13 +383,19 @@ module Styleguide
       end
     end
 
-    # Un échantillon volontairement minuscule : c'est la vue par défaut d'un archétype
-    # fraîchement importé, et donc l'état où l'encart d'avertissement doit être visible.
+    # A deliberately tiny sample: this is the default view of a freshly imported archetype, and so
+    # the state in which the warning notice has to be visible.
+    #
+    # The Struct is built by keyword and carries exactly the members it has — `standings_count` is
+    # gone, `unpooled` is new — because a stand-in that drifts from the Struct does not render a
+    # stale styleguide, it raises and takes the whole /styleguide page with it. `unpooled: true`
+    # is what makes the pool note render, and the note is one of the three things this panel is
+    # here to show.
     def sg_metagame_scope
       Archetypes::MetagameScope::Result.new(
         archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
         standings: nil, listed_standings: nil,
-        pool: StandardPool.new(id: 9), lists_count: 3, standings_count: 3,
+        pool: StandardPool.new(id: 9), lists_count: 3, unpooled: true,
         options: [
           Archetypes::MetagameScope::Option.new(value: "9", label: "TEF-PBL — 3 lists", lists_count: 3),
           Archetypes::MetagameScope::Option.new(value: "8", label: "TEF-CRI — 22 lists", lists_count: 22),

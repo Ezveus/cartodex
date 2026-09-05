@@ -370,13 +370,20 @@ production data exactly **1 of 94** standings carries a W-L-T, the one somebody 
 is **no ACE SPEC category and no functional one** (Gust, Switch, Recovery): every ACE SPEC carries
 `rarity` `"Ultra"` and so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on
 **0 of 4720** cards, and what a card *does* is not scraped at all. The categories are exactly what
-`card_type` plus the scraped `subtype` know — Pokémon, Supporter, Item, Stadium, Tool, Special
+`card_type` plus the scraped `subtype` know — Pokémon, Supporter, Item, **Tool, Stadium**, Special
 Energy, Basic Energy — plus an **`other` bucket that is rendered, not dropped**: it is unreachable
 on today's catalogue and exists so a Trainer subtype the scraper learns tomorrow surfaces as a
-labelled bucket instead of vanishing from a report that still sums to a plausible-looking 60.
-Both spellings of the tool bucket are mapped (`Cards::Fetcher#parse_subtype` can emit
-`"Pokémon Tool"`; all 76 tools in the catalogue carry `"Tool"`), the same pair
-`Decks::ShowView::TRAINER_SUBTYPE_LABELS` already carries.
+labelled bucket instead of vanishing from a report that still sums to a plausible-looking 60. Tool
+before Stadium, because that is the order `Decks::ShowView::TRAINER_SUBTYPE_LABELS` prints a
+decklist in and a member reading both pages should not have to re-find the sections. Both
+spellings of the tool bucket are mapped (`Cards::Fetcher#parse_subtype` can emit `"Pokémon Tool"`;
+all 76 tools in the catalogue carry `"Tool"`) — a pair `TRAINER_SUBTYPE_LABELS` did **not** carry
+until this feature. It knew `"Pokémon Tool"` alone, so all 76 of them fell under "Other" on every
+deck page; the fix (both keys, and grouping on the label rather than on the raw subtype so one
+deck holding both spellings gets one section instead of two identically titled ones) is a
+pre-existing bug closed in passing here. `Decks::PublicShowView#trainer_section` still iterates
+the raw pairs and would print two "Tool" headings for such a deck — the visitor's half of the same
+fix, outstanding.
 
 **Scoping by Standard pool is not a refinement, it is the difference between a true report and a
 false one**, and the first real import already proved it: the 93 recorded lists of
@@ -392,17 +399,48 @@ this deck play?" with 2025 data under a heading that never says so. A sample und
 Non-Standard events carry no pool and therefore appear only under "All formats", which the page
 says rather than leaving to be discovered.
 
+**A selector of one option is not a choice — and neither is one offering two labels for one
+sample.** `MetagameScope::Result#selectable?` is what drops the control entirely
+(`Archetypes::SampleSelector` renders no form when it is false), and it is deliberately **not**
+`options.size > 1`: an archetype with standings in exactly one pool and nowhere else gets
+"TEF-PBL — 4 lists" beside "All formats — 4 lists", two labels for the same four lists, and on the
+production data that is the common shape rather than a corner case. It is
+`pool_options > 1 || (pool_options == 1 && unpooled?)` — one pool *plus* a GLC or Expanded event
+is a genuine choice, while an archetype whose every standing sits outside Standard has
+"All formats" as its **only** option however many events that spans, so `unpooled?` cannot answer
+on its own without rendering a `<select>` of one. `fuller_sample_available?` is the other half of
+the same honesty: the notice under the selector promises a fuller sample one click away, and that
+promise is false on the sample that is already the largest. `Result` carries no `standings_count`:
+it had one, nothing but the styleguide's stub ever read it, and the rule is the one
+`DeckPolicy::Scope` was removed under — the relation is there for a caller who wants the number.
+
 **The report is keyed on `cards.fingerprint`, and one measurement shows both halves of why.**
 Across those 93 lists there are **81 distinct card ids, 72 fingerprints and 70 names**: 81→72 is
 the key folding nine reprints into the card they are, and 72→70 is the key *refusing* to fold —
 **Hoothoot** is three genuinely different cards there (TEF 126 at 70 HP, PRE 77 at 80 HP, SCR 114
 at 70 HP with other attacks) that a player picks between, and keying on the name would have read
 "Hoothoot 100 %, 1-2 copies" and hidden the choice, the same conflation `Decks::ArchetypeDetector`
-was moved off names to avoid. That grouping scatters those three rows in a table sorted by
+was moved off names to avoid. The key in the SQL is not the bare column but
+`CardStats::GROUPING_KEY`, `COALESCE(cards.fingerprint, 'card:' || cards.id)`, and the difference
+is not cosmetic: SQL gathers **every** NULL into one group, so `GROUP BY cards.fingerprint` folds
+two unfingerprinted cards in one list into a single row whose copies are their sum and whose name
+is whichever `MIN()` picked — a Supporter reported at 6 copies, the other card gone from a report
+that still sums to a plausible 60, and nothing raised. `compute_fingerprint` is a `before_save`,
+so only `update_column`, `insert_all` or a fixture can produce such a card; keeping it visible
+under its own id is deliberate, since dropping it is the same silent disappearance in a different
+costume — the state `Decks::ArchetypeDetector` refuses to match on and `Archetypes::FingerprintSync`
+reports rather than writes. That grouping scatters Hoothoot's three rows in a table sorted by
 inclusion, so rows are grouped by **name** inside a category and ordered by the share of lists
 playing *any* version — and that share is a **distinct count of lists, never the sum of the
-printings'**: Hoothoot's three versions total 111.9 % across a name played by 73.1 %, because a
-list may play two of them. The page says so in words; presenting the sub-rows as an additive
+printings'**, computed as the **union of the entries' own list sets** rather than by looking a
+name up in a second index: Hoothoot's three versions total 111.9 % across a name played by
+73.1 %, because a list may play two of them. Taken from the entries the group holds, the number
+above a set of sub-rows is a fact about those sub-rows by construction; keyed on a name the query
+chose and read back by the name of the printing the report chose, the two halves could disagree,
+and an unfingerprinted card showed a group at 0 % sitting above its own 100 % sub-row. The
+printings inside a group are ordered by `set_number.to_i` before `.to_s`, because `set_number` is
+a String holding a number most of the time and `"SV107"` the rest — sorted lexically, "114" comes
+before "77". The page says so in words; presenting the sub-rows as an additive
 decomposition is the one mistake this layout invites. Copies stay on the printing and never on the
 name for the same reason — a "1-4" merged from two versions describes no list — and a split name
 is never marked *fixed*, since which printing is still a choice. Quantities are summed per
@@ -413,9 +451,23 @@ nothing raises. Measured occurrences in production: zero, because Limitless norm
 publishes — the step stays for the hand-typed lists, which are under no such discipline. A mode
 tie is reported as a tie, never resolved in silence.
 
+**One page prints "N lists" four times over, and the four are one number by construction.** The
+sample selector, the card report's denominator, the performance panel and the index row each ask
+a different service, so agreement is a property that has to be built rather than assumed, and two
+things broke it. `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
+"lists holding at least one card" and not "lists" — a field list that resolved no printing gave
+the page two denominators and computed every percentage over the one it did not show; it is now
+`@standings.distinct.count(:deck_id)`, the same question the other three ask. And all four count
+**`COUNT(DISTINCT deck_id)`**, because `index_tournament_standings_on_deck_id` is not unique and
+two standings legitimately point at one deck — two players registering the same 60 cards. A
+single test builds both shapes at once and asserts the four numbers equal.
+
 **The performance panel counts all standings; the card report counts only the listed ones**, which
 is why `MetagameScope` exposes two relations rather than letting one number stand for both — a
-placement is a result whether or not anybody typed the decklist. Its placement bands are fixed
+placement is a result whether or not anybody typed the decklist. `unlisted_count` and
+`unplaced_count` are the two gaps that follow, named on the page rather than left as subtractions:
+`by_placement` has no band for "unknown", so its column sums to `placed_count` and not to
+`standings_count`. Its placement bands are fixed
 (1st, 2-4, 5-8, …) and deliberately **not** `Tournament::TOP_CUT_BANDS`, which maps an *attendance*
 to a cut size for `TournamentEntry#top_cut_size`: telling whether a placement made the cut needs
 the event's field size, and the importer writes none — all three `*_participant_count` columns are
@@ -423,30 +475,49 @@ nil on every imported event. `by_division` walks `TournamentStanding::DIVISIONS`
 `group(:division)` comes back alphabetical (junior, masters, senior) while players read junior,
 senior, masters — the correction the standings sheet had to make in SQL for its page boundaries.
 
-**Member-only, and opening the pages to visitors is three edits** named in a comment above
-`ArchetypesController`: move the resource out of `authenticate :user`, `include PubliclyReachable`
-with `publicly_reachable :index, :show`, and flip `ArchetypePolicy` from `user.present?` to `true`.
-A fourth belongs to that day — a per-IP `rate_limit … unless: -> { user_signed_in? }` sized like
-`tournaments#index`'s 60/min — and is deliberately absent now: no anonymous request can reach the
-route, so nothing could exercise it, and a limiter nobody can exercise is a limiter nobody knows
-works. The same rule shapes the entry points: `Ui::ArchetypeBadge` gained an optional `href:`,
-passed from `Decks::ClassificationBadges` (owner-only) and from `Tournaments::Standings::Row` only
-when its `viewer:` is present, never from `Decks::PublicBadges` — the standings sheet is public,
-and a link to a sign-in wall is worse than no link. `Search::Global`'s fifth group is
-`Archetype.none` for a visitor, exactly as `deck_scope` is, and its option ids are prefixed
-`spotlight-option-archetype-` for the reason `shared_decks` had to be.
+**Member-only, and opening the pages to visitors is seven edits, not three** — the list lives in
+the comment atop `ArchetypesController` and was produced by applying the obvious three and reading
+what broke *and what did not*. Three make the route reachable and are each covered by a test that
+goes red without them: move the resource out of `authenticate :user`, `include PubliclyReachable`
+with `publicly_reachable :index, :show`, flip `ArchetypePolicy` from `user.present?` to `true`.
+**Four more decide what a visitor then sees, and no test would report any of them missing**: the
+per-IP `rate_limit … unless: -> { user_signed_in? }` sized like `tournaments#index`'s 60/min
+(deliberately absent now — no anonymous request can reach the route, so nothing could exercise it,
+and a limiter nobody can exercise is a limiter nobody knows works); `nav_link "Archetypes"` in
+`Ui::PublicNavbar`, without which a visitor on those pages lights **zero** navbar entries, a hole
+`NavbarActiveSectionTest` cannot see because it names no visitor archetype page; dropping
+`Search::Global#archetype_scope`'s `Archetype.none` branch, whose trap is the opposite kind — its
+test keeps *passing* while defending a rule that has become false, so it has to be inverted in the
+same commit; and the two archetype links a public page withholds today, `Tournaments::Standings::Row`'s
+`if @viewer.present?` guard and `Decks::PublicBadges` (which passes no `href:` at all) — the
+standings sheet and a shared deck are both public, and a link to a sign-in wall is worse than no
+link, right up until the wall is gone. `Ui::ArchetypeBadge` gained the optional `href:` that all
+three sites pass or withhold; `Search::Global`'s fifth group prefixes its option ids
+`spotlight-option-archetype-` for the reason `shared_decks` had to. The two archetype rows in
+`public_access_test.rb` move from `owner_only_gets` to `public_gets` that day, and three tests
+asserting today's refusal turn round with them.
 
-**`ArchetypesController#index` orders in SQL over ids alone and loads in a second query.**
-`includes` on a relation carrying `GROUP BY` flips to `eager_load`, which JOINs `cards` and adds
-its columns to a SELECT the GROUP BY does not name; the order is therefore decided by a
-`pluck` and Ruby restores it, the way `DecksController#compare` re-sorts its `where(key: keys)`
-load. `Archetype.search` adds `.distinct`, which SQLite accepts beside that GROUP BY and an
-aggregate `ORDER BY` — worth knowing against #62.
+**`ArchetypesController#index` orders and loads in one relation, `includes` and GROUP BY
+together** — the obvious fear is that `includes` escalates to `eager_load` beside a GROUP BY,
+JOINs `cards` and adds its columns to a SELECT the GROUP BY does not name, and it is wrong:
+`includes` only escalates when something *references* the included table (a `where`/`order` naming
+it, or an explicit `references`), and nothing here does. Measured on both shapes of the relation —
+`Archetype.all`, and `Archetype.search` with its `.distinct` and two extra `left_joins` —
+`eager_loading?` is false, both associations come back preloaded, and the page costs three
+queries. An earlier version plucked the ordered ids and re-loaded them in a second pass to dodge
+an escalation that does not happen, at the price of a query and a Ruby sort; the comment on
+`page_of` is what stops it coming back. `.distinct` beside that GROUP BY and an aggregate
+`ORDER BY` is something SQLite accepts — worth knowing against #62. `#show` costs **16 queries**,
+and a flat-cost test in `ArchetypesControllerTest` holds it there — measured identical at 3 and at
+10 lists in the test, and by hand at 93.
 
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list
 archetype (39 000 `deck_cards` rows): `MetagameScope` 4 queries / 15.6 ms, `CardStats` 3 / 137.3 ms,
-`Performance` 4 / 6.1 ms, `IndexCounts` 1 / 2.0 ms — ≈161 ms for twelve queries, and the count does
-not move with the sample. The honest version key for a cache entry would be a `MAX(updated_at)`
+`Performance` 4 / 6.1 ms, `IndexCounts` 1 / 2.0 ms — ≈161 ms, and the count does
+not move with the sample. `CardStats` is **4** queries since its `lists_count` stopped being
+derived from the rows it had already fetched, so the total is thirteen; the added query is one
+`COUNT(DISTINCT deck_id)` over one archetype's standings, served by
+`index_tournament_standings_on_archetype_id`, and the timings above predate it. The honest version key for a cache entry would be a `MAX(updated_at)`
 over the archetype's standings, the kind of unindexed aggregate `Card.filter_values` had to be
 corrected away from. `CardStats` is 85 % of the cost and is where a cache would go if the
 collection grows past roughly twice that size.

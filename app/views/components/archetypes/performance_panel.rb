@@ -31,15 +31,24 @@ module Archetypes
 
     private
 
+    # Ui::Stat prints the label it is handed and pluralises nothing — it is shared with the deck
+    # and admin pages, where the labels are fixed strings — so the label arrives already agreeing
+    # with its number. A one-standing archetype is the common case here, not a corner one: on the
+    # production data one of the two recorded archetypes has exactly one standing, one event and
+    # one list, and read "1 standings 1 events 1 lists".
     def counters
       div(class: "deck-show-stats") do
-        render Ui::Stat.new(value: @performance.standings_count, label: "standings")
-        render Ui::Stat.new(value: @performance.events_count, label: "events")
-        render Ui::Stat.new(value: @performance.lists_count, label: "lists")
+        counter(@performance.standings_count, "standing")
+        counter(@performance.events_count, "event")
+        counter(@performance.lists_count, "list")
         if @performance.best_placement
           render Ui::Stat.new(value: @performance.best_placement.ordinalize, label: "best placement")
         end
       end
+    end
+
+    def counter(value, noun)
+      render Ui::Stat.new(value: value, label: noun.pluralize(value))
     end
 
     def facts
@@ -77,42 +86,77 @@ module Archetypes
         if @performance.lists_count.zero?
           plain "None of these standings carries a decklist, so there is no card report below."
         else
-          plain "#{@performance.unlisted_count} of these standings carry no decklist, so the card "
+          # "1 of these standings carries", not "carry": the subject is the count, not the
+          # standings it is counting out of.
+          plain "#{@performance.unlisted_count} of these standings "
+          plain "#{@performance.unlisted_count == 1 ? 'carries' : 'carry'} no decklist, so the card "
           plain "report below speaks for the #{@performance.lists_count} "
-          plain "#{'list'.pluralize(@performance.lists_count)} that do."
+          plain "#{'list'.pluralize(@performance.lists_count)} that #{@performance.lists_count == 1 ? 'does' : 'do'}."
         end
       end
     end
 
     def breakdowns
       div(class: "archetype-breakdowns") do
-        breakdown("By placement", "Placement", @performance.by_placement,
-                  "No placement recorded on these standings.")
-        breakdown("By tier", "Tier", @performance.by_tier, "No tier recorded.")
-        breakdown("By division", "Division", @performance.by_division,
-                  "No age division recorded on these standings.")
+        placement_breakdown
+        breakdown("By tier", "Tier", @performance.by_tier)
+        breakdown("By division", "Division", @performance.by_division)
       end
     end
 
-    # Bands and tiers nobody reached are dropped by the service rather than printed as a row of
-    # zeroes, so a breakdown really can come back empty — an event whose sheet records no
-    # placement at all, or standings with no division. Each one therefore carries its own line
-    # instead of collapsing to a heading over nothing.
-    def breakdown(title, column, rows, empty_message)
+    # The one breakdown that can come back empty on well-formed data, and the one whose column
+    # does not sum to the standings count printed above it. `placement` is nullable and there is
+    # no band for "unknown", so the service simply has nowhere to put a standing nobody recorded a
+    # placement for. On a page whose rule is that no number quietly implies another, that gap is
+    # named here the way `unlisted_count` is named above.
+    def placement_breakdown
+      div(class: "archetype-breakdown") do
+        h3 { "By placement" }
+
+        if @performance.by_placement.any?
+          breakdown_table("Placement", @performance.by_placement)
+          unplaced_note
+        else
+          # Reachable, unlike the two below: every standing in scope carries a placement of nil.
+          p(class: "empty-state") { "No placement recorded on these standings." }
+        end
+      end
+    end
+
+    def unplaced_note
+      count = @performance.unplaced_count
+      return unless count.positive?
+
+      p(class: "archetype-fact archetype-fact-muted") do
+        "#{count} of these standings #{count == 1 ? 'carries' : 'carry'} no placement, so " \
+          "#{count == 1 ? 'it is' : 'they are'} not counted in this column."
+      end
+    end
+
+    # No empty message, and no empty branch: `tier` and `division` are both NOT NULL columns
+    # behind validated enums, and the service filter_maps over the enum's own key list
+    # (Tournament.tiers.keys, TournamentStanding::DIVISIONS), so a scope holding any standing at
+    # all yields at least one row here — and `breakdowns` is only called when it does. The two
+    # empty messages that used to sit here ("No tier recorded.", "No age division recorded on
+    # these standings.") were unreachable strings claiming an absence the schema forbids. The one
+    # way past those enums is a write that bypasses validation, and the honest answer to that is a
+    # section that is not drawn rather than a sentence stating something false about the data.
+    def breakdown(title, column, rows)
+      return if rows.empty?
+
       div(class: "archetype-breakdown") do
         h3 { title }
+        breakdown_table(column, rows)
+      end
+    end
 
-        if rows.any?
-          render Ui::DataTable.new(columns: [ column, "Standings" ]) do |table|
-            rows.each do |label, count|
-              table.row do
-                table.cell { label }
-                table.cell { count.to_s }
-              end
-            end
+    def breakdown_table(column, rows)
+      render Ui::DataTable.new(columns: [ column, "Standings" ]) do |table|
+        rows.each do |label, count|
+          table.row do
+            table.cell { label }
+            table.cell { count.to_s }
           end
-        else
-          p(class: "empty-state") { empty_message }
         end
       end
     end
