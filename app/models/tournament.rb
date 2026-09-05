@@ -86,10 +86,16 @@ class Tournament < ApplicationRecord
   # The event's field size per age division. On the event rather than on each standing, because
   # two players in one division at one event are ranked against the same number — unlike
   # TournamentEntry#participant_count, which survives beside these (see the note there).
+  # "open" is not an age division — it is what an online event's standings carry, and its field
+  # size needs a column here for the same reason the other three do: this Hash is what
+  # TournamentStanding#placement_within_division_field reads, and a division absent from it caps
+  # a placement against nothing. The online source is in fact the first to publish an attendance
+  # at all, so this is the first of the four that is ever written.
   DIVISION_COUNT_COLUMNS = {
     "junior" => :junior_participant_count,
     "senior" => :senior_participant_count,
-    "masters" => :masters_participant_count
+    "masters" => :masters_participant_count,
+    "open" => :open_participant_count
   }.freeze
 
   # The catalog prints format_label, which for a Standard event names the pool, and
@@ -98,11 +104,19 @@ class Tournament < ApplicationRecord
   # shared concern: two call sites do not justify one, and a third model would be the moment.
   scope :with_standard_pool, -> { includes(standard_pool: [ :first_card_set, :last_card_set ]) }
 
+  # The public catalog is events members attend. An online event is catalogued because a standing
+  # needs a Tournament, not because anybody went to it, and one archetype's leaderboard is 20 of
+  # them — so every listing surface reads `catalogued`, and only the archetype pages' aggregates
+  # see all of them. Written as a scope rather than repeated as a `where` at each call site
+  # because there are three of them and a fourth is what would silently reintroduce the pile.
+  scope :catalogued, -> { where(online: false) }
+
   validates :name, presence: true
   validates :date, presence: true
   validates :other_format_name, presence: true, if: :other?
   validates :standard_pool, presence: true, if: :standard?
   validates :junior_participant_count, :senior_participant_count, :masters_participant_count,
+    :open_participant_count,
     numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :name_and_date_are_unique
 

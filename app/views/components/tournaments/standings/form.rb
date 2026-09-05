@@ -38,13 +38,18 @@ module Tournaments
 
           render Ui::FormGroup.new do
             f.label :division, class: "form-label"
-            # An explicit selected:. DIVISIONS runs junior-senior-masters, and prefill_attributes
-            # yields no division at all for a member with no TournamentProfile — so the browser
-            # picked the first option and quietly recorded them as a Junior. Masters is the
-            # default because it is the division a standings sheet overwhelmingly records, and a
-            # wrong pre-selection here is a wiki edit away rather than a refusal.
+            # AGE_DIVISIONS, not DIVISIONS: this form is how a member types a paper event's sheet,
+            # and "open" exists only for an imported online event, which has no age divisions to
+            # record. Offering it here would let a hand-typed row claim a division no paper event
+            # has.
+            #
+            # An explicit selected:. AGE_DIVISIONS runs junior-senior-masters, and
+            # prefill_attributes yields no division at all for a member with no TournamentProfile
+            # — so the browser picked the first option and quietly recorded them as a Junior.
+            # Masters is the default because it is the division a standings sheet overwhelmingly
+            # records, and a wrong pre-selection here is a wiki edit away rather than a refusal.
             f.select :division,
-              TournamentStanding::DIVISIONS.map { |d| [ d.capitalize, d ] },
+              TournamentStanding::AGE_DIVISIONS.map { |d| [ d.capitalize, d ] },
               { selected: @standing.division || DEFAULT_DIVISION }, class: "form-input"
           end
 

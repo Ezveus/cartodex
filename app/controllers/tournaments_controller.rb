@@ -37,7 +37,7 @@ class TournamentsController < ApplicationController
     authorize Tournament, :index?
     @query = search_query
 
-    scope = Tournament.order(date: :desc)
+    scope = Tournament.catalogued.order(date: :desc)
     scope = scope.name_matching(@query) if @query.present?
 
     @pages = (scope.count / CATALOG_PER_PAGE.to_f).ceil

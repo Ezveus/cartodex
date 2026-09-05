@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_160000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -302,6 +302,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
     t.integer "masters_participant_count"
     t.string "name", null: false
     t.string "name_normalized", null: false
+    t.boolean "online", default: false, null: false
+    t.integer "open_participant_count"
     t.string "other_format_name"
     t.integer "senior_participant_count"
     t.integer "standard_pool_id"
@@ -310,6 +312,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_140000) do
     t.index ["created_by_id"], name: "index_tournaments_on_created_by_id"
     t.index ["date"], name: "index_tournaments_on_date"
     t.index ["name_normalized", "date"], name: "index_tournaments_on_name_normalized_and_date", unique: true
+    t.index ["online", "date"], name: "index_tournaments_on_online_and_date"
     t.index ["standard_pool_id"], name: "index_tournaments_on_standard_pool_id"
   end
 
