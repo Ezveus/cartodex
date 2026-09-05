@@ -226,7 +226,7 @@ Columns: Archetype (the coloured badge), Cards (both `printing_label`s), Standin
 Last event. Ordered by recorded standings descending, then name — archetypes with none stay listed,
 at the bottom, because they are what members tag their own decks with.
 
-The three counts come from one grouped query (`Archetypes::IndexCounts`), not a `counter_cache`
+The counts come from one grouped query (`Archetypes::IndexCounts`), not a `counter_cache`
 and not a per-row count. A flat-cost test holds that down.
 
 ## Controller, policy, routes

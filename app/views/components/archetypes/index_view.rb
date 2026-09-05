@@ -52,11 +52,22 @@ module Archetypes
 
       table.row do
         table.cell do
-          # The whole cell is the link, so the badge is rendered plain inside it rather than
-          # given an href of its own — a nested <a> is invalid markup and Turbo would have two
-          # targets to choose between.
-          link_to archetype_path(archetype), data: { turbo_frame: "_top" } do
-            render Ui::ArchetypeBadge.new(archetype: archetype)
+          # The link is the badge and nothing else — the note below it is deliberately outside,
+          # since it is not part of what the reader is clicking. The badge is rendered plain
+          # inside the link rather than given an href of its own: a nested <a> is invalid markup
+          # and Turbo would have two targets to choose between.
+          #
+          # The wrapper is load-bearing, not decorative: below 768px .data-table turns each row
+          # into a card and its cells into `display: flex; align-items: center`, so a link and a
+          # note placed directly in the cell become sibling flex items on one line — the note
+          # right-aligned to the card's edge, the badge wrapped to three lines, the row grown from
+          # 29px to 64px. A margin cannot fix that. Only a system test can see it, which is why
+          # archetype_metagame_test.rb now measures the two bounding boxes.
+          div(class: "archetype-row-cell") do
+            link_to archetype_path(archetype), data: { turbo_frame: "_top" } do
+              render Ui::ArchetypeBadge.new(archetype: archetype)
+            end
+            online_note(counts)
           end
         end
         table.cell { member_cards(archetype) }
@@ -65,6 +76,44 @@ module Archetypes
         table.cell { number(counts.lists) }
         table.cell { counts.last_event_on ? localize(counts.last_event_on, format: :long) : DASH }
       end
+    end
+
+    # Outside the row's link and under the badge, because it qualifies the *row* and not any one
+    # of its four figures: an imported online event contributes a standing, a distinct event, a
+    # list and possibly the latest date, so a note beside "Standings" would imply "Events" is
+    # clean — and on the first archetype to carry both, Events is the figure the blend distorts
+    # most (13 of 16). The detail page is where the composition is broken down per sample; this
+    # only has to stop a reader taking the row for a record of real events, and stop the index's
+    # ordering — by standings count — reading as a statement about attendance.
+    #
+    # Silent at zero, unlike the DASH the number columns print: an em dash there says "nothing
+    # recorded", which is information the reader asked for by looking at the column, while a row
+    # with no online results has nothing to qualify and 61 of 62 archetypes are that row.
+    def online_note(counts)
+      return unless counts.online?
+
+      p(class: "archetype-row-note") { online_sentence(counts) }
+    end
+
+    # Names the *events* as well as the results, because one number alone invites the wrong ratio.
+    # Measured on the first archetype to carry both sources: 106 standings of which 13 are online
+    # (12 %) but 16 events of which 13 are (81 %) — a reader given "13" beside a row reading
+    # "Standings 106 · Events 16" maps it onto the larger figure and concludes the blend is
+    # marginal, when the events column is four fifths online and the "Last event" date is an online
+    # weekly.
+    #
+    # The all-online case gets its own sentence rather than an "Includes" that states a mixture
+    # which does not exist — the shape one online import produces for an archetype with no paper
+    # results, and the same branch Performance::Result#all_events_online? draws on the detail page.
+    # "standings" and not "results": it is the word the column header beside it uses and the word
+    # the archetype's own page uses, and three nouns for one thing across one feature is how a
+    # reader stops being sure they are the same thing.
+    def online_sentence(counts)
+      return "Every one of these #{counts.standings} standings comes from online play." if
+        counts.online_standings == counts.standings
+
+      "Includes #{counts.online_standings} #{'standing'.pluralize(counts.online_standings)} " \
+        "from online play, at #{counts.online_events} of these #{counts.events} events."
     end
 
     # Both printings, never the bare names: several cards share a name and an archetype

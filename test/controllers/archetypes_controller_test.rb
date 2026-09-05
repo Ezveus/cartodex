@@ -43,6 +43,77 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The index's four figures all blend paper events with imported online ones — a weekly online
+  # tournament contributes a standing, a distinct event, a list and possibly the "Last event" date
+  # — and the ordering key is the standings count, so the blend also decides which archetype leads
+  # the page. Measured on production when the first online import landed: 106 standings and 16
+  # events for one archetype, of which 13 and 13 came from online play, with nothing on the page
+  # saying so.
+  #
+  # The note qualifies the row rather than any one figure, which is why it is asserted inside the
+  # Archetype cell and not beside a number.
+  test "index says when a row's figures include online play" do
+    archetype = archetypes(:standings_marker)
+    online_event = Tournament.create!(
+      name: "Pumpkaweekly Index", date: Date.new(2026, 4, 18), tier: "other", online: true,
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    online_event.standings.create!(
+      player_name: "JRobrueda", division: "open", placement: 1, archetype: archetype,
+      created_by: @user
+    )
+
+    get archetypes_path
+
+    assert_select ".data-table-row", text: /Standings Marker/ do
+      # Both halves of the ratio. The standings share and the events share diverge sharply —
+      # measured on production, 13 of 106 standings but 13 of 16 events — so a note carrying only
+      # the first invites the reader to map it onto the bigger number and read the blend as
+      # marginal. Here: 1 of 3 standings, but 1 of 2 events.
+      assert_select ".archetype-row-note",
+        text: /Includes 1 standing from online play, at 1 of these 2 events\./
+      # The blend is still counted in, not filtered out — the note names it, it does not hide it.
+      assert_select ".data-table-cell[data-label=Standings]", text: "3"
+      assert_select ".data-table-cell[data-label=Events]", text: "2"
+    end
+  end
+
+  # "Includes" states a mixture, and an archetype whose only record is an online import has none —
+  # the ordinary shape of one online run against an archetype with no paper results. The detail
+  # page draws the same branch (Performance::Result#all_events_online?).
+  test "index says every result is online when none of them is not" do
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+    online_event = Tournament.create!(
+      name: "Weekly Only", date: Date.new(2026, 4, 18), tier: "other", online: true,
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    2.times do |i|
+      online_event.standings.create!(
+        player_name: "Online Player #{i}", division: "open", placement: i + 1,
+        archetype: archetype, created_by: @user
+      )
+    end
+
+    get archetypes_path
+
+    assert_select ".data-table-row", text: /#{archetype.name}/ do
+      assert_select ".archetype-row-note", text: "Every one of these 2 standings comes from online play."
+      assert_select ".archetype-row-note", text: /Includes/, count: 0
+    end
+  end
+
+  # The negative control. 61 of the 62 archetypes in production carry no online result, so a note
+  # that renders unconditionally would be noise on almost every row — and this assertion is what
+  # would catch it.
+  test "index says nothing about online play on a row that has none" do
+    get archetypes_path
+
+    assert_select ".data-table-row", text: /Standings Marker/ do
+      assert_select ".archetype-row-note", count: 0
+    end
+    assert_no_match(/online play/, response.body)
+  end
+
   test "index links each row to the archetype's page and escapes the frame" do
     get archetypes_path
 
@@ -273,16 +344,23 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # One recorded standing, at an event of its own and with a field list of its own: ownerless and
   # shared, which is what an import actually produces (Deck refuses an ownerless deck that is not
   # shared, and refuses a physical one).
+  # Every third row is online, so the flat-cost test above actually walks the `online?` branch the
+  # note hangs off. Without one it never did: `online_note` returned early on all eight rows, and a
+  # per-row query put behind that branch later — the obvious home for a venue split — would have
+  # kept `assert_equal small, large` green while the page N+1'd.
   def record_standing_for(archetype, index)
     tournament = Tournament.create!(
       name: "Quiet Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "league_cup",
-      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user,
+      online: (index % 3).zero?
     )
     field_list = Deck.create!(
       name: "Quiet Field List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
     )
     tournament.standings.create!(
-      player_name: "Quiet Player #{index}", division: "masters", placement: 1,
+      player_name: "Quiet Player #{index}", placement: 1,
+      # What the importer writes for each venue: online play has no age divisions.
+      division: tournament.online? ? "open" : "masters",
       archetype: archetype, deck: field_list, created_by: @user
     )
   end

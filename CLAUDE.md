@@ -508,10 +508,25 @@ tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#t
 `/archetypes/:id` stays at its pinned **16 queries**. The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
 blended population. **Splitting the sample by venue — a second selector beside the pool one — is
-deliberately out**, and is the obvious next issue. So is the *index*: `Archetypes::IndexCounts` is
-untouched, so `/archetypes` still blends the two in its events column, its "last event" date and
-the standings count it orders by. That ordering was already "a statement about who has run an
-import"; it now also depends on which *kind* of import they ran, and nothing on that page says so.
+deliberately out** (#160, where the measurement argues against building it until a second pool
+holds both venues). **The index names it too**: `Archetypes::IndexCounts` carries
+`online_standings` and `online_events` as two CASE terms inside the grouped query it already makes,
+so `/archetypes` stays at its flat 7, and a row whose figures blend prints one muted sentence under
+the badge. It names **both** ratios because they diverge — measured on the first archetype to carry
+both sources, 13 of 106 standings but 13 of 16 events — so a note carrying only the standings share
+invites the reader to map it onto the bigger number and read the blend as marginal, while the
+events column is four fifths online and "Last event" is an online weekly. It is silent at zero
+rather than dashed like the number columns, because an em dash there answers a question the reader
+asked by looking at the column while a row with no online results has nothing to qualify — 61 of
+62 archetypes in production. The all-online case gets its own sentence rather than an "Includes"
+stating a mixture that does not exist, the same branch `Performance::Result#all_events_online?`
+draws on the detail page. **The note lives in a wrapper `div`, and that wrapper is load-bearing**:
+below 768px `.data-table` turns each row into a card whose cells are
+`display: flex; align-items: center`, so a link and a note placed directly in the cell become two
+flex items on one line — measured at 390px, the note took 109px of a 326px cell, right-aligned, and
+grew the row from 29px to 64px. No request test can see that, and no system test visited
+`/archetypes` before this one, which is why the mobile half of the CI sweep saw nothing; the test
+now measures the two bounding boxes.
 
 **Also out:** de-duplication across *leaderboards*. The stored key closes the churn and the split
 run, but it is keyed on the archetype and not on the pool, so one player's unchanged 60 still
@@ -523,7 +538,7 @@ list) and unmeasured either way. Also out: any win rate, and keeping online fiel
 are the aggregation the two sections above deferred, and they add **no column** — everything they
 read already exists. Four services, all two levels deep: `Archetypes::MetagameScope` (which
 standings count), `CardStats` (the deck report), `Performance` (the record), `IndexCounts` (the
-listing's four numbers, in one grouped query). The design record is
+listing's numbers, in one grouped query). The design record is
 `docs/superpowers/specs/2026-09-05-archetype-metagame-stats-design.md`; what is not obvious from
 the code:
 
