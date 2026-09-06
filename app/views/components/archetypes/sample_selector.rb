@@ -37,8 +37,9 @@ module Archetypes
   # copied link; `card-filter` is what submits it on change, which is the same controller both
   # deck listings' filter bars use.
   class SampleSelector < ApplicationComponent
-    def initialize(scope:)
+    def initialize(scope:, grouping: :type)
       @scope = scope
+      @grouping = grouping
     end
 
     def view_template
@@ -65,6 +66,10 @@ module Archetypes
 
       form(action: archetype_path(@scope.archetype), method: "get", class: "deck-filters",
            data: { controller: "card-filter" }) do
+        # The grouping rides along, because this form replaces the whole query string: without it
+        # a reader in role mode who changes the sample is silently returned to type mode, which is
+        # the same loss Archetypes::CardReport's links go to trouble to prevent on the other axis.
+        input(type: "hidden", name: "group", value: "role") if @grouping == :role
         # The label wraps the select rather than pointing at it: Ui::FilterSelect emits no id,
         # and an explicit `for=` naming one that does not exist associates nothing at all.
         label(class: "archetype-sample-label") do

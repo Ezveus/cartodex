@@ -102,4 +102,21 @@ class Admin::CardLabelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to root_path
   end
+
+  # A rename is a delete and a create at once, and stage 2 is what made that expensive: the
+  # suggestion rules key on the slug. Measured before this guard existed — the human's decisions
+  # stayed on the orphaned row, the next db:seed recreated the original empty, the suggester
+  # re-proposed what the human had decided, and /archetypes/:id rendered two sections both titled
+  # "Search".
+  test "a role label's slug cannot be renamed" do
+    patch admin_card_label_path(@role_label), params: { card_label: { slug: "deck-gust", name: "Gust" } }
+
+    assert_equal "gust", @role_label.reload.slug
+  end
+
+  test "a type label's slug is ordinary data and stays editable" do
+    patch admin_card_label_path(@type_label), params: { card_label: { slug: "ace", name: "ACE SPEC" } }
+
+    assert_equal "ace", @type_label.reload.slug
+  end
 end

@@ -1914,10 +1914,23 @@ textarea.form-input {
   border-bottom: 1px dashed var(--ink-500);
 }
 
+/* A decision, yes or no. Without it a refusal renders exactly like a box nobody has looked at,
+   and the screen cannot show its own progress — which is the one thing it exists to record. */
+.card-role-choice--decided {
+  border-bottom: 1px solid var(--ink-900, currentColor);
+}
+
+/* Submitted only through the row's own Clear button, which points at it with the HTML5 `form`
+   attribute: forms cannot nest, and this one is a DELETE. */
+.card-role-clear-form {
+  display: none;
+}
+
 /* The role name repeats the column heading above the breakpoint, where the header row already
    names it; below it the header is hidden and the cell's own ::before label takes over, so this
-   would be the third copy of the word on one line. */
-.card-role-choice > span {
+   would be the third copy of the word on one line. The checkbox keeps an aria-label either way —
+   `display: none` takes this span out of the accessibility tree, not merely out of the layout. */
+.card-role-choice-name {
   display: none;
 }
 

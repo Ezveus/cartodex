@@ -4,12 +4,14 @@ module Admin
   # No Pundit call anywhere below: Admin::BaseController#require_admin! is the whole gate for this
   # namespace, and an `authorize` here would be the only one in the panel.
   #
-  # `role` labels are visible and editable but cannot be created or deleted here. Stage 2 will seed
-  # them from a `CardLabel::ROLES` this stage does not ship, because its suggestion rules key on
-  # their slugs — an invented role would be a label no rule can propose, and a deleted one would
-  # silently take a rule's output with it. Until then the `role` family is reachable only by a
-  # direct database write. A `type` label is referenced by nothing but its own search token, so it
-  # is ordinary data.
+  # `role` labels are visible and editable but cannot be created, deleted, **or renamed** here:
+  # they are seeded from `CardLabel::ROLES`, and CardLabels::RoleSuggester keys its rules on those
+  # slugs. An invented role would be a label no rule can propose; a deleted one would take a rule's
+  # output with it; and a *renamed* one is both at once — measured, an admin renaming `search` to
+  # `deck-search` kept the human's decisions on the orphaned row, had the next db:seed recreate
+  # `search` empty, had the suggester re-propose what the human had already decided, and left
+  # /archetypes/:id rendering two sections both titled "Search". A `type` label is referenced by
+  # nothing but its own search token, so its slug is ordinary data.
   class CardLabelsController < BaseController
     SEEDED_FAMILY_MESSAGE = "Role labels are seeded from the application, not created here.".freeze
 
@@ -85,10 +87,13 @@ module Admin
       @card_label = CardLabel.find(params[:id])
     end
 
-    # `family` is permitted on create alone: see #update.
+    # `family` is permitted on create alone, and `slug` on everything except a role update: see
+    # #update and the note at the top of this file. Both are dropped rather than refused, because
+    # the form does not offer either field for a role — a submitted one is a hand-made request.
     def card_label_params
       permitted = params.require(:card_label).permit(:slug, :name, :position, :description, :source_query)
       permitted[:family] = params[:card_label][:family] if action_name == "create"
+      permitted.delete(:slug) if action_name == "update" && @card_label.role?
       permitted
     end
   end

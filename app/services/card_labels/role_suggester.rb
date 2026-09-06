@@ -3,7 +3,7 @@ module CardLabels
   #
   # Measured on the production dump (4723 cards, 3023 fingerprints) on 2026-09-06: the rules below
   # label 33 of the 51 Trainer/Energy fingerprints the 107 recorded lists play and 13 of the 43
-  # Pokémon ones — 689 fingerprints and 714 assignments over the whole catalogue, in 0.5 s. They
+  # Pokémon ones — 689 fingerprints and 714 assignments over the whole catalogue, in 1.2 s. They
   # also hand *Telepathic Psychic Energy* a `search` role it does not deserve, and say nothing at
   # all about Pokégear 3.0, Explorer's Guidance, Bug Catching Set or Professor Turo's Scenario,
   # which are among the first cards a player would name. Coverage is not the problem: an error
@@ -56,9 +56,9 @@ module CardLabels
       # Tournaments::StandingsImporter follows for its card fetches. serialized_transaction is a
       # SQLite BEGIN IMMEDIATE, so it takes the database's single write lock for its whole
       # duration — and measured on the production dump the reading half (4723 cards with their
-      # attacks and abilities, then seven regex passes over 3023 fingerprints) is 543 ms of a
-      # 1239 ms run. Inside the transaction that is 543 ms in which every other writer waits, on a
-      # 5 s busy timeout, for a service that is only looking.
+      # attacks and abilities, then seven regex passes over 3023 fingerprints) is 0.4 s of a 1.2 s
+      # run. Inside the transaction that is 0.4 s in which every other writer waits, against
+      # database.yml's 5 s busy timeout, for a service that is only looking.
       matches = matches_by_fingerprint
 
       serialized_transaction do

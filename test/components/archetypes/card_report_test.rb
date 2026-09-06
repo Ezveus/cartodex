@@ -37,6 +37,32 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     assert_no_match(/appears twice/, html)
   end
 
+  # The page states a mechanic for a card; a reader takes that for something somebody checked.
+  # On the production data the day this shipped, every one of the 714 assignments was a rule's
+  # guess and none had been confirmed, so the sections were 100% machine output under a method
+  # note that said "a person decides". The count is printed rather than the provenance styled per
+  # row, because what a reader needs first is whether to trust the section at all.
+  test "role mode says how much of what it shows nobody has confirmed" do
+    html = report(grouping: :role, proposed: 12, decided: 3)
+
+    assert_includes html, "archetype-provenance-note"
+    assert_includes html, "12 of the 15 roles below are proposals a rule made"
+  end
+
+  test "role mode says nothing about provenance once every role it shows was confirmed" do
+    html = report(grouping: :role, proposed: 0, decided: 15)
+
+    assert_no_match(/archetype-provenance-note/, html)
+  end
+
+  # Type mode's sections say nothing about what a card does, so a sentence about who decided that
+  # would be answering a question the page never asked.
+  test "type mode says nothing about role provenance" do
+    html = report(grouping: :type, proposed: 12, decided: 0)
+
+    assert_no_match(/archetype-provenance-note/, html)
+  end
+
   test "the mode links name both groupings and mark the one the page is showing" do
     html = report(grouping: :role)
 
@@ -82,13 +108,14 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
 
   private
 
-  def report(grouping:, pool: nil)
-    Archetypes::CardReport.new(stats: stats(grouping), scope: scope(pool: pool)).call
+  def report(grouping:, pool: nil, proposed: 0, decided: 0)
+    Archetypes::CardReport.new(stats: stats(grouping, proposed: proposed, decided: decided),
+                               scope: scope(pool: pool)).call
   end
 
   # One card in one section, which is all the header needs — what this file asks about is the
   # header, and Archetypes::CardStatsTest owns the grouping itself.
-  def stats(grouping)
+  def stats(grouping, proposed: 0, decided: 0)
     entry = Archetypes::CardStats::Entry.new(
       card: Card.new(name: "Iono", set_name: "PAL", set_number: "185"),
       fingerprint: "PAL-185", inclusion_count: 4, inclusion_pct: 100.0,
@@ -104,7 +131,7 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
 
     Archetypes::CardStats::Result.new(
       lists_count: 4, categories: [ category ], fixed_core_cards: 1, fixed_core_copies: 4,
-      grouping: grouping
+      grouping: grouping, proposed_roles: proposed, decided_roles: decided
     )
   end
 

@@ -156,9 +156,10 @@ Rails.application.routes.draw do
       end
 
       # Curation, not CRUD: the rows are `cards.fingerprint` values and there is nothing to
-      # create or destroy — a decision is written onto the fingerprint the URL names, and
-      # `suggest` re-runs the rules over the whole catalogue.
-      resources :card_roles, only: %i[index update], param: :id do
+      # create. `destroy` clears the decisions on one fingerprint — the one deletion the app
+      # offers on an assignment, and the only way back to "nobody has an opinion about this card"
+      # once a save has decided all seven roles.
+      resources :card_roles, only: %i[index update destroy] do
         post :suggest, on: :collection
       end
 

@@ -25,6 +25,7 @@ module Archetypes
         if @stats.any?
           summary
           overlap_note if role_mode?
+          provenance_note if role_mode? && @stats.unconfirmed_roles?
           @stats.categories.each do |category|
             render Archetypes::CategorySection.new(category: category, single_list: single_list?)
           end
@@ -95,6 +96,21 @@ module Archetypes
       p(class: "archetype-overlap-note") do
         "A card is listed under every role it plays, so a card with two roles appears twice and " \
           "these sections add up to more than the 60 cards of a list."
+      end
+    end
+
+    # A rule's guess and a human's decision are the same row to everything below this line, and
+    # the report has no way to show the difference card by card without saying it about the
+    # sections a reader is already asked to read carefully. So it says the ratio once, at the top,
+    # in the register of the overlap note: on the production data the day this shipped, 714 of 714
+    # assignments were proposals and the method note underneath still read "a person decides".
+    def provenance_note
+      total = @stats.proposed_roles + @stats.decided_roles
+
+      p(class: "archetype-provenance-note") do
+        plain "#{@stats.proposed_roles} of the #{total} roles below "
+        plain "#{@stats.proposed_roles == 1 ? 'is a proposal a rule made' : 'are proposals a rule made'} "
+        plain "from the card's own text, which nobody has confirmed yet."
       end
     end
 

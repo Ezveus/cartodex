@@ -35,6 +35,33 @@ class AdminCardRolesTest < ApplicationSystemTestCase
                                        rejected: false, card_label: @roles["gust"])
   end
 
+  # Agreeing is the commonest answer on this screen, and it has to be one click: the row submits
+  # on `change`, so without a Save button confirming a suggestion meant ticking a role that is
+  # wrong — publishing it — and unticking it again.
+  test "an admin confirms a suggestion without changing a box" do
+    @roles["gust"].assignments.create!(fingerprint: @card.fingerprint, source: "suggested")
+    visit admin_card_roles_path(played: "0", q: "budew")
+
+    find("#card-role-#{@card.fingerprint} input[type='submit']").click
+
+    assert_selector "#card-role-#{@card.fingerprint} .card-role-choice--decided"
+    assert CardLabelAssignment.exists?(fingerprint: @card.fingerprint, source: "curated",
+                                       rejected: false, card_label: @roles["gust"])
+  end
+
+  # The way back out. The button lives in the row and the form it submits is a hidden sibling —
+  # forms cannot nest — so this also proves the HTML5 `form` attribute wiring, which no request
+  # test can see.
+  test "an admin clears a row's decisions and hands the card back to the rules" do
+    @roles["gust"].assignments.create!(fingerprint: @card.fingerprint, source: "curated")
+    visit admin_card_roles_path(played: "0", q: "budew")
+
+    accept_confirm { find("#card-role-#{@card.fingerprint} button", text: "Clear").click }
+
+    assert_no_selector "#card-role-#{@card.fingerprint} .card-role-choice--decided"
+    assert_equal 0, CardLabelAssignment.curated.where(fingerprint: @card.fingerprint).count
+  end
+
   # Unticking is a refusal and not a deletion, and the two are indistinguishable on the page until
   # the row comes back: an unticked box is what both look like.
   test "unticking a suggestion records the refusal rather than clearing it" do
@@ -85,8 +112,11 @@ class AdminCardRolesNarrowTest < ApplicationSystemTestCase
   test "the no-fingerprint note stacks under the card name at 390px" do
     visit admin_card_roles_path(played: "0", q: "Boss")
 
-    unlabellable = find(".card-role-note")
-    name = find("#card-role-unfingerprinted-#{cards(:trainer_card).id} .card-role-name")
+    row = "#card-role-unfingerprinted-#{cards(:trainer_card).id}"
+    # Scoped to the card cell: the Decision cell of the same row carries its own note saying the
+    # row cannot be written, and this test is about the one under the card's name.
+    unlabellable = find("#{row} .card-role-card .card-role-note")
+    name = find("#{row} .card-role-name")
 
     assert_operator name.rect.y + name.rect.height, :<=, unlabellable.rect.y + 1,
       "the note is beside the card name rather than under it"

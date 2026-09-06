@@ -27,6 +27,17 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
     assert_equal cards(:budew_pre).fingerprint, cards(:budew_asc).fingerprint
   end
 
+  # The rows live in a Turbo Frame and the filter bar targets it. Without one the debounced field
+  # navigates the whole page, and the caret is gone after every keystroke — on the control whose
+  # whole job is turning 3023 fingerprints into 94. The app's three other filtered listings do
+  # exactly this; a request test can at least hold the wiring.
+  test "the rows sit in a frame the filter bar targets" do
+    get admin_card_roles_path(played: "0", q: "budew")
+
+    assert_select "turbo-frame##{Admin::CardRoles::IndexView::FRAME_ID} .data-table-row", minimum: 1
+    assert_select "form.deck-filters[data-turbo-frame=?]", Admin::CardRoles::IndexView::FRAME_ID
+  end
+
   # The filter that makes the first pass an evening's work rather than a month's: measured on the
   # production dump, the recorded lists play 94 fingerprints out of the catalogue's 3023. It is
   # the default because curating what nobody plays is work no reader of the report will ever see.
@@ -92,6 +103,45 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
     assert_not suggestion.rejected
   end
 
+  # The commonest gesture on a curation screen is agreeing with what is already ticked, and until
+  # the row grew a Save button there was nothing to click for it: the form submitted on `change`
+  # alone, so confirming meant ticking a role that is wrong — publishing it — and unticking it.
+  test "a row can be saved without any box changing" do
+    @roles["gust"].assignments.create!(fingerprint: @card.fingerprint, source: "suggested")
+
+    patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] },
+      headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_equal "curated", @roles["gust"].assignments.sole.source
+  end
+
+  # The way back out, and the only deletion the app offers on an assignment: a save decides all
+  # seven roles, so one misclick otherwise hides a card from the suggester for good. Deleting on
+  # an *explicit* request is not the same act as deleting when a box is unticked — the second
+  # would erase a refusal, which is the rule this store is built on.
+  test "clearing a row's decisions hands the card back to the suggester" do
+    @roles["gust"].assignments.create!(fingerprint: @card.fingerprint, source: "curated")
+    @roles["draw"].assignments.create!(fingerprint: @card.fingerprint, source: "curated",
+                                        rejected: true)
+    kept = @roles["search"].assignments.create!(fingerprint: @card.fingerprint, source: "suggested")
+
+    delete admin_card_role_path(@card.fingerprint),
+      headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_response :success
+    assert_equal 0, CardLabelAssignment.curated.where(fingerprint: @card.fingerprint).count
+    assert CardLabelAssignment.exists?(kept.id), "clearing took the machine's proposals with it"
+  end
+
+  # An HTML PATCH must not raise MissingTemplate *after* the seven rows have committed — the
+  # DecksController#share lesson, on a form Turbo normally intercepts.
+  test "a write without Turbo lands somewhere instead of 500ing over a committed decision" do
+    patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] }
+
+    assert_redirected_to admin_card_roles_path
+    assert_equal "curated", @roles["gust"].assignments.sole.source
+  end
+
   # A fingerprint no card carries is a row the report can never join — the state
   # CardStats::GROUPING_KEY already refuses to invent. It is a 404 rather than a silent create.
   test "an unknown fingerprint is a 404, not a new row" do
@@ -154,13 +204,4 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
   private
 
   def row_id(fingerprint) = "card-role-#{fingerprint}"
-
-  def count_queries(&block)
-    count = 0
-    counter = ->(_name, _start, _finish, _id, payload) do
-      count += 1 unless payload[:name].in?([ "CACHE", "SCHEMA", "TRANSACTION" ])
-    end
-    ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
-    count
-  end
 end

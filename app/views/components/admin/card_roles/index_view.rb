@@ -2,6 +2,15 @@ module Admin
   module CardRoles
     # The curation screen: one row per fingerprint, one checkbox per role.
     class IndexView < ApplicationComponent
+      include Phlex::Rails::Helpers::TurboFrameTag
+
+      # The rows, the pager and the empty state live inside this frame; the filter bar sits
+      # outside it. Without one, the 300 ms debounce navigates the whole page and the caret is
+      # gone after every keystroke — on the screen whose filter is the thing that turns 3023
+      # fingerprints into 94, which is an evening's work against a month's. The three other
+      # filtered listings in the app already do exactly this.
+      FRAME_ID = "card_role_rows".freeze
+
       def initialize(rows:, unfingerprinted:, roles:, assignments:, page:, pages:, filters:)
         @rows = rows
         @unfingerprinted = unfingerprinted
@@ -19,18 +28,23 @@ module Admin
               class: "btn btn-secondary"
           end
 
-          filters
+          filter_bar
           scope_note
-          table
-          render Ui::Pagination.new(page: @page, pages: @pages, href: ->(page) { page_href(page) })
+          turbo_frame_tag(FRAME_ID) do
+            table
+            # Inside the frame, so Turbo swaps the rows rather than the page — which leaves the
+            # address bar behind, and `turbo_action: "replace"` is what puts ?page= back into it.
+            render Ui::Pagination.new(page: @page, pages: @pages, turbo_action: "replace",
+                                      href: ->(page) { page_href(page) })
+          end
         end
       end
 
       private
 
-      def filters
+      def filter_bar
         form_with(url: admin_card_roles_path, method: :get, class: "deck-filters",
-                  data: { controller: "card-filter" }) do
+                  data: { controller: "card-filter", turbo_frame: FRAME_ID, turbo_action: "replace" }) do
           label(class: "card-role-filter") do
             span { "Name" }
             input(type: "search", name: "q", value: @filters[:q], class: "form-input",
@@ -40,13 +54,8 @@ module Admin
 
           label(class: "card-role-filter") do
             span { "Card type" }
-            select(name: "card_type", class: "form-input",
-                   data: { action: "change->card-filter#submit" }) do
-              option(value: "") { "Any" }
-              Card::CARD_TYPES.each do |type|
-                option(value: type, selected: @filters[:card_type] == type) { type }
-              end
-            end
+            render Ui::FilterSelect.new(name: "card_type", options: card_type_options,
+                                        selected: @filters[:card_type])
           end
 
           label(class: "card-role-filter card-role-filter--check") do
@@ -76,17 +85,17 @@ module Admin
       end
 
       def table
-        render Ui::DataTable.new(columns: [ "Card", "Type", *@roles.map(&:name) ]) do
+        render Ui::DataTable.new(columns: [ "Card", "Type", *@roles.map(&:name), "Decision" ]) do
           @unfingerprinted.each do |card|
-            render Row.new(fingerprint: card.fingerprint, card: card, roles: @roles,
-                           assignments: @assignments, writable: false)
+            render Row.new(card: card, roles: @roles, assignments: @assignments, writable: false)
           end
 
-          @rows.each do |row|
-            render Row.new(fingerprint: row.fingerprint, card: row.card, roles: @roles,
-                           assignments: @assignments)
-          end
+          @rows.each { |card| render Row.new(card: card, roles: @roles, assignments: @assignments) }
         end
+      end
+
+      def card_type_options
+        [ [ "Any", "" ] ] + Card::CARD_TYPES.map { |type| [ type, type ] }
       end
 
       def page_href(page)

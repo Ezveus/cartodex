@@ -24,9 +24,15 @@ module Admin
       @query = params[:q].to_s.strip
       @card_type = params[:card_type].to_s.presence
 
+      filters
       scope = filtered_cards
-      @pages = (scope.distinct.count(:fingerprint) / PER_PAGE.to_f).ceil
-      @page = [ params[:page].to_s.to_i, 1 ].max.clamp(1, [ @pages, 1 ].max)
+      # Counted over the same population rows_for renders: SQL's COUNT ignores NULL but counts an
+      # empty string, and a blank fingerprint is listed separately rather than paged.
+      @pages = (labellable(scope).distinct.count(:fingerprint) / PER_PAGE.to_f).ceil
+      # `to_s` before `to_i` because `?page[]=1` hands an Array and `?page[a]=b` an
+      # ActionController::Parameters, and neither answers to_i — the clamp ArchetypesController
+      # and TournamentsController each spell out for themselves.
+      @page = params[:page].to_s.to_i.clamp(1, [ @pages, 1 ].max)
       @rows = rows_for(scope)
       @assignments = assignments_for(@rows.map(&:fingerprint))
       # A card with no fingerprint can never be labelled — an assignment would name a key no card
@@ -45,17 +51,69 @@ module Admin
       card = Card.where(fingerprint: fingerprint).order(:id).last
       return head :not_found if card.nil?
 
-      ticked = Array(params[:roles]).map(&:to_s)
-      decide(fingerprint, card, ticked)
+      ::CardLabels::RoleDecision.call(fingerprint: fingerprint, card: card, ticked: params[:roles])
 
       @roles = CardLabel.roles.to_a
-      @row = row_for(card, fingerprint)
+      @card = card
       @assignments = assignments_for([ fingerprint ])
-      render :update
+
+      # Branched, because only the Turbo Stream template exists: an unbranched Accept: text/html
+      # request raises MissingTemplate *after* the seven rows have committed, which is the
+      # DecksController#share lesson. The form is fired by Stimulus and Turbo intercepts it, so
+      # this is the path a client without Turbo takes — it must land somewhere, not 500 over a
+      # decision that was in fact recorded.
+      respond_to do |format|
+        format.turbo_stream { render :update }
+        format.html { redirect_to admin_card_roles_path(filter_params), notice: "Roles saved." }
+      end
+    end
+
+    # "I have no opinion about this card after all." A save decides all seven roles at once, so
+    # one misclick otherwise removes a card from the suggester's reach permanently — and nothing
+    # else in the app deletes an assignment. It is deliberately a separate, explicit action:
+    # deleting *here* is a request, while deleting when a box is unticked would erase a refusal,
+    # which is the one thing the store exists to keep.
+    def destroy
+      fingerprint = params[:id].to_s
+      card = Card.where(fingerprint: fingerprint).order(:id).last
+      return head :not_found if card.nil?
+
+      CardLabelAssignment.curated.where(fingerprint: fingerprint).destroy_all
+
+      @roles = CardLabel.roles.to_a
+      @card = card
+      @assignments = assignments_for([ fingerprint ])
+
+      respond_to do |format|
+        format.turbo_stream { render :update }
+        format.html { redirect_to admin_card_roles_path(filter_params), notice: "Decisions cleared." }
+      end
+    end
+
+    # "I have no opinion about this card after all." A save decides all seven roles at once, so one
+    # misclick otherwise removes a card from the suggester's reach permanently — and nothing else
+    # in the app deletes an assignment. It is deliberately a separate, explicit action: deleting
+    # *here* is a request, while deleting when a box is unticked would erase a refusal, which is
+    # the one thing the store exists to keep.
+    def destroy
+      fingerprint = params[:id].to_s
+      card = Card.where(fingerprint: fingerprint).order(:id).last
+      return head :not_found if card.nil?
+
+      CardLabelAssignment.curated.where(fingerprint: fingerprint).destroy_all
+
+      @roles = CardLabel.roles.to_a
+      @card = card
+      @assignments = assignments_for([ fingerprint ])
+
+      respond_to do |format|
+        format.turbo_stream { render :update }
+        format.html { redirect_to admin_card_roles_path(filter_params), notice: "Decisions cleared." }
+      end
     end
 
     # Inline rather than a job, unlike the label import beside it: this makes no HTTP request and
-    # reads text the catalogue already holds — measured at 1.8 s for all 3023 fingerprints,
+    # reads text the catalogue already holds — measured at 1.2 s for all 3023 fingerprints,
     # writing 714 suggestions.
     def suggest
       result = ::CardLabels::RoleSuggester.call
@@ -70,22 +128,29 @@ module Admin
 
     private
 
-    Row = Struct.new(:fingerprint, :card, keyword_init: true)
-
     def played_filter
       return DEFAULT_PLAYED unless params.key?(:played)
 
       ActiveModel::Type::Boolean.new.cast(params[:played]).present?
     end
 
+    # One hash, three readers: the view's filter bar, the pager's links and the redirect after a
+    # suggestion run. `played` rides only when it was asked for, so a redirect never writes the
+    # default into the URL.
+    def filters
+      @filters ||= { q: @query.presence, card_type: @card_type, played: @played }.compact
+    end
+
     def filter_params
-      { q: params[:q].presence, card_type: params[:card_type].presence,
-        played: (params[:played] if params.key?(:played)), page: params[:page].presence }.compact
+      filters.merge(page: params[:page].presence).compact
     end
 
     def filtered_cards
       scope = Card.all
-      scope = scope.where("cards.name LIKE ?", "%#{Card.sanitize_sql_like(@query)}%") if @query.present?
+      # Card.name_matching, not a LIKE spelled out here: the concern searches `name_normalized`
+      # (SQLite folds ASCII only, so an accented name in the wrong case is otherwise unfindable),
+      # carries the ESCAPE clause a typed `%` needs, and caps the pattern's length.
+      scope = scope.merge(Card.name_matching(@query)) if @query.present?
       scope = scope.where(card_type: @card_type) if @card_type
       scope = scope.where(id: played_card_ids) if @played
       scope
@@ -98,37 +163,23 @@ module Admin
     # One grouped read for the page: the fingerprint, the name it sorts under, and the id of the
     # printing that represents it. Reading the printings row by row is the obvious way to write
     # this screen and is what would make its cost grow with the page.
+    def labellable(scope) = scope.where.not(fingerprint: [ nil, "" ])
+
     def rows_for(scope)
-      grouped = scope.where.not(fingerprint: [ nil, "" ])
+      grouped = labellable(scope)
                      .group(:fingerprint)
                      .order(Arel.sql("MIN(cards.name)"))
                      .offset((@page - 1) * PER_PAGE)
                      .limit(PER_PAGE)
                      .pluck(Arel.sql("cards.fingerprint"), Arel.sql("MAX(cards.id)"))
 
-      cards = Card.where(id: grouped.map(&:last)).index_by(&:id)
-      grouped.map { |fingerprint, card_id| Row.new(fingerprint: fingerprint, card: cards[card_id]) }
-    end
-
-    def row_for(card, fingerprint)
-      Row.new(fingerprint: fingerprint, card: card)
+      Card.where(id: grouped.map(&:last)).to_a.sort_by { |card| card.name.downcase }
     end
 
     # (fingerprint, card_label_id) -> the assignment, so a row asks a Hash and not the database.
     def assignments_for(fingerprints)
       CardLabelAssignment.where(fingerprint: fingerprints, card_label_id: CardLabel.roles.select(:id))
                          .index_by { |assignment| [ assignment.fingerprint, assignment.card_label_id ] }
-    end
-
-    def decide(fingerprint, card, ticked)
-      labels = CardLabel.roles.to_a
-
-      CardLabelAssignment.transaction do
-        labels.each do |label|
-          assignment = CardLabelAssignment.find_or_initialize_by(card_label: label, fingerprint: fingerprint)
-          assignment.update!(source: "curated", rejected: ticked.exclude?(label.slug), card: card)
-        end
-      end
     end
   end
 end

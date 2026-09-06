@@ -12,12 +12,20 @@ module Admin
     # container of `.data-table-cell` children, so a form wrapped around the cells would become
     # the row's single flex child and collapse the layout — and below 768px, where each row
     # becomes a card and each cell grows a `::before` label, it would take the labels with it.
+    #
+    # Which is why "Clear" is a *second* form, rendered as a hidden sibling with the row's own
+    # button pointing at it through HTML5's `form` attribute: forms cannot nest, and the two
+    # actions genuinely differ — one records a decision, the other withdraws every decision made
+    # about this card and hands it back to the suggester.
     class Row < ApplicationComponent
       # A card with no fingerprint cannot be labelled: an assignment would name a key no card
       # carries and the report could never join it. The row renders, and says so, with its boxes
       # disabled — a click that could not be written must not be offered.
-      def initialize(fingerprint:, card:, roles:, assignments:, writable: true)
-        @fingerprint = fingerprint
+      def initialize(card:, roles:, assignments:, writable: true)
+        # The fingerprint is the card's own: rows_for picks its representative *within* a
+        # fingerprint group, and #update looks the card up *by* the fingerprint, so a second
+        # keyword could only ever disagree with this one.
+        @fingerprint = card.fingerprint
         @card = card
         @roles = roles
         @assignments = assignments
@@ -31,6 +39,7 @@ module Admin
           form_with(url: admin_card_role_path(@fingerprint), method: :patch,
                     id: self.class.dom_id(@fingerprint), class: "data-table-row",
                     data: { controller: "card-filter" }) { cells }
+          clear_form if decided?
         else
           div(id: "card-role-unfingerprinted-#{@card.id}", class: "data-table-row") { cells }
         end
@@ -42,6 +51,39 @@ module Admin
         div(class: "data-table-cell", data: { label: "Card" }) { card_cell }
         div(class: "data-table-cell", data: { label: "Type" }) { type_label }
         @roles.each { |role| role_cell(role) }
+        div(class: "data-table-cell", data: { label: "Decision" }) { actions }
+      end
+
+      # Why a Save button exists at all: agreeing with what the rules proposed is the commonest
+      # answer on this screen, and with `change` as the only trigger there was nothing to click
+      # for it — confirming a row meant ticking a role that is wrong, publishing it, and unticking
+      # it again.
+      def actions
+        return span(class: "card-role-note") { "not labellable" } unless @writable
+
+        input(type: "submit", value: "Save", class: "btn btn-secondary btn-sm")
+        return unless decided?
+
+        button(type: "submit", form: clear_form_id, class: "btn btn-secondary btn-sm") { "Clear" }
+      end
+
+      # Hidden, and only ever submitted by the button above through its `form` attribute: a DELETE
+      # needs a form of its own and it cannot sit inside the row's.
+      def clear_form
+        button_to("Clear decisions", admin_card_role_path(@fingerprint), method: :delete,
+                  class: "card-role-clear-submit",
+                  form: { id: clear_form_id, class: "card-role-clear-form",
+                          data: { turbo_confirm: "Forget every decision recorded for " \
+                                                 "#{@card.name}? The rules may propose roles for " \
+                                                 "it again." } })
+      end
+
+      def clear_form_id = "card-role-clear-#{@fingerprint}"
+
+      # Anything a human has said about this card, yes or no. Only then is there something to
+      # clear.
+      def decided?
+        @roles.any? { |role| @assignments[[ @fingerprint, role.id ]]&.source == "curated" }
       end
 
       # The wrapper is load-bearing, and only a browser shows why: below 768px `.data-table` turns
@@ -60,37 +102,47 @@ module Admin
         [ @card.card_type, @card.subtype.presence ].compact.join(" · ")
       end
 
-      # A suggestion is pre-ticked but styled apart from a decision, because the difference is the
-      # only thing this screen exists to record: a ticked box the rules proposed is "nobody has
-      # said yes yet", and saving the row is what turns it into one.
+      # Three states, not two, and the third is the one this screen exists for: a role a rule
+      # proposed, a role a human decided (yes *or* no), and a role nobody has looked at. A refusal
+      # renders as an unticked box exactly like an untouched one, so without the `--decided`
+      # modifier an admin working through 3023 fingerprints cannot see what they have already done.
       def role_cell(role)
         assignment = @assignments[[ @fingerprint, role.id ]]
-        suggested = assignment&.source == "suggested"
 
         div(class: "data-table-cell", data: { label: role.name }) do
-          label(class: cell_class(suggested), title: title_for(role, suggested)) do
+          label(class: cell_class(assignment), title: title_for(role, assignment)) do
             input(**checkbox_attributes(role, assignment))
-            span { role.name }
+            span(class: "card-role-choice-name") { role.name }
           end
         end
       end
 
-      # A suggestion is not a decision, and the row says so in words as well as in the dashed rule:
-      # what separates the two is the only thing this screen records.
-      def title_for(role, suggested)
-        return role.description unless suggested
-
-        "#{role.description} — proposed by the rules; saving this row decides it."
+      def title_for(role, assignment)
+        case assignment&.source
+        when "suggested" then "#{role.description} — proposed by the rules; saving this row decides it."
+        when "curated" then "#{role.description} — decided by hand."
+        else role.description
+        end
       end
 
-      def cell_class(suggested)
-        suggested ? "card-role-choice card-role-choice--suggested" : "card-role-choice"
+      def cell_class(assignment)
+        [ "card-role-choice", state_modifier(assignment) ].compact.join(" ")
       end
 
+      def state_modifier(assignment)
+        case assignment&.source
+        when "suggested" then "card-role-choice--suggested"
+        when "curated" then "card-role-choice--decided"
+        end
+      end
+
+      # `aria_label`, not the visible span alone: that span is `display: none` above the
+      # breakpoint (the column heading names the role there), and a hidden label leaves the
+      # checkbox with no accessible name — seven anonymous boxes per row to a screen reader.
       def checkbox_attributes(role, assignment)
         attributes = {
           type: "checkbox", name: "roles[]", value: role.slug,
-          class: "card-role-checkbox"
+          class: "card-role-checkbox", aria_label: "#{role.name} — #{@card.name}"
         }
         attributes[:checked] = true if assignment && !assignment.rejected
         # The row submits itself on any change, so the state shown is always one the server wrote.
