@@ -50,11 +50,15 @@ sample — driven by 3–7 dual-role cards per sample; no card in the catalogue 
 The role histogram over the all-formats sample is `{0 => 37, 1 => 32, 2 => 7}`. Role mode has zeros
 too: Switch is 0 in 5 of 16 lists in the default pool, and 22 of 106 blended.
 
-**These role figures are not reproducible against the dev database as it stands.** The dump holds
-29 assignments, all `type`/`ace-spec`, and **zero** role assignments — `CardLabels::RoleSuggester`
-has never been run in production. Every role number above comes from running it (`created=714`,
-`fingerprints_examined=3023`, matching `CLAUDE.md`) against a *copy* of the dump. Re-check them
-without that step and the report reads one 60-copy "No role recorded" section per list.
+**These role figures were not reproducible against production when they were taken, and now they
+are.** The dump then held 29 assignments, all `type`/`ace-spec`, and **zero** role assignments, so
+every role number above came from running `CardLabels::RoleSuggester` (`created=714`,
+`fingerprints_examined=3023`, matching `CLAUDE.md`) against a *copy* of it — without that step the
+report read one 60-copy "No role recorded" section per list. The suggester has since run in
+production and a curation pass has followed (850 assignments: 709 suggested, 19 curated present, 93
+curated refusals, 29 imported), so role mode now has real sections there. The type-mode figures in
+this plan are untouched by that: they are all drawn from archetypes 6 and 63, whose samples are
+still 106 and 18 standings.
 
 **Even in type mode the section ranges do not add up to 60.** TEF-PBL reads Pokémon 17–20,
 Supporter 9–14, Item 11–15, Stadium 3–4, Basic Energy 13–16: minima sum to 53 and maxima to 69,
