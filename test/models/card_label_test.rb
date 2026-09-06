@@ -62,4 +62,31 @@ class CardLabelTest < ActiveSupport::TestCase
       label.destroy
     end
   end
+
+  # ROLES is the vocabulary stage 2 keys its suggestion rules on, and every slug in it is written
+  # into the database by the seed — so a slug the model would refuse is a role that silently never
+  # exists. Underscores are the trap: `energy_acceleration` reads better in Ruby than
+  # `energy-acceleration` and fails this format, which nothing else would report until a fresh
+  # database came up short a role.
+  test "every role in the vocabulary passes the model's own rules" do
+    CardLabel::ROLES.each do |attributes|
+      label = CardLabel.new(family: "role", **attributes)
+
+      assert label.valid?, "#{attributes[:slug]}: #{label.errors.full_messages.to_sentence}"
+    end
+  end
+
+  test "the role vocabulary repeats no slug, no name and no position" do
+    assert_equal CardLabel::ROLES.size, CardLabel::ROLES.map { |role| role[:slug] }.uniq.size
+    assert_equal CardLabel::ROLES.size, CardLabel::ROLES.map { |role| role[:name] }.uniq.size
+    assert_equal CardLabel::ROLES.size, CardLabel::ROLES.map { |role| role[:position] }.uniq.size
+  end
+
+  # The description is user-facing: the curation screen prints it as a title and the report reads
+  # it beside the section. A role with none is a checkbox nobody can interpret.
+  test "every role says what it means" do
+    CardLabel::ROLES.each do |role|
+      assert role[:description].present?, "#{role[:slug]} carries no description"
+    end
+  end
 end

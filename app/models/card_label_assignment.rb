@@ -30,4 +30,6 @@ class CardLabelAssignment < ApplicationRecord
 
   scope :active, -> { where(rejected: false) }
   scope :imported, -> { where(source: "imported") }
+  scope :suggested, -> { where(source: "suggested") }
+  scope :curated, -> { where(source: "curated") }
 end
