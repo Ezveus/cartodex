@@ -44,9 +44,16 @@ module Admin
         @roles.each { |role| role_cell(role) }
       end
 
+      # The wrapper is load-bearing, and only a browser shows why: below 768px `.data-table` turns
+      # each row into a card whose cells are `display: flex`, so a name and a note placed directly
+      # in the cell become two flex items on one line — the same defect measured on the archetype
+      # catalog, where a note took a third of the cell and doubled the row's height. Inside a
+      # column wrapper they are one item and they stack.
       def card_cell
-        span(class: "card-role-name") { @card.printing_label }
-        span(class: "card-role-note") { "no fingerprint — cannot be labelled" } unless @writable
+        div(class: "card-role-card") do
+          span(class: "card-role-name") { @card.printing_label }
+          span(class: "card-role-note") { "no fingerprint — cannot be labelled" } unless @writable
+        end
       end
 
       def type_label
@@ -61,11 +68,19 @@ module Admin
         suggested = assignment&.source == "suggested"
 
         div(class: "data-table-cell", data: { label: role.name }) do
-          label(class: cell_class(suggested), title: role.description) do
+          label(class: cell_class(suggested), title: title_for(role, suggested)) do
             input(**checkbox_attributes(role, assignment))
             span { role.name }
           end
         end
+      end
+
+      # A suggestion is not a decision, and the row says so in words as well as in the dashed rule:
+      # what separates the two is the only thing this screen records.
+      def title_for(role, suggested)
+        return role.description unless suggested
+
+        "#{role.description} — proposed by the rules; saving this row decides it."
       end
 
       def cell_class(suggested)

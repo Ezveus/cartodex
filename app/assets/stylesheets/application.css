@@ -1885,6 +1885,12 @@ textarea.form-input {
    A suggestion is pre-ticked and must not look like a decision: the difference between "the rules
    proposed this" and "a human said yes" is the only thing this screen records, so it is carried
    by a dashed outline and a muted label rather than by the checked state alone. */
+.card-role-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .card-role-name {
   font-weight: 600;
 }
