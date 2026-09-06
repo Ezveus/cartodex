@@ -14,6 +14,7 @@ namespace :card_labels do
   task resync_fingerprints: :environment do
     reports = []
     moved = 0
+    dropped = 0
 
     # Both associations, not :card alone: every report line below reads assignment.card_label.slug,
     # and preloading only the one this task writes through would N+1 the other on every line.
@@ -27,7 +28,25 @@ namespace :card_labels do
         next
       end
 
-      if CardLabelAssignment.exists?(card_label_id: assignment.card_label_id, fingerprint: card.fingerprint)
+      # A machine's opinion never blocks a human's decision, in either direction — and reading the
+      # target row as "a decision" whatever wrote it is how it did. Measured: a force: true
+      # rescrape moves a Pokémon's fingerprint, the next card_labels:suggest_roles run writes a
+      # `suggested` row on the new one, and this branch then stranded the human's refusal on the
+      # old fingerprint while the machine's guess sat on the live one — which is what the report
+      # renders. It aborted on every later run too, taking the repair tool out of service.
+      #
+      # So a suggestion in the way is deleted (the next run re-proposes it, on the right
+      # fingerprint), a suggestion that is itself in the way of a decision is dropped, and only two
+      # rows a human or an import wrote are reported for somebody to resolve.
+      blocking = CardLabelAssignment.find_by(card_label_id: assignment.card_label_id,
+                                             fingerprint: card.fingerprint)
+      if blocking && blocking.source == "suggested" && assignment.source != "suggested"
+        blocking.destroy
+      elsif blocking && assignment.source == "suggested"
+        assignment.destroy
+        dropped += 1
+        next
+      elsif blocking
         reports << "#{assignment.card_label.slug}: #{assignment.fingerprint} moved to " \
                    "#{card.fingerprint}, which already carries a decision — resolve by hand"
         next
@@ -40,6 +59,7 @@ namespace :card_labels do
     end
 
     puts "Moved #{moved} #{"assignment".pluralize(moved)}."
+    puts "Dropped #{dropped} stale #{"suggestion".pluralize(dropped)}." if dropped.positive?
     next if reports.empty?
 
     puts "#{reports.size} could not be moved:"

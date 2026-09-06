@@ -136,6 +136,58 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
     assert_equal Card.where(fingerprint: [ nil, "" ]).count, result.unfingerprinted
   end
 
+  # The withdrawal runs over the pairs the rules *stopped* matching, which is a different branch
+  # from every provenance test above — those all sit on pairs the rules do match. A `where` that
+  # forgot its `suggested` scope would delete a human's refusal here and nothing else would say so.
+  test "withdrawal deletes only the machine's own rows" do
+    card = trainer("Bravery Charm", "The Basic Pokémon this card is attached to gets +50 HP.")
+    refusal = @roles["gust"].assignments.create!(fingerprint: card.fingerprint, source: "curated",
+                                                 rejected: true)
+    imported = @roles["draw"].assignments.create!(fingerprint: card.fingerprint, source: "imported")
+    stale = @roles["search"].assignments.create!(fingerprint: card.fingerprint, source: "suggested")
+
+    result = CardLabels::RoleSuggester.call
+
+    assert CardLabelAssignment.exists?(refusal.id)
+    assert CardLabelAssignment.exists?(imported.id)
+    assert_not CardLabelAssignment.exists?(stale.id)
+    assert_equal 1, result.withdrawn
+  end
+
+  # Six weeks later, with the catalogue moved: a rule that starts matching a card adds its role and
+  # leaves the rest of that card alone. Only reachable for Trainers and Energy, whose fingerprint is
+  # a hash of the name and therefore survives a text change — a Pokémon's would move, which is the
+  # resync task's subject rather than this one's.
+  test "a rule that starts matching adds its role and disturbs nothing else" do
+    card = trainer("Iono", "Each player shuffles their hand and draws a card for each Prize card.")
+    CardLabels::RoleSuggester.call
+    draw = @roles["draw"].assignments.sole
+
+    card.update!(effect: "#{card.effect} Search your deck for a Supporter card.")
+    result = CardLabels::RoleSuggester.call
+
+    assert_equal 1, result.created
+    assert_equal draw.id, @roles["draw"].assignments.sole.id
+    assert_equal [ card.fingerprint ], @roles["search"].assignments.pluck(:fingerprint)
+  end
+
+  # A role can only lose its rule by a code change, since the seed never deletes and the admin
+  # panel refuses to. When it does, the label row survives with its assignments — and a human's
+  # decisions are theirs to keep, while the machine's proposals are no longer maintainable by
+  # anything: nothing will ever withdraw them, and the report would carry a section built on
+  # guesses no rule still makes.
+  test "a role whose rule has gone keeps its decisions and loses its suggestions" do
+    card = trainer("Nest Ball", "Search your deck for a Basic Pokémon and put it onto your Bench.")
+    orphan = CardLabel.create!(family: "role", slug: "mill", name: "Mill", position: 80)
+    decision = orphan.assignments.create!(fingerprint: card.fingerprint, source: "curated")
+    guess = orphan.assignments.create!(fingerprint: cards(:doublade).fingerprint, source: "suggested")
+
+    CardLabels::RoleSuggester.call
+
+    assert CardLabelAssignment.exists?(decision.id)
+    assert_not CardLabelAssignment.exists?(guess.id)
+  end
+
   # The §9.6 question, asked of this service: what does the second run do? Nothing, and it says
   # nothing — the receipt an admin reads must not report work that did not happen.
   test "a second run creates nothing and withdraws nothing" do

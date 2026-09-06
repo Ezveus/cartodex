@@ -55,6 +55,7 @@ module CardLabels
       serialized_transaction do
         matches = matches_by_fingerprint
         RULES.each_key { |slug| apply(labels.fetch(slug), matches) }
+        labels.except(*RULES.keys).each_value { |orphan| abandon(orphan) }
       end
 
       Result.new(
@@ -74,6 +75,17 @@ module CardLabels
       raise MissingRoles, "no card_labels row for #{missing.to_sentence} — run db:seed" if missing.any?
 
       labels
+    end
+
+    # A role can only lose its rule through a code change — the seed never deletes and
+    # Admin::CardLabelsController refuses to destroy a `role` label — and the row then survives
+    # with its assignments. The human's decisions on it are theirs to keep; its `suggested` rows
+    # are the machine's, and nothing will ever withdraw them again, so they go now rather than
+    # standing behind a report section built on guesses no rule still makes.
+    def abandon(label)
+      stale = label.assignments.suggested
+      @withdrawn += stale.count
+      stale.delete_all
     end
 
     def apply(label, matches)

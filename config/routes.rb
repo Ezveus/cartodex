@@ -148,6 +148,10 @@ Rails.application.routes.draw do
       # is five fields and the index already lists all of them, so a show page would only restate
       # the row. `import` is a POST on the member: it enqueues a run of that label's own `is:`
       # token, so there is nothing to preview and nothing to type.
+      #
+      # It was routed anyway until AdminGateTest walked the routing table and found the one admin
+      # route that answered without passing the gate, because Rails refuses a missing action
+      # before any callback runs.
       resources :card_labels, except: [ :show ] do
         post :import, on: :member
       end
