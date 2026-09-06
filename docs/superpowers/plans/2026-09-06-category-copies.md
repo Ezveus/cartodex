@@ -38,8 +38,11 @@ on the production data, and one of them is nearly always zero:
 | SVI-DRI (68) | **56** | 0 |
 | All formats (106) | **93** | 1 |
 
-Every type category that appears at all is played by 100 % of lists in every bucket; Special
-Energy opens no section for this archetype in any of them.
+Tool and Stadium are the only two that ever reach zero; every other type category present in a
+bucket is played by 100 % of its lists, and Special Energy opens no section for this archetype at
+all. (An earlier draft of this line said "every type category that appears at all", which the table
+directly above it refutes — recorded rather than quietly fixed, since it is the reading the table
+invites.)
 
 **In role mode the sections overshoot 60 by +1 to +8 copies** — mean +1.19 in the default pool,
 +1.77 in TEF-CRI, +6.56 in the fullest *pool* (SVI-DRI) and +4.75 over the blended all-formats
@@ -79,13 +82,30 @@ already tells the reader in words that role sections overlap, and the reference 
 figure for functional groups first. Withholding it in role mode would withhold the more useful
 half.
 
-### 3. The ranges are per-list ranges and the page says they do not add up
+### 3. The figures are per-list figures and the page says they do not add up
 
 One sentence under the summary, in both modes, in the register of the printing note and the
 overlap note. Suppressed at one list — because there is no *range* to disclaim there, every
 section printing an exact number, and **not** because the sections then sum to the list: in role
 mode they still do not, a single list carrying one dual-role card already summing to 61. The
 overlap note is what covers that case and it renders at one list too.
+
+**The domain review moved this sentence twice, and both moves were measured.** It said *ranges*,
+and the range is not the column that invites the addition — the **mode** is: over the eight
+samples the production data offers the modes sum to 60 or 61 every time, and on the three largest
+they describe a 60-card profile **no list played**. So it says *those figures*. And it now names
+the zeros rule, because the page shows both rules a line apart and explained neither: TEF-CRI
+renders `Stadium · 1 card · 0-4 copies` directly above that section's only card at
+`95.5 % of lists · 3-4 copies`. The card count gets a clause too — all-formats reads
+`Pokémon · 32 cards · 16-23 copies`, which is a contradiction if the two are read as facts about
+one list.
+
+**Left as it is, and worth knowing:** "most often" is a weaker claim on a heading than on a card
+row and is worded identically. Measured over the all-formats sample, a card row printing a mode
+has a median share of 92.1 %; the six section headings on the same page read 32.1 to 87.7 %, and
+`Item · most often 16` is 34 lists of 106. That is structural — a card varies over 1–4 values, a
+category over 8–13 — and dropping the mode from a heading would lose the one figure that tells a
+reader Tool is *usually not played at all*. Flagged, not changed.
 
 ## The shape of the change
 
@@ -139,8 +159,14 @@ overlap note is what covers that case and it renders at one list too.
 ### Callers to update
 
 `CategoryGroup` is built by hand in `test/components/archetypes/card_report_test.rb` and
-`test/components/archetypes/name_group_row_test.rb`. The styleguide builds `Entry` and `NameGroup`
-but never `CategoryGroup`, so `Styleguide::PageView` needs no change — verify rather than assume.
+`test/components/archetypes/name_group_row_test.rb`. Verified rather than assumed, and both halves
+of the guess turned out slightly wrong, so what actually happened is recorded here: the styleguide
+builds `Entry` and `NameGroup` but never `CategoryGroup`, so nothing there *breaks* — but
+`CLAUDE.md` asks for a component to be shown at `/styleguide` when it gains a token or a part, and
+a heading nothing renders would show neither of the two new classes, so it now renders a whole
+`CategorySection`. And the two test files needed no edit for the change to pass, because
+`copies_per_list` defaults to `[]`; `card_report_test.rb` gained one anyway, later, so that its
+new range-note cases have a sample to be about.
 
 ## Tests — the "what would stay green" list
 

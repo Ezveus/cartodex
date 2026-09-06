@@ -222,9 +222,10 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype = single_list_archetype
 
     visit archetype_path(archetype)
-    assert_selector ".archetype-category-header h3", text: "Pokémon"
 
-    header = all(".archetype-category-header").first
+    # The header the assertion above waited for, not whichever one comes first — those are the
+    # same element today and the test should not be the thing that assumes it.
+    header = find(".archetype-category-header", text: "Pokémon")
     count = rect_of(header.find(".archetype-category-count"))
     copies = rect_of(header.find(".archetype-category-copies"))
 

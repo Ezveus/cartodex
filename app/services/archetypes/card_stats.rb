@@ -142,10 +142,17 @@ module Archetypes
       # A caller with nothing to say about copies — the styleguide, a component test — rather
       # than a fold that came back empty: `categories` drops a section with no entries, so a
       # section this service built always has at least one list behind it.
+      #
+      # `any?` without a block, deliberately: a section every list plays none of would be all
+      # zeros, and `any? { … }` would read that as "nothing to say" and drop the figure. It cannot
+      # arise (a section exists only because some list plays it, so the maximum is at least one),
+      # which is exactly why the weaker spelling would never be caught.
       def copies_known? = copies_per_list.any?
       def min_copies = copies_per_list.min
       def max_copies = copies_per_list.max
       def single_quantity? = min_copies == max_copies
+      # Memoised, which is safe only because nothing reassigns a member after the fact: this is
+      # built once by `category_group_for` and read.
       def modes = @modes ||= CardStats.modes_of(copies_per_list)
       def tied_mode? = modes.size > 1
     end
@@ -178,8 +185,14 @@ module Archetypes
     # semantics drop the bare rows, so deleting it left every test green, which the comment here
     # used to say. `deck_ids` plucks instead of counting, and `pluck` hands back a `nil` element
     # that `size` counts: measured on the production dump with one list-less standing, the two
-    # forms read 106 and 107. Delete this line now and every percentage on the page is computed
-    # over a denominator larger than the sample.
+    # forms read 106 and 107.
+    #
+    # Which is a statement about a bare relation and not about the page: the only caller in `app/`
+    # passes `MetagameScope#listed_standings`, which carries `where.not(deck_id: nil)` of its own,
+    # so on the page this line is *still* a no-op. What it now protects is a caller that does not
+    # filter — every one in `CardStatsTest` among them. Delete it and the sample grows by one nil,
+    # every section's floor drops to zero because `totals[nil]` is 0, and every percentage is
+    # computed over a denominator larger than the sample.
     # `grouping` is a mode, not a second report: `Entry`, `NameGroup`, the fixed core and every
     # percentage below are computed identically either way, and only the grouping of entries into
     # sections changes. That is what makes the two views incapable of telling two stories about one
@@ -361,12 +374,11 @@ module Archetypes
         inclusion_pct: percentage(inclusion),
         min_copies: copies.min,
         max_copies: copies.max,
-        modes: self.class.modes_of(copies),
+        modes: CardStats.modes_of(copies),
         core: inclusion == lists_count,
         labels: labels_by_fingerprint.fetch(key, [])
       )
     end
-
 
     def percentage(count)
       (100.0 * count / lists_count).round(1)
@@ -409,6 +421,12 @@ module Archetypes
     # Tool is played by 1 list of 22, 12 of 68 and 13 of 106 — a heading reading "1 copy" over
     # those samples is true of the card and false of the sample. A later reader making the two
     # rules agree is undoing this, not tidying it.
+    #
+    # What a zero cannot distinguish: a list whose player played none of the category, and a list
+    # the app failed to parse in full. `Decks::Fetcher` drops a decklist line it cannot match
+    # rather than raising, so a half-resolved import lands as a short deck and reads here as
+    # restraint. All 125 recorded lists hold exactly 60 cards today, which is why this is a limit
+    # worth knowing rather than a defect worth guarding.
     #
     # Folded over the section's own entries rather than filtered out of every row per section:
     # that is what makes it O(the rows the section holds) instead of O(rows × sections), and it is

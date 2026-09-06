@@ -639,7 +639,9 @@ a String holding a number most of the time and `"SV107"` the rest — sorted lex
 before "77". The page says so in words; presenting the sub-rows as an additive
 decomposition is the one mistake this layout invites. Copies stay on the printing and never on the
 name for the same reason — a "1-4" merged from two versions describes no list — and a split name
-is never marked *fixed*, since which printing is still a choice. Quantities are summed per
+is never marked *fixed*, since which printing is still a choice. That is not contradicted by the
+section heading's own range below: merging two cards' ranges invents an interval, while a range
+taken over per-list *totals* is a fact about lists that were actually played. Quantities are summed per
 `(deck, fingerprint)` **before** the histogram: two printings of one card in one list are two
 legal `DeckCard` rows (`(deck_id, card_id)` is UNIQUE) and one card in that list; counted
 separately the card appears in more lists than exist, each at a fraction of its copies, and
@@ -653,10 +655,62 @@ a different service, so agreement is a property that has to be built rather than
 things broke it. `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
 "lists holding at least one card" and not "lists" — a field list that resolved no printing gave
 the page two denominators and computed every percentage over the one it did not show; it is now
-`@standings.distinct.count(:deck_id)`, the same question the other three ask. And all four count
-**`COUNT(DISTINCT deck_id)`**, because `index_tournament_standings_on_deck_id` is not unique and
-two standings legitimately point at one deck — two players registering the same 60 cards. A
-single test builds both shapes at once and asserts the four numbers equal.
+`@standings.distinct.pluck(:deck_id).size`, the same question the other three ask. And all four
+count **distinct deck ids**, because `index_tournament_standings_on_deck_id` is not unique and two
+standings legitimately point at one deck — two players registering the same 60 cards. A single
+test builds both shapes at once and asserts the four numbers equal. `CardStats` plucks where the
+other three `COUNT(DISTINCT …)`, and it is the same one statement: the copies figure below needs
+the **ids**, because a list playing none of a category has to be placed as a zero and a list
+holding no card at all appears in no `deck_cards` row. That swap is what turned the service's own
+`where.not(deck_id: nil)` from a documented no-op into a load-bearing filter — `COUNT(DISTINCT)`
+drops NULLs, `pluck` hands back a nil that `size` counts (measured on the dump with one list-less
+standing: 106 against 107). On the page it is *still* a no-op, since `MetagameScope#listed_standings`
+filters already; what it now protects is a caller that does not, every one in `CardStatsTest`
+among them.
+
+**A section heading says how many copies of it a list plays, and that number could not be derived
+from the per-card ones** (#156). Summing the entries' minima and maxima counts cards no single
+list plays together: measured, all-formats Pokémon reads 39-57 that way against a true 16-23, a
+floor above the true ceiling, and TEF-CRI Item reads 24-28 against 11-17. The honest figure sums a
+category **within each list first** and then takes the range across lists, which is a fold over
+`rows` — `(deck, card-key, copies)` — that `CardStats` already holds, so it costs no query and
+`/archetypes/:id` stays at seventeen. `Archetypes::CopiesText` is the module both grains print
+through (`Entry` and `CategoryGroup` carry `min_copies`/`max_copies`/`modes`/`single_quantity?`/
+`tied_mode?` under the same names for exactly that reason), and `CardStats.modes_of` is one
+definition of "every value that ties for most frequent" rather than two.
+
+Three decisions, each of which a later reader would otherwise undo. **Zeros are counted, unlike
+`Entry`**: an entry's range is the range *when played*, which is right for a row printing its
+inclusion percentage beside it, while a heading carries no such figure — and Tool is played by 1
+list of 22, 12 of 68 and 13 of 106, so "1 copy" over those samples is true of the card and false
+of the sample. Making the two rules agree is undoing this, not tidying it. **Both grouping modes
+get the figure**, even though role sections overlap and their copies therefore add past 60 (+1 to
++8, from three to seven dual-role cards per sample): each section's own total is still true of
+that section, and the functional grouping is the half the reference reports print first. **And the
+page says the figures do not add up**, in both modes, suppressed at one list where there is no
+range to disclaim. That sentence says *figures* and not *ranges* deliberately: the column inviting
+the addition is the **mode**, which sums to 60 or 61 across all eight production samples and on
+the three largest describes a 60-card profile no list played. It also names the zeros rule,
+because the page shows both rules a line apart — TEF-CRI renders `Stadium · 1 card · 0-4 copies`
+directly above that section's only card at `95.5 % of lists · 3-4 copies` — and it separates the
+card count, which is over the whole sample, since all-formats reads `Pokémon · 32 cards · 16-23
+copies`. What it deliberately does **not** flatten: "most often" is a weaker claim on a heading
+than on a card row (median share 92.1 % for a row, 32-87 % for the six headings beside it) and is
+worded identically, because dropping it would lose the one figure saying Tool is usually not
+played at all.
+
+**The heading's two figures live in a wrapper, and it is load-bearing** —
+`.archetype-category-header` is `display: flex; justify-content: space-between`, so a third child
+is not placed beside the second but spread to the far end with the card count parked in the
+middle. It is a *cousin* of the `/archetypes` index bug rather than the same one, and the
+difference decides where to test it: that container did not wrap, so the note overflowed and grew
+the row, which 390px catches; this one wraps, so nothing overflows and the damage is worst at full
+width where there is room to spread into — at the narrow end the items may wrap onto separate
+lines and a stacking assertion would pass with the bug still there. The system test therefore
+claims **adjacency**, at both sweep widths. `.archetype-range-note + .archetype-overlap-note` is
+the one selector in the archetype CSS block that buys weight rather than scope, and that block's
+preamble names it: an unconditional negative `margin-top` on the overlap note would pull it under
+the summary in the one-list case, where the range note above it is withheld.
 
 **The performance panel counts all standings; the card report counts only the listed ones**, which
 is why `MetagameScope` exposes two relations rather than letting one number stand for both — a
@@ -721,10 +775,12 @@ lists in the test whether or not those lists' cards carry labels, and by hand at
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list
 archetype (39 000 `deck_cards` rows): `MetagameScope` 4 queries / 15.6 ms, `CardStats` 3 / 137.3 ms,
 `Performance` 4 / 6.1 ms, `IndexCounts` 1 / 2.0 ms — ≈161 ms, and the count does
-not move with the sample. `CardStats` is **4** queries since its `lists_count` stopped being
-derived from the rows it had already fetched, so the total is thirteen; the added query is one
-`COUNT(DISTINCT deck_id)` over one archetype's standings, served by
-`index_tournament_standings_on_archetype_id`, and the timings above predate it. The honest version key for a cache entry would be a `MAX(updated_at)`
+not move with the sample. `CardStats` is **5** queries — rows, deck ids, representative printings,
+those printings' cards, and the label join — so the total is fourteen; the fifth arrived when
+`lists_count` stopped being derived from the rows already fetched, it reads one archetype's
+standings through `index_tournament_standings_on_archetype_id`, and the timings above predate it.
+(This paragraph said "4" and "thirteen" from the day it was written; the count was five even
+then.) The honest version key for a cache entry would be a `MAX(updated_at)`
 over the archetype's standings, the kind of unindexed aggregate `Card.filter_values` had to be
 corrected away from. `CardStats` is 85 % of the cost and is where a cache would go if the
 collection grows past roughly twice that size.
@@ -912,9 +968,7 @@ paths, so a screen added tomorrow is covered the day it is routed — and on its
 gate because Rails refuses a missing action before any callback runs. That route is gone, like
 `standard_pools`' `show` beside it.
 
-**Out of scope for the roles, deliberately:** copies per category (#156, whose question role mode
-*asks* — what a total is worth when a card is counted twice — and deliberately does not answer),
-variants (#157), per-archetype role overrides (a role is a property of the card; an override would
+**Out of scope for the roles, deliberately:** variants (#157), per-archetype role overrides (a role is a property of the card; an override would
 be a second store, not a migration of this one), and roles anywhere but `/archetypes/:id` and the
 admin screen — not on a deck page, not in the JSON API, not in an MCP tool.
 

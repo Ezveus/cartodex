@@ -8,11 +8,16 @@ require "test_helper"
 # Structs are built by hand, the way the report's other component tests do: what this file asks
 # about is presentation, and Archetypes::CardStatsTest owns the aggregation.
 class Archetypes::CategorySectionTest < ActiveSupport::TestCase
+  # "Beside" is a claim about the markup, not only about the strings: the header is a
+  # `space-between` flex row, so two figures placed in it directly are pushed apart rather than
+  # grouped. The geometry is measured in ArchetypeMetagameTest; what is checked here is the one
+  # thing that makes the geometry possible, which is that both spans share a wrapper.
   test "prints the copies a list plays of the section beside the card count" do
     html = section(copies_per_list: [ 17, 20, 19, 20 ])
+    meta = html[/<div class="archetype-category-meta">.*?<\/div><\/div>/m]
 
-    assert_includes html, "1 card"
-    assert_includes html, "17-20 copies · most often 20"
+    assert_includes meta, "1 card"
+    assert_includes meta, "17-20 copies · most often 20"
   end
 
   # The singular is the branch an extraction fumbles and the one nothing asserted: `copies_noun`

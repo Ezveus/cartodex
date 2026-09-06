@@ -3275,7 +3275,14 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
    .tournaments-search .form-input already has, which is the listing this page was built from.
 
    The rule these layers exist to enforce is that no override here may depend on sitting later in
-   the file, since the next appended layer would silently undo it; none of these is an override.
+   the file, since the next appended layer would silently undo it. One selector here **is** an
+   override and says so in its own weight: .archetype-range-note + .archetype-overlap-note, which
+   exists to beat .archetype-overlap-note's own margin when the two notes stack in role mode. It
+   is an adjacent sibling and not descent, so it is the one entry in this block that buys weight
+   rather than scope — and it buys it in the selector, which is the whole point: an unconditional
+   negative margin-top on .archetype-overlap-note would pull that note under the summary in the
+   one-list case, where the range note above it is withheld. Every other selector below is scope,
+   not weight.
 
    Deliberately absent: any energy-type colour. The one thing on this page that is typed is the
    archetype badge in the header, and Ui::ArchetypeBadge already colours itself from
@@ -3534,6 +3541,14 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .archetype-category-copies {
   color: var(--ink-500);
   font-size: 0.85rem;
+}
+
+/* Only the card count refuses to break. The copies figure carries a mode list of no fixed length
+   — a four-way tie in a small sample renders "0-1 copies · most often 0 / 1 / 2 / 3 — tied" — and
+   it is the last thing on the line, so letting it wrap costs nothing while `nowrap` would make it
+   the one unbreakable string on the page. The meta wrapper's own flex-wrap only moves the two
+   spans relative to each other; it cannot break either of them. */
+.archetype-category-count {
   white-space: nowrap;
 }
 
