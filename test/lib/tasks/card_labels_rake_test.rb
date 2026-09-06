@@ -46,6 +46,52 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
     assert_match "doublade_fp", printed
   end
 
+  # Measured, and the reason the collision check reads `source` at all: a force: true rescrape
+  # moves a Pokémon's fingerprint, the next suggester run writes a `suggested` row on the new one,
+  # and a collision check that called that "a decision" left the human's refusal stranded on the
+  # old fingerprint — with the machine's opinion sitting on the live one, which is what the report
+  # then renders. It aborted on every subsequent run too, so the repair tool took itself out of
+  # service. A machine's opinion never blocks a human's decision.
+  test "a suggestion never blocks a decision from being resynced" do
+    refusal = @label.assignments.create!(fingerprint: "honedge_fp", card: @card, source: "curated",
+                                         rejected: true)
+    @card.update_column(:fingerprint, "honedge_fp_v2")
+    suggestion = @label.assignments.create!(fingerprint: "honedge_fp_v2", source: "suggested")
+
+    # Rescued for the reason the clean-run test below is: an abort here would be the regression,
+    # and minitest treats SystemExit as a passthrough that kills the whole run rather than failing
+    # this one test.
+    begin
+      run_task
+    rescue SystemExit
+      flunk "resync_fingerprints refused to move a decision past a suggestion:\n#{printed}"
+    end
+
+    assert_equal "honedge_fp_v2", refusal.reload.fingerprint
+    assert refusal.rejected
+    assert_not CardLabelAssignment.exists?(suggestion.id)
+    assert_match "Moved 1 assignment.", printed
+  end
+
+  # The same rule read from the other side: a stale suggestion that would land on a fingerprint a
+  # human has already decided is the machine's to drop. Reporting it would ask a human to resolve
+  # a conflict between their own decision and a guess.
+  test "a stale suggestion whose target carries a decision is dropped, not reported" do
+    decision = @label.assignments.create!(fingerprint: "doublade_fp", source: "curated")
+    suggestion = @label.assignments.create!(fingerprint: "honedge_fp", card: @card, source: "suggested")
+    @card.update_column(:fingerprint, "doublade_fp")
+
+    begin
+      run_task
+    rescue SystemExit
+      flunk "resync_fingerprints reported a stale suggestion instead of dropping it:\n#{printed}"
+    end
+
+    assert_not CardLabelAssignment.exists?(suggestion.id)
+    assert_equal "curated", decision.reload.source
+    assert_match "Dropped 1 stale suggestion.", printed
+  end
+
   # The fingerprint assertion is the load-bearing half: the task's only write path is
   # update_column, which does not bump updated_at in this Rails version, so a
   # maximum(:updated_at) assertion here would pass identically whether the resolved assignment was
@@ -71,6 +117,32 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
     assert_no_match "could not be moved", printed
   end
 
+  # The receipt is the only thing an admin reads after a run, so every number it prints has to be
+  # a number this run produced.
+  test "suggest_roles reports what it wrote" do
+    CardLabel::ROLES.each { |attributes| CardLabel.create!(family: "role", **attributes) }
+    Card.create!(name: "Nest Ball", card_type: "Trainer", subtype: "Item", set_name: "TST",
+                 set_number: "1", rarity: "Common",
+                 effect: "Search your deck for a Basic Pokémon and put it onto your Bench.")
+
+    run_task("card_labels:suggest_roles")
+
+    assert_match "Created 1, kept 0, withdrew 0.", printed
+    assert_match "Left 0 decided by hand untouched.", printed
+    assert_match(/Skipped \d+ printings with no fingerprint/, printed)
+  end
+
+  # Unlike resync_fingerprints, this one has nothing ambiguous to report and must not abort:
+  # bin/docker-entrypoint would fail a boot on curation debt, which is a state the admin screen
+  # exists to work through rather than an error.
+  test "suggest_roles does not abort, however much is left uncurated" do
+    CardLabel::ROLES.each { |attributes| CardLabel.create!(family: "role", **attributes) }
+
+    run_task("card_labels:suggest_roles")
+
+    assert_match "Created 0, kept 0, withdrew 0.", printed
+  end
+
   private
 
   # Named run_task, not run: Minitest::Test#run is the framework's own method for driving a test
@@ -83,10 +155,10 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
   # its block returning normally, and abort raises SystemExit out of that block instead — the
   # exception propagates straight past capture_io's own return statement, taking the captured
   # string with it. Stashing the StringIO on an ivar keeps it readable after the raise.
-  def run_task
+  def run_task(name = "card_labels:resync_fingerprints")
     original_stdout = $stdout
     $stdout = @printed = StringIO.new
-    Rake::Task["card_labels:resync_fingerprints"].tap(&:reenable).invoke
+    Rake::Task[name].tap(&:reenable).invoke
   ensure
     $stdout = original_stdout
   end

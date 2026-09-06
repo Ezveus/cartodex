@@ -148,8 +148,20 @@ Rails.application.routes.draw do
       # is five fields and the index already lists all of them, so a show page would only restate
       # the row. `import` is a POST on the member: it enqueues a run of that label's own `is:`
       # token, so there is nothing to preview and nothing to type.
+      #
+      # It was routed anyway until AdminGateTest walked the routing table and found the one admin
+      # route that answered without passing the gate, because Rails refuses a missing action
+      # before any callback runs.
       resources :card_labels, except: [ :show ] do
         post :import, on: :member
+      end
+
+      # Curation, not CRUD: the rows are `cards.fingerprint` values and there is nothing to
+      # create. `destroy` clears the decisions on one fingerprint — the one deletion the app
+      # offers on an assignment, and the only way back to "nobody has an opinion about this card"
+      # once a save has decided all seven roles.
+      resources :card_roles, only: %i[index update destroy] do
+        post :suggest, on: :collection
       end
 
       # Importing an archetype's field off Limitless TCG. `preview` is a GET on the collection

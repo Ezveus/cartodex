@@ -14,6 +14,7 @@ namespace :card_labels do
   task resync_fingerprints: :environment do
     reports = []
     moved = 0
+    dropped = 0
 
     # Both associations, not :card alone: every report line below reads assignment.card_label.slug,
     # and preloading only the one this task writes through would N+1 the other on every line.
@@ -27,7 +28,25 @@ namespace :card_labels do
         next
       end
 
-      if CardLabelAssignment.exists?(card_label_id: assignment.card_label_id, fingerprint: card.fingerprint)
+      # A machine's opinion never blocks a human's decision, in either direction — and reading the
+      # target row as "a decision" whatever wrote it is how it did. Measured: a force: true
+      # rescrape moves a Pokémon's fingerprint, the next card_labels:suggest_roles run writes a
+      # `suggested` row on the new one, and this branch then stranded the human's refusal on the
+      # old fingerprint while the machine's guess sat on the live one — which is what the report
+      # renders. It aborted on every later run too, taking the repair tool out of service.
+      #
+      # So a suggestion in the way is deleted (the next run re-proposes it, on the right
+      # fingerprint), a suggestion that is itself in the way of a decision is dropped, and only two
+      # rows a human or an import wrote are reported for somebody to resolve.
+      blocking = CardLabelAssignment.find_by(card_label_id: assignment.card_label_id,
+                                             fingerprint: card.fingerprint)
+      if blocking && blocking.source == "suggested" && assignment.source != "suggested"
+        blocking.destroy
+      elsif blocking && assignment.source == "suggested"
+        assignment.destroy
+        dropped += 1
+        next
+      elsif blocking
         reports << "#{assignment.card_label.slug}: #{assignment.fingerprint} moved to " \
                    "#{card.fingerprint}, which already carries a decision — resolve by hand"
         next
@@ -40,10 +59,34 @@ namespace :card_labels do
     end
 
     puts "Moved #{moved} #{"assignment".pluralize(moved)}."
+    puts "Dropped #{dropped} stale #{"suggestion".pluralize(dropped)}." if dropped.positive?
     next if reports.empty?
 
     puts "#{reports.size} could not be moved:"
     reports.each { |line| puts "  #{line}" }
     abort "card_labels:resync_fingerprints left #{reports.size} assignments unresolved."
+  end
+
+  # Propose roles from the card text, for every card in the catalogue. Safe to re-run: it writes
+  # only its own `suggested` rows, never examines a pair a human has decided, and withdraws the
+  # suggestions its own rules no longer make.
+  #
+  # It does not abort on anything it reports, unlike resync_fingerprints above: nothing here is
+  # ambiguous — a card the rules say nothing about is simply a card nobody has curated yet, which
+  # is the state /admin/card_roles exists to work through, and failing a boot on it would be
+  # failing a boot on curation debt.
+  desc "Suggest card roles from the effect, attack and ability text the catalogue already holds"
+  task suggest_roles: :environment do
+    result = CardLabels::RoleSuggester.call
+
+    puts "Examined #{result.fingerprints_examined} #{"card".pluralize(result.fingerprints_examined)}."
+    puts "Created #{result.created}, kept #{result.kept}, withdrew #{result.withdrawn}."
+    puts "Left #{result.decided} decided by hand untouched."
+    # `next`, not `return`: a rake task body is a block, and `return` out of one raises
+    # LocalJumpError — which the fixtures hide, since they always leave a few unfingerprinted
+    # printings and the branch is never taken in a test.
+    next if result.unfingerprinted.zero?
+
+    puts "Skipped #{result.unfingerprinted} printings with no fingerprint, which cannot be labelled."
   end
 end

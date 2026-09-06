@@ -306,6 +306,97 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".archetype-card-row .archetype-card-label", text: "Attacker", count: 0
   end
 
+  # ── The card report's second grouping mode ──────────────────────────────────────────────────
+
+  # And the type badge keeps its place on the name line while the sections are role sections: the
+  # two families answer two different questions about one card, so a mode that hid the badge would
+  # make "is this an ACE SPEC?" a question the reader can only answer by switching modes.
+  test "show groups the card report by role when asked" do
+    archetype = quiet_archetype(480, name: "Roled Report Archetype")
+    standing = role_card(listed_standing_for(archetype, 480), "gust", "Gust", 30)
+    card = standing.deck.deck_cards.first.card
+    ace_spec = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    ace_spec.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    listed_standing_for(archetype, 481)
+
+    get archetype_path(archetype, group: "role")
+
+    assert_response :success
+    assert_select ".archetype-category-header h3", text: "Gust"
+    assert_select ".archetype-category-header h3", text: "No role recorded"
+    assert_select ".archetype-category-header h3", text: "Pokémon", count: 0
+    assert_select ".archetype-category-header h3", text: "ACE SPEC", count: 0
+    assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
+  end
+
+  # The clamp `#index` makes for `?page=` and `#show` already makes for `?pool=`, on the third
+  # parameter this page reads: `?group[]=role` hands over an Array, which is neither the string
+  # "role" nor anything that could be compared to it without raising. The report falls back to the
+  # grouping it has always had rather than 404ing or blowing up.
+  test "show survives a malformed group parameter and stays in type mode" do
+    archetype = quiet_archetype(500, name: "Malformed Group Archetype")
+    listed_standing_for(archetype, 500)
+
+    get archetype_path(archetype, group: [ "role" ])
+
+    assert_response :success
+    assert_select ".archetype-category-header h3", text: "Pokémon"
+    assert_select ".archetype-category-header h3", text: "No role recorded", count: 0
+  end
+
+  # The rule the mode links exist under: each re-emits the sample the page is *showing*, which is
+  # the scope's own answer, never the parameter that produced it. Asserted through a malformed
+  # `?pool[]=` precisely because that is the case where the two differ — the scope fell back to the
+  # default pool, and a link built from `params[:pool]` would carry `pool[]=junk` back into the
+  # next request and into every copy of that link.
+  test "the report's mode links re-emit the sample the page fell back to, never the parameter" do
+    archetype = quiet_archetype(520, name: "Fallback Archetype")
+    listed_standing_for(archetype, 520)
+
+    get archetype_path(archetype, pool: [ "junk" ])
+
+    assert_response :success
+    hrefs = css_select("a.archetype-report-mode").map { |link| link["href"] }
+
+    assert_equal 2, hrefs.size
+    assert hrefs.all? { |href| href.include?("pool=#{standard_pools(:twm_por).id}") },
+      "a mode link did not carry the pool the page is showing: #{hrefs.inspect}"
+    assert hrefs.any? { |href| href.include?("group=type") }
+    assert hrefs.any? { |href| href.include?("group=role") }
+    assert_no_match(/junk/, response.body)
+  end
+
+  # Role mode regroups entries the page has already loaded, so it must cost exactly what type mode
+  # costs — the same 17 the test above pins for the type report.
+  #
+  # The literal matters here and a `small == large` comparison would not have caught what this is
+  # for. Measured: an N+1 issued once *per section* moved this page from 17 to 18 on a fixture
+  # whose role mode renders a single "No role recorded" section, and to 25 on the eight sections
+  # the production data produces — while the type/role equality stayed true and the test stayed
+  # green. Hence two roles on two distinct cards below: role mode has to render several sections
+  # before the count can say anything at all.
+  test "role mode costs no query the type report does not" do
+    archetype = quiet_archetype(540, name: "Grouped Archetype")
+    role_card(listed_standing_for(archetype, 540), "draw", "Draw", 10)
+    role_card(listed_standing_for(archetype, 541), "search", "Search", 20)
+    listed_standing_for(archetype, 542)
+
+    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+
+    type_mode = capture_queries { get archetype_path(archetype) }
+    role_mode = capture_queries { get archetype_path(archetype, group: "role") }
+
+    assert_response :success
+    assert_select ".archetype-category-header h3", text: "Draw"
+    assert_select ".archetype-category-header h3", text: "Search"
+    assert_select ".archetype-category-header h3", text: "No role recorded"
+
+    assert_equal 17, type_mode.size, "the type report moved off its pinned cost"
+    assert_equal 17, role_mode.size, "role mode issued a query the type report does not"
+    assert_equal 1, role_mode.count { |sql| sql.include?("card_label") },
+      "the label join ran more than once in role mode"
+  end
+
   # The blend neither the sample selector nor the performance panel can show any other way: the
   # pool axis puts an online weekly and a Regional anchored to the same pool in one bucket, and the
   # online import forces `tier: "other"`, so `by_tier` cannot tell them apart either. This is the
@@ -453,6 +544,17 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     label = CardLabel.create!(slug: "label-#{standing.id}", name: "Label #{standing.id}",
                                family: "type", position: standing.id)
     label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    standing
+  end
+
+  # A curated role on the standing's card, which is the row the report reads — the suggester and
+  # the admin screen are two ways of writing it and the report is indifferent to which. A distinct
+  # role per call, like `label_card`'s distinct labels: the flat-cost test needs role mode to
+  # render several sections before its count says anything.
+  def role_card(standing, slug, name, position)
+    card = standing.deck.deck_cards.first.card
+    role = CardLabel.create!(slug: slug, name: name, family: "role", position: position)
+    role.assignments.create!(fingerprint: card.fingerprint, card: card, source: "curated")
     standing
   end
 

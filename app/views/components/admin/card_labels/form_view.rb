@@ -16,7 +16,11 @@ module Admin
 
             render Ui::FormGroup.new do
               f.label :slug, class: "form-label"
-              f.text_field :slug, class: "form-input"
+              # Disabled on a role, for the reason `family` is disabled on an edit: the browser
+              # then submits nothing at all, which is what Admin::CardLabelsController relies on.
+              # A renamed role slug is a delete and a create at once — the rules key on it, the
+              # seed recreates the old row empty, and the human's decisions stay on the orphan.
+              f.text_field :slug, class: "form-input", disabled: @card_label.role?
             end
 
             render Ui::FormGroup.new do
@@ -70,7 +74,7 @@ module Admin
       def family_hint
         return "Family cannot be changed once created." if @card_label.persisted?
 
-        "Role labels will be seeded from the application in stage 2 — pick type here."
+        "Role labels are seeded from the application — pick type here."
       end
 
       # `new` offers only `type`: a hand-invented role would be a label no stage-2 rule can ever

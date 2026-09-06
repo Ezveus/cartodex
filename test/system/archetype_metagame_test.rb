@@ -176,6 +176,36 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
       "(badge #{badge_width}, name cell #{cell_width})"
   end
 
+  # The mode control is two links in the card report's own header, and only a browser proves the
+  # round trip: the sections have to change, the URL has to carry the mode so a copied link opens
+  # the same report, and the *sample* has to survive the switch — a link that dropped `?pool=`
+  # would silently move the reader to the default sample while they were changing something else.
+  test "a member switches the card report between types and roles, keeping the sample" do
+    archetype = roled_archetype
+
+    visit archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+    assert_selector ".archetype-category-header h3", text: "Pokémon"
+    assert_no_text "A card is listed under every role it plays"
+
+    click_on "Role"
+
+    assert_selector ".archetype-category-header h3", text: "Gust"
+    assert_selector ".archetype-category-header h3", text: "No role recorded"
+    assert_no_selector ".archetype-category-header h3", text: "Pokémon"
+    assert_text "A card is listed under every role it plays"
+    assert_current_path(/group=role/)
+    assert_current_path(/pool=#{standard_pools(:twm_por).id}/)
+
+    click_on "Type"
+
+    assert_selector ".archetype-category-header h3", text: "Pokémon"
+    assert_no_selector ".archetype-category-header h3", text: "Gust"
+    assert_no_text "A card is listed under every role it plays"
+    assert_current_path(/group=type/)
+    assert_current_path(/pool=#{standard_pools(:twm_por).id}/)
+  end
+
   private
 
   # One paper standing and one online one, so the note has a mixture to describe.
@@ -235,6 +265,20 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype
   end
 
+  # One list holding a Pokémon nobody has curated and a Trainer somebody has: role mode then has
+  # both a real section and the "No role recorded" one, which is the shape the page is about.
+  def roled_archetype
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+    event = tournament("Role Cup", Date.new(2026, 2, 14), standard_pools(:twm_por))
+    place = standing(event, archetype, "Role Player")
+
+    gusting = place.deck.deck_cards.map(&:card).find { |card| card.card_type == "Trainer" }
+    role = CardLabel.create!(slug: "gust", name: "Gust", family: "role", position: 30)
+    role.assignments.create!(fingerprint: gusting.fingerprint, card: gusting, source: "curated")
+
+    archetype
+  end
+
   def tournament(name, date, pool, online: false)
     Tournament.create!(name: name, date: date, tier: online ? "other" : "regional",
                        format: "standard", standard_pool: pool, online: online)
@@ -251,5 +295,74 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
                                player_name: player_name, division: division,
                                placement: 1 + TournamentStanding.where(tournament: event).count)
+  end
+end
+
+# Pinned to 390px because the assertion is about what the report's header does when it runs out of
+# room, and the mobile half of the sweep really renders at 500 (Chrome refuses a narrower window;
+# only CDP escapes that floor). The header puts a heading and a two-link control on one line, which
+# is the shape that overlaps or overflows when it stops fitting — and neither failure is visible to
+# a text assertion, because the links render either way. They render in the wrong place.
+class ArchetypeReportModesNarrowTest < ApplicationSystemTestCase
+  drive_at 390, 844
+
+  setup do
+    @user = users(:one)
+    login_as @user, scope: :user
+  end
+
+  test "the mode links never overlap the heading and never push the header past the panel" do
+    visit archetype_path(reported_archetype)
+    assert_selector ".archetype-report-header"
+
+    boxes = evaluate_script(<<~JS)
+      (() => {
+        const header = document.querySelector(".archetype-report-header");
+        const box = (el) => {
+          const r = el.getBoundingClientRect();
+          return { top: r.top, right: r.right, bottom: r.bottom, left: r.left, width: r.width };
+        };
+        return {
+          heading: box(header.querySelector("h2")),
+          modes: box(header.querySelector(".archetype-report-modes")),
+          panel: box(header.closest(".archetype-panel")),
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth
+        };
+      })()
+    JS
+
+    heading, modes, panel = boxes["heading"], boxes["modes"], boxes["panel"]
+    clear = modes["left"] >= heading["right"] - 1 || modes["top"] >= heading["bottom"] - 1
+
+    assert clear,
+      "the mode links sit on top of the heading " \
+      "(heading #{heading.inspect}, modes #{modes.inspect})"
+    # The header is a block, so its own box can never be wider than the panel however far its
+    # contents spill — measuring it would assert nothing. What overflow actually moves is the
+    # control's right edge and the document's scroll width, so those are what is measured.
+    assert_operator modes["right"], :<=, panel["right"] + 1,
+      "the mode links overflow the panel " \
+      "(modes right #{modes['right']}, panel right #{panel['right']})"
+    assert_operator boxes["scrollWidth"], :<=, boxes["innerWidth"],
+      "the page scrolls sideways at 390px " \
+      "(scrollWidth #{boxes['scrollWidth']}, innerWidth #{boxes['innerWidth']})"
+  end
+
+  private
+
+  # Enough of a report for the header to render its control: the links are withheld on an empty
+  # sample, where both modes would show the same empty state.
+  def reported_archetype
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+    event = Tournament.create!(name: "Narrow Cup", date: Date.new(2026, 2, 14), tier: "regional",
+                               format: "standard", standard_pool: standard_pools(:twm_por))
+    deck = Deck.create!(name: "Narrow list", shared: true, physical: false, format: "standard",
+                        standard_pool: event.standard_pool)
+    DeckCard.create!(deck: deck, card: cards(:teal_mask_ogerpon_ex), quantity: 2)
+    TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
+                               player_name: "Narrow Player", division: "masters", placement: 1)
+
+    archetype
   end
 end

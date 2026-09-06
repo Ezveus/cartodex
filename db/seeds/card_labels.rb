@@ -4,7 +4,9 @@
 # db/seeds/standard_pools.rb. Reasserting the values here would silently revert an admin's
 # correction on the next deploy.
 #
-# Stage 2 grows a second loop over CardLabel::ROLES for the `role` family.
+# The two families are seeded from two places on purpose: a `type` label is data, so its list
+# lives here and an admin may add to it; a `role` label is referenced by code, so its list is
+# CardLabel::ROLES and this file only walks it.
 #
 # Local variable instead of constant: this file is loaded twice in one test process
 # (CardLabelSeedTest loads it twice), which would re-initialize a constant and print a warning.
@@ -23,5 +25,12 @@ type_labels.each do |attributes|
   next if CardLabel.exists?(slug: attributes[:slug])
 
   CardLabel.create!(family: "type", **attributes)
+  puts "Created card label #{attributes[:slug]}"
+end
+
+CardLabel::ROLES.each do |attributes|
+  next if CardLabel.exists?(slug: attributes[:slug])
+
+  CardLabel.create!(family: "role", **attributes)
   puts "Created card label #{attributes[:slug]}"
 end

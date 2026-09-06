@@ -1,9 +1,18 @@
 module Archetypes
-  # What the recorded lists play. The categories arrive already ordered and already grouped by the
-  # service — Pokémon, Supporter, Item, Tool, Stadium, Special Energy, Basic Energy, Other — and
-  # this component adds no ordering of its own, so the display order stays a single decision made
-  # in Archetypes::CardStats::CATEGORIES.
+  # What the recorded lists play. The sections arrive already ordered and already grouped by the
+  # service — by card type (Pokémon, Supporter, Item, Tool, Stadium, Special Energy, Basic Energy,
+  # Other) or by what the card does (the role vocabulary, then "No role recorded") — and this
+  # component adds no ordering of its own, so the display order stays a single decision made in
+  # Archetypes::CardStats.
+  #
+  # The mode control lives here and not in Archetypes::SampleSelector, which is dropped entirely
+  # when `selectable?` is false: a page whose archetype has one sample would then offer no way back
+  # out of role mode. Which mode is showing is read off the result rather than passed in beside it,
+  # so the links cannot name a grouping other than the one the sections below them were built with.
   class CardReport < ApplicationComponent
+    # The two groupings, in the order the header offers them: the report's own default first.
+    MODES = [ [ :type, "Type" ], [ :role, "Role" ] ].freeze
+
     def initialize(stats:, scope:)
       @stats = stats
       @scope = scope
@@ -11,10 +20,12 @@ module Archetypes
 
     def view_template
       section(class: "archetype-panel") do
-        h2 { "Card report" }
+        header
 
         if @stats.any?
           summary
+          overlap_note if role_mode?
+          provenance_note if role_mode? && @stats.unconfirmed_roles?
           @stats.categories.each do |category|
             render Archetypes::CategorySection.new(category: category, single_list: single_list?)
           end
@@ -25,6 +36,83 @@ module Archetypes
     end
 
     private
+
+    def role_mode? = @stats.role_grouping?
+
+    def header
+      div(class: "archetype-report-header") do
+        h2 { "Card report" }
+        # Withheld on an empty sample: both modes render the same "no decklist recorded" line, so
+        # the control would be a click that changes the URL and not the page.
+        mode_links if @stats.any?
+      end
+    end
+
+    def mode_links
+      div(class: "archetype-report-modes") do
+        span(class: "archetype-report-modes-label") { "Group by" }
+        MODES.each { |mode, label| mode_link(mode, label) }
+      end
+    end
+
+    # The current mode stays a link — it is a tab, and a tab that cannot be clicked reads as
+    # disabled — so what says which one is showing is `aria-current` and a modifier class, not the
+    # absence of an anchor.
+    def mode_link(mode, label)
+      current = role_mode? == (mode == :role)
+      classes = [ "archetype-report-mode" ]
+      classes << "archetype-report-mode--current" if current
+
+      a(href: path_for(mode), class: classes.join(" "),
+        aria_current: ("page" if current)) { label }
+    end
+
+    # A plain anchor over the routes module, not `link_to` with `archetype_path`: both of those
+    # resolve through a view_context, which does not exist when this component is rendered by a
+    # bare `.call` — the trap Ui::ArchetypeBadge documents, and the reason this component has a
+    # unit test at all.
+    #
+    # The sample re-emitted is the one the page is **showing**, taken from the scope and never from
+    # `params[:pool]`. A malformed `?pool[]=junk` is the case where the two differ: the scope fell
+    # back to the default pool, and a link built from the parameter would carry the junk back into
+    # the next request and into every copy of that link. The component is handed no parameters at
+    # all, which makes that structural rather than a convention.
+    def path_for(mode)
+      Rails.application.routes.url_helpers.archetype_path(
+        @scope.archetype, pool: pool_param, group: mode
+      )
+    end
+
+    def pool_param
+      @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id
+    end
+
+    # The sentence a reader cannot infer from the sections themselves, in the register of the one
+    # that stops them taking Hoothoot's printings for a decomposition. The overlap is half the
+    # vocabulary rather than a corner case — Iono is draw and disruption, Prime Catcher is gust and
+    # switch — so the sections genuinely describe more cards between them than a list holds, and a
+    # reader adding them up concludes the wrong thing about every number on the page.
+    def overlap_note
+      p(class: "archetype-overlap-note") do
+        "A card is listed under every role it plays, so a card with two roles appears twice and " \
+          "these sections add up to more than the 60 cards of a list."
+      end
+    end
+
+    # A rule's guess and a human's decision are the same row to everything below this line, and
+    # the report has no way to show the difference card by card without saying it about the
+    # sections a reader is already asked to read carefully. So it says the ratio once, at the top,
+    # in the register of the overlap note: on the production data the day this shipped, 714 of 714
+    # assignments were proposals and the method note underneath still read "a person decides".
+    def provenance_note
+      total = @stats.proposed_roles + @stats.decided_roles
+
+      p(class: "archetype-provenance-note") do
+        plain "#{@stats.proposed_roles} of the #{total} roles below "
+        plain "#{@stats.proposed_roles == 1 ? 'is a proposal a rule made' : 'are proposals a rule made'} "
+        plain "from the card's own text, which nobody has confirmed yet."
+      end
+    end
 
     # One list is not a sample of itself. `core` is `inclusion_count == lists_count`, so at one
     # list every card in it is "played by every list", and every quantity is "always the same

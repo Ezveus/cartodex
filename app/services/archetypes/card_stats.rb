@@ -41,6 +41,15 @@ module Archetypes
       [ :other,          "Other" ]
     ].freeze
 
+    # Where a card lands in role mode when nothing says what it does. A rendered, counted section
+    # and not a silent drop: on the production dump 48 of the 94 played fingerprints carry no role,
+    # so dropping them would leave a report summing to half a list and still looking like one. The
+    # rejected alternative reads better and is worse — falling back to the card's *type* category
+    # means a reader cannot tell "this card has no role" from "nobody has curated it yet", and the
+    # page starts asserting a classification it does not hold.
+    NO_ROLE = :no_role
+    NO_ROLE_LABEL = "No role recorded".freeze
+
     # `cards.subtype` is a free scraped string, not an enum. Both spellings of the tool bucket are
     # mapped because Cards::Fetcher#parse_subtype can emit either — it reads whatever follows
     # "Trainer - " on the page — while every one of the 76 tools in the catalogue today carries
@@ -95,15 +104,35 @@ module Archetypes
       def split? = entries.size > 1
     end
 
+    # One section of the report. `key` is a Symbol in both modes — a CATEGORIES key in type mode,
+    # a role's slug (dashes and all: `:"energy-acceleration"`) or NO_ROLE in role mode — because it
+    # is only ever compared, never printed; `label` is what the reader sees.
+    #
+    # `cards_count` counts printings, and in role mode it **over-counts on purpose**: an entry is
+    # filed under every role it carries, so Iono is under `draw` and under `disruption` and both
+    # sections count it. That is why nothing prints a total across sections and why role mode says
+    # so in words — see Archetypes::CardReport.
     CategoryGroup = Struct.new(:key, :label, :name_groups, keyword_init: true) do
       def cards_count = name_groups.sum { |group| group.entries.size }
     end
 
+    # `grouping` travels on the result rather than beside it because the sections and the control
+    # that chose them are rendered by one component: read off the result, the mode links cannot
+    # name a grouping other than the one the sections below them were built with.
+    # `proposed_roles` / `decided_roles` count the (fingerprint, role) pairs the sections below
+    # were built from, split by who wrote them. The report prints roles a rule guessed beside
+    # roles a human confirmed, and nothing else on the page could tell them apart — the entries
+    # carry `CardLabel`s, which is what the section headings need and which says nothing about
+    # provenance. Without this the page asserts "a person decides" over a sample where, on the
+    # production data the day this shipped, 714 of 714 assignments were guesses.
     Result = Struct.new(
-      :lists_count, :categories, :fixed_core_cards, :fixed_core_copies,
+      :lists_count, :categories, :fixed_core_cards, :fixed_core_copies, :grouping,
+      :proposed_roles, :decided_roles,
       keyword_init: true
     ) do
       def any? = lists_count.positive?
+      def role_grouping? = grouping == :role
+      def unconfirmed_roles? = proposed_roles.to_i.positive?
     end
 
     # Takes the standings relation rather than deck ids, so the caller cannot hand this a
@@ -115,8 +144,18 @@ module Archetypes
     # green (checked). It stays as the declaration of what this service is allowed to see, so
     # that a future query reading `@standings` some other way inherits the restriction instead of
     # having to rediscover it.
-    def initialize(standings:)
+    # `grouping` is a mode, not a second report: `Entry`, `NameGroup`, the fixed core and every
+    # percentage below are computed identically either way, and only the grouping of entries into
+    # sections changes. That is what makes the two views incapable of telling two stories about one
+    # sample.
+    #
+    # Anything that is not exactly `:role` is `:type` — the clamp `ArchetypesController#index`
+    # already makes for `?page=` and `#show` for `?pool=`. The value arrives from a query parameter
+    # by way of the controller, so the unknown case is a reader's typo or a link-checker, and a
+    # raise there would be a 500 over a spelling.
+    def initialize(standings:, grouping: :type)
       @standings = standings.where.not(deck_id: nil)
+      @grouping = grouping == :role ? :role : :type
     end
 
     def call
@@ -126,14 +165,25 @@ module Archetypes
         lists_count: lists_count,
         categories: categories,
         fixed_core_cards: fixed_entries.size,
-        fixed_core_copies: fixed_entries.sum(&:min_copies)
+        fixed_core_copies: fixed_entries.sum(&:min_copies),
+        grouping: @grouping,
+        proposed_roles: role_assignments_by_source["suggested"].to_i,
+        decided_roles: role_assignments_by_source["curated"].to_i
       )
     end
 
     private
 
+    # Counted off the assignments already loaded for the report — no query of its own, which is
+    # what keeps /archetypes/:id at 17 — and scoped to the roles the reader is actually looking
+    # at, not to the whole table.
+    def role_assignments_by_source
+      @role_assignments_by_source ||= role_assignments.group_by(&:source).transform_values(&:size)
+    end
+
     def empty_result
-      Result.new(lists_count: 0, categories: [], fixed_core_cards: 0, fixed_core_copies: 0)
+      Result.new(lists_count: 0, categories: [], fixed_core_cards: 0, fixed_core_copies: 0,
+                 grouping: @grouping)
     end
 
     # The key every card is aggregated under. It is the fingerprint, except for a card that has
@@ -215,13 +265,29 @@ module Archetypes
     # unlabelled sample and two on a labelled one, which is exactly the number that would not
     # show up against fixtures with no assignment at all. `eager_load` forces the LEFT OUTER JOIN
     # unconditionally, so the query count no longer depends on whether any row happens to match.
-    def labels_by_fingerprint
-      @labels_by_fingerprint ||= CardLabelAssignment
+    def assignments_by_fingerprint
+      @assignments_by_fingerprint ||= CardLabelAssignment
         .active
         .eager_load(:card_label)
         .where(fingerprint: rows_by_key.keys)
         .group_by(&:fingerprint)
-        .transform_values { |assignments| assignments.map(&:card_label).sort_by { |l| [ l.position, l.slug ] } }
+    end
+
+    def labels_by_fingerprint
+      @labels_by_fingerprint ||= assignments_by_fingerprint.transform_values do |assignments|
+        assignments.map(&:card_label).sort_by { |label| [ label.position, label.slug ] }
+      end
+    end
+
+    # The role half of what the report loaded, for the sentence that says how much of it a human
+    # has confirmed. `entries` rather than every loaded fingerprint, because a fingerprint the
+    # sample does not reach is not something the reader is being shown.
+    def role_assignments
+      shown = entries.map(&:fingerprint).to_set
+
+      assignments_by_fingerprint.filter_map do |fingerprint, assignments|
+        assignments.select { |assignment| assignment.card_label.role? } if shown.include?(fingerprint)
+      end.flatten
     end
 
     # key -> the lists playing it. Kept beside the entries so a name group can count the union of
@@ -271,14 +337,20 @@ module Archetypes
     end
 
     # Structure the database actually knows, and nothing beyond it. There is still no ACE SPEC
-    # bucket here and no functional one (Gust, Switch, Recovery): the categories stay a partition
-    # of the list, and ACE SPEC is now an annotation on the name line (CardLabelAssignment), not a
-    # section — an ACE SPEC is still an Item, and moving it out would break that partition. Nothing
-    # in this method could have derived the flag itself: every ACE SPEC carries rarity "Ultra" and
-    # so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on 0 of 4720 cards, and
-    # the individual card page carries it no better than the search does — which is why it is
-    # imported from Limitless's card search rather than guessed here. Guessing a functional
-    # category from a name is how a report starts stating things the data never said.
+    # bucket here: the categories stay a partition of the list, and ACE SPEC is an annotation on
+    # the name line (CardLabelAssignment), not a section — an ACE SPEC is still an Item, and moving
+    # it out would break that partition. Nothing in this method could have derived the flag itself:
+    # every ACE SPEC carries rarity "Ultra" and so do 93 ordinary Trainers, the string "ACE SPEC"
+    # appears in `effect` on 0 of 4720 cards, and the individual card page carries it no better
+    # than the search does — which is why it is imported from Limitless's card search rather than
+    # guessed here.
+    #
+    # What a card *does* is no longer absent — it is a second grouping (`role_categories`) rather
+    # than a bucket here, and it is still not derived from the text in this method. A role is a
+    # property of the card, curated by hand from a rule's suggestion, so this method keeps
+    # answering the one question the columns can answer on their own. Guessing a functional
+    # category from a name is how a report starts stating things the data never said, which is
+    # exactly why the role is a stored decision and not a match run at render time.
     def category_of(card)
       case card.card_type
       when "Pokémon" then :pokemon
@@ -289,11 +361,51 @@ module Archetypes
     end
 
     def categories
+      @grouping == :role ? role_categories : type_categories
+    end
+
+    def type_categories
       grouped = entries.group_by { |entry| category_of(entry.card) }
 
       CATEGORIES.filter_map do |key, label|
         category_entries = grouped[key] or next
         CategoryGroup.new(key: key, label: label, name_groups: name_groups_for(category_entries))
+      end
+    end
+
+    # The same entries, regrouped — and the one place in this service where a section is not a
+    # partition of the sample. An entry is filed under **every** role it carries, so a card with
+    # two roles is in two sections and the sections' `cards_count` add up past the number of cards
+    # played. That is the vocabulary, not an accident: Iono is draw and disruption, Prime Catcher
+    # is gust and switch. The report says so in words (Archetypes::CardReport) and prints no total
+    # across sections, which is the only honest way to show an overlapping classification.
+    #
+    # No query is added. `Entry#labels` already holds every family's label, loaded for the whole
+    # report by `labels_by_fingerprint`'s single `eager_load`; only the `role?` half opens a
+    # section here, and the `type?` half stays what it has always been — a badge on the name line.
+    #
+    # Ordered by the vocabulary's own (position, slug), never alphabetically and never by section
+    # size, so two loads of one page cannot disagree; a role no entry carries is dropped exactly as
+    # an empty category is. NO_ROLE is last whatever its neighbours are numbered, because it is not
+    # a role.
+    #
+    # The Hash is keyed on the CardLabel instance: `eager_load` hands back one object per row, and
+    # ActiveRecord defines `==`/`eql?`/`hash` on the id anyway, so two fingerprints carrying the
+    # same role collapse to one key rather than opening two identically titled sections.
+    def role_categories
+      grouped = Hash.new { |hash, key| hash[key] = [] }
+
+      entries.each do |entry|
+        roles = entry.labels.select(&:role?)
+        roles.any? ? roles.each { |role| grouped[role] << entry } : grouped[NO_ROLE] << entry
+      end
+
+      sections = grouped.keys.grep(CardLabel).sort_by { |role| [ role.position, role.slug ] }
+        .map { |role| [ role.slug.to_sym, role.name, grouped[role] ] }
+      sections << [ NO_ROLE, NO_ROLE_LABEL, grouped[NO_ROLE] ] if grouped.key?(NO_ROLE)
+
+      sections.map do |key, label, section_entries|
+        CategoryGroup.new(key: key, label: label, name_groups: name_groups_for(section_entries))
       end
     end
 

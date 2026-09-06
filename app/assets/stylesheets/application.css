@@ -1878,6 +1878,84 @@ textarea.form-input {
   min-width: 0;
 }
 
+/* The card-roles curation screen. Its rows are the app's widest table — the card, its type and
+   one checkbox per role — and every rule here is single-class, in the layer the file's own
+   comment prescribes, so nothing below silently undoes it.
+
+   A suggestion is pre-ticked and must not look like a decision: the difference between "the rules
+   proposed this" and "a human said yes" is the only thing this screen records, so it is carried
+   by a dashed outline and a muted label rather than by the checked state alone. */
+/* Each row is a wrapper around its <form> and the hidden form its Clear button submits, so that a
+   Turbo Stream replaces the pair as one element. That makes every .data-table-row a :last-child of
+   its own wrapper, which would take the table's separators with it — hence this rule, which is the
+   separator put back where the wrapper moved it. */
+.card-role-row:not(:last-child) .data-table-row {
+  border-bottom: 1px solid var(--line);
+}
+
+.card-role-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.card-role-name {
+  font-weight: 600;
+}
+
+.card-role-note {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-500);
+}
+
+.card-role-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.card-role-choice--suggested {
+  color: var(--ink-500);
+  border-bottom: 1px dashed var(--ink-500);
+}
+
+/* A decision, yes or no. Without it a refusal renders exactly like a box nobody has looked at,
+   and the screen cannot show its own progress — which is the one thing it exists to record. */
+.card-role-choice--decided {
+  border-bottom: 1px solid var(--ink-900, currentColor);
+}
+
+/* Submitted only through the row's own Clear button, which points at it with the HTML5 `form`
+   attribute: forms cannot nest, and this one is a DELETE. */
+.card-role-clear-form {
+  display: none;
+}
+
+/* The role name repeats the column heading above the breakpoint, where the header row already
+   names it; below it the header is hidden and the cell's own ::before label takes over, so this
+   would be the third copy of the word on one line. The checkbox keeps an aria-label either way —
+   `display: none` takes this span out of the accessibility tree, not merely out of the layout. */
+.card-role-choice-name {
+  display: none;
+}
+
+.card-role-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+.card-role-filter--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .data-table a:not(.btn) {
   color: var(--secondary-color);
   text-decoration: none;
@@ -3318,6 +3396,74 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 
 .archetype-panel {
   margin-top: 2rem;
+}
+
+/* The card report's heading and its grouping control on one line, wrapping to two when they stop
+   fitting rather than overlapping or pushing the panel wider than the page. Same shape as
+   .archetype-category-header below, and the same reason it is a class of its own rather than
+   .admin-header: that one carries a page header's margin.
+
+   No media query, deliberately — the whole block is written so that nothing here has to beat
+   anything, and flex-wrap answers 390px and 1400px with one rule. The h2 loses its own margin
+   because the flex line is what spaces it now; that is descent into markup this block defines,
+   not weight bought to outrank a layer above. */
+.archetype-report-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.archetype-report-header h2 {
+  margin: 0;
+}
+
+.archetype-report-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.archetype-report-modes-label {
+  color: var(--ink-500);
+}
+
+/* A tab, not a button: the current one stays clickable (a tab that cannot be clicked reads as
+   disabled) and is told apart by weight and an underline as well as by colour, since colour alone
+   is not a distinction every reader has. */
+.archetype-report-mode {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  color: var(--ink-500);
+  text-decoration: none;
+}
+
+.archetype-report-mode--current {
+  background: var(--paper);
+  color: var(--ink-800);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* The register of .archetype-printing-note below — the other sentence on this page that stops a
+   reader taking a set of numbers for parts of a whole. --ink-500 for the reason
+   .archetype-row-note carries it: a sentence written to prevent a misreading has to be readable. */
+.archetype-overlap-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+/* Same register as the note above it, deliberately: both qualify the sections rather than
+   announce anything, and at default <p> weight this one was louder than the report it describes. */
+.archetype-provenance-note {
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
 }
 
 .archetype-facts {
