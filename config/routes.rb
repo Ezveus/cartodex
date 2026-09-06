@@ -146,7 +146,12 @@ Rails.application.routes.draw do
 
       # The card-label vocabulary. `import` is a POST on the member: it enqueues a run of that
       # label's own `is:` token, so there is nothing to preview and nothing to type.
-      resources :card_labels do
+      #
+      # No show action, like standard_pools above and for the same reason — the index prints every
+      # field a label has. It was routed anyway until AdminGateTest walked the routing table and
+      # found the one admin route that answered without passing the gate, because Rails refuses a
+      # missing action before any callback runs.
+      resources :card_labels, except: [ :show ] do
         post :import, on: :member
       end
 

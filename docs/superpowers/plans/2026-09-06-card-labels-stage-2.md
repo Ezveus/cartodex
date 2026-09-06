@@ -69,7 +69,7 @@ CardLabel::ROLES = [
   { slug: "switch",              name: "Switch",              position: 40, description: "…" },
   { slug: "recovery",            name: "Recovery",            position: 50, description: "…" },
   { slug: "disruption",          name: "Disruption",          position: 60, description: "…" },
-  { slug: "energy_acceleration", name: "Energy acceleration", position: 70, description: "…" }
+  { slug: "energy-acceleration", name: "Energy acceleration", position: 70, description: "…" }
 ].freeze
 ```
 
@@ -95,7 +95,8 @@ Archetypes::CardStats::NO_ROLE_LABEL = "No role recorded"
   `.to_sym` (dashes and all: `:"energy-acceleration"`) or `NO_ROLE` in `role` mode.
 - `ArchetypesController#show` reads `params[:group]`, and **anything other than the string `"role"`
   is `:type`** — the clamp `#index` already makes for `?page=`, and the reason
-  `test/controllers/archetypes_controller_test.rb:306` exists for `?pool[]=`.
+  `test/controllers/archetypes_controller_test.rb:352` exists for `?pool[]=` (the flat-cost test
+is at `:254`).
 - The mode control's links re-emit **the sample the page is showing** (`@scope.all_formats? ?
   MetagameScope::ALL : @scope.pool&.id`), never `params[:pool]` — a malformed parameter must not
   travel into a link the page renders.
@@ -331,7 +332,9 @@ stage-1 convention for `Admin::`).
 - `@roles = CardLabel.roles`
 - the population: distinct fingerprints, built from `Card` — filtered by `params[:played]`
   (default **on**), `params[:card_type]`, `params[:q]` (name `LIKE`), ordered by name, paginated
-  at `PER_PAGE = 50` with the same `requested_page` clamp `ArchetypesController#index` uses.
+  at `PER_PAGE = 50` with the same clamp `ArchetypesController#index` makes — spelled out again rather than reused, since
+  `requested_page` is private to that controller and `TournamentsController` already carries its
+  own copy.
 - one representative `Card` per fingerprint (the newest printing, the same rule the suggester
   uses), one grouped read of the assignments for the page's fingerprints.
 - cards with a blank fingerprint are listed too, on page 1, in a row whose checkboxes are
@@ -369,8 +372,9 @@ decision must not look identical, which is the whole point of the screen.
 - [ ] **Step 5: Route, navbar, CSS**
 
 `namespace :admin` → `resources :card_roles, only: %i[index update] do post :suggest, on:
-:collection end`. Add **two** entries to `Ui::AdminNavbar`: "Card Labels" (stage 1 shipped the
-screen without a link — a pre-existing gap this task closes in passing) and "Card Roles".
+:collection end`. Add **one** entry to `Ui::AdminNavbar`: "Card Roles". ("Card Labels" is
+already there — the recon note claiming otherwise was measured against an earlier commit of
+stage 1.)
 
 CSS: one block beside the admin table rules, single-class specificity, in the layer the file's own
 comment prescribes. A suggested checkbox is distinguished by a token, never by colour alone.
@@ -546,3 +550,26 @@ Task 1 is done **before** the lanes start (both consume `ROLES`). Task 5 is done
 `app/assets/stylesheets/application.css` is the only file both touch; they touch different blocks
 of it and integration resolves it. Each lane runs in its own worktree so that two `bin/rails test`
 runs never share one `storage/test.sqlite3`.
+
+---
+
+## What the adversarial pass changed (2026-09-06)
+
+Measured against the real suite, restored clean. Its findings are folded in above and into the
+tasks' test lists; three are worth recording here because they changed the work rather than the
+plan:
+
+- **`card_labels:resync_fingerprints` inverted the provenance rule under stage 2.** Its collision
+  branch called any row at the target fingerprint "a decision", `source` unread. After a
+  `force: true` rescrape moves a Pokémon's fingerprint and a suggester run writes a `suggested`
+  row on the new one, the human's refusal was stranded on the old fingerprint, the machine's guess
+  sat on the live one — which is what the report renders — and the task aborted on every later run,
+  taking the repair tool out of service. Reproduced, fixed, and covered by two tests.
+- **A new admin screen inherits no protection at all.** A controller declared
+  `< ApplicationController`, routed under `/admin`, reachable by any signed-in member, left the
+  whole suite green. `test/controllers/admin_gate_test.rb` now walks the routing table — and found
+  `GET /admin/card_labels/:id`, routed by stage 1 with no action behind it.
+- **The flat-cost test's fixture cannot render more than one role section**, so an equality between
+  type and role mode is vacuous: a query per section moved 17 → 18 there and would be 17 → 25 in
+  production, with the test green either way. The lane's brief was corrected to require several
+  roles in the fixture and a literal assertion.
