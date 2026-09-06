@@ -77,4 +77,18 @@ class AdminCardRolesNarrowTest < ApplicationSystemTestCase
         "a cell overflows the row"
     end
   end
+
+  # The unlabellable row's note must sit *under* the card's name and not beside it. Both render
+  # either way — which is exactly why this is measured rather than asserted on text: as flex
+  # siblings in a cell that is `justify-content: space-between`, the note is pushed to the far
+  # right of the row and the name has half a cell to live in.
+  test "the no-fingerprint note stacks under the card name at 390px" do
+    visit admin_card_roles_path(played: "0", q: "Boss")
+
+    unlabellable = find(".card-role-note")
+    name = find("#card-role-unfingerprinted-#{cards(:trainer_card).id} .card-role-name")
+
+    assert_operator name.rect.y + name.rect.height, :<=, unlabellable.rect.y + 1,
+      "the note is beside the card name rather than under it"
+  end
 end
