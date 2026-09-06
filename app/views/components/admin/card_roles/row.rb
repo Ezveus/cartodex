@@ -17,6 +17,10 @@ module Admin
     # button pointing at it through HTML5's `form` attribute: forms cannot nest, and the two
     # actions genuinely differ — one records a decision, the other withdraws every decision made
     # about this card and hands it back to the suggester.
+    #
+    # The two of them sit in a wrapper that carries the DOM id, because the Turbo Stream replaces
+    # *one* element: with the id on the row's own form, each save inserted a fresh clear form
+    # beside the one already there — measured, two after two saves, both carrying the same id.
     class Row < ApplicationComponent
       # A card with no fingerprint cannot be labelled: an assignment would name a key no card
       # carries and the report could never join it. The row renders, and says so, with its boxes
@@ -35,13 +39,14 @@ module Admin
       def self.dom_id(fingerprint) = "card-role-#{fingerprint}"
 
       def view_template
-        if @writable
+        unless @writable
+          return div(id: "card-role-unfingerprinted-#{@card.id}", class: "data-table-row") { cells }
+        end
+
+        div(id: self.class.dom_id(@fingerprint), class: "card-role-row") do
           form_with(url: admin_card_role_path(@fingerprint), method: :patch,
-                    id: self.class.dom_id(@fingerprint), class: "data-table-row",
-                    data: { controller: "card-filter" }) { cells }
+                    class: "data-table-row", data: { controller: "card-filter" }) { cells }
           clear_form if decided?
-        else
-          div(id: "card-role-unfingerprinted-#{@card.id}", class: "data-table-row") { cells }
         end
       end
 

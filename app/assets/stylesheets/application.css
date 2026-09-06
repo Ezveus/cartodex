@@ -1885,6 +1885,14 @@ textarea.form-input {
    A suggestion is pre-ticked and must not look like a decision: the difference between "the rules
    proposed this" and "a human said yes" is the only thing this screen records, so it is carried
    by a dashed outline and a muted label rather than by the checked state alone. */
+/* Each row is a wrapper around its <form> and the hidden form its Clear button submits, so that a
+   Turbo Stream replaces the pair as one element. That makes every .data-table-row a :last-child of
+   its own wrapper, which would take the table's separators with it — hence this rule, which is the
+   separator put back where the wrapper moved it. */
+.card-role-row:not(:last-child) .data-table-row {
+  border-bottom: 1px solid var(--line);
+}
+
 .card-role-card {
   display: flex;
   flex-direction: column;
@@ -3446,6 +3454,14 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
    .archetype-row-note carries it: a sentence written to prevent a misreading has to be readable. */
 .archetype-overlap-note {
   margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+/* Same register as the note above it, deliberately: both qualify the sections rather than
+   announce anything, and at default <p> weight this one was louder than the report it describes. */
+.archetype-provenance-note {
+  margin: -0.75rem 0 1.25rem;
   font-size: 0.85rem;
   color: var(--ink-500);
 }
