@@ -985,8 +985,9 @@ the filter **fails closed**; both params are read through `to_s`, so a Hash- or 
 can never reach `cards_path` and raise `UnfilteredParameters` on a public page. And **a role filter
 says that it is showing proposals**: `active` is `rejected: false` and says nothing about
 provenance, `Archetypes::CardReport` already answers that for the member-only report, and this
-surface is anonymous — after one suggester run on the dump, 714 of 743 assignments were guesses. It
-carries no number, because the counts available are of assignments while the grid shows printings.
+surface is anonymous — on production, 709 of 850 assignments are a rule's guess and **no role is
+yet fully curated**, so the sentence renders for all seven. It carries no number, because the counts
+available are of assignments while the grid shows printings.
 
 **`Search::Global` takes `user: nil`.** A visitor's deck scope becomes `Deck.none` and never touches the database, but the tournament scope does not follow it: the catalog is public, so `tournament_scope` runs `Tournament.name_matching(@query)` unconditionally. Only `deck_scope` skips the database for a visitor — cards (`apply_card_name_filter(Card.all, …)`), shared decks (`Deck.shared`) and tournaments all query. The fourth group, `shared_decks`, is `Deck.shared` excluding the searcher's own (`where.not(user: @user) if @user`) so a member's own shared deck never appears in both the "my decks" and "shared decks" groups of one result list. Its DOM ids are prefixed `spotlight-option-shared-deck-` rather than `spotlight-option-deck-` for the same reason: `Search::ResultsList` derives option ids from `deck.id`, and one deck rendered under two groups would otherwise emit the same id twice and break the spotlight's keyboard navigation.
 

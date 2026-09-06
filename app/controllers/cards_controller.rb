@@ -80,7 +80,8 @@ class CardsController < ApplicationController
     # ("N of the M roles below are proposals a rule made"), and the rule it answers it under is
     # about the store rather than about one screen: a page may leave a proposal on display, but not
     # without saying so. This surface is anonymous, so it needs the sentence more, not less —
-    # measured after one suggester run on the production dump, 714 of 743 assignments were guesses.
+    # measured on production, 709 of 850 assignments are a rule's guess, and no role is yet fully
+    # curated, so the sentence renders for every one of the seven.
     #
     # No number, deliberately: the counts available here are of assignments (fingerprints) while
     # the grid below shows printings, and 29 beside a page of 33 is the second denominator this

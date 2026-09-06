@@ -306,8 +306,8 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
 
   # CardLabelAssignment.active is `rejected: false` and says nothing about provenance, so a rule's
   # guess and a human's decision open the same page. Archetypes::CardReport says so for the
-  # member-only report; this surface is anonymous, and after one suggester run on the production
-  # dump 714 of 743 assignments were guesses.
+  # member-only report; this surface is anonymous, and on production 709 of 850 assignments are a
+  # rule's guess with no role yet fully curated.
   test "a role filter says when it is showing a rule's proposals" do
     gust_role.assignments.create!(fingerprint: cards(:bosss_orders_meg).fingerprint,
                                   card: cards(:bosss_orders_meg), source: "suggested")

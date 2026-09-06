@@ -23,11 +23,15 @@ app (an admin may create and delete a `type` label; a `role` is a constant that 
 
 Two consequences it is worth being explicit about:
 
-- **The role control ships returning nothing.** Production holds 8 labels and 29 assignments, all
-  `type`/`ace-spec`; `CardLabels::RoleSuggester` has never been run there. Every one of the seven
-  roles answers with zero cards until an admin runs it and curates. That is a true statement about
-  the catalogue rather than a broken control, and it is the same state `/admin/card_roles` exists to
-  change.
+- **The role control was going to ship returning nothing, and by the time it shipped it did not.**
+  When this was planned, production held 8 labels and 29 assignments, all `type`/`ace-spec`, and
+  `CardLabels::RoleSuggester` had never run there — so every one of the seven roles would have
+  answered with zero cards. That was recorded as a true statement about the catalogue rather than a
+  broken control, and it stopped being true the same day: the suggester ran and a curation pass
+  followed. Measured on production now — 850 assignments, of which **709 suggested, 19 curated
+  present, 93 curated refusals**, and 29 imported — every role carries cards: `search` 506,
+  `draw` 403, `energy-acceleration` 131, `disruption` 113, `recovery` 74, `gust` 58, `switch` 33,
+  beside `ace-spec`'s 33. The select is a genuine choice on every option.
 - **A family with no labels renders no control.** `MetagameScope::Result#selectable?`'s instinct:
   a `<select>` whose only option is "All labels" is not a choice. Both families are non-empty today
   (1 and 7), so this is a guard rather than a behaviour anybody will see — and it is what stops the
@@ -148,8 +152,8 @@ that creates the labels.
   holding a card.
 - **A role filter says that it is showing proposals.** `CardLabelAssignment.active` is
   `rejected: false` and says nothing about who wrote the row, so a rule's guess and a human's
-  decision open the same page — and after one suggester run on the production dump, 714 of 743
-  assignments are guesses. `Archetypes::CardReport#provenance_note` answers that for the
+  decision open the same page — and on production today 709 of the 850 assignments are guesses, with
+  **no role yet fully curated**, so the sentence renders for all seven. `Archetypes::CardReport#provenance_note` answers that for the
   member-only report, and `CLAUDE.md` states the rule about the *store* rather than about one
   screen: a page may leave a proposal on display, but not without saying so. This surface is
   anonymous, so it needs the sentence more. It carries **no number** — the counts available are of
