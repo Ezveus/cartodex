@@ -150,6 +150,13 @@ Rails.application.routes.draw do
         post :import, on: :member
       end
 
+      # Curation, not CRUD: the rows are `cards.fingerprint` values and there is nothing to
+      # create or destroy — a decision is written onto the fingerprint the URL names, and
+      # `suggest` re-runs the rules over the whole catalogue.
+      resources :card_roles, only: %i[index update], param: :id do
+        post :suggest, on: :collection
+      end
+
       # Importing an archetype's field off Limitless TCG. `preview` is a GET on the collection
       # and not the POST a "run this" button suggests: Turbo treats a non-redirected 200
       # answering a form POST as an error, so a POST that rendered the plan would do nothing at

@@ -1878,6 +1878,57 @@ textarea.form-input {
   min-width: 0;
 }
 
+/* The card-roles curation screen. Its rows are the app's widest table — the card, its type and
+   one checkbox per role — and every rule here is single-class, in the layer the file's own
+   comment prescribes, so nothing below silently undoes it.
+
+   A suggestion is pre-ticked and must not look like a decision: the difference between "the rules
+   proposed this" and "a human said yes" is the only thing this screen records, so it is carried
+   by a dashed outline and a muted label rather than by the checked state alone. */
+.card-role-name {
+  font-weight: 600;
+}
+
+.card-role-note {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-500);
+}
+
+.card-role-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.card-role-choice--suggested {
+  color: var(--ink-500);
+  border-bottom: 1px dashed var(--ink-500);
+}
+
+/* The role name repeats the column heading above the breakpoint, where the header row already
+   names it; below it the header is hidden and the cell's own ::before label takes over, so this
+   would be the third copy of the word on one line. */
+.card-role-choice > span {
+  display: none;
+}
+
+.card-role-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+.card-role-filter--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .data-table a:not(.btn) {
   color: var(--secondary-color);
   text-decoration: none;
