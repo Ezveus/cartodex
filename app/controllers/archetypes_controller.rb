@@ -82,7 +82,15 @@ class ArchetypesController < ApplicationController
     # Two different populations, from the one service that decides them: the card report can only
     # speak for the standings whose decklist somebody typed, while a recorded placement is a
     # result whether or not anybody did.
-    @stats = Archetypes::CardStats.call(standings: @scope.listed_standings)
+    #
+    # `to_s` before the comparison, for the reason `requested_page` calls it: `?group[]=role` hands
+    # over an Array and `?group[a]=b` an ActionController::Parameters, and only the exact String
+    # "role" selects role mode — anything else is the grouping this report has always had, the
+    # clamp `#index` makes for `?page=` and `MetagameScope` makes for `?pool=`.
+    @stats = Archetypes::CardStats.call(
+      standings: @scope.listed_standings,
+      grouping: params[:group].to_s == "role" ? :role : :type
+    )
     @performance = Archetypes::Performance.call(standings: @scope.standings)
   end
 

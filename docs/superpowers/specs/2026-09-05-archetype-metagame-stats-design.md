@@ -50,6 +50,22 @@ which the scraper does not record. The reference deck reports get them from a ha
 per-archetype table; an app cannot maintain one per archetype and must not guess from a name. The
 page groups by the structure the database does know (below) and leaves the roles to the reader.
 
+> **#155 answered this, and the measurement above is what shaped the answer.** Roles are now
+> recorded — seven of them, in `card_labels`' `role` family — and `/archetypes/:id` offers them as
+> a **second grouping mode** of the same report (`?group=role`), never as a second report: the list
+> count, the settled core and every percentage are computed before the grouping is consulted. The
+> two objections here both stand and both are met rather than overruled. *A table per archetype* is
+> refused outright — a role is a property of the **card**, so there is one table for the whole
+> catalogue and no per-archetype override anywhere. *Guessing from a name* is refused too: a rule
+> in `CardLabels::RoleSuggester` reads the card's own effect, attack and ability text and writes a
+> `suggested` row, and a human turns that into a `curated` decision or a `curated` refusal — the
+> report reads decisions, and never matches anything at render time. Two consequences are printed
+> on the page rather than left to be discovered: a card nobody has decided about falls into a
+> rendered, counted **"No role recorded"** section (48 of the 94 played fingerprints on the
+> production dump, which shows the curation debt instead of hiding it), and a card carrying two
+> roles is listed under **both** — Iono is draw and disruption — so those sections deliberately add
+> up to more than a 60-card list and no total is printed across them.
+
 ## The sample
 
 ### Scoping is not optional
