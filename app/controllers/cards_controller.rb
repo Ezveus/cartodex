@@ -41,14 +41,30 @@ class CardsController < ApplicationController
     @energy = params[:energy].presence
     @rarity = params[:rarity].presence
     @mark   = params[:mark].presence
+    # Slugs, never records: `search_query_params` re-emits these into the pager's URLs, and a
+    # record there would emit its id, which the next request cannot resolve back to a slug.
+    @label  = params[:label].presence
+    @role   = params[:role].presence
     # to_s first: a Hash- or Array-shaped `page` param answers to neither to_i nor the
     # concern's two rescued exceptions, and this action is reachable without a session.
     @page   = [ params[:page].to_s.to_i, 1 ].max
 
-    @searching = @query.length >= 2 || @type || @energy || @rarity || @mark
+    @searching = @query.length >= 2 || @type || @energy || @rarity || @mark || @label || @role
 
     # Cached, and invalidated by the two things that can add a value — see Card.filter_values.
     @rarities, @marks = Card.filter_values
+
+    # Deliberately not folded into the pair above. Those two are unindexed scans of `cards` behind
+    # an hour-long cache; these are indexed reads of an eight-row table, and putting them in that
+    # entry would tie an always-correct list to an invalidation path (`Card.forget_filter_values`,
+    # called by the set importer and the rescrape job) that has nothing to do with labels — an
+    # admin's new label would be invisible for up to an hour.
+    #
+    # `to_a`, because the view asks `any?` before iterating: on a relation that is a second query
+    # per family, on a page that is public and rate-limited, and no relative query-count comparison
+    # could ever see it — both lists are one and seven rows whatever the catalogue holds.
+    @labels = CardLabel.types.to_a
+    @roles = CardLabel.roles.to_a
 
     @cards =
       if @searching
@@ -100,6 +116,11 @@ class CardsController < ApplicationController
     scope = scope.where(type_symbol: @energy) if @energy
     scope = scope.where(rarity: @rarity) if @rarity
     scope = scope.where(regulation_mark: @mark) if @mark
+    # Resolved against the lists already loaded rather than by a lookup of their own, so an unknown
+    # slug costs no query and answers with no cards. A role slug passed as `label` finds nothing
+    # in the type family, which is the same answer for the same reason.
+    scope = scope.with_label(@labels.find { |label| label.slug == @label }) if @label
+    scope = scope.with_label(@roles.find { |role| role.slug == @role }) if @role
     scope.left_outer_joins(:card_set)
          .order(Arel.sql("card_sets.release_date IS NULL, card_sets.release_date DESC, CAST(cards.set_number AS INTEGER)"))
   end

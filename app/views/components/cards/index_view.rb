@@ -4,7 +4,7 @@ module Cards
 
     FRAME_ID = "card_results".freeze
 
-    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, card_counts:, total: nil, page: 1, pages: nil)
+    def initialize(blocks:, current_set:, cards:, query:, type:, energy:, rarity:, mark:, rarities:, marks:, searching:, card_counts:, label: nil, role: nil, labels: [], roles: [], total: nil, page: 1, pages: nil)
       @blocks = blocks
       @current_set = current_set
       @cards = cards
@@ -16,6 +16,10 @@ module Cards
       @mark = mark
       @rarities = rarities
       @marks = marks
+      @label = label
+      @role = role
+      @labels = labels
+      @roles = roles
       @searching = searching
       @total = total
       @page = page
@@ -55,6 +59,8 @@ module Cards
         filter_select("energy", "Energy", Card::ENERGY_TYPES, @energy)
         filter_select("rarity", "Rarity", @rarities, @rarity)
         filter_select("mark", "Mark", @marks, @mark)
+        label_select("label", "Labels", @labels, @label)
+        label_select("role", "Roles", @roles, @role)
         set_select
       end
     end
@@ -64,6 +70,24 @@ module Cards
         option(value: "") { "All #{all_label}" }
         options.each do |value|
           option(value: value, selected: value == selected) { value }
+        end
+      end
+    end
+
+    # A label's option carries its slug and shows its name, which `filter_select` cannot do — there
+    # the value *is* the text. `set_select` below is the existing precedent for a bespoke one.
+    #
+    # Nothing is rendered for a family holding no label: a `<select>` whose only option is
+    # "All labels" is not a choice, the rule MetagameScope::Result#selectable? already applies to
+    # the archetype sample. The list arrives loaded, so `any?` here costs no query — see
+    # CardsController#index.
+    def label_select(name, all_label, labels, selected)
+      return if labels.empty?
+
+      select(name: name, class: "form-input cards-search-select", data: { action: "change->card-filter#submit" }) do
+        option(value: "") { "All #{all_label}" }
+        labels.each do |label|
+          option(value: label.slug, selected: label.slug == selected) { label.name }
         end
       end
     end
@@ -142,6 +166,8 @@ module Cards
         energy: @energy,
         rarity: @rarity,
         mark: @mark,
+        label: @label,
+        role: @role,
         set: @current_set&.code
       }.compact
     end

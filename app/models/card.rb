@@ -75,6 +75,24 @@ class Card < ApplicationRecord
   # was itself an unindexed full-table aggregate, so it paid a scan on every request to protect
   # an entry that nothing ever invalidated. The writers call forget_filter_values instead, and
   # the hour is the backstop for a path that forgets to.
+  # The cards carrying a label, keyed on the fingerprint the assignment names rather than on the
+  # printing it was recorded from: a label describes the card, and every printing of Prime Catcher
+  # is an ACE SPEC. `active` because a curated refusal is a row and not an absence.
+  #
+  # A subquery rather than a join, and the obvious reason — that a join would inflate a `count` —
+  # is wrong and was measured to be: `(card_label_id, fingerprint)` is UNIQUE, so a join predicated
+  # on one label is 1:1 and both forms answer 33 on the production catalogue. The real reasons are
+  # that `where` chaining ANDs while `merge` (the idiom CardSearchable uses three lines from the
+  # only caller) keeps only the last of two conditions on one column, and that Rails cannot alias
+  # two joins onto the same association apart. Two labels have to narrow each other, or "Item and
+  # gust" is unaskable.
+  #
+  # A nil label is a slug nobody has: `card_label_id IS NULL` matches no assignment, so the filter
+  # answers with no cards rather than with the catalogue.
+  scope :with_label, ->(label) {
+    where(fingerprint: CardLabelAssignment.active.where(card_label_id: label).select(:fingerprint))
+  }
+
   FILTER_VALUES_CACHE_KEY = "cards/filter-values".freeze
   FILTER_VALUES_TTL = 1.hour
 
