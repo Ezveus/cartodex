@@ -14,6 +14,30 @@ class Card < ApplicationRecord
   # CardLabelAssignment.
   has_many :card_label_assignments, dependent: :nullify
 
+  # The cards carrying a label, keyed on the fingerprint the assignment names rather than on the
+  # printing it was recorded from: a label describes the card, and every printing of Prime Catcher
+  # is an ACE SPEC. `active` because a curated refusal is a row and not an absence.
+  #
+  # **`joins(:card_label_assignments)` is not the same query and must not replace this.** That
+  # association is on `card_id` — the one printing a decision was read from — so it answers 29
+  # where this answers 33 on the production catalogue, losing exactly the four reprints the
+  # fingerprint key exists to reach (Maximum Belt, Prime Catcher, Scoop Up Cyclone, Sparkling
+  # Crystal, each held twice). A hand-written join on `fingerprint` *would* agree, and it is not
+  # chosen for two other reasons: chained `where`s AND while `merge` — the idiom CardSearchable
+  # uses three lines from the only caller — keeps only the last of two conditions on one column,
+  # and Rails cannot alias two joins onto one association apart. Two labels have to narrow each
+  # other, or "Item and gust" is unaskable.
+  #
+  # A nil label is a slug nobody has: `card_label_id IS NULL` matches no assignment, so the filter
+  # answers with no cards rather than with the catalogue. That is what makes an unresolvable
+  # parameter fail closed — and, as a side effect, what keeps a Hash- or Array-shaped `?label=`
+  # away from `cards_path`, since an empty result renders no pager. The `to_s` in the controller
+  # is what makes that a guarantee rather than a coincidence between two rules.
+  scope :with_label, ->(label) {
+    where(fingerprint: CardLabelAssignment.active.where(card_label_id: label).select(:fingerprint))
+  }
+
+
   # Allowed values
   CARD_TYPES = %w[Pokémon Energy Trainer].freeze
   ENERGY_TYPES = %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless].freeze

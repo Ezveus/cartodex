@@ -1558,6 +1558,14 @@ textarea.form-input {
   min-width: 200px;
 }
 
+/* The register of the archetype report's own overlap and provenance notes: a sentence written to
+   qualify what is below it rather than to announce anything. */
+.cards-search-note {
+  margin: -0.25rem 0 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
 .cards-search-select {
   flex: 0 0 auto;
   width: auto;
