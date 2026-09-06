@@ -20,11 +20,6 @@ module Admin
 
     def index
       @roles = CardLabel.roles.to_a
-      @played = played_filter
-      @query = params[:q].to_s.strip
-      @card_type = params[:card_type].to_s.presence
-
-      filters
       scope = filtered_cards
       # Counted over the same population rows_for renders: SQL's COUNT ignores NULL but counts an
       # empty string, and a blank fingerprint is listed separately rather than paged.
@@ -65,28 +60,6 @@ module Admin
       respond_to do |format|
         format.turbo_stream { render :update }
         format.html { redirect_to admin_card_roles_path(filter_params), notice: "Roles saved." }
-      end
-    end
-
-    # "I have no opinion about this card after all." A save decides all seven roles at once, so
-    # one misclick otherwise removes a card from the suggester's reach permanently — and nothing
-    # else in the app deletes an assignment. It is deliberately a separate, explicit action:
-    # deleting *here* is a request, while deleting when a box is unticked would erase a refusal,
-    # which is the one thing the store exists to keep.
-    def destroy
-      fingerprint = params[:id].to_s
-      card = Card.where(fingerprint: fingerprint).order(:id).last
-      return head :not_found if card.nil?
-
-      CardLabelAssignment.curated.where(fingerprint: fingerprint).destroy_all
-
-      @roles = CardLabel.roles.to_a
-      @card = card
-      @assignments = assignments_for([ fingerprint ])
-
-      respond_to do |format|
-        format.turbo_stream { render :update }
-        format.html { redirect_to admin_card_roles_path(filter_params), notice: "Decisions cleared." }
       end
     end
 
@@ -134,11 +107,20 @@ module Admin
       ActiveModel::Type::Boolean.new.cast(params[:played]).present?
     end
 
-    # One hash, three readers: the view's filter bar, the pager's links and the redirect after a
-    # suggestion run. `played` rides only when it was asked for, so a redirect never writes the
-    # default into the URL.
+    # One hash, four readers: the view's filter bar, the pager's links, and the redirect out of
+    # every write. Read off the request and not off ivars, which is what it did until a review
+    # measured the consequence — only #index assigns those, so #update, #destroy and #suggest each
+    # redirected to an unfiltered screen while carefully building their URL from this hash.
+    #
+    # `played` always rides, with its effective value rather than only the one that was typed: the
+    # view reads it for the checkbox's state, and a hash omitting the default would render the box
+    # unticked on the very screen it describes.
     def filters
-      @filters ||= { q: @query.presence, card_type: @card_type, played: @played }.compact
+      @filters ||= {
+        q: params[:q].to_s.strip.presence,
+        card_type: params[:card_type].to_s.presence,
+        played: played_filter
+      }.compact
     end
 
     def filter_params
@@ -150,9 +132,9 @@ module Admin
       # Card.name_matching, not a LIKE spelled out here: the concern searches `name_normalized`
       # (SQLite folds ASCII only, so an accented name in the wrong case is otherwise unfindable),
       # carries the ESCAPE clause a typed `%` needs, and caps the pattern's length.
-      scope = scope.merge(Card.name_matching(@query)) if @query.present?
-      scope = scope.where(card_type: @card_type) if @card_type
-      scope = scope.where(id: played_card_ids) if @played
+      scope = scope.merge(Card.name_matching(filters[:q])) if filters[:q]
+      scope = scope.where(card_type: filters[:card_type]) if filters[:card_type]
+      scope = scope.where(id: played_card_ids) if filters[:played]
       scope
     end
 
@@ -173,7 +155,13 @@ module Admin
                      .limit(PER_PAGE)
                      .pluck(Arel.sql("cards.fingerprint"), Arel.sql("MAX(cards.id)"))
 
-      Card.where(id: grouped.map(&:last)).to_a.sort_by { |card| card.name.downcase }
+      # Kept in the order the GROUP BY produced rather than re-sorted here: SQL orders by
+      # MIN(cards.name) and Ruby would order by something else (String#<=> is byte-wise, downcased
+      # or not), so the page would be *chosen* by one ordering and *displayed* by another — a row
+      # sorting before the top of page 1 could then only ever appear on page 2. The same class of
+      # defect TournamentStanding.division_order exists to prevent.
+      cards = Card.where(id: grouped.map(&:last)).index_by(&:id)
+      grouped.filter_map { |_fingerprint, card_id| cards[card_id] }
     end
 
     # (fingerprint, card_label_id) -> the assignment, so a row asks a Hash and not the database.

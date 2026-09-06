@@ -38,6 +38,27 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
     assert_select "form.deck-filters[data-turbo-frame=?]", Admin::CardRoles::IndexView::FRAME_ID
   end
 
+  # The page is *chosen* by SQL's ordering (MIN(cards.name), which SQLite compares byte-wise) and
+  # must be *displayed* by the same one. Re-sorting the loaded page in Ruby is the trap: "Zubat"
+  # sorts before "apple" in bytes and after it downcased, so a row could be picked for page 1 by
+  # one rule and shown in a place the other rule chose — the same class of defect
+  # TournamentStanding.division_order exists to prevent.
+  test "the rows are displayed in the order the page was chosen by" do
+    %w[Zubat apple Banana].each_with_index do |name, index|
+      Card.create!(name: name, card_type: "Trainer", subtype: "Item", set_name: "ORD",
+                   set_number: index.to_s, rarity: "Common")
+    end
+
+    get admin_card_roles_path(played: "0", card_type: "Trainer")
+
+    shown = css_select(".card-role-row .card-role-name").map(&:text)
+    ordered = Card.where(card_type: "Trainer").where.not(fingerprint: [ nil, "" ])
+                  .group(:fingerprint).order(Arel.sql("MIN(cards.name)"))
+                  .pluck(Arel.sql("MIN(cards.name)"))
+
+    assert_equal ordered.first(shown.size), shown.map { |label| label.sub(/ \(.*\)\z/, "") }
+  end
+
   # The filter that makes the first pass an evening's work rather than a month's: measured on the
   # production dump, the recorded lists play 94 fingerprints out of the catalogue's 3023. It is
   # the default because curating what nobody plays is work no reader of the report will ever see.
@@ -138,7 +159,7 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
   test "a write without Turbo lands somewhere instead of 500ing over a committed decision" do
     patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] }
 
-    assert_redirected_to admin_card_roles_path
+    assert_redirected_to admin_card_roles_path(played: true)
     assert_equal "curated", @roles["gust"].assignments.sole.source
   end
 
@@ -170,9 +191,33 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
 
     post suggest_admin_card_roles_path
 
-    assert_redirected_to admin_card_roles_path
+    assert_redirected_to admin_card_roles_path(played: true)
     assert_equal 1, @roles["search"].assignments.count
     assert_match(/1 suggestion/, flash[:notice])
+  end
+
+  # Every write redirects back to the screen the admin was working on, filters and all. It did
+  # not: `filters` read ivars that only #index assigns, so a save, a clear or a suggestion run
+  # each dropped the admin back into the unfiltered catalogue — while the "Suggest roles" button
+  # was carefully building its own URL from that same hash.
+  test "a write redirects back to the filtered screen the admin was on" do
+    filters = { q: "budew", card_type: "Pokémon", played: "0" }
+
+    patch admin_card_role_path(@card.fingerprint), params: filters.merge(roles: [ "gust" ])
+
+    assert_redirected_to admin_card_roles_path(q: "budew", card_type: "Pokémon", played: false)
+  end
+
+  test "clearing a row redirects back to the filtered screen too" do
+    delete admin_card_role_path(@card.fingerprint), params: { q: "budew", played: "0" }
+
+    assert_redirected_to admin_card_roles_path(q: "budew", played: false)
+  end
+
+  test "a suggestion run redirects back to the filtered screen too" do
+    post suggest_admin_card_roles_path, params: { q: "budew", played: "0" }
+
+    assert_redirected_to admin_card_roles_path(q: "budew", played: false)
   end
 
   test "a non-admin cannot reach the screen" do

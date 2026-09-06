@@ -49,6 +49,27 @@ class AdminCardRolesTest < ApplicationSystemTestCase
                                        rejected: false, card_label: @roles["gust"])
   end
 
+  # The Turbo Stream replaces one element, so the row's form and the hidden form its Clear button
+  # submits have to be one element: with the id on the form alone, each save inserted a fresh
+  # clear form beside the one already there — measured, two after two saves, both carrying the
+  # same id, which is invalid markup and a stale target waiting to be picked.
+  test "saving a row twice leaves exactly one clear form behind it" do
+    visit admin_card_roles_path(played: "0", q: "budew")
+
+    find("#card-role-#{@card.fingerprint} input[value='gust']").click
+    assert_selector "#card-role-#{@card.fingerprint} input[value='gust'][checked]"
+
+    # The second save has to *change* something, or nothing on the page tells the test that the
+    # server's answer has landed: asserting the state the row is already in passes against the old
+    # row, the count runs before the replacement, and the test proves nothing. Unticking is
+    # observable — and a refusal is still a decision, so the row stays decided.
+    find("#card-role-#{@card.fingerprint} input[value='gust']").click
+    assert_no_selector "#card-role-#{@card.fingerprint} input[value='gust'][checked]"
+    assert_selector "#card-role-#{@card.fingerprint} .card-role-choice--decided"
+
+    assert_equal 1, all("form.card-role-clear-form", visible: :all).size
+  end
+
   # The way back out. The button lives in the row and the form it submits is a hidden sibling —
   # forms cannot nest — so this also proves the HTML5 `form` attribute wiring, which no request
   # test can see.
