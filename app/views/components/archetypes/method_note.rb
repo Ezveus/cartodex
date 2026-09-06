@@ -26,13 +26,14 @@ module Archetypes
         p do
           plain "Grouped by role, the sections say what a card does (Draw, Search, Gust, Switch, "
           plain "Recovery, Disruption, Energy acceleration). A role is a property of the card and "
-          plain "not of the deck playing it, and it is recorded rather than guessed: a rule reads "
-          plain "the card's own text and proposes, and a person decides. Guessing a card's "
-          plain "function from its name at the moment of rendering is how a report starts stating "
-          plain "things the data never said, so a card nobody has decided about says exactly that "
-          plain "— it is listed under “No role recorded” rather than filed by its type. A card "
-          plain "with two roles is listed under both, so those sections add up to more than a "
-          plain "list."
+          plain "not of the deck playing it, and it is stored rather than worked out while the "
+          plain "page renders: a rule reads the card's own text and proposes a role, and a person "
+          plain "confirms or refuses it. Both are shown here — the line above the sections says "
+          plain "how many are still unconfirmed proposals, because a rule reading text gets cards "
+          plain "wrong that a player would not. A card no rule proposed anything for is listed "
+          plain "under “No role recorded” rather than filed by its type, which would let a reader "
+          plain "mistake “nothing is recorded” for “this card does nothing”. A card with two "
+          plain "roles is listed under both, so those sections add up to more than a list."
         end
 
         p do

@@ -29,7 +29,7 @@ module Archetypes
         end
 
         render Archetypes::Identity.new(archetype: @archetype)
-        render Archetypes::SampleSelector.new(scope: @scope)
+        render Archetypes::SampleSelector.new(scope: @scope, grouping: @stats.grouping)
         render Archetypes::PerformancePanel.new(performance: @performance)
         render Archetypes::CardReport.new(stats: @stats, scope: @scope)
         render Archetypes::MethodNote.new

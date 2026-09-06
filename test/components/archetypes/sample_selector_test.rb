@@ -123,9 +123,27 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_includes html, "Every list in this sample comes from an online tournament."
   end
 
+  # The two controls on this page each replace the whole query string, so each has to carry what
+  # the other chose. The mode links re-emit the pool; without this the sample form dropped the
+  # grouping, and a reader comparing one archetype's roles across two pools was thrown back into
+  # type mode on every switch, silently.
+  test "the sample form carries the grouping the page is showing" do
+    html = selector(lists_count: 12, options: [ pool_option(9, 12), pool_option(8, 4) ],
+                    grouping: :role)
+
+    assert_match(/<input[^>]*name="group"[^>]*value="role"/, html)
+  end
+
+  test "the sample form says nothing about grouping in the report's default mode" do
+    html = selector(lists_count: 12, options: [ pool_option(9, 12), pool_option(8, 4) ])
+
+    assert_no_match(/name="group"/, html)
+  end
+
   private
 
-  def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0)
+  def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0,
+               grouping: :type)
     # Unpersisted on purpose: the component reads an id off each of these and nothing else —
     # `archetype_path` through `to_param`, and the pool only to decide which option is selected —
     # so this file never touches the database and cannot be broken by a fixture another test
@@ -138,7 +156,7 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     )
 
     ApplicationController.renderer.render(
-      Archetypes::SampleSelector.new(scope: scope), layout: false
+      Archetypes::SampleSelector.new(scope: scope, grouping: grouping), layout: false
     )
   end
 

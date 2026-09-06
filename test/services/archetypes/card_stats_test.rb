@@ -653,4 +653,43 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
   def next_index
     @next_index = @next_index.to_i + 1
   end
+
+  # The report shows a rule's guess and a human's decision under the same heading, in the same
+  # style — CardLabelAssignment.active is `rejected: false` and says nothing about who wrote the
+  # row. The counts are what let the page say so out loud, and they are counted off assignments
+  # already loaded rather than by a query of their own.
+  test "it counts the roles a rule proposed apart from the ones a human confirmed" do
+    played = pokemon("Provenance Pokemon")
+    other = trainer("Provenance Trainer")
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(played => 2, other => 1))
+    draw = role_label("draw", "Draw", 10)
+    gust = role_label("gust", "Gust", 30)
+    draw.assignments.create!(fingerprint: played.fingerprint, card: played, source: "suggested")
+    gust.assignments.create!(fingerprint: played.fingerprint, card: played, source: "curated")
+    gust.assignments.create!(fingerprint: other.fingerprint, card: other, source: "curated",
+                             rejected: true)
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal 1, result.proposed_roles
+    assert_equal 1, result.decided_roles
+    assert_predicate result, :unconfirmed_roles?
+  end
+
+  # A label on a card the sample never plays is not something the reader is being shown, so it
+  # cannot be part of a sentence about what they are looking at.
+  test "a role on a card outside the sample is counted in neither half" do
+    played = pokemon("Sample Pokemon")
+    unplayed = trainer("Unplayed Trainer")
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(played => 2))
+    role_label("draw", "Draw", 10)
+      .assignments.create!(fingerprint: unplayed.fingerprint, card: unplayed, source: "suggested")
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal 0, result.proposed_roles
+    assert_equal 0, result.decided_roles
+  end
 end

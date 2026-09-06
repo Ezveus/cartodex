@@ -119,12 +119,20 @@ module Archetypes
     # `grouping` travels on the result rather than beside it because the sections and the control
     # that chose them are rendered by one component: read off the result, the mode links cannot
     # name a grouping other than the one the sections below them were built with.
+    # `proposed_roles` / `decided_roles` count the (fingerprint, role) pairs the sections below
+    # were built from, split by who wrote them. The report prints roles a rule guessed beside
+    # roles a human confirmed, and nothing else on the page could tell them apart — the entries
+    # carry `CardLabel`s, which is what the section headings need and which says nothing about
+    # provenance. Without this the page asserts "a person decides" over a sample where, on the
+    # production data the day this shipped, 714 of 714 assignments were guesses.
     Result = Struct.new(
       :lists_count, :categories, :fixed_core_cards, :fixed_core_copies, :grouping,
+      :proposed_roles, :decided_roles,
       keyword_init: true
     ) do
       def any? = lists_count.positive?
       def role_grouping? = grouping == :role
+      def unconfirmed_roles? = proposed_roles.to_i.positive?
     end
 
     # Takes the standings relation rather than deck ids, so the caller cannot hand this a
@@ -158,11 +166,20 @@ module Archetypes
         categories: categories,
         fixed_core_cards: fixed_entries.size,
         fixed_core_copies: fixed_entries.sum(&:min_copies),
-        grouping: @grouping
+        grouping: @grouping,
+        proposed_roles: role_assignments_by_source["suggested"].to_i,
+        decided_roles: role_assignments_by_source["curated"].to_i
       )
     end
 
     private
+
+    # Counted off the assignments already loaded for the report — no query of its own, which is
+    # what keeps /archetypes/:id at 17 — and scoped to the roles the reader is actually looking
+    # at, not to the whole table.
+    def role_assignments_by_source
+      @role_assignments_by_source ||= role_assignments.group_by(&:source).transform_values(&:size)
+    end
 
     def empty_result
       Result.new(lists_count: 0, categories: [], fixed_core_cards: 0, fixed_core_copies: 0,
@@ -248,13 +265,29 @@ module Archetypes
     # unlabelled sample and two on a labelled one, which is exactly the number that would not
     # show up against fixtures with no assignment at all. `eager_load` forces the LEFT OUTER JOIN
     # unconditionally, so the query count no longer depends on whether any row happens to match.
-    def labels_by_fingerprint
-      @labels_by_fingerprint ||= CardLabelAssignment
+    def assignments_by_fingerprint
+      @assignments_by_fingerprint ||= CardLabelAssignment
         .active
         .eager_load(:card_label)
         .where(fingerprint: rows_by_key.keys)
         .group_by(&:fingerprint)
-        .transform_values { |assignments| assignments.map(&:card_label).sort_by { |l| [ l.position, l.slug ] } }
+    end
+
+    def labels_by_fingerprint
+      @labels_by_fingerprint ||= assignments_by_fingerprint.transform_values do |assignments|
+        assignments.map(&:card_label).sort_by { |label| [ label.position, label.slug ] }
+      end
+    end
+
+    # The role half of what the report loaded, for the sentence that says how much of it a human
+    # has confirmed. `entries` rather than every loaded fingerprint, because a fingerprint the
+    # sample does not reach is not something the reader is being shown.
+    def role_assignments
+      shown = entries.map(&:fingerprint).to_set
+
+      assignments_by_fingerprint.filter_map do |fingerprint, assignments|
+        assignments.select { |assignment| assignment.card_label.role? } if shown.include?(fingerprint)
+      end.flatten
     end
 
     # key -> the lists playing it. Kept beside the entries so a name group can count the union of

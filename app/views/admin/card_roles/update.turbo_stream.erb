@@ -1,6 +1,5 @@
 <%# The row and only the row: what the reader sees is the decision the database now holds, not
     the box the browser ticked. %>
-<%= turbo_stream.replace Admin::CardRoles::Row.dom_id(@row.fingerprint) do %>
-  <%= render Admin::CardRoles::Row.new(fingerprint: @row.fingerprint, card: @row.card,
-                                       roles: @roles, assignments: @assignments) %>
+<%= turbo_stream.replace Admin::CardRoles::Row.dom_id(@card.fingerprint) do %>
+  <%= render Admin::CardRoles::Row.new(card: @card, roles: @roles, assignments: @assignments) %>
 <% end %>
