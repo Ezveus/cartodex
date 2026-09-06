@@ -18,6 +18,10 @@ class CardLabelAssignment < ApplicationRecord
   # destroy a Card first.
   belongs_to :card, optional: true
 
+  # For a Trainer or Energy, `fingerprint` is `SHA256(name)` alone (Card#compute_fingerprint), so
+  # this key is really "same name" rather than "same card" for almost everything this feature
+  # labels. Accepted trade-off, not a live defect — see the design record's "The decisions" §9 for
+  # the measurements and what would flip it.
   validates :fingerprint, presence: true
   validates :source, inclusion: { in: SOURCES }
   # The UNIQUE index is the guarantee; this exists for the readable error — the same division of

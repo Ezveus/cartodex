@@ -49,6 +49,24 @@ class CardLabels::ImportJobTest < ActiveJob::TestCase
     assert_match "read 2 of an announced 5", receipt
   end
 
+  # A run of a large label against a sparse catalogue can miss hundreds of printings; the receipt
+  # names the count in full and truncates the list itself, the same shape
+  # Tournaments::LimitlessImportJob::FAILURES_LISTED gives its own unbounded list.
+  test "a long list of missing printings is truncated with a tally of the rest" do
+    printings = (1..25).map { |n| Printing.new(set_code: "NOPE", number: n.to_s) }
+    stub_search(printings)
+
+    perform
+
+    receipt = @import.reload.error_message
+
+    assert_match "25 printings not in the catalogue", receipt
+    assert_match "NOPE 1", receipt
+    assert_match "NOPE 20", receipt
+    assert_no_match "NOPE 21", receipt
+    assert_match "… and 5 more", receipt
+  end
+
   # Enqueued with ids for exactly this: handed the record, GlobalID raises before #perform is
   # entered and the rescue below never runs, leaving the Import at "pending" forever with no way
   # to clear it — Admin::ImportsController#retry refuses this kind.

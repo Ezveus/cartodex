@@ -144,9 +144,11 @@ Rails.application.routes.draw do
       # them, so a show page would only restate the row.
       resources :standard_pools, except: [ :show ]
 
-      # The card-label vocabulary. `import` is a POST on the member: it enqueues a run of that
-      # label's own `is:` token, so there is nothing to preview and nothing to type.
-      resources :card_labels do
+      # The card-label vocabulary. No show action, the same call as standard_pools above: a label
+      # is five fields and the index already lists all of them, so a show page would only restate
+      # the row. `import` is a POST on the member: it enqueues a run of that label's own `is:`
+      # token, so there is nothing to preview and nothing to type.
+      resources :card_labels, except: [ :show ] do
         post :import, on: :member
       end
 

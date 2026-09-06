@@ -42,6 +42,11 @@ module Admin
     def update
       # `family` is not permitted (see card_label_params), so an edit cannot move a label between
       # the two governances — which is the only way the create refusal above could be walked round.
+      # `source_query` is dropped for a `role` label in card_label_params for the same reason: a
+      # role importable? just from source_query.present?, so patching that key onto a role label
+      # would be a third door onto the very rule create/destroy already refuse — the label would
+      # become importable and the importer would write `imported` rows into the family stage 2
+      # reserves for its own rules.
       if @card_label.update(card_label_params)
         redirect_to admin_card_labels_path, notice: "Card label updated."
       else
@@ -89,6 +94,11 @@ module Admin
     def card_label_params
       permitted = params.require(:card_label).permit(:slug, :name, :position, :description, :source_query)
       permitted[:family] = params[:card_label][:family] if action_name == "create"
+      # A role label's source_query is withheld on the way in, not just left unrendered on the
+      # form: CardLabel#importable? is source_query.present?, so an edit that slipped one through
+      # would make the label importable and the importer would write into the family stage 2
+      # reserves for its own rules — the same refusal `create`/`destroy` already state for `role`.
+      permitted.delete(:source_query) if @card_label&.role?
       permitted
     end
   end

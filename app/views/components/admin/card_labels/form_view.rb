@@ -37,9 +37,15 @@ module Admin
               f.number_field :position, min: 0, class: "form-input"
             end
 
-            render Ui::FormGroup.new(hint: "Limitless search token, e.g. is:ace — leave blank if this label has nothing to import") do
-              f.label :source_query, "Search token", class: "form-label"
-              f.text_field :source_query, class: "form-input"
+            # Omitted entirely for a role label, not merely disabled: the controller already
+            # drops source_query from a role label's update params (a role's importable? is just
+            # source_query.present?, and stage 2's rules — not an admin — decide what a role
+            # imports), and a field the server refuses to save is worse than no field.
+            unless @card_label.role?
+              render Ui::FormGroup.new(hint: "Limitless search token, e.g. is:ace — leave blank if this label has nothing to import") do
+                f.label :source_query, "Search token", class: "form-label"
+                f.text_field :source_query, class: "form-input"
+              end
             end
 
             render Ui::FormGroup.new do

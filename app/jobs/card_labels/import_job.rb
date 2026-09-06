@@ -10,6 +10,12 @@ class CardLabels::ImportJob < ApplicationJob
 
   queue_as :default
 
+  # Tournaments::LimitlessImportJob::FAILURES_LISTED's shape, applied to this job's own three
+  # unbounded lists (missing printings, unfingerprinted cards, unlisted fingerprints): a large
+  # label run against a sparse catalogue can name hundreds of printings, and a multi-kilobyte
+  # error_message is worse than a truncated one that says how much it left out.
+  ENTRIES_LISTED = 20
+
   def perform(import_id, card_label_id, user_id)
     # An Import deleted mid-flight is an ordinary lookup miss: there is nowhere left to report to.
     import = Import.find_by(id: import_id) or return
@@ -47,11 +53,11 @@ class CardLabels::ImportJob < ApplicationJob
     lines << "read #{result.read_count} of an announced #{result.announced_count}" unless result.complete?
     if result.missing_printings.any?
       lines << "#{result.missing_printings.size} #{"printing".pluralize(result.missing_printings.size)} " \
-               "not in the catalogue: #{result.missing_printings.join(", ")}"
+               "not in the catalogue: #{listed(result.missing_printings)}"
     end
     if result.unfingerprinted.any?
       lines << "#{result.unfingerprinted.size} skipped for having no fingerprint: " \
-               "#{result.unfingerprinted.join(", ")}"
+               "#{listed(result.unfingerprinted)}"
     end
     # Worded to claim no more than the run can prove: this is usually a printing the source
     # dropped, but it is also what an earlier-labelled card shows after it loses its fingerprint on
@@ -60,9 +66,18 @@ class CardLabels::ImportJob < ApplicationJob
     if result.unlisted_fingerprints.any?
       lines << "#{result.unlisted_fingerprints.size} " \
                "#{"assignment".pluralize(result.unlisted_fingerprints.size)} the source no longer " \
-               "lists or this run could not resolve, kept: #{result.unlisted_fingerprints.join(", ")}"
+               "lists or this run could not resolve, kept: #{listed(result.unlisted_fingerprints)}"
     end
     lines.join("\n")
+  end
+
+  # The count is always stated by the caller above, so a truncated list never hides how bad it
+  # was — only the receipt's line length is bounded.
+  def listed(entries)
+    shown = entries.first(ENTRIES_LISTED).join(", ")
+    return shown if entries.size <= ENTRIES_LISTED
+
+    "#{shown}, … and #{entries.size - ENTRIES_LISTED} more"
   end
 
   def report_failure(import, user, error)

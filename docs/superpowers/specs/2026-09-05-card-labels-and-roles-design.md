@@ -195,6 +195,42 @@ ACE SPEC renders as a badge on the name line, beside the `fixed` flag that alrea
 type-mode category counts stay a partition. The "one ACE SPEC per deck" rule is something the
 reader knows; the page does not assert it, because nothing validates it.
 
+### 9. For a Trainer or Energy, the assignment key is a name, and that is accepted rather than fixed
+
+`Card#compute_fingerprint` only builds the composite digest — name plus HP plus attacks plus
+abilities — for a Pokémon; a Trainer or an Energy gets `SHA256(name)` alone. Assignments are keyed
+on that same fingerprint (decision 2), so for the labels this feature actually imports — almost
+entirely Trainers — the key a label is written on is not "same card", it is "same name". Two
+catalogue rows sharing a Trainer name where only one deserves the label would be given one
+assignment and one badge between them, and `card_labels:resync_fingerprints` cannot repair that:
+it moves an assignment onto whatever fingerprint a card's *current* printing computes to, and for a
+Trainer that computation is still the bare name — it recomputes the same collapsing digest, not a
+finer one.
+
+That is right for the case this feature actually has: **every printing of Prime Catcher is an ACE
+SPEC**, so folding its reprints onto one row is the correct answer, the same folding `CardStats`
+already relies on to avoid splitting a reprinted Pokémon into meaningless halves (decision 2's own
+argument, one level up the same key). The converse — two *different* Trainer cards sharing one
+name, where the label is true of one printing and false of the other — does not hold today, and
+three measurements say so rather than an assumption:
+
+- **0 of the 400** distinct Trainer/Energy fingerprints in the catalogue span cards with different
+  effect text — every name collision on file is a straight reprint, not two different cards
+  wearing one name.
+- **0 of the 29** fingerprints the live `is:ace` import labels reach a card the source did not
+  list — the import's own blast radius is exactly the cards Limitless named, not a name-sharing
+  neighbour.
+- The canonical worry case, **Master Ball** — an ordinary Item in older sets, an ACE SPEC in
+  PAR/TEF — has exactly **one** printing in the catalogue today, TEF 153. There is no older Master
+  Ball on file to mislabel.
+
+What would change the answer: a set import bringing in an *older* printing of a name whose card
+text changed — issue #111's Japanese sets are the likely door, since they are expected to add
+printings the western catalogue does not already hold under set codes that stay globally unique.
+The day that happens, a name collision with different effects becomes real, and this key stops
+being an accepted trade-off and becomes a defect — at which point Trainer/Energy fingerprinting
+needs its own finer key, not a fix inside this feature.
+
 ---
 
 ## Shape of the change

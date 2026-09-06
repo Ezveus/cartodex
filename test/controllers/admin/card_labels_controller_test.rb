@@ -74,6 +74,16 @@ class Admin::CardLabelsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "role", @role_label.reload.family
   end
 
+  # A third door onto the create/destroy refusal: importable? is just source_query.present?, so
+  # patching one onto a role label would make it importable without ever creating a role label.
+  test "patching a source_query onto a role label leaves it blank" do
+    patch admin_card_label_path(@role_label),
+      params: { card_label: { source_query: "is:gust", family: "type" } }
+
+    assert_nil @role_label.reload.source_query
+    assert_not @role_label.importable?
+  end
+
   test "importing enqueues the job and records the import" do
     assert_difference [ "Import.count" ], 1 do
       assert_enqueued_with(job: CardLabels::ImportJob) do

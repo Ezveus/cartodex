@@ -16,7 +16,12 @@ class CardLabels::LimitlessSearch < ApplicationService
   BASE_URL = "https://limitlesstcg.com".freeze
 
   # What a Limitless search token may contain. Narrow because it is interpolated into a URL that is
-  # then fetched: `is:ace`, `is:fusion+aa`, `is:prism,tt`, `-is:gx`.
+  # then fetched: `is:ace`, `is:fusion+aa`, `is:prism,tt`, `-is:gx`. A leading `-` is accepted
+  # deliberately, and it is not a free negation: `-is:gx` searches the *complement* of the label
+  # — thousands of printings rather than a few dozen — and the importer's "never deletes" rule
+  # (decision 4) means a run like that cannot be walked back once written, short of destroying the
+  # label itself (which does cascade its assignments). No validation stops an admin typing one in;
+  # this is the one place that says so before a run does.
   TOKEN_RE = /\A-?[a-z]+:[a-z0-9,+\-]+\z/
 
   CARD_HREF_RE = %r{\A/cards/([A-Za-z0-9]+)/([A-Za-z0-9]+)\z}

@@ -35,15 +35,26 @@ module Admin
 
       # A role label carries no delete link at all, rather than one the controller then refuses:
       # the refusal is the rule, and a button that only ever says no is a worse way to state it.
+      #
+      # link_to with a data-turbo-method, not button_to: button_to renders a block-level <form>,
+      # which stacks vertically under any parent — wrapping it in a div changes nothing, since
+      # block children stack in normal flow regardless of nesting. ".admin-actions" is also not a
+      # class this app defines anywhere (the only neighbour, ".admin-header-actions", is a page
+      # header's row, not a table cell's). Ui::AdminActions and Admin::Imports::IndexView's own
+      # actions_cell are the precedent in this same panel: no wrapper, every control an <a>, plain
+      # " " between them, so they lay out inline on one line inside the cell.
       def actions(label)
-        div(class: "admin-actions") do
-          button_to("Import", import_admin_card_label_path(label), class: "btn btn-secondary btn-sm") if label.importable?
-          link_to "Edit", edit_admin_card_label_path(label), class: "btn btn-secondary btn-sm"
-          unless label.role?
-            button_to "Delete", admin_card_label_path(label), method: :delete,
-              class: "btn btn-danger btn-sm",
-              form: { data: { turbo_confirm: "Delete #{label.name} and its assignments?" } }
-          end
+        if label.importable?
+          link_to "Import", import_admin_card_label_path(label),
+            data: { turbo_method: :post }, class: "btn btn-secondary btn-sm"
+          plain " "
+        end
+        link_to "Edit", edit_admin_card_label_path(label), class: "btn btn-secondary btn-sm"
+        unless label.role?
+          plain " "
+          link_to "Delete", admin_card_label_path(label),
+            data: { turbo_method: :delete, turbo_confirm: "Delete #{label.name} and its assignments?" },
+            class: "btn btn-danger btn-sm"
         end
       end
     end
