@@ -22,6 +22,17 @@ module Archetypes
   # off the representative printing rather than off the grouped query, so a card the key cannot
   # fold (see GROUPING_KEY) still names itself.
   class CardStats < ApplicationService
+    # Every value that ties for most frequent, ascending. See Entry#modes.
+    #
+    # A class method because a category answers the same question about its own per-list totals,
+    # and two spellings of "every value that ties for most frequent" drift the moment one of them
+    # is asked to break a tie.
+    def self.modes_of(values)
+      tally = values.tally
+      best = tally.values.max
+      tally.select { |_value, count| count == best }.keys.sort
+    end
+
     # Display order, and the whole category vocabulary. `other` is unreachable on today's
     # catalogue — all 4720 cards categorise — and exists so that a Trainer subtype the scraper
     # learns tomorrow surfaces as a labelled bucket instead of vanishing from a report that still
@@ -112,8 +123,31 @@ module Archetypes
     # filed under every role it carries, so Iono is under `draw` and under `disruption` and both
     # sections count it. That is why nothing prints a total across sections and why role mode says
     # so in words — see Archetypes::CardReport.
-    CategoryGroup = Struct.new(:key, :label, :name_groups, keyword_init: true) do
+    # `copies_per_list` is one member and not three aggregates, and the reason is the one
+    # `Entry#labels` gives one struct up — except that this variant does not raise. Three
+    # independent members left at the bare Struct default make `min_copies == max_copies` a
+    # `nil == nil`, so `single_quantity?` answers true, the range short-circuits to `""`, and the
+    # heading renders " copies" with nothing to catch it. Derived from one Array with a default,
+    # the absence is a state the component can ask about (`copies_known?`) and the fold cannot
+    # produce.
+    #
+    # It holds **one entry per list in the sample**, zeros included — see `copies_by_list`.
+    CategoryGroup = Struct.new(:key, :label, :name_groups, :copies_per_list, keyword_init: true) do
+      def initialize(copies_per_list: [], **rest)
+        super(copies_per_list: copies_per_list, **rest)
+      end
+
       def cards_count = name_groups.sum { |group| group.entries.size }
+
+      # A caller with nothing to say about copies — the styleguide, a component test — rather
+      # than a fold that came back empty: `categories` drops a section with no entries, so a
+      # section this service built always has at least one list behind it.
+      def copies_known? = copies_per_list.any?
+      def min_copies = copies_per_list.min
+      def max_copies = copies_per_list.max
+      def single_quantity? = min_copies == max_copies
+      def modes = @modes ||= CardStats.modes_of(copies_per_list)
+      def tied_mode? = modes.size > 1
     end
 
     # `grouping` travels on the result rather than beside it because the sections and the control
@@ -138,12 +172,14 @@ module Archetypes
     # Takes the standings relation rather than deck ids, so the caller cannot hand this a
     # population the report may not speak for.
     #
-    # The `deck_id` filter states that intent; it does not enforce it, and no test can pretend
-    # otherwise. Both queries below consume `@standings` as an `IN (SELECT deck_id …)` subquery,
-    # and SQL's NULL semantics already drop the bare rows — removing this line leaves every test
-    # green (checked). It stays as the declaration of what this service is allowed to see, so
-    # that a future query reading `@standings` some other way inherits the restriction instead of
-    # having to rediscover it.
+    # The `deck_id` filter is load-bearing, and it did not use to be. While `lists_count` was a
+    # `COUNT(DISTINCT deck_id)` this line was a declaration of intent that SQL enforced anyway —
+    # the grouped queries consume `@standings` as an `IN (SELECT deck_id …)` subquery and NULL
+    # semantics drop the bare rows, so deleting it left every test green, which the comment here
+    # used to say. `deck_ids` plucks instead of counting, and `pluck` hands back a `nil` element
+    # that `size` counts: measured on the production dump with one list-less standing, the two
+    # forms read 106 and 107. Delete this line now and every percentage on the page is computed
+    # over a denominator larger than the sample.
     # `grouping` is a mode, not a second report: `Entry`, `NameGroup`, the fixed core and every
     # percentage below are computed identically either way, and only the grouping of entries into
     # sections changes. That is what makes the two views incapable of telling two stories about one
@@ -220,13 +256,23 @@ module Archetypes
         )
     end
 
-    # Counted from the standings, not from the rows above, so that this is the same number
-    # MetagameScope put in the sample selector and Performance put in the panel. Derived from the
-    # rows it would instead be "lists holding at least one card", which is the same thing right up
-    # until a list holds none — and then the page prints two listcounts and computes its
-    # percentages over the one it does not show.
+    # The sample, as a list of deck ids. Read from the standings and not from the rows above, so
+    # that `lists_count` is the same number MetagameScope put in the sample selector and
+    # Performance put in the panel. Derived from the rows it would instead be "lists holding at
+    # least one card", which is the same thing right up until a list holds none — and then the
+    # page prints two list counts and computes its percentages over the one it does not show.
+    #
+    # The ids themselves and not a COUNT, because `copies_by_list` needs the whole universe of
+    # lists to place a zero for the ones playing none of a category — a list holding no card at
+    # all appears in no `deck_cards` row and is invisible to anything folded from them. It is one
+    # statement either way; measured, this service stays at five queries and /archetypes/:id at
+    # seventeen.
+    def deck_ids
+      @deck_ids ||= @standings.distinct.pluck(:deck_id)
+    end
+
     def lists_count
-      @lists_count ||= @standings.distinct.count(:deck_id)
+      @lists_count ||= deck_ids.size
     end
 
     # The printing each card is shown as: the one the most lists actually play, with the card id
@@ -315,18 +361,12 @@ module Archetypes
         inclusion_pct: percentage(inclusion),
         min_copies: copies.min,
         max_copies: copies.max,
-        modes: modes_of(copies),
+        modes: self.class.modes_of(copies),
         core: inclusion == lists_count,
         labels: labels_by_fingerprint.fetch(key, [])
       )
     end
 
-    # Every value that ties for most frequent, ascending. See Entry#modes.
-    def modes_of(copies)
-      tally = copies.tally
-      best = tally.values.max
-      tally.select { |_copies, count| count == best }.keys.sort
-    end
 
     def percentage(count)
       (100.0 * count / lists_count).round(1)
@@ -360,6 +400,37 @@ module Archetypes
       end
     end
 
+    # The copies each list plays of one section, one entry per list in the sample — a list playing
+    # none of it contributing a zero rather than nothing.
+    #
+    # That is deliberately not the rule `Entry#min_copies` follows, which is the range **when
+    # played**. A card row prints its inclusion percentage right beside its range, so "1 copy"
+    # there is qualified; a section heading carries no such figure, and on the production data
+    # Tool is played by 1 list of 22, 12 of 68 and 13 of 106 — a heading reading "1 copy" over
+    # those samples is true of the card and false of the sample. A later reader making the two
+    # rules agree is undoing this, not tidying it.
+    #
+    # Folded over the section's own entries rather than filtered out of every row per section:
+    # that is what makes it O(the rows the section holds) instead of O(rows × sections), and it is
+    # also what keeps a role section counting only its own cards, since in role mode one entry
+    # belongs to several sections and `rows` knows nothing about roles. No query is added — this
+    # walks `rows_by_key`, which the entries were built from.
+    def copies_by_list(section_entries)
+      totals = Hash.new(0)
+
+      section_entries.each do |entry|
+        rows_by_key.fetch(entry.fingerprint).each { |deck_id, _key, copies| totals[deck_id] += copies }
+      end
+
+      deck_ids.map { |deck_id| totals[deck_id] }
+    end
+
+    # Both modes build their sections here, so neither can compute the figure the other way.
+    def category_group_for(key, label, section_entries)
+      CategoryGroup.new(key: key, label: label, name_groups: name_groups_for(section_entries),
+                        copies_per_list: copies_by_list(section_entries))
+    end
+
     def categories
       @grouping == :role ? role_categories : type_categories
     end
@@ -369,7 +440,7 @@ module Archetypes
 
       CATEGORIES.filter_map do |key, label|
         category_entries = grouped[key] or next
-        CategoryGroup.new(key: key, label: label, name_groups: name_groups_for(category_entries))
+        category_group_for(key, label, category_entries)
       end
     end
 
@@ -404,9 +475,7 @@ module Archetypes
         .map { |role| [ role.slug.to_sym, role.name, grouped[role] ] }
       sections << [ NO_ROLE, NO_ROLE_LABEL, grouped[NO_ROLE] ] if grouped.key?(NO_ROLE)
 
-      sections.map do |key, label, section_entries|
-        CategoryGroup.new(key: key, label: label, name_groups: name_groups_for(section_entries))
-      end
+      sections.map { |key, label, section_entries| category_group_for(key, label, section_entries) }
     end
 
     # Name groups live *inside* a category rather than above it, so a name whose printings somehow

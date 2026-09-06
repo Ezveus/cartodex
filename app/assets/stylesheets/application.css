@@ -3519,10 +3519,36 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-size: 1.05rem;
 }
 
-.archetype-category-count {
+/* The two figures of a heading, wrapped so `space-between` on the header above puts *them* at
+   the far end together rather than spreading the three children across the row — see
+   Archetypes::CategorySection. Its own `flex-wrap` so the pair stacks under the heading at a
+   width that cannot hold both, instead of overflowing. */
+.archetype-category-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+}
+
+.archetype-category-count,
+.archetype-category-copies {
   color: var(--ink-500);
   font-size: 0.85rem;
   white-space: nowrap;
+}
+
+/* Same register as .archetype-overlap-note and .archetype-printing-note: the third sentence on
+   this page written to stop a reader adding up a set of numbers that are not parts of a whole.
+   It renders in both modes, so in role mode the overlap note follows it and the pair is drawn
+   together — the spacing .archetype-provenance-note already takes from the note above it. */
+.archetype-range-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
+.archetype-range-note + .archetype-overlap-note {
+  margin-top: -0.75rem;
 }
 
 .archetype-card-list {

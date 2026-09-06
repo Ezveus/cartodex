@@ -24,6 +24,7 @@ module Archetypes
 
         if @stats.any?
           summary
+          range_note unless single_list?
           overlap_note if role_mode?
           provenance_note if role_mode? && @stats.unconfirmed_roles?
           @stats.categories.each do |category|
@@ -85,6 +86,24 @@ module Archetypes
 
     def pool_param
       @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id
+    end
+
+    # The third sentence of the same family, and the one the copies figures make necessary in
+    # **both** modes: each heading prints the range one list plays, and those ranges do not add
+    # up. Measured on the production data's default pool — Pokémon 17-20, Supporter 9-14, Item
+    # 11-15, Stadium 3-4, Basic Energy 13-16 — the minima sum to 53 and the maxima to 69, over a
+    # sample where every list plays exactly 60. A reader adding the headings gets an interval no
+    # list played, which is the one mistake this layout invites.
+    #
+    # Withheld at one list, where there is no range to disclaim: every section prints an exact
+    # number. Deliberately not because the sections then sum to the list — in role mode they still
+    # do not, a single list carrying one dual-role card already summing past it — but that is the
+    # overlap note's sentence, and it renders at one list too.
+    def range_note
+      p(class: "archetype-range-note") do
+        "Each heading gives the copies one list plays of that section, so the ranges belong to " \
+          "different lists and adding them up describes none of them."
+      end
     end
 
     # The sentence a reader cannot infer from the sections themselves, in the register of the one
