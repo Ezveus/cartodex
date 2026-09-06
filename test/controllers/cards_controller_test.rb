@@ -136,6 +136,35 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".card-grid-name", text: "Honedge", count: 0
   end
 
+  # The same for a role, and it is not a symmetry test. `@searching` is one expression, so every
+  # filter added to the page has to be added to it — and until this test existed, deleting
+  # `|| @role` from it left all twelve of the others green while `/cards?role=gust` rendered the
+  # browse prompt under a URL claiming to filter. The role half is the one the issue calls the
+  # useful one, and it was the half with no isolated coverage.
+  test "index filters by a role on its own" do
+    label_card(gust_role, cards(:bosss_orders_meg))
+
+    get cards_path(role: "gust")
+
+    assert_response :success
+    assert_select ".card-grid-name", text: "Boss's Orders", count: 1
+    assert_select ".card-grid-name", text: "Honedge", count: 0
+    assert_select "p.cards-empty", text: BROWSE_PROMPT, count: 0
+  end
+
+  # The question the issue's headline asks — "Item and gust" — crosses a column filter and a label
+  # filter, which the two-label test above cannot exercise: it applies the same clause twice.
+  test "a label narrows a column filter rather than being ANDed with nothing" do
+    label_card(gust_role, cards(:bosss_orders_meg))
+    label_card(gust_role, cards(:honedge))
+
+    get cards_path(type: "Trainer", role: "gust")
+
+    assert_select ".card-grid-name", text: "Boss's Orders", count: 1
+    assert_select ".card-grid-name", { text: "Honedge", count: 0 },
+      "a Pokémon survived a Trainer filter"
+  end
+
   # `set` is deliberately outside `@searching`, so before this change `?set=…&label=…` rendered the
   # whole set — and "index without a search shows the selected set grid" asserts exactly that
   # output as correct, which is why nothing in the suite could report the omission.
@@ -209,6 +238,26 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
   # The filter bar sits outside the Turbo Frame the form targets, so it is never re-rendered by a
   # keystroke: the only thing that exercises the selected state is a shared link or a bookmark. A
   # control comparing the wrong things filters correctly and reads "All labels".
+  # /cards is reachable with no session, so it receives whatever a crawler or a broken link sends.
+  # This asserts the answer a malformed filter gets — 200 and no matches — and **not** the `to_s`
+  # coercion in the controller, which it cannot: measured by sabotage, removing that `to_s` leaves
+  # this green, because an unresolvable label matches nothing whatever its shape and the danger
+  # (an `ActionController::Parameters` reaching `cards_path` and raising `UnfilteredParameters`)
+  # lives in a pager that an empty result never renders. Reproducing that would take 49 matching
+  # cards, which no fixture and no production label provides. So the `to_s` is defence in depth
+  # against a failure mode nothing can currently exercise, and this test is about the answer.
+  test "a hash- or array-shaped label answers no matches rather than raising" do
+    ace_spec
+
+    get cards_path(label: [ "ace-spec" ])
+    assert_response :success
+    assert_select "p.cards-empty", text: NO_MATCH
+
+    get cards_path(role: { slug: "gust" })
+    assert_response :success
+    assert_select "p.cards-empty", text: NO_MATCH
+  end
+
   test "the label select says which label is showing" do
     ace_spec
 
@@ -253,6 +302,41 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal 7, count_queries { get cards_path },
       "the label option lists are being re-read per render"
+  end
+
+  # CardLabelAssignment.active is `rejected: false` and says nothing about provenance, so a rule's
+  # guess and a human's decision open the same page. Archetypes::CardReport says so for the
+  # member-only report; this surface is anonymous, and after one suggester run on the production
+  # dump 714 of 743 assignments were guesses.
+  test "a role filter says when it is showing a rule's proposals" do
+    gust_role.assignments.create!(fingerprint: cards(:bosss_orders_meg).fingerprint,
+                                  card: cards(:bosss_orders_meg), source: "suggested")
+
+    get cards_path(role: "gust")
+
+    assert_select "p.cards-search-note", text: /nobody has confirmed yet/
+  end
+
+  # And says nothing once every role it is showing was decided by a person — the same restraint
+  # the provenance note on the archetype report shows.
+  test "a role filter is silent once its roles were confirmed by hand" do
+    gust_role.assignments.create!(fingerprint: cards(:bosss_orders_meg).fingerprint,
+                                  card: cards(:bosss_orders_meg), source: "curated")
+
+    get cards_path(role: "gust")
+
+    assert_select ".card-grid-name", text: "Boss's Orders"
+    assert_select "p.cards-search-note", count: 0
+  end
+
+  # A type label is imported from Limitless's own search, not guessed from card text, so there is
+  # no proposal to disclaim.
+  test "a type label says nothing about provenance" do
+    label_card(ace_spec, cards(:bosss_orders_meg))
+
+    get cards_path(label: "ace-spec")
+
+    assert_select "p.cards-search-note", count: 0
   end
 
   private

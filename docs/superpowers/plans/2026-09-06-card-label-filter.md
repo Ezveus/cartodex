@@ -39,10 +39,25 @@ Two consequences it is worth being explicit about:
 scope.where(fingerprint: CardLabelAssignment.active.where(card_label_id: id).select(:fingerprint))
 ```
 
-A subquery, not a join. **The obvious reason is wrong and was measured to be wrong**: a join would
-not inflate `scope.count`, because `(card_label_id, fingerprint)` is UNIQUE and a join predicated
-on one label is 1:1 — both forms return 33, and `EXPLAIN QUERY PLAN` shows the join driving from
-the 62-row assignment index, if anything the tighter plan. The two real reasons are:
+A subquery, not a join, and the first draft of this paragraph got the reason wrong twice — both
+caught by the adversarial review, both recorded rather than quietly replaced, because the second
+one is the mistake a future reader would repeat.
+
+It said a join would inflate `scope.count`. It would not: `(card_label_id, fingerprint)` is UNIQUE,
+so a hand-written join on `fingerprint` is 1:1 and answers 33, exactly as the subquery does. But it
+then said "both forms", and **the join Rails can actually express is not that one**.
+`Card.joins(:card_label_assignments)` rides the association, which is on `card_id` — the single
+printing a decision was read from — and answers **29**, losing precisely the four reprints the
+fingerprint key exists to reach (Maximum Belt, Prime Catcher, Scoop Up Cyclone, Sparkling Crystal).
+Measured: 33 / 29 / 33 for subquery, association join, hand-written join. A comment claiming
+equivalence would have invited the next reader to "simplify" into the one form that silently drops
+the point of the feature.
+
+(It also read a row count off `EXPLAIN QUERY PLAN`'s third column — "the 62-row assignment index".
+That column is `notused`; the table holds 743 rows and the value varies per query. There is no row
+count in an EQP.)
+
+The two real reasons are:
 
 - **`.merge` collapses two `where`s on one column, and `merge` is the idiom three lines away.**
   `CardSearchable#apply_card_name_filter` does `scope.merge(Card.name_matching(name))`, so it is
@@ -77,6 +92,13 @@ already runs on. Issue #111's Japanese sets are what would change it.
 3. **`search_query_params`** — what the pager re-emits. Absent from it, page 2 silently drops the
    filter and shows the unfiltered catalogue under the same heading.
 
+Both params are read as `params[:label].to_s`, for the reason `page` two lines above carries a
+`to_s`: the action is reachable with no session, and a Hash- or Array-shaped param would otherwise
+travel as far as `cards_path`, where `ActionController::Parameters` raises `UnfilteredParameters` —
+a 500 on a public, rate-limited page. Measured, it cannot get there today, because an unresolvable
+slug empties the result and no pager renders; that is a coincidence between two rules rather than a
+guarantee, and one word makes it structural.
+
 Only the first is visible in a casual read of the diff; the other two fail quietly.
 
 ## The option lists are not `Card.filter_values`, and that is deliberate
@@ -96,7 +118,7 @@ renders on every request, so an option list built with a `Card.joins(…)` would
 `CardLabel` is invisible to that guard, which is why the query cost is pinned separately.
 
 **They are loaded, not handed over as relations**, and that is the one place this change can add an
-N+1 to a rate-limited public page. The "render no control for an empty family" guard asks `any?`
+N+1 to a rate-limited public page. The "render no control for an empty family" guard asks `empty?`
 before `each`, and on an unloaded relation that is a second query per family — two extra on every
 `/cards` request. The identical pattern is already live one line away: `Cards::IndexView`'s
 `search_results` asks `@cards.any?`, which is where the `SELECT 1 AS one` in the measured trace
@@ -116,10 +138,24 @@ that creates the labels.
   clauses in `filtered_scope`, and the two option lists passed to the view.
 - `app/models/card.rb` — a `with_label` scope, so the subquery has one definition and the controller
   stays a controller.
-- `app/views/components/cards/index_view.rb` — two `<select>`s. `filter_select` cannot be reused as
-  written: it builds options where the value *is* the text, and a label needs the slug as value and
-  the name as text. A sibling private method takes `[value, text]` pairs; `set_select` is the
-  existing precedent for a bespoke one in this component.
+- `app/views/components/cards/index_view.rb` — two `<select>`s. `filter_select` builds options
+  where the value *is* the text, and a label needs the slug as value and the name as text, so it
+  gains the pair form rather than acquiring a sibling: a private `label_select` shipped first and
+  the review named it what it was, a **fourth** spelling of one component
+  (`filter_select`, `set_select`, `Ui::FilterSelect`, this). `set_select` stays bespoke — optgroups
+  are a different structure. The `return if options.empty?` guard moved onto the shared method with
+  it, so it reaches the four pre-existing controls too, where it is unreachable with any catalogue
+  holding a card.
+- **A role filter says that it is showing proposals.** `CardLabelAssignment.active` is
+  `rejected: false` and says nothing about who wrote the row, so a rule's guess and a human's
+  decision open the same page — and after one suggester run on the production dump, 714 of 743
+  assignments are guesses. `Archetypes::CardReport#provenance_note` answers that for the
+  member-only report, and `CLAUDE.md` states the rule about the *store* rather than about one
+  screen: a page may leave a proposal on display, but not without saying so. This surface is
+  anonymous, so it needs the sentence more. It carries **no number** — the counts available are of
+  assignments (fingerprints) while the grid shows printings, and 29 beside a page of 33 is the
+  second denominator this repository keeps having to remove — and costs one indexed `EXISTS`, only
+  while a role is selected.
 - `search_query_params` gains both keys.
 - `app/assets/stylesheets/application.css` — nothing, and the reason is not the one it looks like.
   `.cards-search-select` is `flex: 0 0 auto`, i.e. `flex-shrink: 0`: wrapping is **not** what
@@ -127,7 +163,10 @@ that creates the labels.
   would overflow with no `overflow-x` guard anywhere near it. What makes the addition safe is that
   both new controls are strictly narrower than one that already ships — the longest new option is
   "Energy acceleration" (19 characters) against `set_select`'s "Scarlet & Violet Energy" (23) plus
-  its optgroup labels. The real cost of going from six controls to eight is **vertical**: roughly
+  its optgroup labels. **The system test cannot see that comparison**: `card_sets.yml`'s longest
+  name is "Twilight Masquerade", also 19, so the bar it measures is about four characters narrower
+  than the real one. It equals the widest new control and is therefore a valid guard for what this
+  change adds, and it is a guard rather than a discriminator for the widest control overall. The real cost of going from six controls to eight is **vertical**: roughly
   three rows becomes four or five at 500px and six at 344px. **Verified by geometry, not by
   assumption** — the `/archetypes` lesson, and no system test drives this bar at all today.
 

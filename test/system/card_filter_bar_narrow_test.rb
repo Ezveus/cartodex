@@ -13,8 +13,9 @@ require "application_system_test_case"
 class CardFilterBarNarrowTest < ApplicationSystemTestCase
   drive_at 344, 780
 
+  # No `login_as`: /cards is publicly_reachable, and a session this test does not need is a
+  # coupling the next reader has to disprove.
   setup do
-    login_as users(:one), scope: :user
     CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
     CardLabel.create!(slug: "energy-acceleration", name: "Energy acceleration",
                       family: "role", position: 70)
