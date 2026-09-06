@@ -12,6 +12,8 @@ module Archetypes
   # Copies live on the printing, never on the name, for the same reason: two versions of one name
   # in one list are two rows of copies, and a "1-4" spanning them would describe no list.
   class NameGroupRow < ApplicationComponent
+    include Archetypes::CopiesText
+
     def initialize(group:, single_list: false)
       @group = group
       @single_list = single_list
@@ -131,30 +133,6 @@ module Archetypes
           "#{format_pct(pct)}% of lists (#{count})"
         end
       end
-    end
-
-    def copies_text(entry)
-      parts = [ "#{copies_range(entry)} #{copies_noun(entry)}" ]
-      parts << mode_text(entry) unless entry.single_quantity?
-      parts.join(" · ")
-    end
-
-    def copies_range(entry)
-      return entry.min_copies.to_s if entry.single_quantity?
-
-      "#{entry.min_copies}-#{entry.max_copies}"
-    end
-
-    def copies_noun(entry)
-      entry.single_quantity? && entry.min_copies == 1 ? "copy" : "copies"
-    end
-
-    # A tie is a real answer and is said to be one. Printing "3 / 4" alone reads as a range or a
-    # typo; silently picking 3 would state a consensus this sample does not hold.
-    def mode_text(entry)
-      return "most often #{entry.modes.join(' / ')} — tied" if entry.tied_mode?
-
-      "most often #{entry.modes.first}"
     end
 
     # 100.0 and 73.1 both arrive as Floats rounded to one decimal. A trailing ".0" on a whole

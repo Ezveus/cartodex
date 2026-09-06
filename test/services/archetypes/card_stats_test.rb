@@ -27,10 +27,11 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     record(event, archetype, deck: field_list(alpha => 4, beta => 3))
     record(event, archetype, deck: field_list(alpha => 4, beta => 4, gamma => 2))
     record(event, archetype, deck: field_list(alpha => 4, beta => 4, gamma => 3))
-    # A standing with no list is not part of the report's sample. Note that SQL's NULL semantics
-    # already exclude it from `deck_id IN (…)`, so this documents the contract rather than
-    # locking the service's own `where.not(deck_id: nil)` — removing that filter leaves this
-    # green, which was verified.
+    # A standing with no list is not part of the report's sample, and this row is what says so.
+    # SQL's NULL semantics keep it out of `deck_id IN (…)` on their own, so the service's
+    # `where.not(deck_id: nil)` used to be a declaration nothing enforced — but `lists_count` now
+    # plucks the deck ids rather than counting them, and `pluck` hands back a `nil` this row would
+    # add to the sample. Delete that filter and this assertion reads 5.
     record(event, archetype)
 
     result = stats_for(archetype)
@@ -543,6 +544,145 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
   end
 
   # Helpers below `private`, where a `test` declaration would never run.
+
+  # --- Copies per category (issue #156) --------------------------------------------------------
+  #
+  # The category range runs over every list in the sample, zeros included, and is deliberately not
+  # the rule `Entry#min_copies` follows. See CardStats::CategoryGroup for why the two differ.
+
+  # Measured on the production data: Tool is played by 1 list of 22 in TEF-CRI, 12 of 68 in
+  # SVI-DRI and 13 of 106 blended. Under the entry's "when played" rule the heading would read
+  # "1 copy" over a sample where 21 lists of 22 play no Tool at all — true of the card and false
+  # of the sample, and there is no inclusion percentage beside a heading to correct it.
+  #
+  # Three lists and not two: at two the tally is {1 => 1, 0 => 1} and `modes` is the tie [0, 1],
+  # which renders identically whether the zero was counted as a value or the tie is an artefact of
+  # the sample size.
+  test "a category range counts a list playing none of it as a zero" do
+    staple = pokemon("Zeroed Pokemon")
+    tool = trainer("Zeroed Tool", subtype: "Tool")
+    archetype = archetype_of_its_own
+    event = standard_event
+
+    record(event, archetype, deck: field_list(staple => 4, tool => 1))
+    record(event, archetype, deck: field_list(staple => 4))
+    record(event, archetype, deck: field_list(staple => 4))
+
+    section = section_named(stats_for(archetype), :tool)
+
+    assert_equal [ 0, 1 ], [ section.min_copies, section.max_copies ]
+    assert_equal [ 0 ], section.modes
+    refute_predicate section, :single_quantity?
+  end
+
+  # The other half of the same rule, and the one an implementation seeded from the rows rather
+  # than from the sample's deck ids gets wrong: a list holding no card at all is still a list, and
+  # it plays zero Pokémon. It appears in no `deck_cards` row, so it is invisible to any fold that
+  # starts from them.
+  test "a list holding no card at all is a zero in every category, not an absence" do
+    staple = pokemon("Whole List Pokemon")
+    archetype = archetype_of_its_own
+    event = standard_event
+
+    record(event, archetype, deck: field_list(staple => 60))
+    record(event, archetype, deck: field_list({}))
+
+    result = stats_for(archetype)
+    section = section_named(result, :pokemon)
+
+    assert_equal 2, result.lists_count
+    assert_equal [ 0, 60 ], [ section.min_copies, section.max_copies ]
+  end
+
+  # The figure the report could not derive from what it already had, and the reason #156 exists.
+  # Summing the per-card minima and maxima gives an interval no list played, because the list
+  # holding the minimum of one card is not the list holding the minimum of another — here Σ reads
+  # 2-8 over two lists that both play exactly 5 Items. Measured on production the naive interval
+  # is not merely wider: all-formats Pokémon reads 39-57 against a true 16-23, a floor above the
+  # true ceiling.
+  #
+  # The Pokémon in both lists is what also pins the second half: a section sums *its own* entries,
+  # so Item is 5 and not 9.
+  test "the range is over per-list totals, never the sum of the per-card ranges" do
+    staple = pokemon("Untouched Pokemon")
+    first = trainer("Traded Item A", subtype: "Item")
+    second = trainer("Traded Item B", subtype: "Item")
+    archetype = archetype_of_its_own
+    event = standard_event
+
+    record(event, archetype, deck: field_list(staple => 4, first => 4, second => 1))
+    record(event, archetype, deck: field_list(staple => 4, first => 1, second => 4))
+
+    result = stats_for(archetype)
+    items = section_named(result, :item)
+
+    assert_equal [ 5, 5 ], [ items.min_copies, items.max_copies ],
+      "summed per card this reads 2-8, an interval neither list played"
+    assert_predicate items, :single_quantity?
+    assert_equal [ 4, 4 ], [ section_named(result, :pokemon).min_copies,
+                             section_named(result, :pokemon).max_copies ]
+  end
+
+  # A tie is a real answer for a category exactly as it is for a card. Built so that the per-card
+  # sum (2-8) and the per-list range (3-5) differ, unlike the tied-mode fixture above, whose two
+  # forms coincide at 3-5 and would have proved nothing here.
+  test "a category whose per-list totals tie reports the tie" do
+    first = trainer("Tied Item A", subtype: "Item")
+    second = trainer("Tied Item B", subtype: "Item")
+    archetype = archetype_of_its_own
+    event = standard_event
+
+    record(event, archetype, deck: field_list(first => 2, second => 1))
+    record(event, archetype, deck: field_list(first => 1, second => 2))
+    record(event, archetype, deck: field_list(first => 4, second => 1))
+    record(event, archetype, deck: field_list(first => 1, second => 4))
+
+    section = section_named(stats_for(archetype), :item)
+
+    assert_equal [ 3, 5 ], [ section.min_copies, section.max_copies ]
+    assert_equal [ 3, 5 ], section.modes
+    assert_predicate section, :tied_mode?
+  end
+
+  # Role mode computes the same figure over sections that are not a partition, so each section
+  # counts its own cards and a card carrying two roles is counted in both. The sections therefore
+  # add past the list — 11 copies across three sections over a list of 7 — which is what the
+  # report says in words rather than by printing a total.
+  test "a role section totals its own cards, and a card with two roles counts in both" do
+    iono = trainer("Roled Supporter", subtype: "Supporter")
+    ball = trainer("Roled Item", subtype: "Item")
+    assign(role_label("draw", "Draw", 10), iono)
+    assign(role_label("search", "Search", 20), ball)
+    assign(role_label("disruption", "Disruption", 60), iono)
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(iono => 4, ball => 3))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal [ 4, 4 ], [ section_named(result, :draw).min_copies,
+                             section_named(result, :draw).max_copies ]
+    assert_equal [ 4, 4 ], [ section_named(result, :disruption).min_copies,
+                             section_named(result, :disruption).max_copies ]
+    assert_equal [ 3, 3 ], [ section_named(result, :search).min_copies,
+                             section_named(result, :search).max_copies ]
+    assert_equal 11, result.categories.sum(&:max_copies),
+      "the sections must add past the 7 cards of the list, not be made to partition it"
+  end
+
+  # A group built by a caller that has nothing to say about copies — the styleguide, a component
+  # test — must render as an absence rather than as a broken figure. Three independent aggregate
+  # members with no default would not raise: `nil == nil` makes `single_quantity?` true, so the
+  # range short-circuits to `""` and the heading reads " copies" with nothing to catch it. That is
+  # the Entry#labels trap in its silent variant, and one member with a default is what closes it.
+  test "a category group built without copies says so rather than reporting an empty range" do
+    group = Archetypes::CardStats::CategoryGroup.new(key: :item, label: "Item", name_groups: [])
+
+    refute_predicate group, :copies_known?
+    assert_nil group.min_copies
+    assert_empty group.modes
+  end
+
   private
 
   SET_NAME = "CST".freeze

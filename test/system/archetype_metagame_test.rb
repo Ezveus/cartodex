@@ -206,7 +206,48 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_current_path(/pool=#{standard_pools(:twm_por).id}/)
   end
 
+  # `.archetype-category-header` is `display: flex; justify-content: space-between`, so a card
+  # count and a copies figure placed in it as two children are not neighbours — they are spread to
+  # opposite ends, with the count parked in the middle of the row away from the figure it belongs
+  # with. A wrapper is what groups them; a margin cannot.
+  #
+  # It is a cousin of the catalog note above rather than the same bug, and the difference decides
+  # what this measures. That container did not wrap, so the note overflowed and grew the row, and
+  # "is it stacked?" caught it at 390px. This one wraps, so nothing overflows: the damage is worst
+  # at full width, where there is free space to spread into, and at the narrow end the three items
+  # may wrap onto separate lines and a stacking assertion would pass with the bug still there.
+  # So the claim is **adjacency** — together on a line, or stacked — and it runs at both sweep
+  # widths. Neither is visible to a text assertion: both figures render either way.
+  test "the heading's card count and copies figure stay together rather than being spread apart" do
+    archetype = single_list_archetype
+
+    visit archetype_path(archetype)
+
+    # The header the assertion above waited for, not whichever one comes first — those are the
+    # same element today and the test should not be the thing that assumes it.
+    header = find(".archetype-category-header", text: "Pokémon")
+    count = rect_of(header.find(".archetype-category-count"))
+    copies = rect_of(header.find(".archetype-category-copies"))
+
+    if (copies["top"] - count["top"]).abs < 2
+      assert_operator copies["left"] - count["right"], :<, 24,
+        "the two figures share a line but sit #{(copies['left'] - count['right']).round}px apart, " \
+        "spread by the header's space-between instead of grouped in a wrapper"
+    else
+      assert_operator copies["top"], :>=, count["bottom"] - 1,
+        "the copies figure overlaps the card count's line instead of sitting under it"
+    end
+  end
+
   private
+
+  def rect_of(element)
+    evaluate_script(
+      "(function (e) { const r = e.getBoundingClientRect(); " \
+      "return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; })(arguments[0])",
+      element
+    )
+  end
 
   # One paper standing and one online one, so the note has a mixture to describe.
   def archetype_with_online_results

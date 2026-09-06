@@ -24,6 +24,7 @@ module Archetypes
 
         if @stats.any?
           summary
+          range_note unless single_list?
           overlap_note if role_mode?
           provenance_note if role_mode? && @stats.unconfirmed_roles?
           @stats.categories.each do |category|
@@ -85,6 +86,41 @@ module Archetypes
 
     def pool_param
       @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id
+    end
+
+    # The third sentence of the same family, and the one the copies figures make necessary in
+    # **both** modes. It carries two claims, and each was measured before it was written.
+    #
+    # It says *these figures* rather than *these ranges*, because the range is not the column that
+    # invites the addition — the **mode** is. Measured over the eight samples the production data
+    # offers, the modes sum to 60 or 61 every time, so a reader adding that column lands on a
+    # plausible 60-card profile; and on the three largest samples that profile is played by
+    # **zero** lists. The ranges are the honest half of the same trap (default pool: minima 53,
+    # maxima 69, over lists that all play exactly 60), and naming only them would disarm the
+    # column that is nearly harmless while leaving the one that looks right.
+    #
+    # And it names the zeros rule, because the page shows both rules a line apart and explains
+    # neither. TEF-CRI renders `Stadium · 1 card · 0-4 copies` directly above that section's only
+    # card at `95.5% of lists · 3-4 copies`: one card, two different floors, and the reader can
+    # only reconstruct the 0 by noticing that 95.5 is not 100.
+    #
+    # The card count is the third figure the sentence has to separate: it is over the whole
+    # sample, so all-formats reads `Pokémon · 32 cards · 16-23 copies` — a contradiction if the
+    # two are taken as facts about one list.
+    #
+    # Withheld at one list, where there is no range to disclaim: every section prints an exact
+    # number and adding them up genuinely gives the list. Deliberately not because the sections
+    # partition it — in role mode they still do not, a single list carrying one dual-role card
+    # already summing past 60 — but that is the overlap note's sentence, and it renders at one
+    # list too.
+    def range_note
+      p(class: "archetype-range-note") do
+        "Each heading gives the copies one list plays of that section, and a list playing none " \
+          "of it counts as zero here — unlike a card's own range below, which covers only the " \
+          "lists that play it. Those figures belong to different lists, so adding them up across " \
+          "sections describes no list, and the card count beside them is over the whole sample " \
+          "rather than over one list."
+      end
     end
 
     # The sentence a reader cannot infer from the sections themselves, in the register of the one
