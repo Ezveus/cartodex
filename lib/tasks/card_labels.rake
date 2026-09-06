@@ -46,4 +46,27 @@ namespace :card_labels do
     reports.each { |line| puts "  #{line}" }
     abort "card_labels:resync_fingerprints left #{reports.size} assignments unresolved."
   end
+
+  # Propose roles from the card text, for every card in the catalogue. Safe to re-run: it writes
+  # only its own `suggested` rows, never examines a pair a human has decided, and withdraws the
+  # suggestions its own rules no longer make.
+  #
+  # It does not abort on anything it reports, unlike resync_fingerprints above: nothing here is
+  # ambiguous — a card the rules say nothing about is simply a card nobody has curated yet, which
+  # is the state /admin/card_roles exists to work through, and failing a boot on it would be
+  # failing a boot on curation debt.
+  desc "Suggest card roles from the effect, attack and ability text the catalogue already holds"
+  task suggest_roles: :environment do
+    result = CardLabels::RoleSuggester.call
+
+    puts "Examined #{result.fingerprints_examined} #{"card".pluralize(result.fingerprints_examined)}."
+    puts "Created #{result.created}, kept #{result.kept}, withdrew #{result.withdrawn}."
+    puts "Left #{result.decided} decided by hand untouched."
+    # `next`, not `return`: a rake task body is a block, and `return` out of one raises
+    # LocalJumpError — which the fixtures hide, since they always leave a few unfingerprinted
+    # printings and the branch is never taken in a test.
+    next if result.unfingerprinted.zero?
+
+    puts "Skipped #{result.unfingerprinted} printings with no fingerprint, which cannot be labelled."
+  end
 end

@@ -71,6 +71,32 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
     assert_no_match "could not be moved", printed
   end
 
+  # The receipt is the only thing an admin reads after a run, so every number it prints has to be
+  # a number this run produced.
+  test "suggest_roles reports what it wrote" do
+    CardLabel::ROLES.each { |attributes| CardLabel.create!(family: "role", **attributes) }
+    Card.create!(name: "Nest Ball", card_type: "Trainer", subtype: "Item", set_name: "TST",
+                 set_number: "1", rarity: "Common",
+                 effect: "Search your deck for a Basic Pokémon and put it onto your Bench.")
+
+    run_task("card_labels:suggest_roles")
+
+    assert_match "Created 1, kept 0, withdrew 0.", printed
+    assert_match "Left 0 decided by hand untouched.", printed
+    assert_match(/Skipped \d+ printings with no fingerprint/, printed)
+  end
+
+  # Unlike resync_fingerprints, this one has nothing ambiguous to report and must not abort:
+  # bin/docker-entrypoint would fail a boot on curation debt, which is a state the admin screen
+  # exists to work through rather than an error.
+  test "suggest_roles does not abort, however much is left uncurated" do
+    CardLabel::ROLES.each { |attributes| CardLabel.create!(family: "role", **attributes) }
+
+    run_task("card_labels:suggest_roles")
+
+    assert_match "Created 0, kept 0, withdrew 0.", printed
+  end
+
   private
 
   # Named run_task, not run: Minitest::Test#run is the framework's own method for driving a test
@@ -83,10 +109,10 @@ class CardLabelsRakeTest < ActiveSupport::TestCase
   # its block returning normally, and abort raises SystemExit out of that block instead — the
   # exception propagates straight past capture_io's own return statement, taking the captured
   # string with it. Stashing the StringIO on an ivar keeps it readable after the raise.
-  def run_task
+  def run_task(name = "card_labels:resync_fingerprints")
     original_stdout = $stdout
     $stdout = @printed = StringIO.new
-    Rake::Task["card_labels:resync_fingerprints"].tap(&:reenable).invoke
+    Rake::Task[name].tap(&:reenable).invoke
   ensure
     $stdout = original_stdout
   end
