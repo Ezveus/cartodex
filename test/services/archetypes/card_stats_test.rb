@@ -354,18 +354,233 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     assert_equal 1, ten_card_queries.count { |sql| sql.include?("card_label") }
   end
 
+  # ── The second grouping mode ────────────────────────────────────────────────────────────────
+  #
+  # Everything below is about `grouping: :role`, and the one property it must not break on its way
+  # in: `grouping: :type` is a partition of the sample, which nothing asserted before this mode
+  # existed. Both failures here are silent — a report grouped wrongly still sums to a
+  # plausible-looking 60.
+
+  # A card carrying two roles is under both, and the two sections therefore describe more cards
+  # between them than the sample holds. The over-count is the design, not a defect: Iono is draw
+  # *and* disruption, Prime Catcher is gust *and* switch, so half the vocabulary overlaps. It is
+  # why nothing on the page prints a total across sections, and why the report says so in words.
+  test "role mode groups an entry under every role it carries" do
+    iono = trainer("Iono", subtype: "Supporter")
+    assign(role_label("draw", "Draw", 10), iono)
+    assign(role_label("disruption", "Disruption", 60), iono)
+    nest_ball = trainer("Nest Ball", subtype: "Item")
+    assign(role_label("search", "Search", 20), nest_ball)
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(iono => 4, nest_ball => 3))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal [ :draw, :search, :disruption ], result.categories.map(&:key)
+    assert_equal [ "Draw", "Search", "Disruption" ], result.categories.map(&:label)
+    assert_equal [ "Iono" ], section_names(result, :draw)
+    assert_equal [ "Iono" ], section_names(result, :disruption)
+    assert_equal [ "Nest Ball" ], section_names(result, :search)
+    # Two cards, three section entries: the sections over-count, on purpose.
+    assert_equal 3, result.categories.sum(&:cards_count)
+  end
+
+  # The arbitration CATEGORIES' `other` bucket already makes, on the axis where it is the common
+  # case rather than the unreachable one: measured on the production dump, 48 of the 94 played
+  # fingerprints carry no role. Dropped instead of bucketed, the report would sum to half a deck
+  # and still look like a deck.
+  test "a card with no role lands in No role recorded rather than vanishing" do
+    iono = trainer("Iono", subtype: "Supporter")
+    assign(role_label("draw", "Draw", 10), iono)
+    bare = pokemon("Unroled Pokemon")
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(iono => 4, bare => 2))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal [ :draw, Archetypes::CardStats::NO_ROLE ], result.categories.map(&:key)
+    assert_equal "No role recorded", result.categories.last.label
+    assert_equal [ "Unroled Pokemon" ], section_names(result, Archetypes::CardStats::NO_ROLE)
+  end
+
+  # The property the type mode has always had and no test ever stated, written here as the
+  # complement of the one the role mode deliberately breaks. Type mode: every entry exactly once,
+  # so the section counts add up to the sample. Role mode: every entry at least once, and the
+  # counts add up past it.
+  test "type mode is a partition of the sample and role mode deliberately is not" do
+    iono = trainer("Iono", subtype: "Supporter")
+    assign(role_label("draw", "Draw", 10), iono)
+    assign(role_label("disruption", "Disruption", 60), iono)
+    nest_ball = trainer("Nest Ball", subtype: "Item")
+    assign(role_label("search", "Search", 20), nest_ball)
+    bare = pokemon("Unroled Pokemon")
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(iono => 4, nest_ball => 3, bare => 2))
+
+    typed = stats_for(archetype)
+    roled = stats_for(archetype, grouping: :role)
+    played = %w[Iono Nest\ Ball Unroled\ Pokemon]
+
+    assert_equal 3, typed.categories.sum(&:cards_count)
+    assert_equal played.sort, section_card_names(typed).sort
+    assert_equal played.sort, section_card_names(typed).uniq.sort, "type mode listed a card twice"
+
+    assert_equal 4, roled.categories.sum(&:cards_count)
+    assert_equal played.sort, section_card_names(roled).uniq.sort,
+      "every card must appear at least once in role mode"
+  end
+
+  # Ordered by the vocabulary's own (position, slug) — never alphabetically, and never by how many
+  # cards a section happens to hold — with the roles nobody plays dropped exactly as an empty
+  # category is, and "No role recorded" pinned last however its neighbours are numbered.
+  test "role sections come in the vocabulary's own order and empty ones are dropped" do
+    late = trainer("Late Item", subtype: "Item")
+    assign(role_label("energy-acceleration", "Energy acceleration", 70), late)
+    early = trainer("Early Item", subtype: "Item")
+    assign(role_label("draw", "Draw", 10), early)
+    # Two roles sharing a position: the slug is what breaks the tie, so the sections cannot swap
+    # between two loads of the same page.
+    tied_second = trainer("Switching Item", subtype: "Item")
+    assign(role_label("switch", "Switch", 40), tied_second)
+    tied_first = trainer("Gusting Item", subtype: "Item")
+    assign(role_label("gust", "Gust", 40), tied_first)
+    bare = pokemon("Unroled Pokemon")
+    # A role in the vocabulary that no card in this sample carries.
+    role_label("recovery", "Recovery", 50)
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype,
+           deck: field_list(late => 1, early => 1, tied_first => 1, tied_second => 1, bare => 2))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal [ :draw, :gust, :switch, :"energy-acceleration", Archetypes::CardStats::NO_ROLE ],
+      result.categories.map(&:key)
+  end
+
+  # A human's refusal is a row, not an absence — and read as an absence it would put the card in
+  # the section the human took it out of.
+  test "a rejected role decision is not a role" do
+    draw = role_label("draw", "Draw", 10)
+    refused = trainer("Refused Supporter", subtype: "Supporter")
+    draw.assignments.create!(fingerprint: refused.fingerprint, card: refused,
+                             source: "curated", rejected: true)
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(refused => 4))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal [ Archetypes::CardStats::NO_ROLE ], result.categories.map(&:key)
+    assert_equal [ "Refused Supporter" ], section_names(result, Archetypes::CardStats::NO_ROLE)
+  end
+
+  # `Entry#labels` holds every family, because one query loads them all. Only the role half may
+  # open a section: an ACE SPEC is still an Item, and a section headed "ACE SPEC" would take it
+  # out of the category count that is a partition.
+  test "a type label never opens a section in either mode" do
+    ace_spec = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    prime_catcher = trainer("Prime Catcher", subtype: "Item")
+    ace_spec.assignments.create!(fingerprint: prime_catcher.fingerprint, card: prime_catcher,
+                                 source: "imported")
+    assign(role_label("gust", "Gust", 30), prime_catcher)
+
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(prime_catcher => 1))
+
+    assert_equal [ :item ], stats_for(archetype).categories.map(&:key)
+    assert_equal [ :gust ], stats_for(archetype, grouping: :role).categories.map(&:key)
+    assert_equal [ "ACE SPEC", "Gust" ],
+      section_named(stats_for(archetype, grouping: :role), :gust)
+        .name_groups.sole.entries.sole.labels.map(&:name)
+  end
+
+  # The sentence the design asks for in one assertion: the two modes regroup the same entries and
+  # cannot tell two stories about one sample. Everything above the sections — the list count, the
+  # settled core, every percentage — is computed before the grouping is consulted.
+  test "the two modes report the same lists_count and the same fixed core" do
+    iono = trainer("Iono", subtype: "Supporter")
+    assign(role_label("draw", "Draw", 10), iono)
+    bare = pokemon("Unroled Pokemon")
+
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, deck: field_list(iono => 4, bare => 2))
+    record(event, archetype, deck: field_list(iono => 4, bare => 1))
+
+    typed = stats_for(archetype)
+    roled = stats_for(archetype, grouping: :role)
+
+    assert_equal [ 2, 1, 4 ],
+      [ typed.lists_count, typed.fixed_core_cards, typed.fixed_core_copies ]
+    assert_equal [ typed.lists_count, typed.fixed_core_cards, typed.fixed_core_copies ],
+      [ roled.lists_count, roled.fixed_core_cards, roled.fixed_core_copies ]
+    assert_equal typed.categories.flat_map(&:name_groups).map(&:inclusion_pct).sort,
+      roled.categories.flat_map(&:name_groups).map(&:inclusion_pct).sort
+  end
+
+  # The clamp `#index` already makes for `?page=`. `grouping` reaches this service from a query
+  # parameter, and a value it does not know is the type report rather than an empty page or a
+  # raise — including the String spelling of the mode it does know, which is what pins the
+  # coercion at the controller boundary where the parameter is actually read.
+  test "an unknown grouping is the type grouping" do
+    iono = trainer("Iono", subtype: "Supporter")
+    assign(role_label("draw", "Draw", 10), iono)
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(iono => 4))
+
+    [ nil, :roles, "role", "type" ].each do |grouping|
+      result = stats_for(archetype, grouping: grouping)
+
+      assert_equal :type, result.grouping, "grouping #{grouping.inspect} was not clamped to :type"
+      assert_equal [ :supporter ], result.categories.map(&:key)
+    end
+
+    assert_equal :role, stats_for(archetype, grouping: :role).grouping
+  end
+
   # Helpers below `private`, where a `test` declaration would never run.
   private
 
   SET_NAME = "CST".freeze
 
-  def stats_for(archetype)
-    Archetypes::CardStats.call(standings: TournamentStanding.where(archetype_id: archetype.id))
+  def stats_for(archetype, grouping: :type)
+    Archetypes::CardStats.call(
+      standings: TournamentStanding.where(archetype_id: archetype.id), grouping: grouping
+    )
   end
 
   def group_named(result, name)
     result.categories.flat_map(&:name_groups).find { |group| group.name == name } ||
       flunk("no name group for #{name.inspect}")
+  end
+
+  def section_named(result, key)
+    result.categories.find { |category| category.key == key } ||
+      flunk("no section keyed #{key.inspect}; got #{result.categories.map(&:key).inspect}")
+  end
+
+  def section_names(result, key)
+    section_named(result, key).name_groups.map(&:name)
+  end
+
+  # Every card the sections hold, one element per appearance — so a card listed twice shows up
+  # twice. That is what tells a partition from an overlap.
+  def section_card_names(result)
+    result.categories.flat_map(&:name_groups).flat_map(&:entries).map { |entry| entry.card.name }
+  end
+
+  # A role label and a decision on it, which is what the report reads: the suggester and the
+  # curation screen are two ways of writing this row, and the report is indifferent to which.
+  def role_label(slug, name, position)
+    CardLabel.create!(slug: slug, name: name, family: "role", position: position)
+  end
+
+  def assign(label, card)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "curated")
   end
 
   def entry_named(result, name)

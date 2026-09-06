@@ -1,8 +1,9 @@
 module Archetypes
   # The page's own footnotes, folded away. Discreet because a reader does not need them to read
-  # the report, present because two of the three absences below are absences a reader will
-  # otherwise assume are bugs — a deck report elsewhere on the internet has an ACE SPEC line and
-  # a "Gust" line, and this one never will.
+  # the report, present because what they describe is otherwise assumed to be a bug: a deck report
+  # elsewhere on the internet has an ACE SPEC line and a "Gust" line, and this one answers both
+  # questions differently — the first as a badge that opens no section, the second as a whole
+  # second grouping whose sections deliberately overlap.
   class MethodNote < ApplicationComponent
     def view_template
       details(class: "archetype-method") do
@@ -15,12 +16,23 @@ module Archetypes
         end
 
         p do
-          plain "Categories come from the card's type and from the subtype the scraper records, "
-          plain "and from nothing else. There is no ACE SPEC category: nothing in the data "
-          plain "isolates one — every ACE SPEC is an Ultra-rarity Trainer and so are dozens of "
-          plain "ordinary ones. There are no functional categories either (Gust, Switch, "
-          plain "Recovery): what a card does is not recorded anywhere, and guessing it from a "
-          plain "name is how a report starts stating things the data never said."
+          plain "Grouped by type, the sections come from the card's type and from the subtype the "
+          plain "scraper records, and from nothing else. There is no ACE SPEC category: nothing "
+          plain "in the data isolates one — every ACE SPEC is an Ultra-rarity Trainer and so are "
+          plain "dozens of ordinary ones — so it is a badge on the card's line, which takes it "
+          plain "out of no section."
+        end
+
+        p do
+          plain "Grouped by role, the sections say what a card does (Draw, Search, Gust, Switch, "
+          plain "Recovery, Disruption, Energy acceleration). A role is a property of the card and "
+          plain "not of the deck playing it, and it is recorded rather than guessed: a rule reads "
+          plain "the card's own text and proposes, and a person decides. Guessing a card's "
+          plain "function from its name at the moment of rendering is how a report starts stating "
+          plain "things the data never said, so a card nobody has decided about says exactly that "
+          plain "— it is listed under “No role recorded” rather than filed by its type. A card "
+          plain "with two roles is listed under both, so those sections add up to more than a "
+          plain "list."
         end
 
         p do
