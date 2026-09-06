@@ -63,6 +63,29 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     assert_no_match(/archetype-provenance-note/, html)
   end
 
+  # The heading figures print a range and a mode per section, and neither adds up: the ranges
+  # belong to different lists, and the modes sum to a plausible 60-card profile that — measured on
+  # the three largest production samples — no list played. The sentence renders in both modes
+  # because the trap is the arithmetic, not the grouping.
+  test "both modes say the section figures belong to different lists and do not add up" do
+    [ :type, :role ].each do |grouping|
+      html = report(grouping: grouping)
+
+      assert_includes html, "archetype-range-note", "#{grouping} mode withheld the range note"
+      assert_includes html, "a list playing none of it counts as zero here"
+      assert_includes html, "adding them up across sections describes no list"
+    end
+  end
+
+  # At one list there is no range to disclaim — every section prints an exact number, and adding
+  # those up genuinely gives the list. The sentence would be false there, not merely redundant.
+  test "one list has no range to disclaim" do
+    html = report(grouping: :type, lists_count: 1)
+
+    assert_no_match(/archetype-range-note/, html)
+    assert_includes html, "there is nothing to compare it against"
+  end
+
   test "the mode links name both groupings and mark the one the page is showing" do
     html = report(grouping: :role)
 
@@ -108,14 +131,16 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
 
   private
 
-  def report(grouping:, pool: nil, proposed: 0, decided: 0)
-    Archetypes::CardReport.new(stats: stats(grouping, proposed: proposed, decided: decided),
-                               scope: scope(pool: pool)).call
+  def report(grouping:, pool: nil, proposed: 0, decided: 0, lists_count: 4)
+    Archetypes::CardReport.new(
+      stats: stats(grouping, proposed: proposed, decided: decided, lists_count: lists_count),
+      scope: scope(pool: pool)
+    ).call
   end
 
   # One card in one section, which is all the header needs — what this file asks about is the
   # header, and Archetypes::CardStatsTest owns the grouping itself.
-  def stats(grouping, proposed: 0, decided: 0)
+  def stats(grouping, proposed: 0, decided: 0, lists_count: 4)
     entry = Archetypes::CardStats::Entry.new(
       card: Card.new(name: "Iono", set_name: "PAL", set_number: "185"),
       fingerprint: "PAL-185", inclusion_count: 4, inclusion_pct: 100.0,
@@ -126,12 +151,13 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     )
     category = Archetypes::CardStats::CategoryGroup.new(
       key: grouping == :role ? :draw : :supporter,
-      label: grouping == :role ? "Draw" : "Supporter", name_groups: [ group ]
+      label: grouping == :role ? "Draw" : "Supporter", name_groups: [ group ],
+      copies_per_list: Array.new(lists_count, 4)
     )
 
     Archetypes::CardStats::Result.new(
-      lists_count: 4, categories: [ category ], fixed_core_cards: 1, fixed_core_copies: 4,
-      grouping: grouping, proposed_roles: proposed, decided_roles: decided
+      lists_count: lists_count, categories: [ category ], fixed_core_cards: 1,
+      fixed_core_copies: 4, grouping: grouping, proposed_roles: proposed, decided_roles: decided
     )
   end
 

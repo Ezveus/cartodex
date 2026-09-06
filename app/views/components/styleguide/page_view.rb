@@ -375,10 +375,7 @@ module Styleguide
           # Inert like the settings panels further down: the form is a real GET to /archetypes/6,
           # and changing the sample from the styleguide would navigate away from it.
           settings_panel { render Archetypes::SampleSelector.new(scope: sg_metagame_scope) }
-          ul(class: "archetype-card-list") do
-            render Archetypes::NameGroupRow.new(group: sg_fixed_group)
-            render Archetypes::NameGroupRow.new(group: sg_split_group)
-          end
+          render Archetypes::CategorySection.new(category: sg_category)
         end
       end
     end
@@ -406,6 +403,18 @@ module Styleguide
           Archetypes::MetagameScope::Option.new(value: Archetypes::MetagameScope::ALL,
                                                 label: "All formats — 93 lists", lists_count: 93)
         ]
+      )
+    end
+
+    # Rendered as a whole section rather than as two bare rows, so that the heading's own two
+    # figures — the card count and the copies a list plays of the category — have somewhere to
+    # show. `copies_per_list` carries the measured TEF-PBL Pokémon totals over 16 lists, which is
+    # what makes the heading read "17-20 copies · most often 20" rather than a settled number: a
+    # range and a mode are the shape this component has to be shown in.
+    def sg_category
+      Archetypes::CardStats::CategoryGroup.new(
+        key: :pokemon, label: "Pokémon", name_groups: [ sg_fixed_group, sg_split_group ],
+        copies_per_list: [ 17, 18, 18, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20, 20 ]
       )
     end
 
