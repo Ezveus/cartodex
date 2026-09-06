@@ -505,7 +505,7 @@ a Regional anchored to the same pool land in the same bucket and the card report
 describe a mixture nothing names — the same defect the pool scoping itself exists to prevent, on a
 second axis. Both counters ride inside the existing grouped queries (`COUNT(DISTINCT CASE WHEN
 tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
-`/archetypes/:id` stays at its pinned **16 queries**. The events figure stays whole with the split
+`/archetypes/:id` stays at its pinned query count (**16** when that was written, **17** since the card report began reading `card_label_assignments`). The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
 blended population. **Splitting the sample by venue — a second selector beside the pool one — is
 deliberately out** (#160, where the measurement argues against building it until a second pool
@@ -711,9 +711,10 @@ it, or an explicit `references`), and nothing here does. Measured on both shapes
 queries. An earlier version plucked the ordered ids and re-loaded them in a second pass to dodge
 an escalation that does not happen, at the price of a query and a Ruby sort; the comment on
 `page_of` is what stops it coming back. `.distinct` beside that GROUP BY and an aggregate
-`ORDER BY` is something SQLite accepts — worth knowing against #62. `#show` costs **16 queries**,
-and a flat-cost test in `ArchetypesControllerTest` holds it there — measured identical at 3 and at
-10 lists in the test, and by hand at 93.
+`ORDER BY` is something SQLite accepts — worth knowing against #62. `#show` costs **17 queries**
+— 16, plus the one grouped read of `card_label_assignments` the card report added — and a
+flat-cost test in `ArchetypesControllerTest` holds it there, measured identical at 3 and at 10
+lists in the test whether or not those lists' cards carry labels, and by hand at 93.
 
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list
 archetype (39 000 `deck_cards` rows): `MetagameScope` 4 queries / 15.6 ms, `CardStats` 3 / 137.3 ms,
