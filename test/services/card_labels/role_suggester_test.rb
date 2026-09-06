@@ -230,6 +230,33 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
     end
   end
 
+  # The catalogue is read before the write lock is taken, not under it. serialized_transaction is
+  # a SQLite BEGIN IMMEDIATE: measured on the production dump, the reading half is 543 ms of a
+  # 1239 ms run, and inside the transaction that is 543 ms of every other writer waiting on a 5 s
+  # busy timeout for a service that is only looking. The depth is recorded at the read rather than
+  # asserted afterwards, the way StandingsImporterTest records it at each simulated fetch.
+  class DepthRecordingSuggester < CardLabels::RoleSuggester
+    attr_reader :depth_at_read
+
+    private
+
+    def load_cards
+      @depth_at_read ||= ActiveRecord::Base.connection.open_transactions
+      super
+    end
+  end
+
+  test "the catalogue is read before the write lock is taken" do
+    trainer("Nest Ball", "Search your deck for a Basic Pokémon and put it onto your Bench.")
+    suggester = DepthRecordingSuggester.new
+    outside = ActiveRecord::Base.connection.open_transactions
+
+    suggester.call
+
+    assert_equal outside, suggester.depth_at_read,
+      "the catalogue was read inside the transaction, holding SQLite's write lock for it"
+  end
+
   # Every rule names a role by slug, so a database whose vocabulary has not been seeded would
   # have the run write some rules' rows and drop the rest — a partial suggestion nothing reports.
   # It refuses before writing anything instead.

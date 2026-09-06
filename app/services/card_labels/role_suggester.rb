@@ -52,8 +52,16 @@ module CardLabels
       labels = role_labels
       @created = @kept = @withdrawn = @decided = 0
 
+      # Read the whole catalogue *before* opening the transaction, the same discipline
+      # Tournaments::StandingsImporter follows for its card fetches. serialized_transaction is a
+      # SQLite BEGIN IMMEDIATE, so it takes the database's single write lock for its whole
+      # duration — and measured on the production dump the reading half (4723 cards with their
+      # attacks and abilities, then seven regex passes over 3023 fingerprints) is 543 ms of a
+      # 1239 ms run. Inside the transaction that is 543 ms in which every other writer waits, on a
+      # 5 s busy timeout, for a service that is only looking.
+      matches = matches_by_fingerprint
+
       serialized_transaction do
-        matches = matches_by_fingerprint
         RULES.each_key { |slug| apply(labels.fetch(slug), matches) }
         labels.except(*RULES.keys).each_value { |orphan| abandon(orphan) }
       end
