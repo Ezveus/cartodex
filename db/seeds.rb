@@ -26,3 +26,4 @@ end
 
 load Rails.root.join("db/seeds/card_sets.rb")
 load Rails.root.join("db/seeds/standard_pools.rb")
+load Rails.root.join("db/seeds/card_labels.rb")

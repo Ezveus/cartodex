@@ -10,6 +10,9 @@ class Card < ApplicationRecord
   has_many :users, through: :collections
   has_many :deck_cards, dependent: :destroy
   has_many :decks, through: :deck_cards
+  # The printing a label decision was made from. Nullified, never cascaded: see
+  # CardLabelAssignment.
+  has_many :card_label_assignments, dependent: :nullify
 
   # Allowed values
   CARD_TYPES = %w[Pokémon Energy Trainer].freeze

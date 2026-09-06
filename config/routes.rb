@@ -144,6 +144,14 @@ Rails.application.routes.draw do
       # them, so a show page would only restate the row.
       resources :standard_pools, except: [ :show ]
 
+      # The card-label vocabulary. No show action, the same call as standard_pools above: a label
+      # is five fields and the index already lists all of them, so a show page would only restate
+      # the row. `import` is a POST on the member: it enqueues a run of that label's own `is:`
+      # token, so there is nothing to preview and nothing to type.
+      resources :card_labels, except: [ :show ] do
+        post :import, on: :member
+      end
+
       # Importing an archetype's field off Limitless TCG. `preview` is a GET on the collection
       # and not the POST a "run this" button suggests: Turbo treats a non-redirected 200
       # answering a form POST as an error, so a POST that rendered the plan would do nothing at

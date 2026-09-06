@@ -48,6 +48,32 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
     assert_match(/Hoothoot \(SCR 114\)<span class="badge[^>]*archetype-fixed-flag/, printings)
   end
 
+  # The badge follows the same rule the fixed flag does two tests above: a split name's printings
+  # are genuinely different cards, so a name-level badge would assert a property of every printing
+  # under it, with no way for the reader to see which actually carries it. Two printings under one
+  # split name that disagree on their labels must each show only their own, and the name line must
+  # show neither.
+  test "badges each printing's own label on a split name, and none on the name line" do
+    ace_spec = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    gust = CardLabel.create!(slug: "gust", name: "Gust", family: "type", position: 20)
+    entries = [
+      entry("Hoothoot", "SCR", "114", pct: 69.9, count: 65, min: 2, max: 3, modes: [ 2 ], labels: [ ace_spec ]),
+      entry("Hoothoot", "PRE", "77",  pct: 39.8, count: 37, min: 1, max: 2, modes: [ 1 ], labels: [ gust ])
+    ]
+    html = row(group("Hoothoot", 73.1, entries, count: 68))
+    name_line, printings = html.split(%(<ul class="archetype-printing-list">), 2)
+
+    assert_no_match(/archetype-card-label/, name_line)
+    assert_match(
+      %r{Hoothoot \(SCR 114\)<span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>ACE SPEC},
+      printings
+    )
+    assert_match(
+      %r{Hoothoot \(PRE 77\)<span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>Gust},
+      printings
+    )
+  end
+
   test "renders one sub-row per printing, and says they are not parts of the name's share" do
     html = row(split_group)
 
@@ -192,11 +218,11 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
     )
   end
 
-  def entry(name, set_name, set_number, pct:, count:, min:, max:, modes:, core: false)
+  def entry(name, set_name, set_number, pct:, count:, min:, max:, modes:, core: false, labels: [])
     Archetypes::CardStats::Entry.new(
       card: Card.new(name: name, set_name: set_name, set_number: set_number),
       fingerprint: "#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
-      min_copies: min, max_copies: max, modes: modes, core: core
+      min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
     )
   end
 end

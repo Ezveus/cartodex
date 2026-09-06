@@ -10,7 +10,10 @@ class Import < ApplicationRecord
   # unlike "standing_list" — one field list typed into one row of one event's sheet — it has no
   # single tournament to point at and its `tournament_id` deliberately stays nil. What it carries
   # instead is `created_standing_ids`, the receipt Tournaments::StandingsImportUndo reads.
-  KINDS = %w[deck card_set standing_list limitless_standings].freeze
+  # "card_labels" is a run of Limitless's card search for one label's `is:` token. Like
+  # "limitless_standings" it points at no tournament; unlike it, it leaves no receipt to undo,
+  # because a re-run writes exactly the same rows and deletes nothing.
+  KINDS = %w[deck card_set standing_list limitless_standings card_labels].freeze
   STATUSES = %w[pending completed failed].freeze
 
   validates :kind, inclusion: { in: KINDS }

@@ -505,7 +505,7 @@ a Regional anchored to the same pool land in the same bucket and the card report
 describe a mixture nothing names — the same defect the pool scoping itself exists to prevent, on a
 second axis. Both counters ride inside the existing grouped queries (`COUNT(DISTINCT CASE WHEN
 tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
-`/archetypes/:id` stays at its pinned **16 queries**. The events figure stays whole with the split
+`/archetypes/:id` stays at its pinned query count (**16** when that was written, **17** since the card report began reading `card_label_assignments`). The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
 blended population. **Splitting the sample by venue — a second selector beside the pool one — is
 deliberately out** (#160, where the measurement argues against building it until a second pool
@@ -557,9 +557,13 @@ somebody typed — while `play.limitlesstcg.com` publishes one on every row, and
 writes all three. So the columns are now *filled on part of a blended sample and empty on the
 rest*, and a rate computed over that would describe the online rows alone under a heading covering
 both. And there
-is **no ACE SPEC category and no functional one** (Gust, Switch, Recovery): every ACE SPEC carries
-`rarity` `"Ultra"` and so do 93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on
-**0 of 4720** cards, and what a card *does* is not scraped at all. The categories are exactly what
+is **still no ACE SPEC category, and no functional one** (Gust, Switch, Recovery): the label
+introduced below is an annotation on the name line, not a section, and the categories stay a
+partition of the list whether or not a row in it carries one. What changed is the flag itself, not
+the report — nothing here could have derived it: every ACE SPEC carries rarity `"Ultra"` and so do
+93 ordinary Trainers, the string "ACE SPEC" appears in `effect` on **0 of 4720** cards, the
+individual card page carries it no better than the search does, and what a card *does* is not
+scraped at all. The categories are exactly what
 `card_type` plus the scraped `subtype` know — Pokémon, Supporter, Item, **Tool, Stadium**, Special
 Energy, Basic Energy — plus an **`other` bucket that is rendered, not dropped**: it is unreachable
 on today's catalogue and exists so a Trainer subtype the scraper learns tomorrow surfaces as a
@@ -707,9 +711,10 @@ it, or an explicit `references`), and nothing here does. Measured on both shapes
 queries. An earlier version plucked the ordered ids and re-loaded them in a second pass to dodge
 an escalation that does not happen, at the price of a query and a Ruby sort; the comment on
 `page_of` is what stops it coming back. `.distinct` beside that GROUP BY and an aggregate
-`ORDER BY` is something SQLite accepts — worth knowing against #62. `#show` costs **16 queries**,
-and a flat-cost test in `ArchetypesControllerTest` holds it there — measured identical at 3 and at
-10 lists in the test, and by hand at 93.
+`ORDER BY` is something SQLite accepts — worth knowing against #62. `#show` costs **17 queries**
+— 16, plus the one grouped read of `card_label_assignments` the card report added — and a
+flat-cost test in `ArchetypesControllerTest` holds it there, measured identical at 3 and at 10
+lists in the test whether or not those lists' cards carry labels, and by hand at 93.
 
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list
 archetype (39 000 `deck_cards` rows): `MetagameScope` 4 queries / 15.6 ms, `CardStats` 3 / 137.3 ms,
@@ -726,6 +731,54 @@ collection grows past roughly twice that size.
 would need a complete field, which no import produces), per-division card statistics (junior and
 senior hold 3 and 2 of the 94 measured standings), matchup data, and exporting the report.
 
+**The card-label store** (`CardLabel`, `CardLabelAssignment`) is a vocabulary plus a fingerprint-keyed
+join, and exists because the ACE SPEC annotation above needs somewhere to live that is not another
+guess dressed up as a column. The two families it holds are governed oppositely on purpose: a
+`type` label (ACE SPEC today) is referenced by nothing but its own `source_query`, so an admin
+adding one is a row plus a run; stage 2's `role` family is referenced by code — its suggestion
+rules are keyed on the slug — so an admin-invented role would be a label no rule can ever propose,
+and `Admin::CardLabelsController` refuses to create or delete one for exactly that reason. An
+assignment is keyed on **fingerprint**, not on a printing, because a label describes the card and
+every printing of Prime Catcher is an ACE SPEC; `card_id` still rides beside it, optional and
+nullified rather than cascaded, as the one printing the decision was actually read from — deleting
+that printing from the admin panel must not delete what was decided about the card. `source`
+(`imported`/`suggested`/`curated`) says who may overwrite whom: the importer writes `imported` rows
+and touches nothing else, stage 2's suggester will rewrite only its own `suggested` rows, and a
+`curated` row — including one with `rejected` set, a human's refusal rather than an absence of
+opinion — outranks both and is kept rather than deleted so the next run cannot quietly undo it.
+`CardLabels::Importer` follows the same restraint at the edges: it counts a printing the catalogue
+does not hold rather than fetching it (acquiring cards is `CardSets::Importer`'s job, and a known
+printing is never re-scraped anyway), and it never deletes an assignment the source stops listing,
+because a page truncated by a transport failure looks identical to a card the source genuinely
+dropped and only one of those two should depopulate a label. `CardLabels::LimitlessSearch` is what
+makes that restraint affordable: `limitlesstcg.com/cards?q=<token>&show=all` answers with the whole
+result set in one request rather than a page per printing — measured at `is:ace` 46 of 46, `is:tera`
+151 of 151, and the largest plausible label, `is:ex`, 986 of 986 in 234 KB — so there is no
+pagination to write and the page's own announced count is free to serve as an integrity check
+instead of a stopping condition.
+
+`Import::KINDS` gains `card_labels`, whose `tournament_id` stays nil like `limitless_standings`'s
+but for a different reason — a card-label run has no tournament in the picture at all, since it is
+Limitless's card search for one label's `is:` token rather than a standings sheet. Unlike either of
+the two kinds before it, it leaves no receipt to undo: a re-run writes exactly
+the rows the source still lists and deletes nothing on its own, so there is nothing for
+`Admin::ImportsController#undo` to act on and it falls through to that action's generic refusal.
+`Admin::ImportsController::RETRYABLE_KINDS` does not carry it either — an Import stores only the
+label and the query, not a payload, and the query still lives on the `CardLabel` row, so retrying
+means running the import again from there rather than from the `Import`; `UNRETRYABLE_REASONS`
+says exactly that in the admin's own words instead of falling through to the generic fallback
+sentence.
+
+**A `force: true` rescrape moves a card's fingerprint out from under any assignment keyed on it**,
+since `compute_fingerprint` recomputes from the card's own text while the assignment still names the
+old value. `bin/rails card_labels:resync_fingerprints` is the repair tool for exactly that drift,
+the same role `archetypes:resync_fingerprints` plays for `Archetype`'s denormalised columns: it
+walks every assignment whose fingerprint now matches no card, re-derives it from the printing the
+assignment still names (`card_id`), and **reports rather than writes** the two cases that cannot be
+resolved safely — a printing with no fingerprint to read (or none at all, `card_id` having gone
+NULL) and a move that would collide with a decision already recorded for the target fingerprint —
+so that one ambiguous row does not abort a run part-way through and leave the rest unexamined.
+
 `StandardPool` is one period of the rotating Standard calendar: two `CardSet` bounds — the oldest legal set, moved by the annual rotation, and the newest, moved by every release — plus the legal `regulation_marks` and **two** dates. `(first_card_set_id, last_card_set_id)` is UNIQUE because that pair *is* the pool's name, `TEF-PBL`, which is what players call it. `released_on` says the cards exist and drives `StandardPool.current`, the anchor a new deck is pre-selected to; `legal_on` says Play! Pokémon considers the pool legal and drives `StandardPool.at(date)`, which is what a tournament asks — a set is tournament-legal about two weeks after it ships, so neither date derives from the other. `Deck` and `Tournament` each carry a `standard_pool_id`, required by validation when the format is `standard` and cleared otherwise (the `other_format_name` pattern): **only Standard rotates**, the other three formats are eternal and have no anchor. The anchor is **pinned** — nothing moves it automatically, and `Ui::StandardPoolNotice` merely invites the user to. `has_many :decks, dependent: :restrict_with_error`, unlike `Archetype`'s `:nullify`, because a NULL anchor on a Standard deck is unsavable on its next edit. Deck-construction rules are deliberately **not** here: see #61.
 
 `db/seeds/standard_pools.rb` is a **bootstrap, not the source of truth**: pools are maintained from the admin panel, so the seed is keyed on the bound pair and **skips any row that already exists** rather than reasserting its values — otherwise every `db:seed` would silently revert an admin correction. Two of its values are not derivable and carry comments saying so: the `J` regulation mark starts at ASC, not MEG (the Mega Evolution block opens on `I` — *Mega Lucario ex* is MEG 77), and ASC's `legal_on` is 2026-03-06, five weeks after release rather than the usual two, because it shipped staggered and Play! Pokémon pushed legality past the 2026-02-13 EUIC. Re-deriving either with the two-week rule reintroduces a bug.
@@ -734,7 +787,7 @@ senior hold 3 and 2 of the 94 measured standings), matchup data, and exporting t
 
 **Allocation model** (collection as physically-owned inventory): `Collection.quantity` is the number of copies **owned** (source of truth; unique per user+card). `DeckCard.owned_copies` is how many of its copies are **real** (backed by owned cards); `quantity` is the total, `proxies = quantity − owned_copies` (unique per deck+card). Only decks with `physical == true` consume the collection. Invariant: `Σ owned_copies(card) over physical decks ≤ owned(card)` — exceeded only by a collection decrease, which is allowed and leaves a tolerated, surfaced over-allocation (never auto-corrected). Deck-level proxy state is **derived, never stored**: `Deck#has_proxies?` is `physical? &&` any `deck_card` with `owned_copies < quantity`, with `Deck.with_proxies` / `Deck.without_proxies` (over `DeckCard.with_proxies`) as the SQL counterpart backing the deck-list filter. The `physical` half is load-bearing on both sides — a non-physical deck's cards sit at `owned_copies 0` by construction, so the bare per-card test would match every TCG Live deck. The `decks.has_proxies` column and its form checkbox are gone (issue #56); because the badge now derives from data the deck page edits in place, every write in `Api::DeckCardsController` answers with a `deck: { has_proxies: }` key — including the card-removal case, which answers `{ removed: true }` instead of a body-less 204 — and the `deck-proxies` Stimulus controller toggles the badge, which the show header always renders (hidden when it does not apply). User has an `api_token_digest` (SHA-256 of a per-user MCP bearer token — see `User.authenticate_api_token` / `regenerate_api_token`).
 
-**Controllers**: API endpoints under `Api::` namespace serve JSON (archetypes, cards, collections, decks with nested deck_cards and deck_results). `Api::DeckCardPrintingsController` (`GET …/cards/:card_id/printings`, `PATCH …/cards/:card_id/printing`) is separate from `Api::DeckCardsController` because that one identifies a row by its card id — the very thing a printing swap changes; the two share the deck lookup and the row JSON through the `DeckCardPayload` concern. Its swap response also carries what the page needs to rewrite the row in place: `merged`, `max_owned`, `over_allocated` and `image_path`. Admin panel under `Admin::` namespace covers dashboard, card sets (with import), cards (with rescrape), users (with toggle_admin), decks, archetypes (CRUD), standard pools (CRUD, no show page — a pool is five fields and the index shows all of them), and imports (list with error display, delete, retry). Top-level `tournament_profiles` and `deck_results` resources live alongside `decks`. `DeckResultsController` and `Api::DeckResultsController` both permit `tournament_entry_id` now, so a result can be attached to the participation it was played at. `Tournaments::EntriesController` routes under `resources :entries` — the URL reads `/tournaments/:tournament_id/entries/:id` — while the model is `TournamentEntry`, which is why its forms pass an explicit `url:`: polymorphic `form_with` would otherwise build `tournament_tournament_entries_path`, which does not exist. `Tournaments::StandingsController` is the same shape one level further: `resources :standings` under `tournaments`, no show and no index (the sheet lives inside `tournaments#show`, and a row is six fields), and forms that likewise pass an explicit `url:`. App routes require Devise authentication except the surface `PubliclyReachable` opens — `home#dashboard`, `search#show`, all of `resources :decks` (and, by nesting, its `deck_results` routes), all of `resources :cards`, and `tournaments#index`/`#show` (with `resources :tournaments` now carrying **two** nested resources out of `authenticate :user` by nesting alone — `entries` and `standings`, the same way `resources :decks` carries `deck_results`) — plus the always-unauthenticated `root`, `/up`, `/mcp` and the OAuth endpoints; each of the five `PubliclyReachable` controllers still calls `authorize` on every action, so "no session required" is not "no check performed". See **Shared decks** below.
+**Controllers**: API endpoints under `Api::` namespace serve JSON (archetypes, cards, collections, decks with nested deck_cards and deck_results). `Api::DeckCardPrintingsController` (`GET …/cards/:card_id/printings`, `PATCH …/cards/:card_id/printing`) is separate from `Api::DeckCardsController` because that one identifies a row by its card id — the very thing a printing swap changes; the two share the deck lookup and the row JSON through the `DeckCardPayload` concern. Its swap response also carries what the page needs to rewrite the row in place: `merged`, `max_owned`, `over_allocated` and `image_path`. Admin panel under `Admin::` namespace covers dashboard, card sets (with import), cards (with rescrape), users (with toggle_admin), decks, archetypes (CRUD), standard pools (CRUD, no show page — a pool is five fields and the index shows all of them), card labels (CRUD for `type`, edit-only for `role`, plus the member action that imports one label from Limitless), and imports (list with error display, delete, retry). Top-level `tournament_profiles` and `deck_results` resources live alongside `decks`. `DeckResultsController` and `Api::DeckResultsController` both permit `tournament_entry_id` now, so a result can be attached to the participation it was played at. `Tournaments::EntriesController` routes under `resources :entries` — the URL reads `/tournaments/:tournament_id/entries/:id` — while the model is `TournamentEntry`, which is why its forms pass an explicit `url:`: polymorphic `form_with` would otherwise build `tournament_tournament_entries_path`, which does not exist. `Tournaments::StandingsController` is the same shape one level further: `resources :standings` under `tournaments`, no show and no index (the sheet lives inside `tournaments#show`, and a row is six fields), and forms that likewise pass an explicit `url:`. App routes require Devise authentication except the surface `PubliclyReachable` opens — `home#dashboard`, `search#show`, all of `resources :decks` (and, by nesting, its `deck_results` routes), all of `resources :cards`, and `tournaments#index`/`#show` (with `resources :tournaments` now carrying **two** nested resources out of `authenticate :user` by nesting alone — `entries` and `standings`, the same way `resources :decks` carries `deck_results`) — plus the always-unauthenticated `root`, `/up`, `/mcp` and the OAuth endpoints; each of the five `PubliclyReachable` controllers still calls `authorize` on every action, so "no session required" is not "no check performed". See **Shared decks** below.
 
 **MCP server**: An MCP (Model Context Protocol) endpoint is mounted at `POST /mcp` (`Mcp::ServerController`, top-level route **outside** the Devise `authenticate` block), using the `mcp` gem's `StreamableHTTPTransport` (stateless). Auth accepts two bearer credentials, tried in that order: an OAuth 2.1 access token (`Doorkeeper::AccessToken.by_token`, gated on `#accessible?` which covers expiry and revocation together) and, as a fallback, the deprecated legacy per-user static token matched against `api_token_digest`. The bearer scheme is matched case-insensitively per RFC 7235. A resolved OAuth token also fires `revoke_previous_refresh_token!` (`rotate_refresh_token`): Doorkeeper rotates refresh tokens lazily and triggers that hook only from `doorkeeper_authorize!`, which this controller does not use, so without the call no refresh token would ever be retired. It retires the whole superseded row, access token included. Rotation bounds a *passively* leaked refresh token; it is **not** RFC 9700 reuse detection (deliberately not implemented — a replay is indistinguishable from a legitimate double refresh under the concurrency grace window), so the remedy against an attacker who actually redeems a stolen token is the user revoking the connection. Authentication is split into `identify_token_user` (resolves either credential into `@current_user` and `@current_scopes` — an Array of scope strings for OAuth, `nil` for the legacy token meaning full access — never halts) and `reject_unauthenticated!` (issues the 401) so that two rate limiters can sit between and after them: a per-IP one (`IP_RATE_LIMIT_TO`/min, `unless: -> { @current_user }`) that throttles anonymous token spam **before** the 401 without spending an authenticated client's budget, and a per-user work quota (`USER_RATE_LIMIT_TO`/min, keyed by `@current_user.id`) **after** it. Both are plain `before_action`s, so order is load-bearing; both pass an explicit `name:` so their cache keys stay distinct. The 401 challenges per RFC 9728 with a `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"` header, byte-identical whether the token was absent, unknown, expired or revoked. Legacy tokens carry an optional expiry (`api_token_expires_at`, `NULL` = never), rejected at `User.authenticate_api_token`, and record their last use at hourly granularity. Users manage the legacy token from `/settings` (`SettingsController`, `McpTokensController`); the generate action answers with a Turbo Stream so the raw value never passes through the session cookie. Tool classes live in `app/mcp/` — an autoloaded root, so they are **top-level constants** (e.g. `AddCardToDeckTool`, not namespaced), subclassing `McpTool` (shared helpers `current_user`/`find_deck!`/`find_card!`/`text`/`positive_quantity?` — `find_deck!(user, key)` is `user.decks.find_by!(key:)`, so every tool argument that names a deck is `deck_key:`/`from_deck_key:`/`to_deck_key:`, a string, never the numeric id; see **Shared decks** below). Read tools return JSON text, write tools return a summary string; both delegate to services and never hold business logic. Register a new tool by adding it to `Mcp::ServerController::TOOLS`. Tool names drop the `_tool` suffix of the class name. The eight+ tools cover collection/deck reads plus `add_card_to_collection`, `set_collection_quantity`, `add_card_to_deck`, `set_deck_card_owned_copies`, `reallocate_owned_copies`, `set_deck_card_quantity`, `set_deck_card_printing`, `list_over_allocations`, `suggest_owned_equivalents`, `list_printings`.
 
@@ -783,6 +836,7 @@ Four details keep the trigger and the field from working against each other, eac
 - `bin/export_deck_ptcg` — export deck in PTCG text format
 - `bin/rails 'mcp:token[email@example.com,90d]'` — rotate and print a user's MCP bearer token (shown once; only the digest is stored). Lifetime is `30d`/`90d`/`1y`/`never`, default `90d`. Deprecated: this static token still works, but OAuth 2.1 via Doorkeeper (see MCP server, above) is the supported way to connect a client.
 - `bin/rails standard_pools:backfill_anchors` — anchor Standard decks and tournaments that predate the `standard_pool_id` column. Run **after** `db:seed`, which creates the pools it needs; idempotent.
+- `bin/rails card_labels:resync_fingerprints` — move card label assignments onto their card's current fingerprint after a `force: true` rescrape moves it out from under them, reporting rather than writing whatever it cannot resolve safely.
 
 ## Test Setup
 

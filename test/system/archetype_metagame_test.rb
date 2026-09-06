@@ -131,6 +131,51 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
       "(link bottom #{link_bottom}, note top #{note_top})"
   end
 
+  # `.archetype-card-label-line`, the wrapper the badge sits in, carries `flex-basis: 100%`, so
+  # the badge always lands on a line of its own below the name text — deterministically, not "when
+  # the browser happens to run out of room", which is why this holds at both sides of the sweep
+  # rather than needing a pinned width. The wrapper and the pill are two elements precisely
+  # because one cannot answer both questions (see the CSS comment above
+  # `.archetype-card-label-line`), and that is why this test measures both: the line break proves
+  # the wrapper, the width proves the pill. Without the width assertion the pre-fix full-width bar
+  # passes too — it was on its own line as well. Checked
+  # against the name *text* specifically (a span added for exactly this), not the name cell as a
+  # whole: the cell's own box already contains the badge once it wraps beneath it, so comparing
+  # the badge to the cell can never fail for a badge sharing the name's line — only the text's own
+  # box tells the two layouts apart.
+  test "the label badge sits on its own line, below the card name" do
+    archetype = labelled_archetype
+
+    visit archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+
+    row = find(".archetype-card-row", text: "ACE SPEC")
+    name_text = row.find(".archetype-card-name-text")
+    badge = row.find(".archetype-card-label")
+
+    name_bottom = evaluate_script("arguments[0].getBoundingClientRect().bottom", name_text)
+    badge_top = evaluate_script("arguments[0].getBoundingClientRect().top", badge)
+
+    assert_operator badge_top, :>=, name_bottom - 1,
+      "the badge sits beside the name instead of below it " \
+      "(name bottom #{name_bottom}, badge top #{badge_top})"
+
+    # The other half, and the one the line-break assertion cannot see: a badge given the wrapper's
+    # own `flex-basis: 100%` is on its own line *and* a full-width bar, which is what this
+    # component looked like before the two were split. Half the row is a generous ceiling — the
+    # pill measures ~76px against a name cell several times that — and a ceiling rather than a
+    # range because the text's width is the browser's business, not this test's.
+    # Measured against the *name cell*, not the row: a full-width bar is 100% of the cell it is a
+    # flex item of, which is a fraction of the row — so comparing it to the row passes for the bar
+    # too, and the assertion would be watching the wrong box.
+    cell_width = evaluate_script("arguments[0].getBoundingClientRect().width", row.find(".archetype-card-name"))
+    badge_width = evaluate_script("arguments[0].getBoundingClientRect().width", badge)
+
+    assert_operator badge_width, :<, cell_width / 2,
+      "the badge is rendering as a full-width bar rather than a pill " \
+      "(badge #{badge_width}, name cell #{cell_width})"
+  end
+
   private
 
   # One paper standing and one online one, so the note has a mixture to describe.
@@ -167,6 +212,25 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype = Archetype.create!(primary_card: cards(:doublade))
     event = tournament("Lone Record", Date.new(2026, 2, 14), standard_pools(:twm_por))
     standing(event, archetype, "Only Player")
+
+    archetype
+  end
+
+  # A fresh primary card, not one of this file's shared fixtures — Archetype's
+  # (primary_fingerprint, secondary_fingerprint) pair is UNIQUE, and the fixture set already holds
+  # an archetype anchored to teal_mask_ogerpon_ex.
+  def labelled_archetype
+    card = Card.create!(
+      name: "Labelled Primary", set_name: "LBL", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    archetype = Archetype.create!(primary_card: card)
+    event = tournament("Label Cup", Date.new(2026, 2, 14), standard_pools(:twm_por))
+    place = standing(event, archetype, "Label Player")
+
+    labelled_card = place.deck.deck_cards.first.card
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    label.assignments.create!(fingerprint: labelled_card.fingerprint, card: labelled_card, source: "imported")
 
     archetype
   end

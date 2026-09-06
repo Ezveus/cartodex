@@ -29,8 +29,9 @@ module Archetypes
     def main_line
       div(class: "archetype-card-main") do
         div(class: "archetype-card-name") do
-          plain @group.name
+          span(class: "archetype-card-name-text") { @group.name }
           fixed_flag if fixed_group?
+          label_flags(type_labels)
         end
         share(@group.inclusion_pct, @group.inclusion_count)
         div(class: "archetype-card-copies") { name_copies_text }
@@ -57,6 +58,41 @@ module Archetypes
            title: "Played by every list in this sample, always in the same number") { "fixed" }
     end
 
+    # A type label annotates the card and never opens a section: an ACE SPEC is still an Item,
+    # and moving it out would stop the category counts being a partition of the list.
+    #
+    # Withheld on a split group for the same reason `fixed_group?` withholds its flag there: a
+    # name-level badge asserts a property of every printing under it, and a split name's printings
+    # are genuinely different cards that may not agree on their labels — the name line would then
+    # claim the union as if it were settled, with no way for the reader to see which printing
+    # actually carries which label. So the name line says nothing, and each printing's own row
+    # (see `printings` below) carries its own labels instead — no information is lost, only moved
+    # to where it is true.
+    def type_labels
+      return [] if @group.split?
+
+      labels_for(@group.entries)
+    end
+
+    # Filtered to `type?` here rather than in the service: `CardStats` loads both families in one
+    # query so stage 2's role mode can reuse the same load, and only this render layer knows
+    # stage 1 badges type labels alone. Reads every entry passed in, not just one printing's, then
+    # re-sorts by [position, slug] once several entries' labels are concatenated, restoring the
+    # ordering `CardStats` already guarantees within one entry but not across several.
+    def labels_for(entries)
+      entries.flat_map(&:labels).select(&:type?).uniq.sort_by { |label| [ label.position, label.slug ] }
+    end
+
+    # Each label gets its own full-width wrapper: see the CSS comment on .archetype-card-label-line
+    # for why the wrap-forcing element and the visible pill cannot be the same element.
+    def label_flags(labels)
+      labels.each do |label|
+        span(class: "archetype-card-label-line") do
+          span(class: "badge archetype-card-label", title: label.description) { label.name }
+        end
+      end
+    end
+
     def name_copies_text
       return "#{@group.entries.size} printings" if @group.split?
 
@@ -70,6 +106,7 @@ module Archetypes
             div(class: "archetype-card-name") do
               plain entry.card.printing_label
               fixed_flag if fixed?(entry)
+              label_flags(labels_for([ entry ]))
             end
             share(entry.inclusion_pct, entry.inclusion_count)
             div(class: "archetype-card-copies") { copies_text(entry) }

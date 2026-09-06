@@ -242,22 +242,68 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # association issue identical SQL, which the per-request query cache serves and count_queries
   # does not count — which is exactly what would hide an N+1. The pool is shared, deliberately:
   # it is what keeps the default sample growing with the rows instead of moving to a new pool
-  # holding one list. Measured at 16 queries, unchanged from 3 lists to 10.
+  # holding one list. Measured at 17 queries, unchanged from 3 lists to 10 — 16 of those plus one
+  # more since the card report started reading `card_label_assignments` in its own query, a
+  # single LEFT OUTER JOIN against `card_labels`.
+  #
+  # Every card here carries its own distinct label, on purpose — not one label shared across all
+  # of them: identical association SQL is exactly what the per-request query cache serves after
+  # the first hit, which is what `count_queries`/`capture_queries` cannot see and what would hide
+  # this join regressing into one query per card. Read the count straight off `capture_queries`
+  # rather than trusting `small`/`large` to agree by coincidence.
   test "show issues a constant number of queries regardless of how many lists" do
     archetype = quiet_archetype(200, name: "Reported Archetype")
-    3.times { |i| listed_standing_for(archetype, i) }
+    3.times { |i| label_card(listed_standing_for(archetype, i)) }
 
     get archetype_path(archetype) # warm the session: the first request also loads the Devise user
 
-    small = count_queries { get archetype_path(archetype) }
+    small = capture_queries { get archetype_path(archetype) }
 
-    (3..9).each { |i| listed_standing_for(archetype, i) }
+    (3..9).each { |i| label_card(listed_standing_for(archetype, i)) }
 
-    large = count_queries { get archetype_path(archetype) }
+    large = capture_queries { get archetype_path(archetype) }
 
     assert_response :success
     assert_select ".archetype-card-row", minimum: 1
-    assert_equal small, large, "query count grew with the sample: #{small} -> #{large}"
+    assert_equal small.size, large.size, "query count grew with the sample: #{small.size} -> #{large.size}"
+    assert_equal 1, small.count { |sql| sql.include?("card_label") },
+      "the label join ran more than once against the small sample"
+    assert_equal 1, large.count { |sql| sql.include?("card_label") },
+      "the label join ran more than once against the large sample"
+  end
+
+  test "show badges a card's type label on its row" do
+    archetype = quiet_archetype(400, name: "Labelled Archetype")
+    standing = listed_standing_for(archetype, 400)
+    card = standing.deck.deck_cards.first.card
+    label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
+  end
+
+  # Stage 2 introduces the `role` family, and NameGroupRow#type_labels filters to it with a bare
+  # `.select(&:type?)` at the render layer rather than in the service — nothing before this test
+  # exercised a card carrying both families at once, so a role label would have silently badged
+  # beside the type one the day the seed added roles. Delete that `.select(&:type?)` call to watch
+  # this go red.
+  test "show does not badge a card's role label" do
+    archetype = quiet_archetype(420, name: "Roled Archetype")
+    standing = listed_standing_for(archetype, 420)
+    card = standing.deck.deck_cards.first.card
+    type_label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
+    type_label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    role_label = CardLabel.create!(slug: "attacker", name: "Attacker", family: "role", position: 10)
+    role_label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
+    assert_select ".archetype-card-row .archetype-card-label", text: "Attacker", count: 0
   end
 
   # The blend neither the sample selector nor the performance panel can show any other way: the
@@ -398,6 +444,16 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
       player_name: "Report Player #{index}", division: "masters", placement: index + 1,
       archetype: archetype, deck: field_list, created_by: @user
     )
+  end
+
+  # A fresh label per standing, not one shared across all of them — see the flat-cost test above
+  # for why that distinctness is load-bearing.
+  def label_card(standing)
+    card = standing.deck.deck_cards.first.card
+    label = CardLabel.create!(slug: "label-#{standing.id}", name: "Label #{standing.id}",
+                               family: "type", position: standing.id)
+    label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
+    standing
   end
 
   # Enough archetypes to push the catalog onto a second page, without any of them carrying a

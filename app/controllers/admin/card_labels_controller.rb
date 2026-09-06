@@ -1,0 +1,105 @@
+module Admin
+  # The card-label vocabulary, and the button that fills a `type` label from Limitless.
+  #
+  # No Pundit call anywhere below: Admin::BaseController#require_admin! is the whole gate for this
+  # namespace, and an `authorize` here would be the only one in the panel.
+  #
+  # `role` labels are visible and editable but cannot be created or deleted here. Stage 2 will seed
+  # them from a `CardLabel::ROLES` this stage does not ship, because its suggestion rules key on
+  # their slugs — an invented role would be a label no rule can propose, and a deleted one would
+  # silently take a rule's output with it. Until then the `role` family is reachable only by a
+  # direct database write. A `type` label is referenced by nothing but its own search token, so it
+  # is ordinary data.
+  class CardLabelsController < BaseController
+    SEEDED_FAMILY_MESSAGE = "Role labels are seeded from the application, not created here.".freeze
+
+    before_action :set_card_label, only: %i[edit update destroy import]
+
+    def index
+      # One grouped count rather than a per-row association read: the index prints a number per
+      # row and loading every assignment to produce it is a payload nobody looks at.
+      @card_labels = CardLabel.order(:family, :position, :slug)
+      @assignment_counts = CardLabelAssignment.active.group(:card_label_id).count
+    end
+
+    def new
+      @card_label = CardLabel.new(family: "type")
+    end
+
+    def create
+      @card_label = CardLabel.new(card_label_params)
+      return redirect_to(admin_card_labels_path, alert: SEEDED_FAMILY_MESSAGE) if @card_label.role?
+
+      if @card_label.save
+        redirect_to admin_card_labels_path, notice: "Card label created."
+      else
+        render :new, status: :unprocessable_entity
+      end
+    end
+
+    def edit; end
+
+    def update
+      # `family` is not permitted (see card_label_params), so an edit cannot move a label between
+      # the two governances — which is the only way the create refusal above could be walked round.
+      # `source_query` is dropped for a `role` label in card_label_params for the same reason: a
+      # role importable? just from source_query.present?, so patching that key onto a role label
+      # would be a third door onto the very rule create/destroy already refuse — the label would
+      # become importable and the importer would write `imported` rows into the family stage 2
+      # reserves for its own rules.
+      if @card_label.update(card_label_params)
+        redirect_to admin_card_labels_path, notice: "Card label updated."
+      else
+        render :edit, status: :unprocessable_entity
+      end
+    end
+
+    def destroy
+      return redirect_to(admin_card_labels_path, alert: SEEDED_FAMILY_MESSAGE) if @card_label.role?
+
+      count = @card_label.assignments.count
+      @card_label.destroy
+      redirect_to admin_card_labels_path,
+        notice: "Card label deleted, with #{count} #{"assignment".pluralize(count)}."
+    end
+
+    def import
+      unless @card_label.importable?
+        redirect_to admin_card_labels_path,
+          alert: "#{@card_label.name} has no search token, so there is nothing to import it from."
+        return
+      end
+
+      import = current_user.imports.create!(
+        kind: "card_labels",
+        label: "#{@card_label.name} (#{@card_label.source_query})"
+      )
+      # Leading :: is load-bearing: this controller lives inside Admin, and Admin::CardLabels is
+      # also this feature's Phlex namespace (Admin::CardLabels::IndexView etc.) — plain
+      # CardLabels::ImportJob would resolve to that module first and raise NameError, since Ruby
+      # constant lookup checks lexical scope before the top level.
+      ::CardLabels::ImportJob.perform_later(import.id, @card_label.id, current_user.id)
+
+      redirect_to admin_imports_path,
+        notice: "Importing #{@card_label.name} from Limitless. Watch this table for the result."
+    end
+
+    private
+
+    def set_card_label
+      @card_label = CardLabel.find(params[:id])
+    end
+
+    # `family` is permitted on create alone: see #update.
+    def card_label_params
+      permitted = params.require(:card_label).permit(:slug, :name, :position, :description, :source_query)
+      permitted[:family] = params[:card_label][:family] if action_name == "create"
+      # A role label's source_query is withheld on the way in, not just left unrendered on the
+      # form: CardLabel#importable? is source_query.present?, so an edit that slipped one through
+      # would make the label importable and the importer would write into the family stage 2
+      # reserves for its own rules — the same refusal `create`/`destroy` already state for `role`.
+      permitted.delete(:source_query) if @card_label&.role?
+      permitted
+    end
+  end
+end

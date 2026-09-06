@@ -42,6 +42,23 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     assert Import.exists?(import.id)
   end
 
+  # The search token lives on the CardLabel row, not on the Import, so retrying means running the
+  # import again from the label. UNRETRYABLE_REASONS["card_labels"] is what makes that the admin's
+  # answer instead of the generic fallback sentence — nothing else pins that key is reachable.
+  test "a card-label import cannot be retried" do
+    import = users(:one).imports.create!(kind: "card_labels", label: "ACE SPEC (is:ace)", status: "failed")
+
+    assert_no_difference -> { Import.count } do
+      assert_no_enqueued_jobs do
+        post retry_admin_import_path(import)
+      end
+    end
+
+    assert_redirected_to admin_imports_path
+    assert_match(/run it again from the label/, flash[:alert])
+    assert Import.exists?(import.id)
+  end
+
   # The allowlist has to keep saying yes to the two kinds that were always retryable. Inverting a
   # refusal chain is exactly the change that silently takes a working button away, so both live
   # branches are pinned rather than assumed.
