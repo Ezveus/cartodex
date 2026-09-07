@@ -228,9 +228,10 @@ second axis. Both counters ride inside the existing grouped queries (`COUNT(DIST
 tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
 `/archetypes/:id` stays at its pinned query count (**16** when that was written, **17** since the card report began reading `card_label_assignments`). The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
-blended population. **Splitting the sample by venue — a second selector beside the pool one — is
-deliberately out** (#160, where the measurement argues against building it until a second pool
-holds both venues). **The index names it too**: `Archetypes::IndexCounts` carries
+blended population. **Splitting the sample by venue — a second selector beside the pool one —
+shipped as #160**, and it is this import that made it designable: nine archetypes now hold at
+least eight lists on each side, and four of them carry cards whose inclusion differs by fifty
+points or more between the halves. See `archetype-metagame.md`. **The index names it too**: `Archetypes::IndexCounts` carries
 `online_standings` and `online_events` as two CASE terms inside the grouped query it already makes,
 so `/archetypes` stays at its flat 7, and a row whose figures blend prints one muted sentence under
 the badge. It names **both** ratios because they diverge — measured on the first archetype to carry

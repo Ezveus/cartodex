@@ -14,6 +14,20 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # The archetype sample block is the one place the two-select state can be seen at all — a real
+  # archetype needs two pools *and* both venues to render it. Asserted rather than left to the
+  # stub raising, because it will not: `Struct.new(keyword_init: true)` raises on an *extra*
+  # keyword but stores `nil` for a *missing* one (measured), so a member added to
+  # `MetagameScope::Result` and forgotten in `sg_metagame_scope` silently renders one select with
+  # every test on this page still green.
+  test "the archetype sample block renders both of its selects" do
+    get styleguide_path
+
+    assert_response :success
+    assert_select "select[name=pool]", minimum: 1
+    assert_select "select[name=venue]", minimum: 1
+  end
+
   # The page renders the MCP token panel twice. With the panel's ids hardcoded,
   # both copies answered to #mcp-token and to the same #lifetime field, so the
   # second panel's label focused the first panel's select — invalid HTML, on the

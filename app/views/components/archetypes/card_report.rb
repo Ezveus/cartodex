@@ -80,12 +80,20 @@ module Archetypes
     # all, which makes that structural rather than a convention.
     def path_for(mode)
       Rails.application.routes.url_helpers.archetype_path(
-        @scope.archetype, pool: pool_param, group: mode
+        @scope.archetype, pool: pool_param, group: mode, venue: venue_param
       )
     end
 
     def pool_param
       @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id
+    end
+
+    # Read off the scope, never off params, for the reason `pool_param` is — and here it is what
+    # tells a clamp recorded in the Result apart from one applied to the relation alone: a link
+    # rebuilt from the parameter would carry a dead venue into every copy of the URL. Nil at
+    # `:all`, so a default never enters the query string; `archetype_path` drops a nil parameter.
+    def venue_param
+      @scope.venue == :all ? nil : @scope.venue
     end
 
     # The third sentence of the same family, and the one the copies figures make necessary in
@@ -191,18 +199,32 @@ module Archetypes
 
     # The suggestion is made only when there is something to suggest: pointing a reader at
     # "All formats" when the blended sample is just as empty wastes the click and reads as a bug.
+    #
+    # Both axes, and both counted in the state the click would actually produce. The one form
+    # carries the venue along with a pool change, so "try All formats" has to be true *of this
+    # venue* — `options`' own "All formats" count is venue-independent and would promise lists the
+    # current venue may not hold. And the venue is the other click available: where a pool has
+    # placements and typed lists on one side only, that is the direction worth naming, and
+    # `options` cannot see it at all. Reachable by design rather than observed — measured, 0
+    # (pool, venue) cells hold standings and no list today — but "TEF-PBL — 0 lists" is a shape
+    # this page renders on purpose.
     def empty_state
       p(class: "empty-state") do
         plain "No decklist recorded for this sample yet."
-        plain " Lists exist under “All formats” — try that sample above." if elsewhere?
+        plain " Lists exist under “All formats” — try that sample above." if lists_in_other_pool?
+        plain " Lists exist under “All” venues — try that beside it." if lists_in_other_venue?
       end
     end
 
-    def elsewhere?
-      return false if @scope.all_formats?
+    def lists_in_other_pool?
+      !@scope.all_formats? && @scope.all_formats_lists_count.positive?
+    end
 
-      all_option = @scope.options.find { |option| option.value == MetagameScope::ALL }
-      all_option&.lists_count.to_i.positive?
+    def lists_in_other_venue?
+      return false if @scope.venue == :all
+
+      all_venues = @scope.venue_options.find { |option| option.value == MetagameScope::ALL }
+      all_venues&.lists_count.to_i.positive?
     end
   end
 end

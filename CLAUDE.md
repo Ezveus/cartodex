@@ -153,7 +153,7 @@ non-atomic `exists?` that fires long before the UNIQUE index can, so a member ca
 between the preview and the write surfaces as `RecordInvalid` — rescuing only the index error
 blocked every row of that event instead of reusing the row somebody else had just made.
 
-**The archetype catalog and one archetype's metagame report** (`/archetypes`, `/archetypes/:id`) are written out in **`docs/architecture/archetype-metagame.md`** — `Archetypes::MetagameScope`, `CardStats`, `Performance` and `IndexCounts`, the three things the page refuses to say, the fingerprint grouping, the copies ranges, the role mode, and what opening the pages to visitors would cost. Read it before touching anything under `app/services/archetypes/`. Three of its rules stay here:
+**The archetype catalog and one archetype's metagame report** (`/archetypes`, `/archetypes/:id`) are written out in **`docs/architecture/archetype-metagame.md`** — `Archetypes::MetagameScope`, `CardStats`, `Performance` and `IndexCounts`, the three things the page refuses to say, the fingerprint grouping, the copies ranges, the role mode, the venue split, and what opening the pages to visitors would cost. Read it before touching anything under `app/services/archetypes/`. Three of its rules stay here:
 
 **Scoping by Standard pool is not a refinement, it is the difference between a true report and a
 false one**, and the first real import already proved it: the 93 recorded lists of
@@ -172,7 +172,11 @@ says rather than leaving to be discovered.
 **One page prints "N lists" four times over, and the four are one number by construction.** The
 sample selector, the card report's denominator, the performance panel and the index row each ask
 a different service, so agreement is a property that has to be built rather than assumed, and two
-things broke it. `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
+things broke it. (Since the venue axis the page also prints a **fifth** number that is deliberately
+not one of the four: the pool option's own label, which stays the pool's whole size while the
+report covers one venue of it. That is the stable-label trade, and the page says so in words — see
+`docs/architecture/archetype-metagame.md`. The four services still agree under every venue, and a
+test asserts it.) `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
 "lists holding at least one card" and not "lists" — a field list that resolved no printing gave
 the page two denominators and computed every percentage over the one it did not show; it is now
 `@standings.distinct.pluck(:deck_id).size`, the same question the other three ask. And all four

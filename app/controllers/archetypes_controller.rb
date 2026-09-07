@@ -78,7 +78,13 @@ class ArchetypesController < ApplicationController
 
     # The id, not a slug: archetype names contain "/" (Froslass / Munkidori), and unlike a deck
     # there is nothing here worth keeping unenumerable.
-    @scope = Archetypes::MetagameScope.call(archetype: @archetype, pool_param: params[:pool])
+    #
+    # `params[:venue]` rides alongside rather than becoming a `where` here: MetagameScope's opening
+    # comment promises it is the only place that answers which standings count, and the page's four
+    # printed "N lists" agree *because* one object computes them. A filter applied in the
+    # controller would have the selector print 118 while the report counted 98.
+    @scope = Archetypes::MetagameScope.call(archetype: @archetype, pool_param: params[:pool],
+                                            venue_param: params[:venue])
     # Two different populations, from the one service that decides them: the card report can only
     # speak for the standings whose decklist somebody typed, while a recorded placement is a
     # result whether or not anybody did.

@@ -206,6 +206,95 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_current_path(/pool=#{standard_pools(:twm_por).id}/)
   end
 
+  # The venue axis end to end. Its point is a percentage, not a count: on production Alakazam's
+  # blended report prints Dunsparce near 50 %, describing neither of its two halves — so what is
+  # asserted here is that a card played on paper alone moves off the blend's share and onto 100 %
+  # when the reader narrows to paper.
+  #
+  # And the select has to come back reading the venue it is showing: without `selected:`,
+  # Ui::FilterSelect marks nothing, the browser pre-selects "All", and the page reads All above a
+  # narrowed report. That state renders identically to the correct one in every text assertion.
+  test "a member narrows the sample to one venue and the report follows the select" do
+    archetype = split_venue_archetype
+
+    visit archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+    assert_text "of these 4 lists"
+    blended = find(".archetype-card-row", text: "Boss's Orders")
+
+    assert_no_match(/100(\.0)? ?%/, blended.text,
+                    "the paper-only card already reads 100 % on the blended sample")
+
+    select "Paper — 2 lists", from: "Venue"
+
+    # Waited on the *URL* and on the disappearance of the blended note, and deliberately not on a
+    # text like "2 lists": that string is in the select option the click just chose, so it is
+    # already on the page and Capybara returns instantly — the assertions below then read the
+    # blended page. Measured: green locally, red on CI's slower parallel runner, where the row
+    # still read "50 % of lists (2)" over four lists.
+    assert_current_path(/venue=paper/)
+    assert_no_text "of these 4 lists"
+
+    assert_equal "paper", find("select[name='venue']").value,
+      "the venue select does not read the venue the report is showing"
+    assert_match(/100(\.0)? ?%/, find(".archetype-card-row", text: "Boss's Orders").text)
+  end
+
+  # Each control replaces the whole query string, so each has to carry what the other chose. The
+  # pool half is the one no test named — the same asymmetry as a filter tested for one of two
+  # symmetric parameters and not the other — and losing it silently returns the reader to the
+  # default pool while they were asking about a venue.
+  test "changing the venue keeps the pool and the grouping the reader chose" do
+    archetype = split_venue_archetype
+
+    visit archetype_path(archetype, pool: Archetypes::MetagameScope::ALL, group: "role")
+    assert_selector ".archetype-category-header h3", text: "No role recorded"
+
+    select "Online — 2 lists", from: "Venue"
+
+    assert_current_path(/venue=online/)
+    assert_current_path(/pool=all/)
+    assert_current_path(/group=role/)
+    assert_selector ".archetype-category-header h3", text: "No role recorded"
+  end
+
+  # Two labels in `.deck-filters`, which is already `flex-wrap: wrap` with
+  # `.archetype-sample-label` as its flex item — so this should hold with no CSS at all, and the
+  # point of the test is that "it happens to be right today" and "it is held" are different
+  # states. `.archetype-category-header` and the catalog's row note each cost this repository one
+  # bug of exactly this kind.
+  #
+  # Two assertions, because neither is enough on its own and an earlier version of this test made
+  # only the second while claiming both. **The child selector is what catches a wrapper**: a `div`
+  # around the two labels makes them stack, and a claim that accepts "adjacent or stacked" passes
+  # with the wrapper in place — so the structural half has to be asserted structurally. The
+  # geometric half then accepts either arrangement, because it runs at both sweep widths and the
+  # two really do sit on one line above the breakpoint and wrap below it; what it rules out is the
+  # third outcome, one label overlapping the other's line.
+  test "the sample and venue labels are flex siblings and sit together" do
+    archetype = split_venue_archetype
+
+    visit archetype_path(archetype, pool: Archetypes::MetagameScope::ALL)
+
+    assert_selector ".deck-filters > .archetype-sample-label", count: 2,
+      visible: :all
+
+    labels = all(".archetype-sample-label")
+
+    assert_equal 2, labels.size, "both axes should be a choice on this archetype"
+
+    sample = rect_of(labels.first)
+    venue = rect_of(labels.last)
+
+    if (venue["top"] - sample["top"]).abs < 2
+      assert_operator venue["left"] - sample["right"], :<, 24,
+        "the two labels share a line but sit #{(venue['left'] - sample['right']).round}px apart"
+    else
+      assert_operator venue["top"], :>=, sample["bottom"] - 1,
+        "the venue label overlaps the sample label's line instead of sitting under it"
+    end
+  end
+
   # `.archetype-category-header` is `display: flex; justify-content: space-between`, so a card
   # count and a copies figure placed in it as two children are not neighbours — they are spread to
   # opposite ends, with the count parked in the middle of the row away from the figure it belongs
@@ -320,6 +409,22 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype
   end
 
+  # Two pools *and* both venues, which is the only shape where both selects render — 9 of the 48
+  # production archetypes are in it. Boss's Orders is played on the paper side alone, so it is the
+  # card whose share moves when the reader narrows: 50 % of the blend, 100 % of the paper half.
+  def split_venue_archetype
+    archetype = Archetype.create!(primary_card: cards(:doublade))
+    pool = standard_pools(:twm_por)
+    paper = tournament("Split Paper Cup", Date.new(2026, 2, 7), pool)
+    weekly = tournament("Split Weekly", Date.new(2026, 2, 14), pool, online: true)
+    2.times { |i| standing(paper, archetype, "Split Paper #{i}") }
+    2.times { |i| standing(weekly, archetype, "Split Online #{i}", division: "open", boss: false) }
+    older = tournament("Split Rotation Past", Date.new(2025, 12, 6), standard_pools(:twm_asc))
+    standing(older, archetype, "Split Older")
+
+    archetype
+  end
+
   def tournament(name, date, pool, online: false)
     Tournament.create!(name: name, date: date, tier: online ? "other" : "regional",
                        format: "standard", standard_pool: pool, online: online)
@@ -327,11 +432,14 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
 
   # An ownerless field list: shared and never physical, which is what
   # Deck#ownerless_deck_is_shared_and_virtual requires.
-  def standing(event, archetype, player_name, division: "masters")
+  # `boss:` is what lets a card be played on one venue and not the other, which is the whole point
+  # of the venue split: a share of 50 % over a blended sample that is 100 % of one half and 0 % of
+  # the other describes neither.
+  def standing(event, archetype, player_name, division: "masters", boss: true)
     deck = Deck.create!(name: "#{player_name} — #{event.name}", shared: true, physical: false,
                         format: "standard", standard_pool: event.standard_pool)
     DeckCard.create!(deck: deck, card: cards(:teal_mask_ogerpon_ex), quantity: 2)
-    DeckCard.create!(deck: deck, card: cards(:bosss_orders_meg), quantity: 1)
+    DeckCard.create!(deck: deck, card: cards(:bosss_orders_meg), quantity: 1) if boss
 
     TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
                                player_name: player_name, division: division,
