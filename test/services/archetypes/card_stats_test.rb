@@ -284,6 +284,42 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     assert_equal 2, performance.unlisted_count
   end
 
+  # The same claim under a venue, which is where it could newly come apart: the three page-level
+  # counters all derive from one narrowed relation, so they agree by construction — but "by
+  # construction" is what a filter applied to `standings` and not to `listed_standings` quietly
+  # breaks, and that shape prints a selector reading one number over a report computing its
+  # percentages against another.
+  #
+  # The index's fourth counter is deliberately absent here. `Archetypes::IndexCounts` is over the
+  # whole archetype and takes no venue, exactly as it takes no pool — `/archetypes` names the
+  # blend and offers no controls — so it answers 3 while the paper half answers 2, and asserting
+  # otherwise would be asserting the index has a control it does not.
+  test "the three page counters agree under a venue too" do
+    archetype = archetype_of_its_own
+    paper = standard_event
+    online = online_standard_event
+    2.times { record(paper, archetype, deck: field_list(pokemon("Paper Card") => 2)) }
+    record(online, archetype, deck: field_list(pokemon("Online Card") => 2))
+    # A standing with no list on each side, so `lists_count` and `standings_count` cannot agree
+    # by coincidence in either half.
+    record(paper, archetype)
+    record(online, archetype)
+
+    [ [ "paper", 2 ], [ "online", 1 ], [ nil, 3 ] ].each do |venue, expected|
+      scope = Archetypes::MetagameScope.call(archetype: archetype, venue_param: venue)
+      report = Archetypes::CardStats.call(standings: scope.listed_standings)
+      performance = Archetypes::Performance.call(standings: scope.standings)
+
+      assert_equal [ expected ] * 3,
+        [ scope.lists_count, report.lists_count, performance.lists_count ],
+        "venue=#{venue.inspect}: the selector, the report and the panel must print one number"
+    end
+
+    index = Archetypes::IndexCounts.call(archetype_ids: [ archetype.id ]).fetch(archetype.id)
+
+    assert_equal 3, index.lists, "the index counts the whole archetype, venue or no venue"
+  end
+
   # `set_number` is a String holding a number most of the time and something like "SV107" the
   # rest, so the printings of one name are ordered numerically first. A plain String sort puts
   # "114" above "77", which is a printing order no set list has.
@@ -777,9 +813,20 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
                        created_by: users(:one))
   end
 
+  # Anchored to the same pool as the paper one, and `tier: "other"`, which is what the online
+  # importer writes: the point of the venue axis is that an online event is indistinguishable
+  # from a paper one on the axis the pool selector groups by.
+  def online_standard_event(date: Date.new(2026, 5, 2))
+    Tournament.create!(name: "Card Stats Online Event #{next_index}", date: date,
+                       format: "standard", standard_pool: standard_pools(:twm_por),
+                       tier: "other", online: true, created_by: users(:one))
+  end
+
+  # `division` follows the venue, as the importer writes it: online play has no age divisions.
   def record(event, archetype, deck: nil)
     TournamentStanding.create!(tournament: event, archetype: archetype, deck: deck,
-                               player_name: "Player #{next_index}", division: "masters",
+                               player_name: "Player #{next_index}",
+                               division: event.online? ? "open" : "masters",
                                created_by: users(:one))
   end
 
