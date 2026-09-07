@@ -456,7 +456,8 @@ module Styleguide
     end
 
     # Unpersisted: .archetype-card-label is a component style like any other badge on this page,
-    # and CLAUDE.md's design-system section asks for one here the moment it exists in the app.
+    # and docs/architecture/frontend.md's design-system section asks for one here the moment
+    # it exists in the app.
     def sg_label
       CardLabel.new(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10,
                     description: "A deck may hold at most one.")

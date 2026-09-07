@@ -179,8 +179,8 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
 
   # Every category at once, Supporter and Stadium included. An earlier version of this test left
   # both out, which made it blind to the one permutation a reader would actually get wrong:
-  # Tool and Stadium are adjacent, they are the pair CLAUDE.md and Archetypes::CardReport each
-  # named in the opposite order, and swapping them in CATEGORIES passed a sample holding neither.
+  # Tool and Stadium are adjacent, they are the pair docs/architecture/archetype-metagame.md
+  # and Archetypes::CardReport each named in the opposite order, and swapping them in CATEGORIES passed a sample holding neither.
   test "categories come in the declared display order and empty ones are dropped" do
     sample = {
       pokemon("Order Pokemon") => 1,

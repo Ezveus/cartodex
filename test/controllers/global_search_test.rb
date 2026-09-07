@@ -29,7 +29,7 @@ class GlobalSearchTest < ActionDispatch::IntegrationTest
     assert_select ".navbar .navbar-search-trigger", 1
   end
 
-  # CLAUDE.md: the styleguide is the living reference, and it renders the real components so it
+  # docs/architecture/frontend.md: the styleguide is the living reference, and it renders the real components so it
   # cannot drift from what ships.
   test "the styleguide documents the trigger with the shipped component" do
     sign_in users(:one)

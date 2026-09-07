@@ -143,7 +143,7 @@ module Admin
 
       # `aria_label`, not the visible span alone: that span is `display: none` above the
       # breakpoint (the column heading names the role there), and a hidden label leaves the
-      # checkbox with no accessible name — seven anonymous boxes per row to a screen reader.
+      # checkbox with no accessible name — nine anonymous boxes per row to a screen reader.
       def checkbox_attributes(role, assignment)
         attributes = {
           type: "checkbox", name: "roles[]", value: role.slug,
