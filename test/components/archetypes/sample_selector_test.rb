@@ -100,6 +100,11 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
 
     assert_includes html, "Every list in this sample comes from an online tournament."
     assert_no_match(/16 of these 16/, html)
+    # The second sentence claims the report counts both kinds, which is false here — and was
+    # printed unconditionally until #160. Measured on the production data, 23 of the 48 archetypes
+    # carrying a list open on exactly this sample, so 23 pages said it. Both assertions are
+    # needed: without the one above, an implementation that drops the whole note also passes.
+    assert_no_match(/counts online and paper lists together/, html)
   end
 
   # No "0 online lists" line on an archetype nobody has imported an online result for: a sentence
@@ -140,10 +145,61 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_no_match(/name="group"/, html)
   end
 
+  # ---- the venue axis (#160) ----
+
+  # One pool and both venues, which is 15 of the 24 blended archetypes in production. Two
+  # assertions and not one: the first catches a form guard written as `&&`, which drops the form
+  # entirely here, and the second catches a Sample select widened to that guard, which renders a
+  # `<select name="pool">` of one option — the non-choice `selectable?` exists to prevent.
+  test "one pool and two venues renders the venue select alone" do
+    html = selector(lists_count: 28, online_lists_count: 20, venue_selectable: true,
+                    options: [ pool_option("9", 28), all_option(28) ])
+
+    assert_match(/<select name="venue"/, html)
+    assert_no_match(/<select name="pool"/, html)
+    assert_includes html, "Venue"
+  end
+
+  # Two pools and both venues: the only shape where both render, and the state the system test
+  # measures the geometry of.
+  test "two pools and two venues renders both selects" do
+    html = selector(lists_count: 28, online_lists_count: 20, venue_selectable: true,
+                    options: [ pool_option("9", 28), pool_option("8", 22), all_option(50) ])
+
+    assert_match(/<select name="pool"/, html)
+    assert_match(/<select name="venue"/, html)
+    assert_equal 2, html.scan("archetype-sample-label").size
+  end
+
+  # A paper-only archetype must not be offered "Online — 0 lists": the venue select answers to
+  # `venue_selectable?` and to nothing else, so widening it to `selectable?` shows a control that
+  # cannot change the page.
+  test "a paper-only archetype is offered no venue select however many pools it has" do
+    html = selector(lists_count: 50, options: [ pool_option("9", 28), pool_option("8", 22), all_option(50) ])
+
+    assert_match(/<select name="pool"/, html)
+    assert_no_match(/<select name="venue"/, html)
+  end
+
+  # `selected:` is read off the scope. Omitted, Ui::FilterSelect marks no option and the browser
+  # pre-selects the first — "All" — over a report showing Online, which is the trap the standings
+  # form's division select paid for once.
+  test "the venue select marks the venue the page is showing" do
+    html = selector(lists_count: 20, online_lists_count: 20, venue: :online, venue_selectable: true,
+                    options: [ pool_option("9", 28), all_option(28) ])
+
+    assert_match(/<option value="online" selected>/, html)
+    assert_no_match(/<option value="all" selected>/, html)
+  end
+
   private
 
+  # The venue members are spelled out rather than defaulted away, because a `Struct` built with
+  # `keyword_init: true` stores `nil` for a keyword left out — only an *extra* one raises — so a
+  # member added to the Result and forgotten here would leave every venue branch falsy and no
+  # venue regression observable in any test in this file.
   def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0,
-               grouping: :type)
+               grouping: :type, venue: :all, venue_selectable: false, venue_options: nil)
     # Unpersisted on purpose: the component reads an id off each of these and nothing else —
     # `archetype_path` through `to_param`, and the pool only to decide which option is selected —
     # so this file never touches the database and cannot be broken by a fixture another test
@@ -152,7 +208,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
       archetype: Archetype.new(id: 6, name: "Sample"), standings: nil, listed_standings: nil,
       pool: pool == :default ? StandardPool.new(id: 9) : pool,
       options: options, lists_count: lists_count, online_lists_count: online_lists_count,
-      unpooled: unpooled
+      unpooled: unpooled, venue: venue, venue_selectable: venue_selectable,
+      venue_options: venue_options || default_venue_options(lists_count, online_lists_count)
     )
 
     ApplicationController.renderer.render(
@@ -168,5 +225,17 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
   def all_option(lists)
     Archetypes::MetagameScope::Option.new(value: ALL, label: "All formats — #{lists} lists",
                                           lists_count: lists)
+  end
+
+  # Shaped the way the service builds them, so a test that does not care about the venue axis
+  # still renders labels that are consistent with the counts it did pass.
+  def default_venue_options(lists_count, online_lists_count)
+    paper = lists_count - online_lists_count
+    [ [ "all", "All", lists_count ], [ "paper", "Paper", paper ],
+      [ "online", "Online", online_lists_count ] ].map do |value, label, count|
+      Archetypes::MetagameScope::Option.new(
+        value: value, label: "#{label} — #{count} #{'list'.pluralize(count)}", lists_count: count
+      )
+    end
   end
 end

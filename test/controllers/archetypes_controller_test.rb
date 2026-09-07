@@ -431,6 +431,148 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/online/, response.body)
   end
 
+  # ---- the venue axis (#160) ----
+
+  # The defect the issue names, from the page's side: Alakazam's blended report prints a card near
+  # 50 % that describes neither half. A fixture cannot reproduce a percentage that specific, so
+  # what is asserted is the mechanism — the denominator moves, and a card played only on paper
+  # goes from a share of the blend to 100 %.
+  test "a venue narrows the report's denominator and its percentages" do
+    archetype = quiet_archetype(600, name: "Venued Archetype")
+    2.times { |i| listed_standing_for(archetype, 600 + i) }
+    3.times { |i| listed_standing_for(archetype, 610 + i, online: true) }
+
+    get archetype_path(archetype)
+
+    # One pool and both venues: the Venue select alone, and no Sample select — a `<select>` of one
+    # option is the non-choice `Result#selectable?` exists to drop. 15 of the 24 blended
+    # archetypes in production are in exactly this shape.
+    assert_select ".archetype-sample-label", count: 1
+    assert_select "select[name=venue]", count: 1
+    assert_select "select[name=pool]", count: 0
+    blended = css_select(".archetype-card-row").size
+
+    get archetype_path(archetype, venue: "paper")
+
+    assert_response :success
+    assert_select "select[name=venue] option[selected]", text: /\APaper/
+    paper = css_select(".archetype-card-row").size
+    assert_operator paper, :<, blended, "the paper sample reported as many cards as the blend"
+  end
+
+  # Two pools *and* both venues is the only shape where both selects render, and it is the state
+  # the system test measures the geometry of. Nine archetypes in production are multi-pool with a
+  # blended pool.
+  test "an archetype with two pools and two venues renders both selects" do
+    archetype = quiet_archetype(690, name: "Two Axis Archetype")
+    2.times { |i| listed_standing_for(archetype, 690 + i) }
+    2.times { |i| listed_standing_for(archetype, 695 + i, online: true) }
+    older = Tournament.create!(name: "Older Cup 690", date: Date.new(2025, 6, 1), tier: "regional",
+                               format: "standard", standard_pool: standard_pools(:twm_asc),
+                               created_by: @user)
+    older.standings.create!(player_name: "Older Player 690", division: "masters", placement: 1,
+                            archetype: archetype, created_by: @user,
+                            deck: Deck.create!(name: "Older List 690", shared: true,
+                                               standard_pool: standard_pools(:twm_asc)))
+
+    get archetype_path(archetype)
+
+    assert_select ".archetype-sample-label", count: 2
+    assert_select "select[name=pool]", count: 1
+    assert_select "select[name=venue]", count: 1
+  end
+
+  # The clamp, in the only two things the page still shows once it has fired: there is no venue
+  # select to read, because a clamp fires exactly when one venue holds nothing and that is when
+  # `venue_selectable?` is false. So the report must render its blended rows *and* the mode links
+  # must carry no venue — the second alone passes an implementation that empties the relation, and
+  # the first alone passes one that keeps the dead parameter in every copied URL.
+  test "a venue naming an empty cell renders the blended report and re-emits no venue" do
+    archetype = quiet_archetype(620, name: "Clamped Archetype")
+    2.times { |i| listed_standing_for(archetype, 620 + i) }
+
+    get archetype_path(archetype, venue: "online")
+
+    assert_response :success
+    assert_select ".archetype-card-row", minimum: 1
+    assert_select "select[name=venue]", count: 0
+    hrefs = css_select("a.archetype-report-mode").map { |link| link["href"] }
+    assert_predicate hrefs, :any?
+    assert_empty hrefs.select { |href| href.include?("venue=") },
+      "a mode link carried a venue the page had clamped away"
+  end
+
+  # `?venue[]=junk` hands over an Array, which no comparison here may assume is a String.
+  test "show survives a malformed venue parameter" do
+    archetype = quiet_archetype(630, name: "Malformed Venue Archetype")
+    listed_standing_for(archetype, 630)
+    listed_standing_for(archetype, 631, online: true)
+
+    get archetype_path(archetype, venue: [ "junk" ])
+
+    assert_response :success
+    assert_select "select[name=venue] option[selected]", text: /\AAll/
+  end
+
+  # The pinned cost, per venue and as a literal, on a *blended* archetype — on a paper-only one
+  # both venue values clamp to the blended sample and the count is flat for the wrong reason,
+  # which is what the `assert_select` guards against. A duplicated `joins(:tournament)` is
+  # deliberately not what this defends: Rails collapses it to one INNER JOIN, so no query counter
+  # could ever see it.
+  test "the venue axis costs no query the blended page does not" do
+    archetype = quiet_archetype(640, name: "Venue Cost Archetype")
+    2.times { |i| listed_standing_for(archetype, 640 + i) }
+    2.times { |i| listed_standing_for(archetype, 650 + i, online: true) }
+
+    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+
+    counts = { nil => nil, "paper" => nil, "online" => nil }.keys.to_h do |venue|
+      queries = capture_queries { get archetype_path(archetype, venue: venue) }
+      assert_select ".archetype-card-row", minimum: 1
+      [ venue, queries.size ]
+    end
+
+    assert_equal [ 17, 17, 17 ], counts.values, "a venue changed the page's cost: #{counts.inspect}"
+  end
+
+  # The twin of the note below, one panel further down, and false in the other direction: under
+  # `venue=online` the counts *do* separate online play from paper, because every row is online.
+  # It was already false on the 23 of 48 production archetypes whose whole sample is online, so
+  # this assertion is red on master before the venue axis exists.
+  test "the performance panel does not claim to blend a sample that is all online" do
+    archetype = quiet_archetype(660, name: "All Online Archetype")
+    2.times { |i| listed_standing_for(archetype, 660 + i, online: true) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-fact-muted", text: /comes from an online tournament|come from online/
+    assert_no_match(/do not separate online play from paper/, response.body)
+  end
+
+  # Performance reads `@scope.standings`, so it narrows with the venue without a line of its own —
+  # and the division breakdown is what proves it did rather than a counter that could agree by
+  # coincidence: the importer writes `division: "open"` on an online row and an age division on a
+  # paper one, so the blended sample shows an Open row and the paper one must not.
+  test "the performance panel narrows with the venue" do
+    archetype = quiet_archetype(670, name: "Divided Archetype")
+    2.times { |i| listed_standing_for(archetype, 670 + i) }
+    3.times { |i| open_division_standing_for(archetype, 680 + i) }
+
+    get archetype_path(archetype)
+
+    assert_select ".data-table-cell", text: "Open"
+    # Ui::Stat prints the value and its label as two elements, so the section's text runs them
+    # together — "5standings5events5lists".
+    assert_select ".deck-show-stats", text: /\A5\s*standings/
+
+    get archetype_path(archetype, venue: "paper")
+
+    assert_response :success
+    assert_select ".data-table-cell", text: "Open", count: 0
+    assert_select ".deck-show-stats", text: /\A2\s*standings/
+  end
+
   test "show 404s on an unknown archetype" do
     get archetype_path(id: 999_999)
 
@@ -533,6 +675,24 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     field_list.deck_cards.create!(card: card, quantity: 2)
     tournament.standings.create!(
       player_name: "Report Player #{index}", division: "masters", placement: index + 1,
+      archetype: archetype, deck: field_list, created_by: @user
+    )
+  end
+
+  # An online standing carrying the division the online importer actually writes. Neither
+  # `listed_standing_for` nor `record_standing_for` can produce it: the first hardcodes "masters"
+  # and the second derives `online` from the index, and the venue tests need both halves chosen
+  # rather than computed.
+  def open_division_standing_for(archetype, index)
+    tournament = Tournament.create!(
+      name: "Open Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "other", online: true,
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    field_list = Deck.create!(
+      name: "Open Field List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
+    )
+    tournament.standings.create!(
+      player_name: "Open Player #{index}", division: "open", placement: 1,
       archetype: archetype, deck: field_list, created_by: @user
     )
   end

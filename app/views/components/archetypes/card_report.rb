@@ -80,12 +80,20 @@ module Archetypes
     # all, which makes that structural rather than a convention.
     def path_for(mode)
       Rails.application.routes.url_helpers.archetype_path(
-        @scope.archetype, pool: pool_param, group: mode
+        @scope.archetype, pool: pool_param, group: mode, venue: venue_param
       )
     end
 
     def pool_param
       @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id
+    end
+
+    # Read off the scope, never off params, for the reason `pool_param` is — and here it is what
+    # tells a clamp recorded in the Result apart from one applied to the relation alone: a link
+    # rebuilt from the parameter would carry a dead venue into every copy of the URL. Nil at
+    # `:all`, so a default never enters the query string; `archetype_path` drops a nil parameter.
+    def venue_param
+      @scope.venue == :all ? nil : @scope.venue
     end
 
     # The third sentence of the same family, and the one the copies figures make necessary in

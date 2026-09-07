@@ -302,6 +302,174 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_predicate result, :no_lists?
   end
 
+  # ---- the venue axis (#160) ----
+
+  # The fold, in absolute terms rather than as a comparison between two venue states. Unfolded, a
+  # blended pool yields two buckets and the selector offers "pool — 8 lists" beside
+  # "pool — 20 lists" in one <select>; both venue states carry that duplicate, so a test comparing
+  # the two passes with the bug in place. Hence the literal, twice.
+  test "a blended pool is one option carrying its whole total, whatever venue is selected" do
+    archetype, pool = blended(paper: 8, online: 20)
+    expected = [ [ pool.id.to_s, "#{pool.name} — 28 lists", 28 ],
+                 [ Archetypes::MetagameScope::ALL, "All formats — 28 lists", 28 ] ]
+
+    [ nil, "paper", "online" ].each do |venue|
+      result = Archetypes::MetagameScope.call(archetype: archetype, venue_param: venue)
+
+      assert_equal expected, result.options.map { |o| [ o.value, o.label, o.lists_count ] },
+        "the pool options moved under venue=#{venue.inspect}"
+    end
+  end
+
+  # The counts themselves, as literals. Their *sum* is not a testable statement about the fold —
+  # the pool total and the two halves all come out of it, so any fold satisfies the identity.
+  test "each venue counts its own half, and All counts both" do
+    archetype, = blended(paper: 8, online: 20)
+
+    assert_equal [ 28, 8, 20 ], [ nil, "paper", "online" ].map { |venue|
+      Archetypes::MetagameScope.call(archetype: archetype, venue_param: venue).lists_count
+    }
+  end
+
+  # The one shape the fold gets wrong, named rather than left to a measurement that is true today:
+  # one deck carrying a standing under each venue is counted twice in the pool total. Measured on
+  # the production data, 0 decks are in that shape and 0 carry more than one standing at all, but
+  # index_tournament_standings_on_deck_id is not unique so nothing forbids it. The venue-filtered
+  # counts stay exact, because each is a single cell.
+  test "one deck under both venues is over-counted in the pool total and exact within a venue" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    shared = field_list
+    record(standard_event(pool: pool, date: Date.new(2026, 5, 1)), archetype, deck: shared)
+    record(online_event(pool: pool, date: Date.new(2026, 5, 2)), archetype, deck: shared)
+
+    blended = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal 1, blended.standings.distinct.count(:deck_id), "the sample really holds one deck"
+    assert_equal 2, blended.lists_count, "the documented over-count changed shape"
+    assert_equal [ 1, 1 ], [ "paper", "online" ].map { |venue|
+      Archetypes::MetagameScope.call(archetype: archetype, venue_param: venue).lists_count
+    }
+  end
+
+  # `pool_id` is overloaded: nil means "every pool" as a selection and "the non-Standard bucket"
+  # as data. Every venue figure reads it as the selection — read the other way, this archetype's
+  # venue control would answer over the GLC bucket alone. Measured, 24 of the 48 archetypes
+  # carrying a list have a blended All-formats sample, so this is the majority state.
+  test "All formats counts venues over every pool, not over the non-Standard bucket" do
+    archetype = archetype_of_its_own
+    old_pool = standard_pools(:twm_asc)
+    new_pool = standard_pools(:twm_por)
+    3.times { record(standard_event(pool: old_pool, date: Date.new(2025, 6, 1)), archetype, deck: field_list) }
+    2.times { record(online_event(pool: new_pool, date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_predicate result, :venue_selectable?
+    assert_equal [ 6, 4, 2 ], result.venue_options.map(&:lists_count)
+    assert_equal [ "All — 6 lists", "Paper — 4 lists", "Online — 2 lists" ],
+      result.venue_options.map(&:label)
+  end
+
+  # Three options are always rendered, so `venue_options.size > 1` is always true and says nothing.
+  # The question is whether the selection holds both venues at all.
+  test "venue_selectable? is false on a one-venue selection and true on a blended one" do
+    paper_only = archetype_of_its_own
+    2.times { record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1)), paper_only, deck: field_list) }
+    online_only = archetype_of_its_own
+    2.times { record(online_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 2)), online_only, deck: field_list) }
+    both, = blended(paper: 2, online: 2)
+
+    refute_predicate Archetypes::MetagameScope.call(archetype: paper_only), :venue_selectable?
+    refute_predicate Archetypes::MetagameScope.call(archetype: online_only), :venue_selectable?
+    assert_predicate Archetypes::MetagameScope.call(archetype: both), :venue_selectable?
+  end
+
+  # The clamp, and both halves of it: a Result that kept the parameter would print an Online select
+  # over a blended report, and a relation that stayed filtered would render an empty report under a
+  # select reading All.
+  test "a venue with no standing in the selected pool clamps to all, in the Result and the relation" do
+    archetype = archetype_of_its_own
+    paper_pool = standard_pools(:twm_asc)
+    3.times { record(standard_event(pool: paper_pool, date: Date.new(2025, 6, 1)), archetype, deck: field_list) }
+    record(online_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, pool_param: paper_pool.id.to_s,
+                                            venue_param: "online")
+
+    assert_equal :all, result.venue
+    assert_equal 3, result.lists_count
+    assert_equal 3, result.standings.count
+  end
+
+  # `?venue[]=online` is an Array and `?venue[a]=b` an ActionController::Parameters; the action is
+  # reachable by anyone with a session. None may raise, and all fall back to the blended sample.
+  # A Symbol is the one non-String that resolves, which is what the `to_s` in the initializer buys
+  # — the guard is `VENUES.include?`, which fails closed on its own.
+  test "a malformed venue parameter falls back to all, and a Symbol resolves" do
+    archetype, = blended(paper: 4, online: 6)
+
+    [ nil, "", "   ", "PAPER", "junk", [ "online" ], { a: 1 } ].each do |param|
+      result = Archetypes::MetagameScope.call(archetype: archetype, venue_param: param)
+
+      assert_equal :all, result.venue, "#{param.inspect} should fall back"
+      assert_equal 10, result.lists_count
+    end
+
+    assert_equal :online, Archetypes::MetagameScope.call(archetype: archetype,
+                                                         venue_param: :online).venue
+  end
+
+  # The figures, not their equality: under `:online` both `lists_count` and `online_lists_count`
+  # are the same sum over the same rows, so asserting they match holds for any value.
+  test "online_lists_count describes the sample the venue selected" do
+    archetype, = blended(paper: 8, online: 20)
+
+    assert_equal [ [ 28, 20 ], [ 8, 0 ], [ 20, 20 ] ],
+      [ nil, "paper", "online" ].map { |venue|
+        result = Archetypes::MetagameScope.call(archetype: archetype, venue_param: venue)
+        [ result.lists_count, result.online_lists_count ]
+      }
+  end
+
+  # The threshold refused in the design, from the other side: a venue half under SMALL_SAMPLE is a
+  # small sample and says so, rather than being hidden behind a control that refuses to offer it.
+  test "a venue half below the threshold is a small sample even though the pool is not" do
+    archetype, = blended(paper: 8, online: 20)
+
+    blended_result = Archetypes::MetagameScope.call(archetype: archetype)
+    paper = Archetypes::MetagameScope.call(archetype: archetype, venue_param: "paper")
+
+    refute_predicate blended_result, :small_sample?
+    assert_predicate paper, :small_sample?
+    assert_predicate paper, :fuller_sample_available?
+  end
+
+  # Both relations, because the card report reads one and the performance panel the other: a filter
+  # applied to `standings` alone would narrow the panel and leave the report blended, which is the
+  # two-populations disagreement this service exists to prevent.
+  test "a venue narrows both relations, and an unlisted standing stays out of the listed one" do
+    archetype, pool = blended(paper: 2, online: 3)
+    record(online_event(pool: pool, date: Date.new(2026, 6, 1)), archetype, deck: nil)
+
+    online = Archetypes::MetagameScope.call(archetype: archetype, venue_param: "online")
+
+    assert_equal 4, online.standings.count
+    assert_equal 3, online.listed_standings.count
+    assert_equal 2, Archetypes::MetagameScope.call(archetype: archetype,
+                                                   venue_param: "paper").standings.count
+  end
+
+  test "an archetype nobody has recorded offers no venue choice and clamps to all" do
+    result = Archetypes::MetagameScope.call(archetype: archetype_of_its_own, venue_param: "online")
+
+    assert_equal :all, result.venue
+    refute_predicate result, :venue_selectable?
+    assert_equal [ 0, 0, 0 ], result.venue_options.map(&:lists_count)
+  end
+
   # Helpers, deliberately below `private`: a `test` declared under it never runs, which is why
   # everything above this line is a test and everything below it is not.
   private
@@ -347,6 +515,16 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
   def field_list
     Deck.create!(name: "Field list #{next_index}", user: nil, shared: true, physical: false,
                  format: "glc")
+  end
+
+  # One archetype, one pool, both venues — the shape the venue control exists for, and the one
+  # 24 of the 48 production archetypes are in. A distinct field list per standing, so `lists` and
+  # `standings` cannot agree by accident.
+  def blended(paper:, online:, pool: standard_pools(:twm_por))
+    archetype = archetype_of_its_own
+    paper.times { record(standard_event(pool: pool, date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+    online.times { record(online_event(pool: pool, date: Date.new(2026, 5, 2)), archetype, deck: field_list) }
+    [ archetype, pool ]
   end
 
   def next_index

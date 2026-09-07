@@ -82,9 +82,12 @@ absent from 35 of them, exactly as the pool selector is absent from most archety
 ### A half is offered from one standing, with no threshold of its own
 
 A venue is an option whenever it holds standings; nothing hides a small half. A threshold at
-`SMALL_SAMPLE` was considered and rejected on measurement: it would remove the control from 18 of
+`SMALL_SAMPLE` was considered and rejected on measurement: it would remove the control from 17 of
 the 48 archetypes, **including Lillie's Clefairy ex**, whose paper half is 9 lists and which is one
-of the four archetypes whose halves genuinely disagree. The threshold would silence a motivating
+of the four archetypes whose halves genuinely disagree. (That figure read 18 when this spec was
+written; re-measured before implementation it is 17, under all four readings tried — lists `< 10`,
+lists `<= 10`, standings `< 10`, and "any pool" rather than the default pool. The decision is
+unchanged, since Lillie's Clefairy ex is among the 17 either way.) The threshold would silence a motivating
 case. `small_sample?` already exists to say what a nine-list sample is worth, and it now fires on a
 venue half as readily as on a pool.
 

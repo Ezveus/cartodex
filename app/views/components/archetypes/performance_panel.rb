@@ -95,6 +95,13 @@ module Archetypes
     # paper events that have no tier. Printed only when there is a blend to name — a "0 online"
     # line on an archetype nobody has imported an online result for is noise that reads as a
     # warning about nothing.
+    #
+    # The closing sentence prints only when the counts really do mix the two. Unconditional inside
+    # this branch it was false on 23 of the 48 archetypes carrying a list — the ones whose whole
+    # sample is online, where it sat directly under "every event counted above" and contradicted
+    # it — and it is the exact twin of the sentence Archetypes::SampleSelector prints over the
+    # card report's population, which had the same defect and takes the same rule. Since the venue
+    # axis, `?venue=online` reaches the same state deliberately.
     def online
       return unless @performance.online?
 
@@ -107,14 +114,16 @@ module Archetypes
         # "N of the N events" is a strange way to say "all of them", and on an archetype whose
         # every recorded event is online that is the sentence this would otherwise print.
         plain(if @performance.all_events_online?
-                "every event counted above. "
+                "every event counted above."
         else
                 "#{@performance.online_events_count} of the #{@performance.events_count} " \
-                  "#{'event'.pluralize(@performance.events_count)} counted above. "
+                  "#{'event'.pluralize(@performance.events_count)} counted above."
         end)
-        plain "The counts above do not separate online play from paper."
+        plain " The counts above do not separate online play from paper." if blended?
       end
     end
+
+    def blended? = @performance.online_standings_count < @performance.standings_count
 
     # The card report speaks for a strictly smaller population whenever a sheet holds a row nobody
     # typed a list for, which is the common case. Saying so here is what stops the two list counts

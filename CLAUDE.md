@@ -507,9 +507,9 @@ second axis. Both counters ride inside the existing grouped queries (`COUNT(DIST
 tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
 `/archetypes/:id` stays at its pinned query count (**16** when that was written, **17** since the card report began reading `card_label_assignments`). The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
-blended population. **Splitting the sample by venue — a second selector beside the pool one — is
-deliberately out** (#160, where the measurement argues against building it until a second pool
-holds both venues). **The index names it too**: `Archetypes::IndexCounts` carries
+blended population. **The sample splits by venue** (#160) — see the venue paragraphs below; that split was
+deliberately deferred here until a second pool held both venues, and the bulk online import is
+what supplied them. **The index names it too**: `Archetypes::IndexCounts` carries
 `online_standings` and `online_events` as two CASE terms inside the grouped query it already makes,
 so `/archetypes` stays at its flat 7, and a row whose figures blend prints one muted sentence under
 the badge. It names **both** ratios because they diverge — measured on the first archetype to carry
@@ -784,6 +784,95 @@ then.) The honest version key for a cache entry would be a `MAX(updated_at)`
 over the archetype's standings, the kind of unindexed aggregate `Card.filter_values` had to be
 corrected away from. `CardStats` is 85 % of the cost and is where a cache would go if the
 collection grows past roughly twice that size.
+
+**The sample also splits by venue, and that axis is the pool axis's argument on a second
+dimension** (#160). `MetagameScope.call(archetype:, pool_param:, venue_param:)` — a second
+`<select>` labelled **Venue** (All / Paper / Online, each carrying its list count) in the same
+`<form>` as the pool one. It is the pool scoping's own reasoning applied again: `buckets` grouped
+on `standard_pool_id` alone, so an online weekly and a Regional anchored to the same pool land in
+one bucket. Measured on Alakazam (TEF-PBL, 22 paper / 18 online), **12 cards of its blended report
+print between 40 % and 60 % and every one describes neither half** — Dunsparce reads 50.0 %
+blended against 86.4 % paper and 5.6 % online, an 80.8-point gap. Nine archetypes now hold ≥8
+lists on both sides.
+
+**The axis is venue and deliberately not tier**, which looked like a proxy for it and is not: the
+paper half spans **three** tiers and one of them is `other`, exactly the value
+`Tournaments::StandingsImportPlan` forces onto every online event — so a tier control files *Japan
+Championships 2026* with the weeklies and splits the sample six ways where the measured problem is
+already that one side falls under `SMALL_SAMPLE`. Tier is a refinement *within* the paper half, and
+its own issue.
+
+`buckets` gains `tournaments.online` as a second `GROUP BY` column — still **one query**, the row
+count at most doubling (59 buckets, ≤118 rows) — and the old
+`COUNT(DISTINCT CASE WHEN tournaments.online …)` term disappears, since the online list count is
+now the `lists` of the online row. **`online` needs no cast and must not be given one**: SQLite
+reports a decltype for a bare column reference, so `pluck` hands back `true`/`false` (measured:
+`select_all(…).column_types["online"]` is `ActiveModel::Type::Boolean` where
+`column_types["MAX(tournaments.date)"]` is the bare `Value` that `to_date` exists for) — wrapping
+it in a `COALESCE` or a `CASE` is what would lose that and return a `0` that is truthy in Ruby.
+
+**The pool axis is entirely venue-independent, and `unpooled?` is inside that rule.** Pool labels
+do not move when a venue is chosen (`SVI-BLK — 56 lists` reads 56 under Online), which is honest
+only *because of* the clamp: clicking it resets the venue and shows 56. Venue labels, symmetrically,
+count within the current selection. `unpooled?` stays unscoped because it feeds `selectable?`, so
+scoping it would make the *pool* control vanish as a side effect of picking a venue — and the note
+it guards describes how the pool options count, which does not move. `pool_buckets` **folds** its
+at-most-two rows per pool, which is what makes that hold by construction: unfolded, a blended pool
+offers "TEF-PBL — 98 lists" beside "TEF-PBL — 20 lists" in one `<select>`.
+
+**The fold over-counts a deck holding standings under both venues, and that is a pre-existing
+property extended along a second axis rather than a new one** — `total.lists` has always been
+`buckets.sum(&:lists)`, which double-counts a deck across two pools. Measured: **0 decks under
+both venues, and 0 decks carrying more than one standing at all**, so the fold matches the single
+grouped count on 59 buckets of 59 and 1223 = 1223 across pools. Nothing in the schema forbids the
+shape, so a test **names the behaviour** rather than asserting an identity the fold cannot violate
+— both sides of "paper + online = the pool total" come out of the fold, so any fold satisfies it.
+The venue-filtered counts the page prints are exact either way, each being a single cell.
+
+**The clamp is recorded in the `Result`, not merely applied to the relation**, and it is not rare:
+every pool other than TEF-PBL holds zero online lists, so 10 of the 38 cells belonging to the 9
+multi-pool archetypes with a blended pool are empty, and `?pool=<SVI-BLK>&venue=online` is what
+clicking a pool label under Online produces. **The clamp and `venue_selectable?` are mutually
+exclusive** — a clamp fires exactly when one venue holds nothing, which is when the control is
+dropped — so "an Online select over a blended report" is unreachable and what a test can actually
+observe is the pair: rows render, and no mode link carries `venue=`. `CardReport#path_for`
+re-emits the venue off the **scope** and emits nothing at `:all`, so a default never enters a
+copied URL. `venue_selectable?` is "the selection holds both venues", never `venue_options.size >
+1` (always three); absent from 35 of the 59 buckets. **No threshold on a half**: `SMALL_SAMPLE`
+would remove the control from 17 of 48 archetypes *including Lillie's Clefairy ex* (paper 9 /
+online 19), one of the four the issue was reopened for. `fuller_sample_available?` is **unchanged**
+— widening it to consider `venue_options` is dead code, since `venue_options`' "All" is the pool
+total `options` already carries; measured over the 147 reachable `(archetype, pool, venue)` states,
+they diverge on 0.
+
+**"All formats" reads `pool_id: nil` as a selection, never as the non-Standard bucket**, which is
+the one place that overload matters: read the other way, the Venue control answers over the GLC
+bucket alone — vanishing for the 40 archetypes with no non-Standard event and reading "13 GLC
+lists" for the other 8 — so a reader choosing All formats loses the control with no way back but
+the URL. 24 of the 48 archetypes have a blended All-formats sample, so it is the majority state.
+
+**Two notes on this page were already false, on the same 23 of 48 archetypes**, and one rule
+repairs both: print the "these figures mix the two" sentence only when the sample really holds
+both. `SampleSelector#online_note`'s *"The card report below counts online and paper lists
+together."* and `PerformancePanel#online`'s *"The counts above do not separate online play from
+paper."* were unconditional inside their `online?` branches, so every archetype whose whole sample
+is online — 23 of them — was told the figures blended paper lists that do not exist, the panel's
+sitting directly under "every event counted above" and contradicting it. Both tests are red on
+`master` before an implementation line exists, which is the only free proof in the feature that a
+test measures something. `Archetypes::Performance` needs no other change: it reads
+`@scope.standings`, so it narrows with the venue for free, and its `division` breakdown is what
+proves it did — an online row carries `division: "open"` and a paper one an age division.
+
+**Cost: 17 queries, unchanged, measured and not asserted** — the three services are **13 queries
+in each of the six `(venue, grouping)` states** on Alakazam's real sample, and `standings_scope`'s
+`joins(:tournament)` cannot duplicate against `CardStats`' and `Performance`' own (Rails collapses
+a repeated association join to one `INNER JOIN`, so a query counter could never see it either way).
+**No CSS**: `.deck-filters` is already `flex-wrap: wrap` with `.archetype-sample-label` as its flex
+item, so two labels sit side by side above the breakpoint and stack below it — asserted on bounding
+boxes at both sweep widths anyway, since `.archetype-category-header` and `/archetypes`'s row note
+each cost this repository one bug of that kind. **No migration.** Still out: a tier control, any
+win rate, `/archetypes` (which names the blend already and has no controls), and a venue axis
+anywhere but this page.
 
 **Out of scope, deliberately:** cross-archetype comparison and any page spanning archetypes (it
 would need a complete field, which no import produces), per-division card statistics (junior and

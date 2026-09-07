@@ -381,17 +381,21 @@ module Styleguide
     end
 
     # A deliberately tiny sample: this is the default view of a freshly imported archetype, and so
-    # the state in which the warning notice has to be visible.
+    # the state in which the warning notice has to be visible. It also carries both axes, since
+    # two selects side by side is the state that cannot otherwise be seen — a real archetype needs
+    # two pools *and* both venues to render it, which is 9 of the 48 in production.
     #
-    # The Struct is built by keyword and carries exactly the members it has — `standings_count` is
-    # gone, `unpooled` and `online_lists_count` are new — because a stand-in that drifts from the
-    # Struct does not render a stale styleguide, it raises and takes the whole /styleguide page
-    # with it (and every test that renders it: five StyleguideControllerTest cases and four
-    # GlobalSearchTest ones, none of which name this method). Two of the four values here exist
-    # only to make a note render: `unpooled: true` for the pool note, and an `online_lists_count`
-    # short of `lists_count` for the online one — the sentence naming how much of a sample is
-    # online play rather than paper, which is one of the four things this component is here to
-    # show.
+    # The Struct is built by keyword and carries exactly the members it has. A stand-in that
+    # drifts does **not** fail loudly in the direction that matters: `Struct.new(keyword_init:
+    # true)` raises `ArgumentError` on an *extra* keyword but stores `nil` for a *missing* one
+    # (measured), so a member added to the Result and forgotten here renders a silently reduced
+    # styleguide with every test green. StyleguideControllerTest therefore asserts the venue
+    # select is present rather than trusting the raise.
+    #
+    # Three of the values exist only to make something render: `unpooled: true` for the pool note,
+    # an `online_lists_count` short of `lists_count` for the online one — the sentence naming how
+    # much of a sample is online play rather than paper — and `venue_selectable: true` for the
+    # second select.
     def sg_metagame_scope
       Archetypes::MetagameScope::Result.new(
         archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
@@ -402,6 +406,12 @@ module Styleguide
           Archetypes::MetagameScope::Option.new(value: "8", label: "TEF-CRI — 22 lists", lists_count: 22),
           Archetypes::MetagameScope::Option.new(value: Archetypes::MetagameScope::ALL,
                                                 label: "All formats — 93 lists", lists_count: 93)
+        ],
+        venue: :all, venue_selectable: true,
+        venue_options: [
+          Archetypes::MetagameScope::Option.new(value: "all", label: "All — 3 lists", lists_count: 3),
+          Archetypes::MetagameScope::Option.new(value: "paper", label: "Paper — 1 list", lists_count: 1),
+          Archetypes::MetagameScope::Option.new(value: "online", label: "Online — 2 lists", lists_count: 2)
         ]
       )
     end
