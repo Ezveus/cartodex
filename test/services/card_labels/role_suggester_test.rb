@@ -215,7 +215,13 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
     "recovery" => "Put up to 2 Basic Energy cards from your discard pile into your hand.",
     "disruption" => "Your opponent discards cards from their hand until they have 3 cards in their hand.",
     "energy-acceleration" => "Choose up to 2 of your Benched Pokémon and attach a Basic Energy card " \
-                             "from your discard pile to each of them."
+                             "from your discard pile to each of them.",
+    # Air Balloon MEG 166 and Gravity Gemstone SCR 137, verbatim from the catalogue. The two
+    # retreat rules are the only pair in this table that are opposites of each other, which is
+    # why the three tests below the table exist as well as this row.
+    "free-retreat" => "The Retreat Cost of the Pokémon this card is attached to is [C][C] less.",
+    "retreat-tax" => "As long as the Pokémon this card is attached to is in the Active Spot, " \
+                     "the Retreat Cost of both Active Pokémon is [C] more."
   }.freeze
 
   test "every rule in the vocabulary proposes its own role on real card text" do
@@ -272,6 +278,84 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
 
     assert_equal 0, CardLabelAssignment.count
     assert_match "gust", error.message
+  end
+
+  # The two retreat rules are the vocabulary's only opposites, and a single /retreat cost/i rule
+  # would sweep both into one section with a quarter of it backwards. Measured on the production
+  # catalogue: 41 fingerprints mention a retreat cost, 8 of them are played in the recorded lists,
+  # and those 8 carry both senses — Air Balloon, Latias ex, N's Castle, Archaludon, Magnetic Metal
+  # Energy and Charmander make retreating cheaper while Gravity Gemstone and Mega Chandelure ex
+  # make it dearer. So the assertion each rule owes is not only "it matches mine" but "it does not
+  # match the other one's".
+  test "a card that cheapens a retreat and one that taxes it get opposite roles, never both" do
+    cheaper = trainer("Air Balloon",
+                      "The Retreat Cost of the Pokémon this card is attached to is [C][C] less.",
+                      number: "200")
+    dearer = trainer("Gravity Gemstone",
+                     "As long as the Pokémon this card is attached to is in the Active Spot, " \
+                     "the Retreat Cost of both Active Pokémon is [C] more.", number: "201")
+
+    CardLabels::RoleSuggester.call
+
+    assert_equal [ cheaper.fingerprint ], @roles["free-retreat"].assignments.pluck(:fingerprint)
+    assert_equal [ dearer.fingerprint ], @roles["retreat-tax"].assignments.pluck(:fingerprint)
+  end
+
+  # The grant is worded two ways and the rule carries two alternatives for it: a Tool spends a
+  # Retreat Cost "less", while an Ability says a Pokémon "has"/"have no Retreat Cost". Latias ex's
+  # Skyliner is the second form, on a Pokémon — where `effect` is empty and the text comes from the
+  # ability, which is the half of the vocabulary that makes roles mean anything on a Pokémon at
+  # all. One alternative silently matching nothing is precisely how three of these rules failed
+  # once, with the suite green.
+  test "both wordings of a free retreat propose the role, including the one only a Pokémon uses" do
+    pokemon = Card.create!(name: "Latias ex", card_type: "Pokémon", set_name: "SSP",
+                           set_number: "239", rarity: "Ultra Rare", hp: 220, type_symbol: "Psychic",
+                           retreat_cost: 1, stage: "Basic")
+    pokemon.abilities.create!(name: "Skyliner",
+                              effect: "Your Basic Pokémon in play have no Retreat Cost.", position: 0)
+
+    CardLabels::RoleSuggester.call
+
+    assert_includes @roles["free-retreat"].assignments.pluck(:fingerprint), pokemon.fingerprint
+    assert_empty @roles["retreat-tax"].assignments
+  end
+
+  # The two guards on the tax rule, and both are measured rather than plausible.
+  #
+  # `(?! damage)` is what keeps a damage clause out: *Future Booster Energy Capsule* grants free
+  # retreat **and** says "20 more damage" in the same sentence, and *Mega Chandelure ex*'s attack
+  # scales its damage on the opponent's retreat cost without touching one. Without the lookahead
+  # the rule reads 11 fingerprints instead of 9, two of which also match free-retreat — so a card
+  # would open both opposite sections at once.
+  #
+  # The window is `{0,80}` and not the `{0,60}` the issue proposed, which is the one place this
+  # implementation departs from it: at 60 the rule misses *Calamitous Wasteland* ("The Retreat Cost
+  # of each Basic non-[F] Pokémon in play (both yours and your opponent's) is [C] more"), a card
+  # the issue's own table lists under "makes it dearer". Measured over the catalogue, 80 reads 9
+  # fingerprints and 120 reads the same 9 — the `[^.]` class is what actually bounds the reach, so
+  # the number only decides whether a long sentence fits — and the overlap with free-retreat is 0
+  # at every width. It is the lookahead that was load-bearing, not the narrow window.
+  test "a damage clause is never read as a retreat clause, however long the sentence" do
+    both = trainer("Future Booster Energy Capsule",
+                   "The Future Pokémon this card is attached to has no Retreat Cost, and the " \
+                   "attacks it uses do 20 more damage to your opponent's Active Pokémon " \
+                   "(before applying Weakness and Resistance).", number: "202")
+    scaling = Card.create!(name: "Phantom Maze Pokémon", card_type: "Pokémon", set_name: "PBL",
+                           set_number: "115", rarity: "Ultra Rare", hp: 340, type_symbol: "Fire",
+                           retreat_cost: 2, stage: "Basic")
+    scaling.attacks.create!(name: "Phantom Maze", cost: "FF", damage: "50+",
+                            effect: "This attack does 50 more damage for each [C] in your " \
+                                    "opponent's Active Pokémon's Retreat Cost.", position: 0)
+    far = trainer("Calamitous Wasteland",
+                  "The Retreat Cost of each Basic non-[F] Pokémon in play (both yours and your " \
+                  "opponent's) is [C] more.", number: "203")
+
+    CardLabels::RoleSuggester.call
+
+    assert_equal [ both.fingerprint ], @roles["free-retreat"].assignments.pluck(:fingerprint)
+    assert_equal [ far.fingerprint ], @roles["retreat-tax"].assignments.pluck(:fingerprint)
+    assert_empty CardLabelAssignment.where(fingerprint: scaling.fingerprint),
+      "a damage clause scaling on the opponent's retreat cost was read as a retreat role"
   end
 
   # Every slug a rule proposes has to exist in the vocabulary the seed writes, and every role the

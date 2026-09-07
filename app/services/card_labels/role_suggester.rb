@@ -45,7 +45,32 @@ module CardLabels
       "switch" => /switch your active pok[eé]mon with \d+ of your benched/i,
       "recovery" => /from your discard pile into your hand|from your discard pile into your deck|shuffle[^.]{0,40}from your discard pile/i,
       "disruption" => /your opponent (?:shuffles|discards)|each player shuffles their hand|opponent's hand/i,
-      "energy-acceleration" => /attach[^.]{0,80}energy[^.]{0,40}from your (?:discard pile|deck)|attach[^.]{0,40}from your discard pile to/i
+      "energy-acceleration" => /attach[^.]{0,80}energy[^.]{0,40}from your (?:discard pile|deck)|attach[^.]{0,40}from your discard pile to/i,
+      # The two retreat rules are the only pair here that are opposites, so each owes the other a
+      # measurement: over the catalogue, free-retreat reads 23 fingerprints (6 played), retreat-tax
+      # reads 9 (2 played), and they overlap on **0**. A single /retreat cost/i would have read all
+      # 41 into one role with a quarter of them backwards.
+      #
+      # `(?! damage)` is the load-bearing half of the tax rule and not a nicety. Dropped, the rule
+      # reads 11 fingerprints, two of which also match free-retreat: *Future Booster Energy
+      # Capsule* ("has no Retreat Cost, and the attacks it uses do 20 more damage") and *Carnivine*
+      # — in both the "more" belongs to the damage. A card would then open both opposite sections
+      # at once.
+      #
+      # The window is 80 and the issue proposed 60; the change is deliberate and measured. At 60
+      # the rule misses *Calamitous Wasteland* ("The Retreat Cost of each Basic non-[F] Pokémon in
+      # play (both yours and your opponent's) is [C] more"), which the issue's own table lists as a
+      # card that makes retreating dearer. 80 and 120 read the identical 9 fingerprints, because
+      # `[^.]` stops at the sentence and is what actually bounds the reach — the number only
+      # decides whether a long sentence fits inside it. Overlap with free-retreat stays 0 at every
+      # width tried.
+      #
+      # The one known false positive is *Carnivine*, whose "If your opponent's Active Pokémon has
+      # no Retreat Cost, this attack does 80 more damage" is a *condition* read as a grant. It is
+      # unplayed, and telling a condition from a grant is not something a one-line regex should
+      # attempt: this service proposes and a human confirms, which is what the store is for.
+      "free-retreat" => /(?:has|have) no retreat cost|retreat cost[^.]{0,80}\bless\b/i,
+      "retreat-tax" => /retreat cost[^.]{0,80}\bmore\b(?! damage)/i
     }.freeze
 
     def call
@@ -56,7 +81,7 @@ module CardLabels
       # Tournaments::StandingsImporter follows for its card fetches. serialized_transaction is a
       # SQLite BEGIN IMMEDIATE, so it takes the database's single write lock for its whole
       # duration — and measured on the production dump the reading half (4723 cards with their
-      # attacks and abilities, then seven regex passes over 3023 fingerprints) is 0.4 s of a 1.2 s
+      # attacks and abilities, then nine regex passes over 3023 fingerprints) is 0.4 s of a 1.2 s
       # run. Inside the transaction that is 0.4 s in which every other writer waits, against
       # database.yml's 5 s busy timeout, for a service that is only looking.
       matches = matches_by_fingerprint
@@ -75,7 +100,7 @@ module CardLabels
     private
 
     # Refuses before writing anything rather than skipping the rules whose row is missing: a run
-    # that wrote four of the seven families would leave a report that looks complete and is not,
+    # that wrote four of the nine families would leave a report that looks complete and is not,
     # and the vocabulary is seeded before the server accepts traffic (bin/docker-entrypoint).
     def role_labels
       labels = CardLabel.roles.index_by(&:slug)

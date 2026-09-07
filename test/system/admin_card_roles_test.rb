@@ -99,7 +99,7 @@ class AdminCardRolesTest < ApplicationSystemTestCase
   end
 end
 
-# Nine cells on one row — the card, its type and seven checkboxes — on a screen 390px wide. Below
+# Eleven cells on one row — the card, its type and nine checkboxes — on a screen 390px wide. Below
 # 768px `.data-table` turns each row into a card whose cells are `display: flex` with a `::before`
 # label, and a checkbox cell that overflowed would read as a row wider than the page rather than
 # as an error. Geometry, not text: the text renders fine either way, which is exactly what made
@@ -111,7 +111,7 @@ class AdminCardRolesNarrowTest < ApplicationSystemTestCase
 
   setup { sign_in_admin_with_roles }
 
-  test "a row's nine cells stay inside the page at 390px" do
+  test "a row's eleven cells stay inside the page at 390px" do
     visit admin_card_roles_path(played: "0", q: "budew")
 
     row = find("#card-role-#{@card.fingerprint}")

@@ -844,16 +844,54 @@ old fingerprint with the guess sitting on the live one — which is what the rep
 aborted on every later run, taking the repair tool out of service for good.
 
 **The `role` family is what a card *does*, and it is a constant because code reads it.**
-`CardLabel::ROLES` — `draw`, `search`, `gust`, `switch`, `recovery`, `disruption` and
-`energy-acceleration` — is walked by `db/seeds/card_labels.rb` (skip-if-exists, so a `db:seed` on
-every boot never reverts an admin's correction, and a role's *name* stays editable while the row
-cannot be created or destroyed from the panel). The slugs are kebab-case because `CardLabel`'s own
-format validation refuses anything else, and `energy_acceleration` reads better in Ruby: a test
-walks every entry through the model, since nothing else would report the mismatch — the seed skips
-a slug it cannot create as readily as one that already exists, and a fresh database would come up
-one role short in silence. Roles are game mechanics and a property of the **card**, never of the
-archetype playing it (Fezandipiti ex is `draw` in a deck that attacks with it); "attacker" is
-deliberately not a role, since every Pokémon is one.
+`CardLabel::ROLES` — `draw`, `search`, `gust`, `switch`, `free-retreat`, `recovery`, `disruption`,
+`retreat-tax` and `energy-acceleration` — is walked by `db/seeds/card_labels.rb` (skip-if-exists,
+so a `db:seed` on every boot never reverts an admin's correction, and a role's *name* stays
+editable while the row cannot be created or destroyed from the panel). The slugs are kebab-case
+because `CardLabel`'s own format validation refuses anything else, and `energy_acceleration` reads
+better in Ruby: a test walks every entry through the model, since nothing else would report the
+mismatch — the seed skips a slug it cannot create as readily as one that already exists, and a
+fresh database would come up one role short in silence. Roles are game mechanics and a property of
+the **card**, never of the archetype playing it (Fezandipiti ex is `draw` in a deck that attacks
+with it); "attacker" is deliberately not a role, since every Pokémon is one. **The list is
+declared in `position` order, and that is load-bearing rather than tidy**: `CardLabel.roles` is
+`order(:position, :slug)` and `CardLabelSeedTest` asserts the seeded rows come back in the order
+the array declares them, so a role appended with an interleaving position turns it red — which is
+how `free-retreat` (45) and `retreat-tax` (65) were found to belong in their slots rather than at
+the end.
+
+**`free-retreat` and `retreat-tax` are two roles because they are opposites** (#169), and the
+measurement is what made it two rather than one: 41 catalogue fingerprints mention a retreat cost,
+8 of them are played in a recorded list, and those 8 carry **both** senses — Air Balloon, Latias
+ex, N's Castle, Archaludon, Magnetic Metal Energy and Charmander make retreating cheaper while
+Gravity Gemstone and Mega Chandelure ex make it dearer. A single `/retreat cost/i` role would have
+rendered a section that looks complete with a quarter of it backwards, and it is not `disruption`
+either: raising the opponent's retreat traps their Active, which is adjacent to `gust` and to
+`disruption` without being either. Nothing mislabelled these cards before — `switch`'s rule is the
+wording of the *Switch card* and has nothing to do with a retreat cost, so **0 of the 41 carried
+`switch` and 0 carried any role at all**. Their positions **are** the answer to "these get used the
+way Switch does": the model has no notion of two roles being adjacent — a card carries several,
+roles do not relate to each other — so 45 seats Free retreat beside `switch` (40) and 65 seats
+Retreat tax beside `disruption` (60), each next to the role a reader compares it against, filling
+gaps that renumber nothing. "Free retreat" over-claims for Air Balloon, which is −2 rather than
+free; the idiom won over the literal `retreat-reduction`/`retreat-increase` pair on `gust`'s
+precedent, and the description carries the accuracy the name gives up.
+
+**In the tax rule `(?! damage)` is what is load-bearing, and the window is not** — the reverse of
+what the issue proposed, corrected by measurement. Dropped, the lookahead lets the rule read 11
+fingerprints instead of 9, two of which also match `free-retreat` (*Future Booster Energy Capsule*,
+"has no Retreat Cost, and the attacks it uses do 20 more damage", and *Carnivine*), so one card
+would open both opposite sections at once. The window is `{0,80}` and not the proposed `{0,60}`,
+because at 60 the rule misses *Calamitous Wasteland* — a card the issue's own table lists as making
+retreating dearer — while 80 and 120 read the identical 9 fingerprints: `[^.]` stops at the
+sentence and is what actually bounds the reach, so the number only decides whether a long sentence
+fits. Overlap with `free-retreat` is 0 at every width tried. The one known false positive is
+*Carnivine*, whose "If your opponent's Active Pokémon has no Retreat Cost, this attack does 80 more
+damage" is a *condition* read as a grant; it is unplayed, and telling a condition from a grant is
+not a one-line regex's job — this service proposes and a human confirms. Adding the pair is
+**purely additive** on the existing seven: measured against the production snapshot, a
+`card_labels:suggest_roles` run creates exactly 32 assignments (23 `free-retreat`, 6 of them
+played; 9 `retreat-tax`, 2 played) and withdraws **0**.
 
 **`CardLabels::RoleSuggester` proposes and never decides**, which is the asymmetry the whole store
 was built for. One versioned regex per slug reads `cards.effect` **plus** every attack's and

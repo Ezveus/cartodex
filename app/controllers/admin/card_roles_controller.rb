@@ -53,7 +53,7 @@ module Admin
       @assignments = assignments_for([ fingerprint ])
 
       # Branched, because only the Turbo Stream template exists: an unbranched Accept: text/html
-      # request raises MissingTemplate *after* the seven rows have committed, which is the
+      # request raises MissingTemplate *after* the nine rows have committed, which is the
       # DecksController#share lesson. The form is fired by Stimulus and Turbo intercepts it, so
       # this is the path a client without Turbo takes — it must land somewhere, not 500 over a
       # decision that was in fact recorded.
@@ -63,7 +63,7 @@ module Admin
       end
     end
 
-    # "I have no opinion about this card after all." A save decides all seven roles at once, so one
+    # "I have no opinion about this card after all." A save decides all nine roles at once, so one
     # misclick otherwise removes a card from the suggester's reach permanently — and nothing else
     # in the app deletes an assignment. It is deliberately a separate, explicit action: deleting
     # *here* is a request, while deleting when a box is unticked would erase a refusal, which is

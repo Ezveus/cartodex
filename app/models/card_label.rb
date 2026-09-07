@@ -31,10 +31,36 @@ class CardLabel < ApplicationRecord
       description: "Brings one of the opponent's Benched Pokémon to the Active Spot." },
     { slug: "switch", name: "Switch", position: 40,
       description: "Moves your own Active Pokémon out of the Active Spot." },
+    # `free-retreat` and `retreat-tax` are two roles and not one, because they are opposites: 41
+    # catalogue fingerprints mention a retreat cost and they carry both senses — Air Balloon and
+    # Latias ex make retreating cheaper while Gravity Gemstone and Mega Chandelure ex make it
+    # dearer. A single "retreat cost" role would render as a section that looks complete with a
+    # quarter of it backwards.
+    #
+    # Their positions are 45 and 65 rather than the next two multiples of ten, and that *is* the
+    # answer to "these get used the way Switch does": the model has no notion of two roles being
+    # adjacent — a card carries several, roles do not relate to each other — and inventing one
+    # would be a new concept. `position` already orders the report's sections, so 45 seats Free
+    # retreat beside `switch` (40) and 65 seats Retreat tax beside `disruption` (60), each next to
+    # the role a reader compares it against, and both fill gaps that renumber nothing.
+    #
+    # "Free retreat" over-claims for Air Balloon, which is −2 rather than free. Taken knowingly:
+    # `gust`'s precedent is that a player's own word wins where one exists, and the literal pair
+    # (`retreat-reduction` / `retreat-increase`) is duller in a heading. The description carries
+    # the accuracy the name gives up.
+    #
+    # **This list is declared in `position` order, and that is load-bearing rather than tidy**:
+    # `CardLabel.roles` is `order(:position, :slug)`, and CardLabelSeedTest asserts the seeded rows
+    # come back in the order this array declares them. Appending a role with an interleaving
+    # position turns that test red — which is how these two were found to belong in their slots.
+    { slug: "free-retreat", name: "Free retreat", position: 45,
+      description: "Removes or reduces the Energy a Pokémon must discard to retreat." },
     { slug: "recovery", name: "Recovery", position: 50,
       description: "Returns cards from the discard pile to the hand or the deck." },
     { slug: "disruption", name: "Disruption", position: 60,
       description: "Acts on the opponent's hand, deck or board rather than on your own." },
+    { slug: "retreat-tax", name: "Retreat tax", position: 65,
+      description: "Raises a Retreat Cost, usually the opponent's, to hold a Pokémon in play." },
     { slug: "energy-acceleration", name: "Energy acceleration", position: 70,
       description: "Attaches Energy from somewhere other than the turn's own attachment." }
   ].freeze

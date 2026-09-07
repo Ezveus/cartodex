@@ -154,7 +154,7 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
     assert CardLabelAssignment.exists?(kept.id), "clearing took the machine's proposals with it"
   end
 
-  # An HTML PATCH must not raise MissingTemplate *after* the seven rows have committed — the
+  # An HTML PATCH must not raise MissingTemplate *after* the nine rows have committed — the
   # DecksController#share lesson, on a form Turbo normally intercepts.
   test "a write without Turbo lands somewhere instead of 500ing over a committed decision" do
     patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] }
