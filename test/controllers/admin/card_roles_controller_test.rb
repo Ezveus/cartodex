@@ -103,7 +103,7 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
   end
 
   # A save is a statement about the whole card, not about the box that changed: every role left
-  # unticked becomes a recorded refusal, which is what stops the suggester re-proposing the six
+  # unticked becomes a recorded refusal, which is what stops the suggester re-proposing the eight
   # the human said no to by leaving them alone.
   test "a save decides every role on the row, not only the ticked ones" do
     patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] },
@@ -137,7 +137,7 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
   end
 
   # The way back out, and the only deletion the app offers on an assignment: a save decides all
-  # seven roles, so one misclick otherwise hides a card from the suggester for good. Deleting on
+  # nine roles, so one misclick otherwise hides a card from the suggester for good. Deleting on
   # an *explicit* request is not the same act as deleting when a box is unticked — the second
   # would erase a refusal, which is the rule this store is built on.
   test "clearing a row's decisions hands the card back to the suggester" do
@@ -154,7 +154,7 @@ class Admin::CardRolesControllerTest < ActionDispatch::IntegrationTest
     assert CardLabelAssignment.exists?(kept.id), "clearing took the machine's proposals with it"
   end
 
-  # An HTML PATCH must not raise MissingTemplate *after* the seven rows have committed — the
+  # An HTML PATCH must not raise MissingTemplate *after* the nine rows have committed — the
   # DecksController#share lesson, on a form Turbo normally intercepts.
   test "a write without Turbo lands somewhere instead of 500ing over a committed decision" do
     patch admin_card_role_path(@card.fingerprint), params: { roles: [ "gust" ] }
