@@ -19,9 +19,14 @@ module Archetypes
   # figure would leave the standings count, the list count, the best placement and all three
   # breakdowns describing the blended population beside a counter that did not, and `by_tier`
   # cannot help — the online import forces `tier: "other"`, which is also where a genuine paper
-  # event with no tier lands. Splitting the *sample* by venue is a selector and its own issue; the
-  # rule this panel keeps in the meantime is the page's rule everywhere else, that no number
-  # quietly implies another.
+  # event with no tier lands.
+  #
+  # Splitting the *sample* by venue shipped as #160, and it needed no line here: this panel reads
+  # `@scope.standings`, so the population itself narrows and every figure narrows with it. That is
+  # the resolution the paragraph above was holding open — the population shrinks rather than the
+  # panel growing a second number — and it is why the two sentences below are conditional now
+  # instead of unconditional. The rule they keep is the page's rule everywhere else, that no
+  # number quietly implies another.
   class PerformancePanel < ApplicationComponent
     def initialize(performance:)
       @performance = performance
@@ -119,11 +124,38 @@ module Archetypes
                 "#{@performance.online_events_count} of the #{@performance.events_count} " \
                   "#{'event'.pluralize(@performance.events_count)} counted above."
         end)
-        plain " The counts above do not separate online play from paper." if blended?
+        plain " The counts above do not separate online play from paper." if @performance.blended?
       end
+
+      leaderboard_note
     end
 
-    def blended? = @performance.online_standings_count < @performance.standings_count
+    # **The one thing the placement breakdown cannot say for itself.** The online rows come from
+    # `play.limitlesstcg.com/decks/<slug>`, which publishes a leaderboard of *best finishes* and is
+    # de-duplicated per player keeping the best result — so a placement there is selected on the
+    # outcome, while the paper source is an event's whole results page. Measured on the production
+    # data: of the placed standings, **online is 20.2 % firsts and 42.9 % top-4 (799 rows) against
+    # paper's 0.9 % and 4.3 % (439 rows)**, and the rows are genuine wins rather than an import
+    # bug. Left unsaid, "By placement: 1st 18 of 20" reads as a win rate on a page that refuses to
+    # print one.
+    #
+    # It prints whenever the sample holds an online row at all, blended or not: a blend mixes a
+    # leaderboard with a full history, which is the same distortion in smaller proportion, and the
+    # sentence above already says what the proportion is.
+    #
+    # This is not a consequence of the venue axis — 23 of the 48 archetypes carrying a list open on
+    # an all-online sample, so the column already read this way. What the venue axis changed is
+    # that the sentence beside it had to stop claiming the counts blend, which left this state with
+    # no qualification at all until this note.
+    def leaderboard_note
+      return unless @performance.online?
+
+      p(class: "archetype-fact archetype-fact-muted") do
+        "Online results are imported from a published leaderboard of best finishes, one row per " \
+          "player and list, so the placements above are selected on the result rather than a " \
+          "record of every online event."
+      end
+    end
 
     # The card report speaks for a strictly smaller population whenever a sheet holds a row nobody
     # typed a list for, which is the common case. Saying so here is what stops the two list counts

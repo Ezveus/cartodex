@@ -387,6 +387,41 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_predicate Archetypes::MetagameScope.call(archetype: both), :venue_selectable?
   end
 
+  # The shape that made `venue_selectable?` wrong, and the reason it needs its own test: for a
+  # single pool "more than one non-empty cell" and "both venues" are the same question, because a
+  # pool has at most a paper row and an online row. Under "All formats" they are not — the cells
+  # span pools — so two paper-only samples in two pools counted as two cells and offered a Venue
+  # select reading "All — 2 lists / Paper — 2 lists / Online — 0 lists": two labels for one sample
+  # *and* a dead option that clamps back to All when clicked. Measured on the production data, one
+  # archetype was in exactly this state (Mega Greninja ex / Dragapult ex).
+  test "two pools of one venue are not a venue choice under All formats" do
+    archetype = archetype_of_its_own
+    2.times { record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2025, 6, 1)), archetype, deck: field_list) }
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_equal 2, result.venue_options.count { |option| option.lists_count.positive? },
+      "sanity: two cells, both paper, so only All and Paper hold anything"
+    refute_predicate result, :venue_selectable?
+  end
+
+  # And the mirror, so the fix cannot be "always false under All formats": two pools where one of
+  # them is blended is a real choice, and its options carry the grand totals.
+  test "a blended pool under All formats is still a venue choice" do
+    archetype = archetype_of_its_own
+    record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2025, 6, 1)), archetype, deck: field_list)
+    record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1)), archetype, deck: field_list)
+    record(online_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 2)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_predicate result, :venue_selectable?
+    assert_equal [ 3, 2, 1 ], result.venue_options.map(&:lists_count)
+  end
+
   # The clamp, and both halves of it: a Result that kept the parameter would print an Online select
   # over a blended report, and a relation that stayed filtered would render an empty report under a
   # select reading All.

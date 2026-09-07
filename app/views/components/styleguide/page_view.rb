@@ -400,7 +400,8 @@ module Styleguide
       Archetypes::MetagameScope::Result.new(
         archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
         standings: nil, listed_standings: nil,
-        pool: StandardPool.new(id: 9), lists_count: 3, online_lists_count: 2, unpooled: true,
+        pool: StandardPool.new(id: 9), lists_count: 3, online_lists_count: 2,
+        unpooled: true, unpooled_in_sample: true, all_formats_lists_count: 93,
         options: [
           Archetypes::MetagameScope::Option.new(value: "9", label: "TEF-PBL — 3 lists", lists_count: 3),
           Archetypes::MetagameScope::Option.new(value: "8", label: "TEF-CRI — 22 lists", lists_count: 22),

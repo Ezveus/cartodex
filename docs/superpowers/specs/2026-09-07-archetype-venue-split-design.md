@@ -209,10 +209,15 @@ would carry a dead venue into every copy of that URL.
 
 **`Archetypes::Performance` splits in silence.** It reads `@scope.standings`, so a venue filter
 reaches it without a line of its own. Its comment argues the events figure stays whole because
-"every other number on the panel is over the same blended population" and notes that "that reasoning
-stops holding the moment the population is selectable" — it stops holding here, and the resolution
-is that the population itself narrows rather than that the panel grows a second number. Its two
-online counters then read 0 or all, so its sentences withhold themselves.
+"every other number on the panel is over the same blended population" and because the online
+import's forced `tier: "other"` leaves `by_tier` unable to tell the two apart — and it closes with
+"Splitting the *sample* by venue is a selector, a page and its own issue." That is this page, and
+the resolution is that the population itself narrows rather than that the panel grows a second
+number. Its two online counters then read 0 or all, so its sentences withhold themselves.
+
+(An earlier draft of this section quoted that comment as saying "that reasoning stops holding the
+moment the population is selectable". It does not — the phrase appears nowhere in `app/`, and the
+argument above had been resting on an invented citation.)
 
 **`/archetypes` does not change.** The issue body predates #153, which gave `Archetypes::IndexCounts`
 its two online terms and the muted sentence under a blended row. The index names the blend; it has

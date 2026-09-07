@@ -258,14 +258,20 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   # states. `.archetype-category-header` and the catalog's row note each cost this repository one
   # bug of exactly this kind.
   #
-  # Adjacency rather than stacking, at both sweep widths, for the reason the heading test below
-  # gives: above the breakpoint the two sit on one line, below it they wrap onto two, and only a
-  # claim that accepts either can run on both sides while still failing on a wrapper element that
-  # breaks the flex line.
-  test "the sample and venue labels sit together, side by side or stacked" do
+  # Two assertions, because neither is enough on its own and an earlier version of this test made
+  # only the second while claiming both. **The child selector is what catches a wrapper**: a `div`
+  # around the two labels makes them stack, and a claim that accepts "adjacent or stacked" passes
+  # with the wrapper in place — so the structural half has to be asserted structurally. The
+  # geometric half then accepts either arrangement, because it runs at both sweep widths and the
+  # two really do sit on one line above the breakpoint and wrap below it; what it rules out is the
+  # third outcome, one label overlapping the other's line.
+  test "the sample and venue labels are flex siblings and sit together" do
     archetype = split_venue_archetype
 
     visit archetype_path(archetype, pool: Archetypes::MetagameScope::ALL)
+
+    assert_selector ".deck-filters > .archetype-sample-label", count: 2,
+      visible: :all
 
     labels = all(".archetype-sample-label")
 

@@ -181,6 +181,58 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_no_match(/<select name="venue"/, html)
   end
 
+  # The Sample select's label says "Sample", so its selected option asserts the sample's size —
+  # and the pool options are venue-independent by design, so once a venue is chosen it asserts the
+  # wrong one. Measured on the production data, 78 of the 171 rendered pool options do not deliver
+  # their own label on a click, worst gap "All formats — 174 lists" above a 20-list report.
+  test "the page says the Sample counts span both venues when a venue is chosen" do
+    html = selector(lists_count: 20, online_lists_count: 20, venue: :online, venue_selectable: true,
+                    options: [ pool_option("9", 118), pool_option("8", 56), all_option(174) ])
+
+    assert_match(/The Sample counts above are over both venues/, html)
+    assert_match(%r{<strong>20 lists</strong> of the venue selected beside it}, html)
+  end
+
+  # And not otherwise: with no venue chosen the Sample labels are the sample, so the sentence
+  # would be qualifying something that needs no qualification.
+  test "the venue note is withheld when no venue narrows the sample" do
+    html = selector(lists_count: 174, online_lists_count: 20, venue_selectable: true,
+                    options: [ pool_option("9", 118), pool_option("8", 56), all_option(174) ])
+
+    assert_no_match(/The Sample counts above are over both venues/, html)
+  end
+
+  # The small-sample notice agrees in number. A one-list sample stopped being exotic with the
+  # venue axis: 18 production states render it, most of them paper halves.
+  test "the small sample notice agrees in number at one list" do
+    one = selector(lists_count: 1, options: [ pool_option("9", 1), all_option(4) ])
+    two = selector(lists_count: 2, options: [ pool_option("9", 2), all_option(4) ])
+
+    assert_match(/describes what that list did/, one)
+    assert_match(/describes what those lists did/, two)
+  end
+
+  # The pool note describes where a non-Standard list is counted, so it may only print where the
+  # current sample actually holds one. An archetype whose only GLC event is paper prints it under
+  # Online about a list that venue does not hold — the sample counts it nowhere, which is not what
+  # the sentence says. Measured on the production data: 21 such states over 7 archetypes.
+  test "the pool note withholds itself when the chosen venue holds no unpooled list" do
+    html = selector(lists_count: 19, online_lists_count: 19, venue: :online, venue_selectable: true,
+                    unpooled: true, unpooled_in_sample: false, pool: nil,
+                    options: [ pool_option("9", 37), all_option(38) ])
+
+    assert_no_match(/Events outside Standard/, html)
+    assert_match(/<select name="venue"/, html, "sanity: the rest of the block still renders")
+  end
+
+  test "the pool note prints when the chosen venue does hold one" do
+    html = selector(lists_count: 19, venue: :paper, venue_selectable: true,
+                    unpooled: true, unpooled_in_sample: true, pool: nil,
+                    options: [ pool_option("9", 37), all_option(38) ])
+
+    assert_match(/Events outside Standard/, html)
+  end
+
   # `selected:` is read off the scope. Omitted, Ui::FilterSelect marks no option and the browser
   # pre-selects the first — "All" — over a report showing Online, which is the trap the standings
   # form's division select paid for once.
@@ -199,7 +251,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
   # member added to the Result and forgotten here would leave every venue branch falsy and no
   # venue regression observable in any test in this file.
   def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0,
-               grouping: :type, venue: :all, venue_selectable: false, venue_options: nil)
+               grouping: :type, venue: :all, venue_selectable: false, venue_options: nil,
+               unpooled_in_sample: nil)
     # Unpersisted on purpose: the component reads an id off each of these and nothing else —
     # `archetype_path` through `to_param`, and the pool only to decide which option is selected —
     # so this file never touches the database and cannot be broken by a fixture another test
@@ -208,7 +261,12 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
       archetype: Archetype.new(id: 6, name: "Sample"), standings: nil, listed_standings: nil,
       pool: pool == :default ? StandardPool.new(id: 9) : pool,
       options: options, lists_count: lists_count, online_lists_count: online_lists_count,
-      unpooled: unpooled, venue: venue, venue_selectable: venue_selectable,
+      unpooled: unpooled,
+      # Defaults to `unpooled` so every test written before the venue axis keeps its meaning: the
+      # two only differ once a venue narrows the sample, which is what the venue test below pins.
+      unpooled_in_sample: unpooled_in_sample.nil? ? unpooled : unpooled_in_sample,
+      all_formats_lists_count: lists_count,
+      venue: venue, venue_selectable: venue_selectable,
       venue_options: venue_options || default_venue_options(lists_count, online_lists_count)
     )
 

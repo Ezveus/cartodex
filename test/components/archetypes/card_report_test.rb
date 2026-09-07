@@ -129,6 +129,42 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     assert_no_match(/archetype-report-mode/, html)
   end
 
+  # The empty state names the click that would actually help, on either axis. `options`' own
+  # "All formats" count is venue-independent, so on a pool with placements and no typed list it
+  # promised lists this venue may not hold — and the one form carries the venue along with a pool
+  # change, so the reader would land on the same empty page.
+  test "an empty sample points at the pool that has lists, counted in the venue showing" do
+    html = Archetypes::CardReport.new(
+      stats: empty_stats,
+      scope: scope(pool: @pool, venue: :online, all_formats_lists_count: 12)
+    ).call
+
+    assert_match(/Lists exist under “All formats”/, html)
+  end
+
+  test "an empty sample says nothing about a pool that is empty in this venue too" do
+    html = Archetypes::CardReport.new(
+      stats: empty_stats,
+      scope: scope(pool: @pool, venue: :online, all_formats_lists_count: 0)
+    ).call
+
+    assert_no_match(/Lists exist under “All formats”/, html)
+  end
+
+  # The other axis, which `options` cannot see at all: a pool whose typed lists are all on the
+  # other venue.
+  test "an empty sample points at the other venue when that is where the lists are" do
+    all_venues = Archetypes::MetagameScope::Option.new(
+      value: Archetypes::MetagameScope::ALL, label: "All — 9 lists", lists_count: 9
+    )
+    html = Archetypes::CardReport.new(
+      stats: empty_stats,
+      scope: scope(pool: @pool, venue: :online, venue_options: [ all_venues ])
+    ).call
+
+    assert_match(/Lists exist under “All” venues/, html)
+  end
+
   private
 
   def report(grouping:, pool: nil, proposed: 0, decided: 0, lists_count: 4)
@@ -168,10 +204,18 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
   end
 
   # `pool: nil` is the blended sample: MetagameScope::Result#all_formats? is `pool.nil?`.
-  def scope(pool:)
+  #
+  # Every member is spelled out, including the ones this file does not assert on. A `Struct` built
+  # with `keyword_init: true` stores `nil` for a keyword left out and raises only for an extra one,
+  # so a member added to the Result and forgotten here is a silent falsy value in whatever branch
+  # reads it — which is how the empty state's two suggestions would have gone quiet rather than
+  # wrong.
+  def scope(pool:, venue: :all, all_formats_lists_count: 0, venue_options: [])
     Archetypes::MetagameScope::Result.new(
       archetype: @archetype, standings: nil, listed_standings: nil, pool: pool, options: [],
-      lists_count: 4, online_lists_count: 0, unpooled: false
+      lists_count: 4, online_lists_count: 0, unpooled: false, unpooled_in_sample: false,
+      all_formats_lists_count: all_formats_lists_count, venue: venue,
+      venue_options: venue_options, venue_selectable: false
     )
   end
 end

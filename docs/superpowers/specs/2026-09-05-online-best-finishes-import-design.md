@@ -334,6 +334,10 @@ it is a page, it needs its own measurements once there is more than one archetyp
 online data, and shipping the import behind an unnamed blend to get there is the one thing that
 must not happen in between.
 
+*(It shipped as #160, once this import had supplied the data to design it against — nine
+archetypes with at least eight lists on each side. See
+`2026-09-07-archetype-venue-split-design.md`.)*
+
 ---
 
 ## Shape of the change
@@ -418,11 +422,11 @@ both, so both runs are `limitless_standings` and the `label` says which source t
 
   (Not, as an earlier draft said, a second row at the *same* event — that is impossible, since
   `(tournament_id, player_name_normalized, division)` is UNIQUE and the plan marks it `:skip`.)
-- **A venue axis on the archetype pages.** See §7: the blend is named on both `/archetypes/:id` and
-  — since #160 — on `/archetypes`, where each row says how many of its results and events came from
-  online play. Neither page lets a reader *separate* the two, which is what #160 tracks; the
-  measurement recorded there argues against building the selector until a second pool holds both
-  venues or a blended pool's paper half exceeds `SMALL_SAMPLE`.
+- **A venue axis on the archetype pages.** ~~Out of scope~~ — **shipped as #160**, which this
+  import is what made designable: nine archetypes now hold at least eight lists on each side, and
+  four of them carry cards whose inclusion differs by fifty points or more between the halves.
+  `/archetypes/:id` gained the selector; `/archetypes` still only *names* the blend and gains no
+  control, which stays out. See `2026-09-07-archetype-venue-split-design.md`.
 - **A win rate anywhere**, though the data to compute one now exists.
 - **Any online-only tournament reaching `/tournaments`, search, or the dashboard.**
 - **Keeping online field lists out of `/decks/shared`.** Every imported row builds a `shared: true`

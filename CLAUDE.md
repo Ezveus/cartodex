@@ -507,9 +507,10 @@ second axis. Both counters ride inside the existing grouped queries (`COUNT(DIST
 tournaments.online …)` in `MetagameScope#buckets`, two terms in `Performance#totals`), so
 `/archetypes/:id` stays at its pinned query count (**16** when that was written, **17** since the card report began reading `card_label_assignments`). The events figure stays whole with the split
 named beside it rather than split in two, because every other number on the panel is over the same
-blended population. **The sample splits by venue** (#160) — see the venue paragraphs below; that split was
-deliberately deferred here until a second pool held both venues, and the bulk online import is
-what supplied them. **The index names it too**: `Archetypes::IndexCounts` carries
+blended population. **The sample splits by venue** (#160) — see the venue paragraphs below. That split was deferred
+here for want of data to design it against, and the bulk online import is what supplied it: nine
+archetypes now hold at least eight lists on each side. Not a second *pool* — measured, exactly one
+of the five holds both venues, which is the same fact the clamp paragraph below rests on. **The index names it too**: `Archetypes::IndexCounts` carries
 `online_standings` and `online_events` as two CASE terms inside the grouped query it already makes,
 so `/archetypes` stays at its flat 7, and a row whose figures blend prints one muted sentence under
 the badge. It names **both** ratios because they diverge — measured on the first archetype to carry
@@ -652,7 +653,11 @@ tie is reported as a tie, never resolved in silence.
 **One page prints "N lists" four times over, and the four are one number by construction.** The
 sample selector, the card report's denominator, the performance panel and the index row each ask
 a different service, so agreement is a property that has to be built rather than assumed, and two
-things broke it. `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
+things broke it. (Since the venue axis the page also prints a **fifth** number that is deliberately
+not one of the four: the pool option's own label, which stays the pool's whole size while the
+report covers one venue of it. That is the stable-label trade, and the page says so in words — see
+the venue paragraphs below. The four services still agree under every venue, and a test asserts
+it.) `CardStats#lists_count` used to be derived from the `deck_cards` rows, which is
 "lists holding at least one card" and not "lists" — a field list that resolved no printing gave
 the page two denominators and computed every percentage over the one it did not show; it is now
 `@standings.distinct.pluck(:deck_id).size`, the same question the other three ask. And all four
@@ -811,6 +816,16 @@ reports a decltype for a bare column reference, so `pluck` hands back `true`/`fa
 `column_types["MAX(tournaments.date)"]` is the bare `Value` that `to_date` exists for) — wrapping
 it in a `COALESCE` or a `CASE` is what would lose that and return a `0` that is truthy in Ruby.
 
+**Three things on the page are scoped to the venue and three deliberately are not**, and the split
+is per *reader* rather than per word. `unpooled?` is venue-independent because `selectable?` reads
+it; `unpooled_in_sample?` is the venue-scoped twin that only the pool note reads, since an
+archetype whose one non-Standard event is paper printed "their lists are counted under All formats
+only" under Online about a list that venue does not hold — 21 such states over 7 archetypes.
+`all_formats_lists_count` is the same shape for the card report's empty state, whose "try All
+formats" has to be true *of this venue* because the one form carries the venue along with the
+click; it also names the venue as the other direction worth trying, which `options` cannot see at
+all.
+
 **The pool axis is entirely venue-independent, and `unpooled?` is inside that rule.** Pool labels
 do not move when a venue is chosen (`SVI-BLK — 56 lists` reads 56 under Online), which is honest
 only *because of* the clamp: clicking it resets the venue and shows 56. Venue labels, symmetrically,
@@ -827,7 +842,10 @@ both venues, and 0 decks carrying more than one standing at all**, so the fold m
 grouped count on 59 buckets of 59 and 1223 = 1223 across pools. Nothing in the schema forbids the
 shape, so a test **names the behaviour** rather than asserting an identity the fold cannot violate
 — both sides of "paper + online = the pool total" come out of the fold, so any fold satisfies it.
-The venue-filtered counts the page prints are exact either way, each being a single cell.
+The venue-filtered counts the page prints are exact either way, each being a single cell. What the
+second axis changed is the *reach* and not the existence: before it a selected pool was one bucket
+and only "All formats" folded, so the default view was exact; now a selected pool folds two cells,
+so that shape would break the four counters on the default view too.
 
 **The clamp is recorded in the `Result`, not merely applied to the relation**, and it is not rare:
 every pool other than TEF-PBL holds zero online lists, so 10 of the 38 cells belonging to the 9
@@ -838,7 +856,12 @@ dropped — so "an Online select over a blended report" is unreachable and what 
 observe is the pair: rows render, and no mode link carries `venue=`. `CardReport#path_for`
 re-emits the venue off the **scope** and emits nothing at `:all`, so a default never enters a
 copied URL. `venue_selectable?` is "the selection holds both venues", never `venue_options.size >
-1` (always three); absent from 35 of the 59 buckets. **No threshold on a half**: `SMALL_SAMPLE`
+1` (always three) and never "more than one non-empty cell" — the two agree for a single pool, whose
+cells *are* its venues, and diverge under "All formats", where the cells span pools. That was a
+live defect: one archetype with two paper-only cells was offered "All — 2 lists / Paper — 2 lists /
+Online — 0 lists", two labels for one sample plus a dead option that clamps back when clicked.
+`venue_present?` is now the one definition both the clamp and the predicate call. Absent from 35 of
+the 59 buckets. **No threshold on a half**: `SMALL_SAMPLE`
 would remove the control from 17 of 48 archetypes *including Lillie's Clefairy ex* (paper 9 /
 online 19), one of the four the issue was reopened for. `fuller_sample_available?` is **unchanged**
 — widening it to consider `venue_options` is dead code, since `venue_options`' "All" is the pool
@@ -851,9 +874,36 @@ bucket alone — vanishing for the 40 archetypes with no non-Standard event and 
 lists" for the other 8 — so a reader choosing All formats loses the control with no way back but
 the URL. 24 of the 48 archetypes have a blended All-formats sample, so it is the majority state.
 
+**The placement breakdown is a leaderboard on the online side, and that is the one thing the venue
+axis had to start saying out loud.** `play.limitlesstcg.com/decks/<slug>` publishes *best finishes*
+and the importer de-duplicates per player keeping the best result, while the paper source is an
+event's whole results page — so measured over the placed standings, **online is 20.2 % firsts and
+42.9 % top-4 (799 rows) against paper's 0.9 % and 4.3 % (439 rows)**, and the rows are genuine wins
+rather than an import bug. Left unsaid, "By placement: 1st 18 of 20" reads as a win rate on a page
+that refuses to print one. `PerformancePanel#leaderboard_note` says it whenever the sample holds an
+online row at all, blended or not — a blend is the same distortion in smaller proportion, and the
+sentence above it already gives the proportion. This is **not** a consequence of the venue axis (23
+of 48 archetypes open on an all-online sample, so the column already read this way) but the axis is
+what removed its last cover: the sentence beside it had to stop claiming the counts blend, which
+left that state qualified by nothing until this note.
+
+**The Sample select's own label asserts a sample size it stops delivering under a venue, so the
+page says so.** The pool options are venue-independent by design, so the number beside the pool is
+the pool's whole size while the report covers one half of it — and **the clamp does not rescue
+that**, which is what an earlier version of this paragraph claimed: it fires only where the target
+cell is empty, so it covers exactly the options that cannot lie. Measured, 78 of the 171 rendered
+pool options do not deliver their own label on a click, and "All formats" is structurally on the
+wrong side of it (it always holds a standing in the current venue, or the reader would not be in
+that venue); worst gap, Dragapult ex at `pool=all&venue=online`, "All formats — 174 lists" selected
+above a 20-list report. `SampleSelector#venue_note` names the real figure instead. The alternative
+that makes the label literally true — giving the Sample select its own form so a pool change resets
+the venue — is a different decision about what a click does and is left open.
+
 **Two notes on this page were already false, on the same 23 of 48 archetypes**, and one rule
 repairs both: print the "these figures mix the two" sentence only when the sample really holds
-both. `SampleSelector#online_note`'s *"The card report below counts online and paper lists
+both. `blended?` lives on **both** `Result`s rather than in the two components, beside every
+predicate like it, because two components computing one rule over two populations is how the halves
+of a page come to disagree. `SampleSelector#online_note`'s *"The card report below counts online and paper lists
 together."* and `PerformancePanel#online`'s *"The counts above do not separate online play from
 paper."* were unconditional inside their `online?` branches, so every archetype whose whole sample
 is online — 23 of them — was told the figures blended paper lists that do not exist, the panel's

@@ -433,11 +433,13 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
   # ---- the venue axis (#160) ----
 
-  # The defect the issue names, from the page's side: Alakazam's blended report prints a card near
-  # 50 % that describes neither half. A fixture cannot reproduce a percentage that specific, so
-  # what is asserted is the mechanism — the denominator moves, and a card played only on paper
-  # goes from a share of the blend to 100 %.
-  test "a venue narrows the report's denominator and its percentages" do
+  # The defect the issue names, from the page's side: Alakazam's blended report prints twelve cards
+  # between 40 % and 60 %, none of which describes either half. What is asserted here is the
+  # mechanism only — the report covers fewer cards once the sample narrows — because
+  # `listed_standing_for` gives every standing a card of its own, so no card here can move from a
+  # blend to 100 %. That half is measured by the system test, whose fixture plays one card on the
+  # paper side alone (50 % → 100 %).
+  test "a venue narrows the report to the sample it names" do
     archetype = quiet_archetype(600, name: "Venued Archetype")
     2.times { |i| listed_standing_for(archetype, 600 + i) }
     3.times { |i| listed_standing_for(archetype, 610 + i, online: true) }
@@ -526,7 +528,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
     get archetype_path(archetype) # warm the session: the first request also loads the Devise user
 
-    counts = { nil => nil, "paper" => nil, "online" => nil }.keys.to_h do |venue|
+    counts = [ nil, "paper", "online" ].to_h do |venue|
       queries = capture_queries { get archetype_path(archetype, venue: venue) }
       assert_select ".archetype-card-row", minimum: 1
       [ venue, queries.size ]
@@ -548,6 +550,47 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".archetype-fact-muted", text: /comes from an online tournament|come from online/
     assert_no_match(/do not separate online play from paper/, response.body)
+  end
+
+  # The one thing the placement breakdown cannot say for itself, and the reason this note exists:
+  # the online source is a leaderboard of best finishes, de-duplicated per player keeping the best
+  # result, while the paper source is an event's whole results page. Measured over the production
+  # data's placed standings, online is 20.2 % firsts and 42.9 % top-4 against paper's 0.9 % and
+  # 4.3 %. Unsaid, "1st 18 of 20" reads as a win rate on a page that refuses to print one.
+  #
+  # It prints on a blend as well as on an all-online sample — a blend is the same distortion in
+  # smaller proportion — so both are asserted, and the paper-only case asserts its absence.
+  test "the panel says the online placements come from a leaderboard of best finishes" do
+    archetype = quiet_archetype(700, name: "Leaderboard Archetype")
+    2.times { |i| listed_standing_for(archetype, 700 + i, online: true) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-fact-muted", text: /leaderboard of best finishes/
+  end
+
+  test "the leaderboard note prints on a blended sample too" do
+    archetype = quiet_archetype(710, name: "Blended Leaderboard Archetype")
+    2.times { |i| listed_standing_for(archetype, 710 + i) }
+    2.times { |i| listed_standing_for(archetype, 715 + i, online: true) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-fact-muted", text: /leaderboard of best finishes/
+  end
+
+  # And never where there is no online row to qualify: a sentence about an absent source reads as
+  # a warning about nothing, the rule the online counter beside it already follows.
+  test "the leaderboard note is withheld from an all-paper sample" do
+    archetype = quiet_archetype(720, name: "Paper Only Archetype")
+    2.times { |i| listed_standing_for(archetype, 720 + i) }
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_no_match(/leaderboard of best finishes/, response.body)
   end
 
   # Performance reads `@scope.standings`, so it narrows with the venue without a line of its own —

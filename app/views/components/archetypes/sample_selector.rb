@@ -1,7 +1,7 @@
 module Archetypes
   # Which sample the page is reporting on, and how much that sample is worth.
   #
-  # Four rules meet here, and all four are the design's, not this component's taste. Each is a
+  # Six rules meet here, and all six are the design's, not this component's taste. Each is a
   # predicate on Archetypes::MetagameScope::Result rather than a condition assembled here, because
   # every one of them is a fact about the sample and the page must not compute it twice:
   #
@@ -23,6 +23,10 @@ module Archetypes
   #     axis's reasoning: "All — 20 lists" beside "Online — 20 lists" is two labels for one
   #     sample. Measured, that is the majority shape — of the 59 (archetype, pool) buckets in
   #     production, 12 are paper-only and 23 online-only, so the control is absent from 35.
+  #   * the venue note says that the Sample counts span both venues, printed only when a venue is
+  #     chosen and the pool control is offered. The pool labels are deliberately stable, so the
+  #     number beside the pool is the pool's whole size while the report covers one half of it —
+  #     and the clamp does not rescue that, since it fires only where the target cell is empty.
   #   * the online note names what is left of the blend once the reader has chosen a sample, and
   #     its second sentence — the report counts both kinds together — prints only when the sample
   #     really does hold both. Unconditional, it was false on 23 of the 48 archetypes carrying a
@@ -55,6 +59,7 @@ module Archetypes
 
       div(class: "archetype-sample") do
         selector
+        venue_note
         pool_note
         online_note
         small_sample_notice
@@ -127,12 +132,48 @@ module Archetypes
       @scope.all_formats? ? MetagameScope::ALL : @scope.pool&.id.to_s
     end
 
+    # The Sample select's own label says "Sample", so its selected option reads as an assertion
+    # about the sample the page is showing — and once a venue is chosen it is not one. The pool
+    # options are venue-independent by design (see MetagameScope#options: recounting them inside
+    # the current venue makes labels shift under the reader between loads and produces options
+    # reading "SVI-BLK — 0 lists"), so the number beside the pool is the pool's whole size while
+    # the report below covers one half of it.
+    #
+    # The clamp does **not** rescue that, which is what an earlier version of this comment claimed
+    # and what the design record argued from: it fires only where the target cell is empty, so it
+    # covers exactly the options that cannot lie. Measured on the production data, 78 of the 171
+    # rendered pool options do not deliver their own label on a click, and "All formats" is
+    # structurally on the wrong side of it — it always holds a standing in the current venue,
+    # since otherwise the reader would not be in that venue. Worst measured gap: Dragapult ex at
+    # `pool=all&venue=online`, "All formats — 174 lists" selected above a 20-list report.
+    #
+    # So the page says it, in the register it says everything else it cannot compute away. This is
+    # the cheaper half of the trade; the alternative that makes the label literally true is to give
+    # the Sample select its own form so that changing the pool resets the venue, which is a
+    # different product decision about what a click does and is left to the owner.
+    def venue_note
+      return unless @scope.venue != :all && @scope.selectable?
+
+      count = @scope.lists_count
+
+      p(class: "archetype-sample-note") do
+        plain "The Sample counts above are over both venues. This report covers the "
+        strong { "#{count} #{'list'.pluralize(count)}" }
+        plain " of the venue selected beside it."
+      end
+    end
+
     # Said rather than left to be discovered — but only where there is something to discover. A
     # non-Standard event carries no pool by design, so a GLC or an Expanded list is invisible
     # under every pool option and appears only in the blended one. Where this archetype has no
     # such event, the sentence describes an absence nothing on the page can show.
+    #
+    # `unpooled_in_sample?` and not `unpooled?`, which is the venue-independent one `selectable?`
+    # needs: an archetype whose only non-Standard event is paper prints this under Online about a
+    # list that venue does not hold at all — the sample counts it nowhere, not "under All formats
+    # only". Measured, 21 states over 7 archetypes.
     def pool_note
-      return unless @scope.unpooled? && @scope.selectable?
+      return unless @scope.unpooled_in_sample? && @scope.selectable?
 
       p(class: "archetype-sample-note") do
         "Events outside Standard carry no pool, so their lists are counted under “All formats” only."
@@ -152,10 +193,9 @@ module Archetypes
       return unless @scope.online_lists?
 
       count = @scope.online_lists_count
-      blended = count < @scope.lists_count
 
       p(class: "archetype-sample-note") do
-        if blended
+        if @scope.blended?
           plain "#{count} of these #{@scope.lists_count} lists "
           plain "#{count == 1 ? 'comes' : 'come'} from an online tournament. "
           plain "The card report below counts online and paper lists together."
@@ -171,7 +211,11 @@ module Archetypes
       p(class: "archetype-notice") do
         plain "Small sample: every percentage below is computed over "
         strong { "#{@scope.lists_count} #{'list'.pluralize(@scope.lists_count)}" }
-        plain ". That describes what those lists did and supports no conclusion about the archetype"
+        # Singular agreement, because the venue axis made a one-list sample ordinary: 18 states
+        # over the production data render this at exactly one list, most of them paper halves.
+        plain ". That describes what "
+        plain @scope.lists_count == 1 ? "that list" : "those lists"
+        plain " did and supports no conclusion about the archetype"
         plain @scope.fuller_sample_available? ? " — a fuller sample may be one click away above." : "."
       end
     end

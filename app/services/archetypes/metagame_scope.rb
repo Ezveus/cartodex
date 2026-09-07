@@ -29,13 +29,22 @@ module Archetypes
 
     Result = Struct.new(
       :archetype, :standings, :listed_standings, :pool, :options,
-      :lists_count, :online_lists_count, :unpooled,
-      :venue, :venue_options, :venue_selectable,
+      :lists_count, :online_lists_count, :unpooled, :unpooled_in_sample,
+      :all_formats_lists_count, :venue, :venue_options, :venue_selectable,
       keyword_init: true
     ) do
       # Whether any standing sits on an event with no Standard pool — a GLC or Expanded one. Those
       # are the lists the "All formats" option holds and no pool option can.
+      #
+      # Two members and not one, because two readers ask two different questions of the same word.
+      # `unpooled?` is over **every** venue and feeds `selectable?`, so it must not move when a
+      # venue is chosen — scoped, the *pool* control would vanish as a side effect of picking a
+      # venue. `unpooled_in_sample?` is the venue-scoped one, and only the note reads it: measured
+      # on the production data, Slowking has one GLC list, all paper, so under Online the sentence
+      # "their lists are counted under All formats only" sent the reader after a list the current
+      # sample excludes entirely — 21 such states over 7 archetypes.
       def unpooled? = unpooled
+      def unpooled_in_sample? = unpooled_in_sample
       def all_formats? = pool.nil?
 
       # Whether this sample holds any online list at all, which is what decides whether the note
@@ -46,6 +55,13 @@ module Archetypes
       # existed, since 23 of the 48 archetypes carrying a list open on an all-online sample and
       # were told their report counted paper lists that do not exist.
       def online_lists? = online_lists_count.positive?
+
+      # Whether the sample really holds both kinds, which is the question the note above the card
+      # report asks — and it lives here rather than in the component because every predicate
+      # beside it does, and because Archetypes::Performance::Result carries the same rule over its
+      # own population. Two components computing it is how the two halves of one page come to
+      # disagree.
+      def blended? = online_lists_count.positive? && online_lists_count < lists_count
       def small_sample? = lists_count.positive? && lists_count < SMALL_SAMPLE
       def no_lists? = lists_count.zero?
 
@@ -76,12 +92,16 @@ module Archetypes
       # select, which reads "TEF-PBL — 118 lists" beside a 98-list sample.
       def fuller_sample_available? = options.any? { |option| option.lists_count > lists_count }
 
-      # Whether the venue control is a genuine choice, which is "the selection holds standings
-      # under both venues" and deliberately not `venue_options.size > 1` — those always number
-      # three, so that spelling is always true. "All — 20 lists" beside "Online — 20 lists" is two
-      # labels for one sample, the same non-choice `selectable?` drops the pool control to avoid.
-      # Measured, the majority shape: of the 59 (archetype, pool) buckets in production, 12 are
-      # paper-only and 23 online-only, so the control is absent from 35 of them.
+      # Whether the venue control is a genuine choice: the selection holds standings under **both**
+      # venues, and deliberately not `venue_options.size > 1` — those always number three, so that
+      # spelling is always true. "All — 20 lists" beside "Online — 20 lists" is two labels for one
+      # sample, the same non-choice `selectable?` drops the pool control to avoid. Measured, the
+      # majority shape: of the 59 (archetype, pool) buckets in production, 12 are paper-only and 23
+      # online-only, so the control is absent from 35 of them.
+      #
+      # "Both venues" and not "more than one non-empty cell", which is what it first counted: the
+      # two agree for a single pool and diverge under "All formats", where the cells span pools —
+      # see `venue_present?`.
       def venue_selectable? = venue_selectable
     end
 
@@ -111,8 +131,15 @@ module Archetypes
         pool: pool,
         options: options,
         lists_count: totals.lists,
-        online_lists_count: venue == :paper ? 0 : fold(online_rows(pool)).lists,
+        online_lists_count: venue == :paper ? 0 : fold(selection_rows(pool, :online)).lists,
         unpooled: buckets.any? { |bucket| bucket.pool_id.nil? },
+        unpooled_in_sample: selection_rows(nil, venue).any? { |bucket| bucket.pool_id.nil? },
+        # Every pool, *this* venue. The card report's empty state is the only reader, and it needs
+        # a count the reader's click would actually deliver: `options`' "All formats" is
+        # venue-independent, so on a pool with placements and no typed list it promised lists that
+        # the current venue may not hold, and the one form carries the venue along with the click.
+        # A fold over buckets already in memory, so no query.
+        all_formats_lists_count: fold(selection_rows(nil, venue)).lists,
         venue: venue,
         venue_options: venue_options(pool),
         venue_selectable: venue_selectable?(pool)
@@ -171,14 +198,27 @@ module Archetypes
     # would count only the GLC lists for the other 8, so a reader choosing "All formats" would
     # lose the control with no way back but editing the URL. Measured, 24 of the 48 archetypes
     # carrying a list have a blended All-formats sample, so that is the majority state.
-    def selection_rows(pool, venue = :all)
+    def selection_rows(pool, venue)
       rows = pool ? buckets.select { |bucket| bucket.pool_id == pool.id } : buckets
       return rows if venue == :all
 
       rows.select { |bucket| bucket.online == (venue == :online) }
     end
 
-    def online_rows(pool) = selection_rows(pool, :online)
+    # "Does this half of the selection hold anything?" — one definition, called by the clamp and by
+    # `venue_selectable?`, because the two ask the same question and answered it in two spellings.
+    #
+    # That divergence was a live defect: `venue_selectable?` counted the selection's *non-empty
+    # cells* rather than its *venues*, which is the same thing for one pool (a pool has at most a
+    # paper row and an online row) and not for "All formats", where the cells span pools. Measured
+    # on the production data, one archetype — Mega Greninja ex / Dragapult ex, one paper standing
+    # in TEF-PBL and one at a non-Standard event — was offered a Venue select reading
+    # "All — 2 lists / Paper — 2 lists / Online — 0 lists": two labels for one sample *and* a dead
+    # option that silently clamps back to All when clicked, which is both of the shapes this
+    # control exists to avoid.
+    def venue_present?(pool, venue)
+      selection_rows(pool, venue).sum(&:standings).positive?
+    end
 
     # Sums a set of cells into one bucket. Sound because a deck cannot be counted twice — measured
     # on the production data, 0 decks carry standings under both venues and 0 carry more than one
@@ -285,7 +325,7 @@ module Archetypes
       return :all unless VENUES.include?(@venue_param)
 
       venue = @venue_param.to_sym
-      return :all if venue != :all && selection_rows(pool, venue).sum(&:standings).zero?
+      return :all if venue != :all && !venue_present?(pool, venue)
 
       venue
     end
@@ -295,14 +335,12 @@ module Archetypes
     def venue_options(pool)
       VENUES.map do |value|
         lists = fold(selection_rows(pool, value.to_sym)).lists
-        Option.new(value: value, label: "#{venue_label(value)} — #{list_label(lists)}",
+        # `capitalize` rather than a parallel label table: the three labels are exactly the
+        # values, and Archetypes::Performance#by_division already reads its own enum this way.
+        Option.new(value: value, label: "#{value.capitalize} — #{list_label(lists)}",
                    lists_count: lists)
       end
     end
-
-    VENUE_LABELS = { "all" => "All", "paper" => "Paper", "online" => "Online" }.freeze
-
-    def venue_label(value) = VENUE_LABELS.fetch(value)
 
     # A half is an option from one standing, with no threshold of its own. A threshold at
     # SMALL_SAMPLE was weighed and refused on measurement: it would remove the control from 17 of
@@ -311,7 +349,7 @@ module Archetypes
     # motivating case. `small_sample?` already says what a nine-list sample is worth, and it now
     # fires on a venue half as readily as on a pool.
     def venue_selectable?(pool)
-      selection_rows(pool).count { |bucket| bucket.standings.positive? } > 1
+      venue_present?(pool, :paper) && venue_present?(pool, :online)
     end
 
     def standings_scope(pool, venue)

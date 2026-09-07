@@ -46,6 +46,11 @@ module Archetypes
       # does not: a "0 online standings" line on an archetype nobody has imported an online
       # result for is noise that reads as a warning.
       def online? = online_standings_count.positive?
+
+      # The twin of Archetypes::MetagameScope::Result#blended?, over this panel's own population:
+      # the card report counts listed standings, this counts every recorded placement, and each
+      # note may only claim a mixture its own figures actually hold.
+      def blended? = online_standings_count.positive? && online_standings_count < standings_count
       # Whether every event in the sample is an online one, which is the case the page words
       # differently — "N of these M" is a strange way to say "all of them".
       def all_events_online? = events_count.positive? && online_events_count == events_count
@@ -101,9 +106,16 @@ module Archetypes
     # standings, lists, best placement, all three breakdowns — is over the same blended
     # population and would have to split with it or contradict it, and §6 of the online import's
     # design forces `tier: "other"` on every online event, so `by_tier` cannot tell them apart
-    # either and a split events count would be the one figure that could. Splitting the *sample*
-    # by venue is a selector, a page and its own issue. So both counts come back whole and the
-    # two online figures ride beside them, for the panel to name the mixture in words.
+    # either and a split events count would be the one figure that could. So both counts come back
+    # whole and the two online figures ride beside them, for the panel to name the mixture in
+    # words.
+    #
+    # Splitting the *sample* by venue shipped as #160, and this service needed no change for it:
+    # it is handed `@scope.standings`, so a venue narrows the population and every figure here
+    # narrows with it. Which is the resolution this paragraph implies rather than an exception to
+    # it — the reasoning above is about what to do while one blended population is all there is,
+    # and the answer when it becomes selectable is that it stops being blended, not that the
+    # panel grows a second number.
     #
     # The two online terms cost no query: they are CASE expressions on a join this pick already
     # makes, and this page is pinned at a flat query count by a controller test.
