@@ -99,7 +99,85 @@ class AdminCardRolesTest < ApplicationSystemTestCase
   end
 end
 
-# Eleven cells on one row — the card, its type and nine checkboxes — on a screen 390px wide. Below
+# The desktop half of the same geometry, and the half that had no test at all. Above 768px
+# `.card-role-choice-name` is `display: none`, so the column header is the **only** visible thing
+# naming a checkbox — and the header divides the row by its own rules, not the row's, because
+# `flex: 1` floors a flex item at min-content. A header of long words therefore drifts from the
+# cells it labels once its min-content sum passes the container.
+#
+# Measured when two roles took this table from ten cells to twelve: at a 1100px window the header
+# overflowed by 40px and put three checkboxes under the wrong role name, where the ten-cell version
+# fitted exactly. The same table was already misaligned at 1000px before that, so this pins a
+# pre-existing defect as well as the regression that surfaced it.
+#
+# 1100px and not 1400px: above roughly 1230px `.admin-container` stops growing, so the widest
+# viewport is the *easiest* case and the interesting one is the ordinary laptop window. `drive_at`
+# is what reaches it — the desktop half of the sweep renders at 1400 — and the assertion is on
+# geometry because the text renders correctly either way. It renders in the wrong place.
+class AdminCardRolesWideTest < ApplicationSystemTestCase
+  include CardRoleCuration
+
+  drive_at 1100, 900
+
+  setup { sign_in_admin_with_roles }
+
+  test "every column header sits over the checkbox it names at 1100px" do
+    visit admin_card_roles_path(played: "0", q: "budew")
+
+    assert_selector "#card-role-#{@card.fingerprint}"
+
+    misplaced = evaluate_script(<<~JS)
+      (function () {
+        const header = document.querySelector('.data-table-header');
+        const row = document.querySelector('.data-table-row');
+        const heads = [...header.querySelectorAll('.data-table-cell')];
+        const cells = [...row.querySelectorAll('.data-table-cell')];
+        const wrong = [];
+        cells.forEach((cell, i) => {
+          const box = cell.querySelector('input[type=checkbox]');
+          if (!box) return;
+          const rect = box.getBoundingClientRect();
+          const middle = rect.left + rect.width / 2;
+          const over = heads.findIndex((head) => {
+            const bounds = head.getBoundingClientRect();
+            return middle >= bounds.left && middle <= bounds.right;
+          });
+          if (over !== i) {
+            wrong.push(heads[i].textContent.trim() + ' -> ' + (heads[over] ? heads[over].textContent.trim() : 'nothing'));
+          }
+        });
+        return wrong;
+      })()
+    JS
+
+    assert_empty misplaced,
+      "a checkbox sits under a header naming a different role: #{misplaced.inspect}"
+  end
+
+  # The other half of the same claim, and the one that says *why* it held: a header wider than the
+  # table is how the columns come apart, so it is asserted directly rather than inferred from the
+  # alignment above.
+  test "the header does not overflow the table it heads at 1100px" do
+    visit admin_card_roles_path(played: "0", q: "budew")
+
+    assert_selector "#card-role-#{@card.fingerprint}"
+
+    overflow = evaluate_script(<<~JS)
+      (function () {
+        const heads = [...document.querySelectorAll('.data-table-header .data-table-cell')];
+        const last = heads[heads.length - 1].getBoundingClientRect();
+        const container = document.querySelector('.admin-container').getBoundingClientRect();
+        return Math.round(last.right - container.right);
+      })()
+    JS
+
+    assert_operator overflow, :<=, 1, "the header runs #{overflow}px past the page's container"
+  end
+end
+
+# Twelve cells on one row — the card, its type, nine checkboxes and the Decision cell — on a
+# screen 390px wide. (The name read "nine" before two roles were added and was already short by
+# one: the Decision cell holding Save and Clear was never counted.) Below
 # 768px `.data-table` turns each row into a card whose cells are `display: flex` with a `::before`
 # label, and a checkbox cell that overflowed would read as a row wider than the page rather than
 # as an error. Geometry, not text: the text renders fine either way, which is exactly what made
@@ -111,7 +189,7 @@ class AdminCardRolesNarrowTest < ApplicationSystemTestCase
 
   setup { sign_in_admin_with_roles }
 
-  test "a row's eleven cells stay inside the page at 390px" do
+  test "a row's twelve cells stay inside the page at 390px" do
     visit admin_card_roles_path(played: "0", q: "budew")
 
     row = find("#card-role-#{@card.fingerprint}")

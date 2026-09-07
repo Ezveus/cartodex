@@ -61,14 +61,14 @@ class CardsController < ApplicationController
     @rarities, @marks = Card.filter_values
 
     # Deliberately not folded into the pair above. Those two are unindexed scans of `cards` behind
-    # an hour-long cache; these are indexed reads of an eight-row table, and putting them in that
+    # an hour-long cache; these are indexed reads of a ten-row table, and putting them in that
     # entry would tie an always-correct list to an invalidation path (`Card.forget_filter_values`,
     # called by the set importer and the rescrape job) that has nothing to do with labels — an
     # admin's new label would be invisible for up to an hour.
     #
     # `to_a`, because the view asks `empty?` before iterating: on a relation that is a second query
     # per family, on a page that is public and rate-limited, and no relative query-count comparison
-    # could ever see it — both lists are one and seven rows whatever the catalogue holds.
+    # could ever see it — both lists are one and nine rows whatever the catalogue holds.
     @labels = CardLabel.types.to_a
     @roles = CardLabel.roles.to_a
     @selected_label = @labels.find { |label| label.slug == @label } if @label
@@ -81,7 +81,7 @@ class CardsController < ApplicationController
     # about the store rather than about one screen: a page may leave a proposal on display, but not
     # without saying so. This surface is anonymous, so it needs the sentence more, not less —
     # measured on production, 709 of 850 assignments are a rule's guess, and no role is yet fully
-    # curated, so the sentence renders for every one of the seven.
+    # curated, so the sentence renders for every one of the nine.
     #
     # No number, deliberately: the counts available here are of assignments (fingerprints) while
     # the grid below shows printings, and 29 beside a page of 33 is the second denominator this

@@ -39,7 +39,7 @@ module Admin
 
     # A save is a statement about the whole card and not about the box that moved: every role left
     # unticked becomes a recorded refusal, which is exactly what stops the next suggester run
-    # re-proposing the six the human just said no to. Nothing is ever deleted here — a deletion
+    # re-proposing the eight the human just said no to. Nothing is ever deleted here — a deletion
     # would read as "nobody has looked at this yet", which is the one thing that is no longer true.
     def update
       fingerprint = params[:id].to_s

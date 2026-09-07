@@ -1857,8 +1857,22 @@ textarea.form-input {
   border-bottom: 2px solid var(--border-color);
 }
 
+/* `min-width: 0` is what keeps a header cell over its own column, and it is here because the row
+   cell below has it: `flex: 1` alone floors a flex item at min-content, so a header of long words
+   ("ENERGY ACCELERATION") divides the row differently from the cells it labels, and the two drift
+   apart once the header's min-content sum passes the container.
+
+   Measured on /admin/card_roles, the app's widest table, at the moment two roles took it from ten
+   cells to twelve. Without this line, 9 roles at a 1100px window overflow the header by 40px and
+   put three checkboxes under the wrong role name — and above 768px the per-checkbox label is
+   `display: none`, so the header is the only visible thing naming a box. The same table with 7
+   roles fitted 1100px exactly (overflow -16px, nothing misplaced) and was already misaligned at
+   1000px, so this closes a pre-existing defect as well as the regression that surfaced it. The
+   390px geometry test cannot see any of it: below the breakpoint `.data-table-header` is
+   `display: none`. */
 .data-table-header .data-table-cell {
   flex: 1;
+  min-width: 0;
   padding: 0.75rem 1rem;
   font-size: 0.85rem;
   font-weight: 600;

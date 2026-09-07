@@ -46,8 +46,18 @@ class CardLabel < ApplicationRecord
     #
     # "Free retreat" over-claims for Air Balloon, which is −2 rather than free. Taken knowingly:
     # `gust`'s precedent is that a player's own word wins where one exists, and the literal pair
-    # (`retreat-reduction` / `retreat-increase`) is duller in a heading. The description carries
-    # the accuracy the name gives up.
+    # (`retreat-reduction` / `retreat-increase`) is duller in a heading. **The description does not
+    # make up for it where a reader would meet the name**: it reaches the curation screen's
+    # checkbox `title` and the `type` family's badge, and a role never renders as a badge — the
+    # report's section heading is the name alone. So the over-claim is visible on
+    # `/archetypes/:id` and the nuance is not, which is the price of the idiom rather than a
+    # mitigation of it.
+    #
+    # A second gap, and it is a vocabulary question rather than curation debt: the description says
+    # nothing about *whose* Pokémon. `retreat-tax`'s hedges ("usually the opponent's") and this one
+    # cannot, because 3 of its 23 matches — N's Castle, Beach Court, Paradise Resort, and N's
+    # Castle is played — grant free retreat to both players. A curator asked whether N's Castle is
+    # `free-retreat` has no right answer.
     #
     # **This list is declared in `position` order, and that is load-bearing rather than tidy**:
     # `CardLabel.roles` is `order(:position, :slug)`, and CardLabelSeedTest asserts the seeded rows

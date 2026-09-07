@@ -320,32 +320,35 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
     assert_empty @roles["retreat-tax"].assignments
   end
 
-  # The two guards on the tax rule, and both are measured rather than plausible.
+  # The tax rule's two guards, one card each, both verbatim from the catalogue — and each of the
+  # three assertions below goes red under a different mutation, which is the whole reason the cards
+  # are these and not invented ones.
   #
-  # `(?! damage)` is what keeps a damage clause out: *Future Booster Energy Capsule* grants free
-  # retreat **and** says "20 more damage" in the same sentence, and *Mega Chandelure ex*'s attack
-  # scales its damage on the opponent's retreat cost without touching one. Without the lookahead
-  # the rule reads 11 fingerprints instead of 9, two of which also match free-retreat — so a card
-  # would open both opposite sections at once.
-  #
-  # The window is `{0,80}` and not the `{0,60}` the issue proposed, which is the one place this
-  # implementation departs from it: at 60 the rule misses *Calamitous Wasteland* ("The Retreat Cost
-  # of each Basic non-[F] Pokémon in play (both yours and your opponent's) is [C] more"), a card
-  # the issue's own table lists under "makes it dearer". Measured over the catalogue, 80 reads 9
-  # fingerprints and 120 reads the same 9 — the `[^.]` class is what actually bounds the reach, so
-  # the number only decides whether a long sentence fits — and the overlap with free-retreat is 0
-  # at every width. It is the lookahead that was load-bearing, not the narrow window.
-  test "a damage clause is never read as a retreat clause, however long the sentence" do
+  #   * `(?! damage)`: *Future Booster Energy Capsule* grants free retreat **and** says "20 more
+  #     damage" in the same sentence. Drop the lookahead and it joins retreat-tax as well — one
+  #     card opening two opposite sections.
+  #   * `(?<!or )`: *Talonflame* SCR 123's "If the Retreat Cost of your opponent's Active Pokémon
+  #     is [C][C] **or more**, this attack does 110 more damage" is a *threshold* on a retreat
+  #     cost, not a change to one. The lookahead cannot see it — the offending "more" is followed
+  #     by a comma — so it needs a guard of its own. This is the case a review found after the
+  #     first version of this test shipped; that version asserted instead that an attack scaling
+  #     its damage on the opponent's retreat cost gets no role, which is true and **untestable
+  #     here**: its "more" sits *before* "Retreat Cost", so the forward rule cannot reach it under
+  #     any mutation, and the assertion could not go red.
+  #   * the window: *Calamitous Wasteland* is 79 characters from its anchor to its "more", so at
+  #     the `{0,60}` the issue proposed it drops out of a role its own table assigns it.
+  test "the tax rule reads a change to a retreat cost and neither a damage clause nor a threshold" do
     both = trainer("Future Booster Energy Capsule",
                    "The Future Pokémon this card is attached to has no Retreat Cost, and the " \
                    "attacks it uses do 20 more damage to your opponent's Active Pokémon " \
                    "(before applying Weakness and Resistance).", number: "202")
-    scaling = Card.create!(name: "Phantom Maze Pokémon", card_type: "Pokémon", set_name: "PBL",
-                           set_number: "115", rarity: "Ultra Rare", hp: 340, type_symbol: "Fire",
-                           retreat_cost: 2, stage: "Basic")
-    scaling.attacks.create!(name: "Phantom Maze", cost: "FF", damage: "50+",
-                            effect: "This attack does 50 more damage for each [C] in your " \
-                                    "opponent's Active Pokémon's Retreat Cost.", position: 0)
+    threshold = Card.create!(name: "Aero Chase Pokémon", card_type: "Pokémon", set_name: "SCR",
+                             set_number: "123", rarity: "Rare", hp: 120, type_symbol: "Colorless",
+                             retreat_cost: 1, stage: "Basic")
+    threshold.attacks.create!(name: "Aero Chase", cost: "CC", damage: "10+",
+                              effect: "If the Retreat Cost of your opponent's Active Pokémon is " \
+                                      "[C][C] or more, this attack does 110 more damage.",
+                              position: 0)
     far = trainer("Calamitous Wasteland",
                   "The Retreat Cost of each Basic non-[F] Pokémon in play (both yours and your " \
                   "opponent's) is [C] more.", number: "203")
@@ -354,8 +357,8 @@ class CardLabels::RoleSuggesterTest < ActiveSupport::TestCase
 
     assert_equal [ both.fingerprint ], @roles["free-retreat"].assignments.pluck(:fingerprint)
     assert_equal [ far.fingerprint ], @roles["retreat-tax"].assignments.pluck(:fingerprint)
-    assert_empty CardLabelAssignment.where(fingerprint: scaling.fingerprint),
-      "a damage clause scaling on the opponent's retreat cost was read as a retreat role"
+    assert_empty CardLabelAssignment.where(fingerprint: threshold.fingerprint),
+      "a threshold on the opponent's retreat cost was read as a change to one"
   end
 
   # Every slug a rule proposes has to exist in the vocabulary the seed writes, and every role the
