@@ -13,8 +13,8 @@ class TournamentPolicy < ApplicationPolicy
 
   private
 
-  # This is the one policy in the app that reads admin?, and it is not the rule CLAUDE.md's
-  # deck paragraph protects. Nothing about an event is hidden — it is listed at /tournaments —
+  # This is the one policy in the app that reads admin?, and it is not the rule
+  # docs/architecture/public-surface.md's deck paragraph protects. Nothing about an event is hidden — it is listed at /tournaments —
   # so an admin correcting a catalog entry gains no read they did not already have. The
   # alternative was an Admin::TournamentsController duplicating three actions to say the same
   # thing. A participation is different, and TournamentEntryPolicy grants an admin nothing.
