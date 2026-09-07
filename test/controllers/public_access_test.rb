@@ -277,12 +277,14 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       # The three entry rows check less than this file's header promises. Their signed-in half
       # is worth having as a smoke test, but it cannot catch a missing `authorize`: that half
       # relies on verify_authorized, and Tournaments::EntriesController does not include
-      # PubliclyReachable and therefore has none (deliberately — see CLAUDE.md).
+      # PubliclyReachable and therefore has none
+      # (deliberately — see docs/architecture/public-surface.md).
       "tournament entry" => tournament_entry_path(tournaments(:one), tournament_entries(:one)),
       "edit tournament entry" => edit_tournament_entry_path(tournaments(:one), tournament_entries(:one)),
       # Like the three entry rows, these cannot catch a missing `authorize`:
       # Tournaments::StandingsController does not include PubliclyReachable and therefore has no
-      # verify_authorized (deliberately — see CLAUDE.md). Worth having as a smoke test.
+      # verify_authorized (deliberately — see docs/architecture/public-surface.md).
+      # Worth having as a smoke test.
       "new tournament standing" => new_tournament_standing_path(tournaments(:one)),
       "edit tournament standing" =>
         edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters)),
