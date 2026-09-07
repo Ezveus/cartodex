@@ -227,11 +227,17 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
 
     select "Paper — 2 lists", from: "Venue"
 
-    assert_text "2 lists"
+    # Waited on the *URL* and on the disappearance of the blended note, and deliberately not on a
+    # text like "2 lists": that string is in the select option the click just chose, so it is
+    # already on the page and Capybara returns instantly — the assertions below then read the
+    # blended page. Measured: green locally, red on CI's slower parallel runner, where the row
+    # still read "50 % of lists (2)" over four lists.
+    assert_current_path(/venue=paper/)
+    assert_no_text "of these 4 lists"
+
     assert_equal "paper", find("select[name='venue']").value,
       "the venue select does not read the venue the report is showing"
     assert_match(/100(\.0)? ?%/, find(".archetype-card-row", text: "Boss's Orders").text)
-    assert_current_path(/venue=paper/)
   end
 
   # Each control replaces the whole query string, so each has to carry what the other chose. The
