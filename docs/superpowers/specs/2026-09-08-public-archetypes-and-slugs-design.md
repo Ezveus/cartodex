@@ -69,6 +69,18 @@ address" for every archetype in order to serve a case the whole catalogue can pr
 currently does not. A test pins the message so it is at least readable, and an admin can create
 the row.
 
+**Under a real race the index answers, and `Api::ArchetypesController` already rescues it.**
+Measured: forcing a duplicate slug past the validation raises `ActiveRecord::RecordNotUnique`
+(`SQLite3::ConstraintException: UNIQUE constraint failed: archetypes.slug`), which that
+controller's existing `rescue ActiveRecord::RecordNotUnique` catches — `render_race_winner`
+re-reads by fingerprint, finds nothing, and answers 422 with its fallback message. Not a 500, and
+no new rescue needed. As with `Tournaments::StandingsImporter`'s event lookup, the *validation* is
+the likely path (a non-atomic `exists?` fires long before the index can), so the readable message
+is what a real user meets; the index is what covers the window between them. The fallback message
+says "Archetype already exists" rather than naming the address, which is left alone: that path
+exists for exactly the case where the refusal was not the race it looked like, and rewriting it
+would touch race handling this change has no business touching.
+
 **A blank slug refuses too, and that is the one known limit.** A name with no transliterable
 character produces `""`, which cannot address a page. Zero rows and zero card names are in that
 state, and the way to reach it is #111 (Japanese card sets): a Japanese-named archetype cannot be
