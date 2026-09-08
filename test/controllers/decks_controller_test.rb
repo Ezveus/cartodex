@@ -582,6 +582,39 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
 
+  # The visitor path — public_show — was measured by nothing at all, which is how it came to
+  # preload neither :archetype nor its two member cards while both deck-size tests above passed:
+  # they sign a user in and therefore only ever exercise owner_show.
+  #
+  # A literal, not a small == large comparison, and that is the point: a comparison cannot see the
+  # constant cost the preview payload adds (the archetype and its two cards), and it cannot see the
+  # pokemon_subtype reads at all while every fixture card leaves that column NULL. So the cards
+  # below get *distinct* subtypes — rows sharing an id issue identical SQL, which the per-request
+  # query cache serves and count_queries does not count — and real image_urls, so the payload
+  # actually resolves artwork instead of returning early on a blank.
+  test "the visitor's deck page costs a fixed number of queries" do
+    deck = @user.decks.create!(name: "Public", shared: true, standard_pool: standard_pools(:twm_por))
+    # Two *different* subtype fixtures, not one shared: rows with the same id issue identical SQL,
+    # which the query cache serves and count_queries never sees.
+    [ [ cards(:doublade), :pokemon_ex ], [ cards(:budew_asc), :pokemon_v ] ].each do |card, subtype|
+      card.update!(image_url: "https://example.test/#{card.id}.png",
+                   pokemon_subtype: pokemon_subtypes(subtype))
+      deck.deck_cards.create!(card: card, quantity: 2)
+    end
+
+    sign_out :user
+    get deck_path(deck) # warm anything the first request of a test loads once
+
+    # 7, measured. Lower than the 9 this path cost before the change, which reads backwards until
+    # you see why: the payload needs the archetype, its two member cards and the pool's two
+    # bounds, and preloading those replaced lazy reads the page was already making one at a time.
+    # A feature that pays for itself is unusual enough to be worth the sentence.
+    assert_equal 7, count_queries { get deck_path(deck) },
+      "the visitor's deck page moved off its pinned cost"
+    assert_response :success
+    assert_select "meta[property='og:image']", 1
+  end
+
   # The result modal's tournament picker prints TournamentEntry#picker_label, which reads the
   # event *and* the Play! Pokémon profile — so the page has to preload both. Each participation
   # gets an event and a profile of its own on purpose: rows sharing an id issue identical SQL,

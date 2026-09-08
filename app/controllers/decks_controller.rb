@@ -282,8 +282,13 @@ class DecksController < ApplicationController
   # the caller may not see. One extra primary-key SELECT is the price of that ordering, in
   # `export` (which has no branch) as much as here.
   def owner_show
-    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: [],
-                                       tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
+    # with_standard_pool because the preview payload's subtitle names the pool through
+    # Deck#format_label, and StandardPool#name reads *both* of its bounds — the scope exists
+    # precisely so that is one preload rather than three queries per distinct pool.
+    @deck = current_user.decks.with_standard_pool
+                        .includes(archetype: [ :primary_card, :secondary_card ],
+                                  deck_cards: { card: :pokemon_subtype }, deck_results: [],
+                                  tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
     # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
@@ -300,16 +305,33 @@ class DecksController < ApplicationController
       @over_allocated_card_ids = Set.new
     end
 
+    assign_og_payload
     render :show
   end
 
   def public_show
-    @deck = Deck.includes(deck_cards: :card).find(@deck.id)
+    @deck = Deck.with_standard_pool
+                .includes(archetype: [ :primary_card, :secondary_card ],
+                          deck_cards: { card: :pokemon_subtype }).find(@deck.id)
     # Devise only remembers a location when authenticate_user! bounces a request, so without
     # this a visitor who clicks Sign in here lands on the dashboard and has to find the deck
     # again.
     store_location_for(:user, request.fullpath) if remember_return_to?
+    assign_og_payload
     render :public_show
+  end
+
+  # Both show paths, because both render the layout and a shared deck's link is pasted from
+  # either. It runs *after* the reload above so the payload reads a preloaded record: it walks the
+  # deck cards and the archetype's two member cards, which is why both `includes` grew
+  # `archetype: [ :primary_card, :secondary_card ]` and `deck_cards: { card: :pokemon_subtype }`.
+  # The subtype is what `Decks::ArchetypeDetector`'s sort reads through `rule_box`, and it was
+  # preloaded on neither path before.
+  #
+  # Guarded by the policy and not by `@deck.shared?`: spelled the short way, DeckPolicy#og_image?
+  # would never be exercised by anything and could quietly be `show?`.
+  def assign_og_payload
+    @og_payload = Og::DeckPayload.call(@deck) if policy(@deck).og_image?
   end
 
   # Only for a visitor who actually asked for this page. A signed-in member reading somebody

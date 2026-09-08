@@ -1,4 +1,5 @@
 require "test_helper"
+require "tmpdir"
 
 # The routes for decks, cards, the dashboard and search left the `authenticate :user` block,
 # so each of those actions lost one of its two guards. This file is what replaces it: one
@@ -242,6 +243,70 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     refute_match(/^Disallow:\s*\/\s*$/, Rails.public_path.join("robots.txt").read)
   end
 
+  # One case per OgImagesController action, which is what CLAUDE.md asks of every
+  # PubliclyReachable controller. They are not rows in public_gets: those are swept by a test that
+  # asserts nothing about content, and dragging libvips into it — the sweep would render three real
+  # banners — would make an unrelated test fail on a machine without the library. So the endpoint
+  # is exercised here with its cache stubbed, and OgImagesControllerTest carries the end-to-end.
+  test "the preview-image actions answer without a session" do
+    @deck.update!(shared: true)
+    with_stubbed_og_cache do
+      {
+        "og deck image" => deck_og_image_path(@deck.key),
+        "og archetype image" => archetype_og_image_path(archetypes(:standings_marker).slug),
+        "og card image" => card_og_image_path(@card)
+      }.each do |label, path|
+        get path
+        assert_response :success, "expected #{label} to be public, got #{response.status}"
+        assert_equal "image/jpeg", response.media_type, label
+      end
+    end
+  end
+
+  test "a private deck's preview image is indistinguishable from an unknown one" do
+    @deck.update!(shared: false)
+    with_stubbed_og_cache do
+      get deck_og_image_path(@deck.key)
+      assert_response :not_found
+      private_body = response.body
+
+      get deck_og_image_path("no-such-deck-key")
+      assert_response :not_found
+
+      assert_equal private_body, response.body
+    end
+  end
+
+  # Every public page advertises a preview image, including the ones nobody thought about: that is
+  # the point of OgPreviewHost defaulting to the site payload rather than to nil.
+  #
+  # /search is excluded, and named rather than quietly skipped — SearchController is `layout false`
+  # (search_controller.rb:9), so it renders no <head> at all and can carry no tags. Giving it a
+  # layout is a different change. Excluding it here is a decision; leaving it in the sweep and
+  # watching it fail would have been an oversight.
+  test "every public HTML page advertises a preview image" do
+    @deck.update!(shared: true)
+
+    public_gets.except("search").each do |label, path|
+      get path
+      assert_response :success, label
+      assert_select "meta[property='og:image']", 1, "#{label} advertises no og:image"
+      assert_select "meta[property='og:image:width'][content=?]", "1200", true, label
+    end
+  end
+
+  # The file the site default points at has to exist. Asserting the tag says nothing about that,
+  # and the failure mode is every page in the app advertising a 404 image with the suite green.
+  test "the assets the layout and the site payload name are all present" do
+    %w[
+      og-default.jpg icon.svg icon-small.svg icon-maskable.svg
+      icon-16.png icon-32.png icon-192.png icon-512.png icon-maskable-512.png
+    ].each do |name|
+      assert_path_exists Rails.public_path.join(name)
+      assert_predicate Rails.public_path.join(name).size, :positive?, "#{name} is empty"
+    end
+  end
+
   private
 
   # Label => path, one entry per action that left the authenticate block. Methods rather than
@@ -266,6 +331,18 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "archetypes index" => archetypes_path,
       "archetype page" => archetype_path(archetypes(:standings_marker))
     }
+  end
+
+  # The house stubbing idiom (define_singleton_method, as in test/services/cards/
+  # fetcher_cache_test.rb), so this file never needs libvips.
+  def with_stubbed_og_cache
+    original = Og::Cache.method(:fetch)
+    Og::Cache.define_singleton_method(:fetch) { |_payload| "\xFF\xD8\xFF\xDB".b }
+
+    yield
+  ensure
+    Og::Cache.singleton_class.remove_method(:fetch)
+    Og::Cache.define_singleton_method(:fetch, original)
   end
 
   def owner_only_gets

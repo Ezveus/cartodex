@@ -109,6 +109,9 @@ class CardsController < ApplicationController
                          .where.not(id: @card.id)
                          .order(:set_name)
     @collection_quantity = current_user&.collections&.find_by(card_id: @card.id)&.quantity.to_i
+    # :pokemon_subtype is already in the includes above and the payload reads only the card's own
+    # columns, so this is free. Unconditional: the catalog is public, CardPolicy#og_image? is true.
+    @og_payload = Og::CardPayload.call(@card)
   end
 
   def image

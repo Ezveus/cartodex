@@ -48,6 +48,27 @@ gem "kamal", require: false
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false
 
+# libvips bindings, for the composed Open Graph banners (app/services/og). The
+# native library is already in the production base image (the Dockerfile's
+# apt line installs `libvips`, 8.14.1 with svgload) and is added to CI's two
+# Rails-booting jobs. ruby-vips *without* image_processing is deliberate — see
+# the note immediately below, which still holds: ActiveStorage's Vips
+# transformer requires "image_processing/vips", which still fails as "cannot
+# load such file" and so still matches engine.rb's rescue filter.
+#
+# `require: false`, and it is load-bearing rather than tidy. Bundler.require pulls every gem in
+# before any railtie runs, so on a machine without the native library `require "ruby-vips"` raises
+# a LoadError there and the whole app dies with Bundler::GemRequireError — `bin/rails runner "p 1"`
+# included. ActiveStorage does its own `gem "ruby-vips"; require "ruby-vips"` inside a begin/rescue
+# whose filter matches /libvips/ (active_storage/vips.rb:16-23), so left to it the absence degrades
+# gracefully; it just never gets a turn if Bundler went first. With this, a contributor with no
+# libvips can still boot the app and run everything but the renderer's own tests.
+#
+# CI still fails loudly, which is the property that mattered: Og::Renderer requires "vips" at the
+# top of the file, and config.eager_load is true under CI, so a missing library is a boot failure
+# there — once, in the open — rather than a 500 on the first crawler request in production.
+gem "ruby-vips", require: false
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 #
 # Commented out: nothing in this app attaches or transforms a blob, and neither

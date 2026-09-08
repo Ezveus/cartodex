@@ -5,4 +5,5 @@ class CardPolicy < ApplicationPolicy
   def index? = true
   def show? = true
   def image? = true
+  def og_image? = true
 end
