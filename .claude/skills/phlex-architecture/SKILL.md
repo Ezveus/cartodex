@@ -46,7 +46,9 @@ Under `app/views/components/ui/`. Use these to avoid duplication:
 
 | Component | Purpose |
 |---|---|
-| `Ui::Navbar` | App and admin navbars (parameterized via `variant:`) |
+| `Ui::NavbarShell` | The chrome of all three navbars (`Ui::AppNavbar`, `Ui::AdminNavbar`, `Ui::PublicNavbar` pass into it) |
+| `Ui::NavGroup` | A navbar entry that expands into a panel; takes its entries as data, see `docs/architecture/frontend.md` |
+| `Ui::Logo` | The app mark, inline SVG so its fills can be tokens |
 | `Ui::StatCard` | Value + label card (admin dashboard, deck stats) |
 | `Ui::PageHeader` | Title + optional action buttons |
 | `Ui::DataTable` | Table with column headers, yields rows block |
