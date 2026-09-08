@@ -12,10 +12,14 @@ module Archetypes
         p do
           plain "Cards are grouped by Cartodex's printing-independent card key, so reprints of "
           plain "one card fold together while two genuinely different cards sharing a name — a "
-          plain "Pokémon reprinted with different HP or attacks — stay apart. The set code beside "
-          plain "a card names one of its printings, the one most of these lists play, and links "
-          plain "to it; the other reprints of that card are counted on the same line. Where a "
-          plain "name really is two cards, the line splits and each printing gets its own."
+          plain "Pokémon reprinted with different HP or attacks — stay apart. Each card is named "
+          plain "by one of its printings, and links to it: where the lists playing that card did "
+          plain "not all choose the same printing, the one more of them chose than any other. The "
+          plain "figures on that "
+          plain "line are about the card and not about the printing named — every reprint of it "
+          plain "is counted there — and the report says so above whenever a sample holds such a "
+          plain "card. Where a name really is two or more different cards, the line splits and "
+          plain "each of those cards gets its own."
         end
 
         p do

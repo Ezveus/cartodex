@@ -59,7 +59,7 @@ module Archetypes
     def name_text
       return span(class: "archetype-card-name-text") { @group.name } if @group.split?
 
-      card_link(@group.entries.first, "archetype-card-name-text archetype-card-link")
+      card_link(@group.entries.first.card, "archetype-card-name-text archetype-card-link")
     end
 
     # A plain `a` over the routes module, and not `link_to card_path(card)`, for the reason
@@ -76,9 +76,9 @@ module Archetypes
     # without the condition that earns it; the system test is what would notice if a frame ever
     # did come to wrap the report, since frame-scoped the click renders Turbo's missing-frame
     # error instead of navigating and the markup is identical either way.
-    def card_link(entry, css_class)
-      a(href: Rails.application.routes.url_helpers.card_path(entry.card), class: css_class) do
-        entry.card.printing_label
+    def card_link(card, css_class)
+      a(href: Rails.application.routes.url_helpers.card_path(card), class: css_class) do
+        card.printing_label
       end
     end
 
@@ -148,7 +148,7 @@ module Archetypes
         @group.entries.each do |entry|
           li(class: "archetype-printing-row") do
             div(class: "archetype-card-name") do
-              card_link(entry, "archetype-card-link")
+              card_link(entry.card, "archetype-card-link")
               fixed_flag if fixed?(entry)
               label_flags(labels_for([ entry ]))
             end

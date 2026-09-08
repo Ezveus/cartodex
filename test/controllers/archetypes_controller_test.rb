@@ -249,6 +249,30 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
                   card_path(card), text: card.printing_label
   end
 
+  # The other half of the fold, and the one the set code made necessary: two printings of one card
+  # (one *fingerprint*, two rows) leave a single row naming one of them while its share and its
+  # copies count both. Only a rendered page proves the note and the row agree, since the count is
+  # taken in the service and the sentence written three components away.
+  test "show says when a card below is played in more than one printing, and not otherwise" do
+    folded = quiet_archetype(720, name: "Reprinted Archetype")
+    reprint_standing_for(folded, 720)
+
+    get archetype_path(folded)
+
+    assert_response :success
+    assert_select ".archetype-reprint-note", text: /1 card below is played in more than one printing/
+    # And the row itself names exactly one of the two, so the sentence has something to qualify.
+    assert_select ".archetype-card-row a.archetype-card-name-text", count: 1
+
+    settled = quiet_archetype(730, name: "Single Printing Archetype")
+    listed_standing_for(settled, 730)
+
+    get archetype_path(settled)
+
+    assert_response :success
+    assert_select ".archetype-reprint-note", count: 0
+  end
+
   # No request test in the suite had ever rendered a printing sub-row: `listed_standing_for` gives
   # every standing a uniquely-named card, and the system helpers use one printing each, so
   # `NameGroupRow#printings` — where the sub-row links live — was reachable only from a component
@@ -264,10 +288,6 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".archetype-printing-row a[href=?]", card_path(first), text: first.printing_label
     assert_select ".archetype-printing-row a[href=?]", card_path(second), text: second.printing_label
-    # And the name line above them stays a name: it covers two genuinely different cards, so a
-    # code there would name one of them as if it were the group.
-    assert_select ".archetype-card-main .archetype-card-name-text", text: "Owl Of Two Printings"
-    assert_select ".archetype-card-main a", count: 0
   end
 
   # The page the spec costs out at greatest length, and the one the index's own flat-cost test
@@ -765,6 +785,37 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
       player_name: "Report Player #{index}", division: "masters", placement: index + 1,
       archetype: archetype, deck: field_list, created_by: @user
     )
+  end
+
+  # Two printings of one card — the same *fingerprint*, so the report folds them into one row and
+  # names one of them. `hp` is equal here on purpose: that is what makes `compute_fingerprint`
+  # land on one value, which is the whole difference from `split_name_standing_for` below.
+  def reprint_standing_for(archetype, index)
+    cards = %w[ 3 33 ].map do |set_number|
+      Card.create!(
+        name: "Owl Reprinted", set_name: "RE#{index}", set_number: set_number,
+        card_type: "Pokémon", hp: 70, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1,
+        card_set: CardSet.create!(code: "RE#{index}#{set_number}", name: "Reprint Set #{set_number}")
+      )
+    end
+    assert_equal 1, cards.map(&:fingerprint).uniq.size, "sanity: the two printings must fold"
+
+    tournament = Tournament.create!(
+      name: "Reprint Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "league_cup",
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    cards.each_with_index do |card, i|
+      field_list = Deck.create!(
+        name: "Reprint List #{index}-#{i}", shared: true, standard_pool: standard_pools(:twm_por)
+      )
+      field_list.deck_cards.create!(card: card, quantity: 2)
+      tournament.standings.create!(
+        player_name: "Reprint Player #{index}-#{i}", division: "masters", placement: i + 1,
+        archetype: archetype, deck: field_list, created_by: @user
+      )
+    end
+
+    cards
   end
 
   # One list holding two printings of one card *name* under two different fingerprints — the

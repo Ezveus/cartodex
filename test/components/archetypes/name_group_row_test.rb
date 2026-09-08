@@ -11,8 +11,10 @@ require "test_helper"
 # tests for. `.call` is still enough now that the rows carry links, but only because the component
 # builds its href through `Rails.application.routes.url_helpers` rather than through `card_path` —
 # the trap Ui::ArchetypeBadgeTest documents, which a bare `.call` walks straight into. The Cards
-# below need an id for that helper to have anything to route to; the helper at the bottom derives
-# it from the set number so an assertion can name the href it expects without a second lookup.
+# below need an id for that helper to have anything to route to; the helper at the bottom offsets
+# it from the set number so an assertion can name the href it expects without a second lookup —
+# offsets rather than equals it, deliberately: with `id == set_number.to_i` an implementation
+# routing on `card.set_number` instead of on the card satisfied every assertion in this file.
 class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
   # A name played as one card, by every list, always in the same number: the one shape that earns
   # the flag.
@@ -172,7 +174,7 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
                                             min: 4, max: 4, modes: [ 4 ], core: true) ]))
 
     assert_match(
-      %r{<a href="/cards/185" class="archetype-card-name-text archetype-card-link">Iono \(PAL 185\)</a>},
+      %r{<a href="/cards/1185" class="archetype-card-name-text archetype-card-link">Iono \(PAL 185\)</a>},
       html
     )
   end
@@ -183,9 +185,9 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
   test "links every printing of a split name to its own card" do
     _name_line, printings = row(split_group).split(%(<ul class="archetype-printing-list">), 2)
 
-    assert_match(%r{<a href="/cards/114" class="archetype-card-link">Hoothoot \(SCR 114\)</a>}, printings)
-    assert_match(%r{<a href="/cards/77" class="archetype-card-link">Hoothoot \(PRE 77\)</a>}, printings)
-    assert_match(%r{<a href="/cards/126" class="archetype-card-link">Hoothoot \(TEF 126\)</a>}, printings)
+    assert_match(%r{<a href="/cards/1114" class="archetype-card-link">Hoothoot \(SCR 114\)</a>}, printings)
+    assert_match(%r{<a href="/cards/1077" class="archetype-card-link">Hoothoot \(PRE 77\)</a>}, printings)
+    assert_match(%r{<a href="/cards/1126" class="archetype-card-link">Hoothoot \(TEF 126\)</a>}, printings)
   end
 
   # The rule the fixed flag and the type labels already follow two tests above, applied to the set
@@ -272,7 +274,8 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
 
   def entry(name, set_name, set_number, pct:, count:, min:, max:, modes:, core: false, labels: [])
     Archetypes::CardStats::Entry.new(
-      card: Card.new(id: set_number.to_i, name: name, set_name: set_name, set_number: set_number),
+      card: Card.new(id: 1000 + set_number.to_i, name: name, set_name: set_name,
+                     set_number: set_number),
       fingerprint: "#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
       min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
     )

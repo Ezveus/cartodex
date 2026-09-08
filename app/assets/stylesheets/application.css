@@ -3588,6 +3588,15 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   margin-top: -0.75rem;
 }
 
+/* Same register as the three notes above it. Scope, not weight: it follows whichever of them
+   rendered, and takes no negative margin of its own — the pair-tightening trick above exists for
+   two notes that always stack together, while this one may follow any of three or none. */
+.archetype-reprint-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+}
+
 .archetype-card-list {
   display: flex;
   flex-direction: column;
@@ -3628,14 +3637,15 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   font-weight: 600;
 }
 
-/* The card names are links to the printing they name. Three declarations and not
-   .deck-compare-card-link's five: that rule also carries display:flex/align-items/gap, and
-   copying it whole would turn a text flex *item* into a flex container — moving geometry that
-   only ArchetypeMetagameTest's badge assertion could judge, and that nobody asked to move.
+/* The card names are links to the printing they name. Two of .deck-compare-card-link's five
+   declarations, plus a hover underline: that rule's display:flex/align-items/gap are *inert* on
+   an anchor holding a single run of text — measured, identical boxes with and without them at
+   1400px and at 344px — so copying them would assert a layout this element does not have.
    `inherit` is what keeps the two weights this page sets: 600 on a name line, and
    400/--ink-700 on a printing sub-row through .archetype-printing-row .archetype-card-name. So
    linking the text changes nothing about how the report reads, and the hover underline is what
-   says it is a link. */
+   says it is a link — the same trade /decks/compare already makes, which is also the one thing
+   here no test in this repository can see: nothing in test/ reads a computed style. */
 .archetype-card-link {
   color: inherit;
   text-decoration: none;

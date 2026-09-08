@@ -145,6 +145,62 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     assert_equal [ 1, 4 ], [ result.fixed_core_cards, result.fixed_core_copies ]
   end
 
+  # The count behind Archetypes::CardReport's reprint note. The fold is what makes it necessary:
+  # `GROUPING_KEY` is printing-independent, so one row can name one printing while its share and
+  # its copies count every reprint of that card — and the page may only say so where an instance
+  # exists. Measured on the production data, 16 distinct card keys are in this state.
+  test "counts the cards the sample plays under more than one printing" do
+    reprinted_a = pokemon("Squawkabilly", hp: 90)
+    reprinted_b = pokemon("Squawkabilly", hp: 90)
+    assert_equal reprinted_a.fingerprint, reprinted_b.fingerprint
+    settled = pokemon("Lonely Hoothoot", hp: 70)
+
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, deck: field_list(reprinted_a => 2, settled => 1))
+    record(event, archetype, deck: field_list(reprinted_b => 2, settled => 1))
+
+    result = stats_for(archetype)
+
+    assert_equal 1, result.reprinted_cards,
+                 "only the card the sample played under two codes counts"
+    assert_predicate result, :reprints?
+  end
+
+  test "counts no reprint where every card is played under one printing" do
+    archetype = archetype_of_its_own
+    record(standard_event, archetype, deck: field_list(pokemon("Settled Owl", hp: 70) => 2))
+
+    result = stats_for(archetype)
+
+    assert_equal 0, result.reprinted_cards
+    refute_predicate result, :reprints?
+  end
+
+  # Role mode files one entry under every role it carries, so a count taken over the rendered rows
+  # instead of over the distinct cards reports the same reprint twice and the note says "2 cards"
+  # about one.
+  test "counts a reprinted card once however many roles it carries" do
+    draw = CardLabel.create!(slug: "draw", name: "Draw", family: "role", position: 10)
+    disruption = CardLabel.create!(slug: "disruption", name: "Disruption", family: "role",
+                                   position: 20)
+    first = pokemon("Squawkabilly", hp: 90)
+    second = pokemon("Squawkabilly", hp: 90)
+    [ draw, disruption ].each do |label|
+      label.assignments.create!(fingerprint: first.fingerprint, card: first, source: "curated")
+    end
+
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, deck: field_list(first => 2))
+    record(event, archetype, deck: field_list(second => 2))
+
+    result = stats_for(archetype, grouping: :role)
+
+    assert_equal 2, result.categories.size, "sanity: the card is filed under both of its roles"
+    assert_equal 1, result.reprinted_cards
+  end
+
   # Which printing the report *shows*, and — since Archetypes::NameGroupRow now names it and links
   # to it — where a click lands. Nothing pinned it: the test above asserts the entry's numbers and
   # never which card it carries, and "the printings of one name are ordered by set number" below
@@ -173,7 +229,15 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
 
   # The other half, and the reason there is a tie-break at all: two printings level on lists have
   # to settle the same way on every load, or the set code and the link change under a reader who
-  # only reloaded the page.
+  # only reloaded the page. Measured on the production data, exactly one of the 246 reachable
+  # samples holds such a tie — Dragapult ex, all formats, paper: Switch MEG 130 and SVI 194 at one
+  # list each.
+  #
+  # What this pins is the tie-break's *direction*, not its existence, and the distinction is
+  # measured rather than assumed: replacing `[ lists, -card_id ]` with `[ lists ]` leaves this
+  # green, because `max_by` keeps the first of equals and the grouped pluck arrives ordered by
+  # card_id — so the accident lands on the same side. Inverting the sign is what turns it red.
+  # The sibling test above is the discriminating one for the lists half.
   test "two printings level on lists settle on the lower card id rather than on chance" do
     first = pokemon("Squawkabilly", hp: 90)
     second = pokemon("Squawkabilly", hp: 90)

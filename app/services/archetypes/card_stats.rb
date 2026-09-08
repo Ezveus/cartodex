@@ -168,12 +168,16 @@ module Archetypes
     # production data the day this shipped, 714 of 714 assignments were guesses.
     Result = Struct.new(
       :lists_count, :categories, :fixed_core_cards, :fixed_core_copies, :grouping,
-      :proposed_roles, :decided_roles,
+      :proposed_roles, :decided_roles, :reprinted_cards,
       keyword_init: true
     ) do
       def any? = lists_count.positive?
       def role_grouping? = grouping == :role
       def unconfirmed_roles? = proposed_roles.to_i.positive?
+      # A row naming a printing whose card the sample also played under another code. The count is
+      # of cards and not of rows, so role mode — where one entry is filed under every role it
+      # carries — does not report the same card twice.
+      def reprints? = reprinted_cards.to_i.positive?
     end
 
     # Takes the standings relation rather than deck ids, so the caller cannot hand this a
@@ -217,7 +221,8 @@ module Archetypes
         fixed_core_copies: fixed_entries.sum(&:min_copies),
         grouping: @grouping,
         proposed_roles: role_assignments_by_source["suggested"].to_i,
-        decided_roles: role_assignments_by_source["curated"].to_i
+        decided_roles: role_assignments_by_source["curated"].to_i,
+        reprinted_cards: reprinted_entries.size
       )
     end
 
@@ -288,10 +293,11 @@ module Archetypes
       @lists_count ||= deck_ids.size
     end
 
-    # The printing each card is shown as: the one the most lists actually play, with the card id
-    # breaking a tie so the choice cannot change between two loads of the same page.
-    def representative_ids
-      @representative_ids ||= DeckCard
+    # Every printing of every card the sample plays, as (card key, card id, lists playing it).
+    # One query, and two questions are asked of it: which printing to show, and how many the key
+    # covers.
+    def printings_by_key
+      @printings_by_key ||= DeckCard
         .joins(:card)
         .where(deck_id: @standings.select(:deck_id))
         .group(GROUPING_KEY, Arel.sql("deck_cards.card_id"))
@@ -301,7 +307,21 @@ module Archetypes
           Arel.sql("COUNT(DISTINCT deck_cards.deck_id)")
         )
         .group_by(&:first)
+    end
+
+    # The printing each card is shown as: the one the most lists actually play, with the card id
+    # breaking a tie so the choice cannot change between two loads of the same page.
+    def representative_ids
+      @representative_ids ||= printings_by_key
         .transform_values { |group| group.max_by { |_key, card_id, lists| [ lists, -card_id ] }[1] }
+    end
+
+    # How many printings of one card the sample actually plays. Free — it is the size of the group
+    # `representative_ids` picks from — and it is what tells a row whose figures describe exactly
+    # the printing named apart from a row where they describe the card and the code names one of
+    # its reprints. Archetypes::CardReport says that out loud, and only where it happens.
+    def printings_played_by_key
+      @printings_played_by_key ||= printings_by_key.transform_values(&:size)
     end
 
     def cards
@@ -386,6 +406,14 @@ module Archetypes
 
     def fixed_entries
       @fixed_entries ||= entries.select(&:fixed?)
+    end
+
+    # Counted over `entries` — the distinct cards — rather than over the rendered rows, so role
+    # mode does not inflate it by filing one card under two roles.
+    def reprinted_entries
+      @reprinted_entries ||= entries.select do |entry|
+        printings_played_by_key.fetch(entry.fingerprint, 1) > 1
+      end
     end
 
     # Structure the database actually knows, and nothing beyond it. There is still no ACE SPEC

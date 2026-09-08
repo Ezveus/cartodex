@@ -21,7 +21,8 @@ second place for them to drift from. Stated here on purpose rather than skipped 
 | The split sub-rows already print it; the non-split name line prints `@group.name` | `name_group_row.rb:109` vs `:34` |
 | The printing shown per fingerprint is already deterministic — most-played, lowest card id breaking the tie | `card_stats.rb:293-305` |
 | Longest label in the dump: `"Technical Machine: Evolution (PAR 178)"` — 38 chars against 28 for the bare name | `bin/rails runner` over Dragapult ex, 174 lists / 126 entries |
-| 25 split name groups in the dump, up to 4 printings (`Applin`: TWM 17 / TWM 126 / SCR 12 / DRI 16) | same run |
+| 53 split name groups over the 48 archetypes' all-formats samples — 36 distinct names, 30 archetypes, at most 4 printings (`Applin` and `Charcadet`) | a run over every archetype; **corrected** — this row first read "25", a number counted by eye off a `head -30`, which is the "report a figure you did not read out of a command" failure this pipeline names |
+| 16 distinct card keys fold two printings a list actually played, so a *non-split* row can name one printing while its figures cover both | same run, and the domain review's own count agreed |
 | `/cards/:id` is public, `/archetypes/:id` is member-only | `routes.rb:59` vs `:118` |
 | `Card` has no `to_param`, so `card_path(card)` is `/cards/<id>` | grep over `app/models/` — only `Deck` defines one |
 
