@@ -1,0 +1,26 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Android crops a maskable icon to a circle, so two things are true at once here: the ink-900
+       ground bleeds to all four edges (a transparent-corner drawing would have the mat's corners
+       cut off), and the mark itself sits inside the inner 80%, the safe circle of radius 205 about
+       (256,256). The mark's farthest point is the mat's bottom-right corner, at radius 262.4, so
+       scaling by 0.78 puts it at 204.7: inside the safe circle, with nothing wasted.
+
+       The ground is ink-800 and the mat ink-900, which is the inverse of every other variant.
+       Painted the obvious way round, an ink-900 mat on an ink-900 ground has no silhouette at all:
+       looked at, the icon became five slots and a red card floating on a dark field, which is not
+       the mark. Two neighbouring darks keep the ground bleeding to the edges AND the mat readable
+       as a shape. -->
+  <rect width="512" height="512" fill="#1A2233"/>
+  <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+    <g transform="rotate(-11 256 256)">
+      <rect x="48" y="112" width="416" height="304" rx="32" fill="#0E1320"/>
+      <rect x="88" y="286" width="336" height="6" rx="3" fill="#28324A"/>
+      <rect x="68"  y="304" width="64" height="90" rx="10" fill="#93A0B4"/>
+      <rect x="146" y="304" width="64" height="90" rx="10" fill="#93A0B4"/>
+      <rect x="224" y="304" width="64" height="90" rx="10" fill="#5A6678"/>
+      <rect x="302" y="304" width="64" height="90" rx="10" fill="#93A0B4"/>
+      <rect x="380" y="304" width="64" height="90" rx="10" fill="#93A0B4"/>
+    </g>
+    <rect x="204" y="96" width="104" height="146" rx="16" fill="#DD2C16"/>
+  </g>
+</svg>

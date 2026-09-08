@@ -1,0 +1,12 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- The same mark as icon.svg with the five bench slots removed: at 84px they collapse into
+       indistinguishable grey pips, so below roughly 48px they are noise rather than information.
+       The centre line is thickened (6 -> 18) and the active card enlarged (104x146 -> 120x168) so
+       the mark still fills its box; the -11 degree mat and the upright red active are untouched,
+       because that tension is the logo. -->
+  <g transform="rotate(-11 256 256)">
+    <rect x="48" y="112" width="416" height="304" rx="32" fill="#0E1320"/>
+    <rect x="88" y="280" width="336" height="18" rx="9" fill="#28324A"/>
+  </g>
+  <rect x="196" y="86" width="120" height="168" rx="18" fill="#DD2C16"/>
+</svg>
