@@ -154,13 +154,19 @@ component into a Rails content buffer is a bet, and there is an established patt
 not.
 
 `Ui::OgTags` emits `og:title`, `og:description`, `og:type`, `og:url`, `og:image` with its
-`:width`, `:height` and `:type`, plus `twitter:card` and `twitter:image`. It is rendered only when
-`og_preview` is present.
+`:width`, `:height` and `:type`, plus `twitter:card` and `twitter:image`. **It always renders**, and
+`og_preview` never returns nil: its default is a *site* payload whose image is the committed
+`public/og-default.jpg`. An earlier draft of this spec had it render only when a payload was
+present, which contradicted this document's own promise that everything outside the three surfaces
+"gets a static Cartodex banner" — a page with no payload would have emitted no tags and therefore
+no banner.
 
-**`og:image` is emitted only when the subject is publicly readable** — for a deck, `shared?`. Not
-`show?`: an owner reading their own private deck would otherwise be served a page advertising an
-image that every crawler is refused, which renders worse than no tag at all. Archetypes and cards
-are public outright, so theirs is unconditional.
+**A subject's own `og:image` replaces the site one only when that subject is publicly readable** —
+for a deck, `shared?`. Not `show?`: an owner reading their own private deck would otherwise be
+served a page advertising an image every crawler is refused, which renders worse than the generic
+banner. Archetypes and cards are public outright, so theirs is unconditional. Reading it this way
+puts the decision in one branch in one controller rather than in a condition the component has to
+repeat, and it makes the private case degrade to Cartodex branding instead of to a bare URL.
 
 ## Generation and cache
 
@@ -173,12 +179,22 @@ Three objects, one of which knows about libvips:
   composes, returns JPEG bytes. The only file that requires `vips`.
 - **`Og::Cache`** — `storage/og/<kind>/<id>-<digest>.jpg`, inside the `cartodex_storage` volume
   Kamal already mounts at `/rails/storage`, so a deploy does not throw the work away. On write it
-  deletes the subject's other `<id>-*` files: the cache is bounded by construction and needs no
-  sweep.
+  deletes the subject's other `<id>-*` files, so **one subject holds one file**. That bound is per
+  subject and the subject count is not bounded: `/og/cards/:id` spans the whole catalogue, 1806
+  cards at 92.8 KB ≈ **168 MB**, plus a file per deck and per archetype, in the same volume as the
+  production SQLite databases. That is the honest ceiling; no sweep ships, and a prune task is named
+  as out of scope rather than implied by a claim of boundedness.
 
-The digest covers the subject's `updated_at`, the ids and `image_url`s of the cards actually
-chosen, **and a `LAYOUT_VERSION` constant**. Without that last term, editing the design would
-leave every already-generated file in place and the change would appear to do nothing.
+The digest covers the subject's `updated_at`, the `image_url`s of the cards actually chosen, **a
+`LAYOUT_VERSION` constant**, and — for a deck — **the loaded deck-cards' count and newest
+`updated_at`**. Each term earns its place: without `LAYOUT_VERSION`, editing the design leaves every
+generated file in place and the change appears to do nothing; without the deck-cards term the
+address never moves when the decklist does, because `DeckCard belongs_to :deck` carries no
+`touch: true` (measured: create, update and destroy all leave `deck.updated_at` untouched), so every
+card added or removed would change the banner's content and none would change its URL — permanently,
+under `immutable`. `touch: true` was the tempting fix and is rejected: it would move `updated_at` on
+every allocation write app-wide, to serve this feature. Reading the count and maximum off the
+**already preloaded** association costs no query.
 
 The digest also travels in the URL as `?v=<digest>`, because chat clients cache previews by URL.
 A banner whose inputs changed therefore has a new address, which is the only thing that makes a
