@@ -56,6 +56,29 @@ class NavbarLayoutTest < ApplicationSystemTestCase
 
       assert_navbar_fits "admin at 1280"
     end
+
+    # A panel is `top: 100%` of its group, so the group has to be as tall as the bar or 100% is the
+    # bottom of a 34px box centred in a 56px one — measured, the panel then opened 7px *above* the
+    # bar's own bottom edge and overlapped it. `align-self: stretch` on `.navbar-group` and
+    # `.navbar-links` is what fixes that, and nothing else in the suite measures this dimension:
+    # deleting those two declarations leaves all 11 other cases here green.
+    test "an open panel hangs below the bar rather than overlapping it" do
+      login_as users(:one), scope: :user
+      visit dashboard_path
+
+      find(".navbar-group-trigger", text: "Decks").click
+
+      box = evaluate_script(<<~JS)
+        (() => {
+          const bar = document.querySelector(".navbar").getBoundingClientRect();
+          const panel = document.querySelector(".navbar-group-panel--open").getBoundingClientRect();
+          return { barBottom: Math.round(bar.bottom), panelTop: Math.round(panel.top) };
+        })()
+      JS
+
+      assert_operator box["panelTop"], :>=, box["barBottom"],
+        "the panel starts #{box["barBottom"] - box["panelTop"]}px above the bar's bottom edge"
+    end
   end
 
   class AtNarrowestDesktop < NavbarLayoutTest

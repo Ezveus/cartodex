@@ -43,8 +43,13 @@ class Ui::NavGroupTest < ActiveSupport::TestCase
   # An entry may name no section — nothing in the app routes to it, or it leaves the app entirely
   # (the admin navbar's "Jobs" goes to Mission Control). It must never light its group, and the
   # empty list must not be read as "matches anything".
+  #
+  # `active_section` is deliberately a real section rather than nil, and that is the whole test:
+  # `active?` returns early on nil, so a case passing nil never reaches the clause it means to
+  # cover. Measured — an implementation reading an empty list as "matches everything" passed this
+  # test unchanged until the section was named.
   test "an entry naming no section never lights the group" do
-    html = group(entries: [ [ "Jobs", "/jobs", [] ] ], active_section: nil)
+    html = group(entries: [ [ "Jobs", "/jobs", [] ] ], active_section: "imports")
 
     assert_not_includes trigger_class(html), "active"
   end
