@@ -11,7 +11,7 @@ class TournamentStandingsTest < ApplicationSystemTestCase
 
   test "a member adds a row to an event's sheet" do
     visit dashboard_path
-    click_nav_link "Tournaments"
+    click_nav_link "All tournaments"
     click_on @tournament.name
 
     click_on "Add a standing"

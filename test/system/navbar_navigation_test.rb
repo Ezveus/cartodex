@@ -17,7 +17,7 @@ class NavbarNavigationTest < ApplicationSystemTestCase
   test "a navbar link reaches its page" do
     visit dashboard_path
 
-    click_nav_link "Decks"
+    click_nav_link "My decks"
 
     assert_selector "h1", text: "My Decks"
     assert_current_path decks_path
@@ -28,7 +28,7 @@ class NavbarNavigationTest < ApplicationSystemTestCase
   test "a second navbar link reaches its page too" do
     visit dashboard_path
 
-    click_nav_link "Decks"
+    click_nav_link "My decks"
     click_nav_link "Collection"
 
     assert_current_path collections_path
