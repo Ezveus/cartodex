@@ -57,6 +57,39 @@ class Admin::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "This archetype is still named on 2 tournament standings.", flash[:alert]
   end
 
+  # Admin::DecksController had to make the same move when a deck became addressable by its key:
+  # `admin_archetype_path` goes through `Archetype#to_param`, so `find` would cast the slug to 0
+  # and 404 every screen here.
+  test "an archetype's admin URL names its slug and resolves" do
+    assert_equal "/admin/archetypes/budew-teal-mask-ogerpon-ex", admin_archetype_path(@archetype)
+
+    get "/admin/archetypes/budew-teal-mask-ogerpon-ex"
+
+    assert_response :success
+  end
+
+  test "renaming an archetype redirects to its new address" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "Budew Toolbox", primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_redirected_to "/admin/archetypes/budew-toolbox"
+    assert_equal "budew-toolbox", @archetype.reload.slug
+  end
+
+  # The slug is UNIQUE, so a rename onto a name another archetype already owns modulo
+  # punctuation is refused — and refused on :name, the only field this form has.
+  test "a rename whose address is already taken is refused on the name field" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "Teal Mask Ogerpon ex",
+                             primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_response :unprocessable_entity
+    assert_match "/archetypes/teal-mask-ogerpon-ex", response.body
+    assert_equal "budew-teal-mask-ogerpon-ex", @archetype.reload.slug
+  end
+
   test "deletes an archetype no standing names" do
     assert_difference -> { Archetype.count }, -1 do
       delete admin_archetype_path(@archetype)

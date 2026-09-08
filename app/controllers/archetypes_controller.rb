@@ -72,12 +72,17 @@ class ArchetypesController < ApplicationController
     # and printing_label), the parent this is a variant of, and the variants of it. Left lazy
     # that is four more queries on a page whose whole point is that its cost does not move with
     # the data.
+    #
+    # `find_by!(slug:)` and not `find`: an archetype is addressed by its name, parameterized —
+    # `Archetype#to_param` returns it, which is why the URL every page emits changed with no edit
+    # to a single call site. The slug moves when the name moves and nothing records the old one:
+    # a renamed archetype's links break, which is the decision recorded in
+    # docs/superpowers/specs/2026-09-08-public-archetypes-and-slugs-design.md. It costs the same
+    # one indexed query `find` did, so the flat-cost tests below are unmoved.
     @archetype = Archetype.preload(:primary_card, :secondary_card, :parent, :children)
-                          .find(params[:id])
+                          .find_by!(slug: params[:id])
     authorize @archetype
 
-    # The id, not a slug: archetype names contain "/" (Froslass / Munkidori), and unlike a deck
-    # there is nothing here worth keeping unenumerable.
     #
     # `params[:venue]` rides alongside rather than becoming a `where` here: MetagameScope's opening
     # comment promises it is the only place that answers which standings count, and the page's four

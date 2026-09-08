@@ -120,6 +120,44 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?][data-turbo-frame=_top]", archetype_path(archetypes(:ogerpon))
   end
 
+  # The URL spelled out rather than built from the helper: `archetype_path` goes through
+  # `to_param`, so an assertion written that way agrees with whatever the model decides and
+  # says nothing about what the address *is*.
+  test "index links each row by slug, not by id" do
+    get archetypes_path
+
+    assert_select "a[href=?]", "/archetypes/teal-mask-ogerpon-ex"
+    assert_select "a[href=?]", "/archetypes/#{archetypes(:ogerpon).id}", count: 0
+  end
+
+  test "show resolves an archetype by its slug" do
+    get "/archetypes/teal-mask-ogerpon-ex"
+
+    assert_response :success
+    assert_select "h1", text: /Teal Mask Ogerpon ex/
+  end
+
+  # The id is not an address any more. It routes — `:id` matches any segment — and resolves to
+  # nothing, which is the same answer an unknown slug gets.
+  test "show no longer resolves an archetype by its id" do
+    get archetype_path(id: archetypes(:ogerpon).id)
+
+    assert_response :not_found
+  end
+
+  # A rename moves the address and nothing records the old one; this is where that is written
+  # down as a request rather than as a model assertion.
+  test "a renamed archetype answers on its new address and not its old one" do
+    archetype = archetypes(:ogerpon)
+    archetype.update!(name: "Ogerpon Toolbox", custom_name: "1")
+
+    get "/archetypes/ogerpon-toolbox"
+    assert_response :success
+
+    get "/archetypes/teal-mask-ogerpon-ex"
+    assert_response :not_found
+  end
+
   test "index filters by name" do
     get archetypes_path(q: "budew")
 

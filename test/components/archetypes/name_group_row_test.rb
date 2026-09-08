@@ -236,7 +236,8 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
   # stores `nil` for a keyword left out, so a forgotten one is silently falsy rather than loud.
   def scope
     Archetypes::MetagameScope::Result.new(
-      archetype: Archetype.new(id: 1, name: "Sample"), standings: nil, listed_standings: nil,
+      archetype: Archetype.new(id: 1, name: "Sample", slug: "sample"),
+      standings: nil, listed_standings: nil,
       pool: nil, options: [], lists_count: 0, online_lists_count: 0, unpooled: false,
       unpooled_in_sample: false, all_formats_lists_count: 0, venue: :all, venue_options: [],
       venue_selectable: false

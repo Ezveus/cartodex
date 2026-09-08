@@ -258,7 +258,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     # so this file never touches the database and cannot be broken by a fixture another test
     # destroys.
     scope = Archetypes::MetagameScope::Result.new(
-      archetype: Archetype.new(id: 6, name: "Sample"), standings: nil, listed_standings: nil,
+      archetype: Archetype.new(id: 6, name: "Sample", slug: "sample"),
+      standings: nil, listed_standings: nil,
       pool: pool == :default ? StandardPool.new(id: 9) : pool,
       options: options, lists_count: lists_count, online_lists_count: online_lists_count,
       unpooled: unpooled,

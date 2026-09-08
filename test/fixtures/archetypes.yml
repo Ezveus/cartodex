@@ -3,8 +3,10 @@
 # NOTE: archetypes hold a foreign key to cards (their member cards), so only
 # reference cards that are not destroyed by other tests (e.g. avoid honedge).
 #
-# Fixtures skip callbacks, so name_normalized and the denormalised fingerprint pair are
-# spelled out by hand; ArchetypeTest asserts both stay in step. A missing secondary is the
+# Fixtures skip callbacks, so name_normalized, `slug` and the denormalised fingerprint pair are
+# spelled out by hand; ArchetypeTest asserts all three stay in step. `slug` is the archetype's
+# address — name_normalized, parameterized — and it is NOT NULL, so a fixture omitting it fails
+# at load with a constraint violation rather than at an assertion. A missing secondary is the
 # empty string, never NULL — see the migration for why.
 #
 # The same rule extends to TournamentStanding, whose belongs_to :archetype is required and
@@ -32,6 +34,7 @@ ogerpon:
   secondary_fingerprint: ""
   name: "Teal Mask Ogerpon ex"
   name_normalized: "teal mask ogerpon ex"
+  slug: "teal-mask-ogerpon-ex"
 
 budew_ogerpon:
   primary_card: budew_pre
@@ -40,6 +43,7 @@ budew_ogerpon:
   secondary_fingerprint: ogerpon_shared
   name: "Budew / Teal Mask Ogerpon ex"
   name_normalized: "budew / teal mask ogerpon ex"
+  slug: "budew-teal-mask-ogerpon-ex"
 
 # Exists solely to back test/fixtures/tournament_standings.yml — see the note above. Its
 # member card, cards(:standings_marker), exists solely to back this archetype in turn: neither
@@ -51,3 +55,4 @@ standings_marker:
   secondary_fingerprint: ""
   name: "Standings Marker"
   name_normalized: "standings marker"
+  slug: "standings-marker"

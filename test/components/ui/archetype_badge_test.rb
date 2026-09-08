@@ -33,7 +33,9 @@ class Ui::ArchetypeBadgeTest < ActiveSupport::TestCase
   test "renders a linked badge outside a request" do
     html = Decks::ClassificationBadges.new(deck: sample_deck, linked: true).call
 
-    assert_includes html, %(<a href="/archetypes/#{@archetype.id}" data-turbo-frame="_top">)
+    # The slug spelled out rather than interpolated off the record: this asserts the URL an
+    # archetype actually has, which is what an interpolated `to_param` would stop doing.
+    assert_includes html, %(<a href="/archetypes/teal-mask-ogerpon-ex" data-turbo-frame="_top">)
   end
 
   # The other half of the same decision: Decks::DeckCard wraps its whole body in an anchor, so the

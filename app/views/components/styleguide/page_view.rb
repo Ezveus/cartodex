@@ -230,7 +230,8 @@ module Styleguide
         query: "ogerpon",
         decks: [
           Deck.new(id: 1, key: "sg-ogerpon-toolbox", name: "Ogerpon Toolbox", format: "standard",
-                   archetype: Archetype.new(name: "Teal Mask Ogerpon ex")),
+                   archetype: Archetype.new(name: "Teal Mask Ogerpon ex",
+                                            slug: "teal-mask-ogerpon-ex")),
           Deck.new(id: 2, key: "sg-tuesday-list", name: "Tuesday List", format: "glc")
         ],
         deck_total: 4,
@@ -245,13 +246,13 @@ module Styleguide
         tournament_total: 1,
         shared_decks: [
           Deck.new(id: 3, key: "sg-zoroark-box", name: "Zoroark Box", format: "standard",
-                   archetype: Archetype.new(name: "Zoroark Control"))
+                   archetype: Archetype.new(name: "Zoroark Control", slug: "zoroark-control"))
         ],
         shared_deck_total: 1,
         # The fifth group. Its rows print both member cards' printing_labels, so the sample
         # archetype carries real Card objects rather than a bare name.
         archetypes: [
-          Archetype.new(id: 1, name: "Teal Mask Ogerpon ex",
+          Archetype.new(id: 1, name: "Teal Mask Ogerpon ex", slug: "teal-mask-ogerpon-ex",
                         primary_card: Card.new(name: "Teal Mask Ogerpon ex",
                                                set_name: "TWM", set_number: "25"))
         ],
@@ -303,8 +304,13 @@ module Styleguide
       end
     end
 
+    # Carries a slug for the reason sg_sample_deck carries a key: Archetype#to_param is the
+    # slug, and a callback has not run on an unpersisted record, so anything that builds
+    # archetype_path from this stand-in — Decks::PublicBadges below, the spotlight's archetype
+    # group above — would raise without one.
     def sg_sample_archetype
-      Archetype.new(name: "Charizard ex", primary_card: Card.new(type_symbol: "Fire"))
+      Archetype.new(name: "Charizard ex", slug: "charizard-ex",
+                    primary_card: Card.new(type_symbol: "Fire"))
     end
 
     # Unpersisted, like every other stand-in on this page, but carries a key — the styleguide's
@@ -398,7 +404,8 @@ module Styleguide
     # second select.
     def sg_metagame_scope
       Archetypes::MetagameScope::Result.new(
-        archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex"),
+        archetype: Archetype.new(id: 6, name: "Raging Bolt ex / Teal Mask Ogerpon ex",
+                                 slug: "raging-bolt-ex-teal-mask-ogerpon-ex"),
         standings: nil, listed_standings: nil,
         pool: StandardPool.new(id: 9), lists_count: 3, online_lists_count: 2,
         unpooled: true, unpooled_in_sample: true, all_formats_lists_count: 93,
