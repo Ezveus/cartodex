@@ -126,19 +126,143 @@ body {
   display: flex;
   align-items: center;
   height: 56px;
-  gap: 2rem;
+  /* 1.5rem, not 2. `.navbar-menu` is `display: contents`, so this gap falls between four items in
+     the visitor's navbar, and 2rem of it spent 96px on whitespace in a row that had none to spare:
+     measured, adding the brand mark took that navbar — the one this change leaves flat — from 0 to
+     6px of document overflow at 769px. The grouped navbars are dense enough that the row reads as
+     well at 1.5. */
+  gap: 1.5rem;
 }
 
 .navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1.25rem;
   font-weight: bold;
   color: var(--primary-color);
   text-decoration: none;
 }
 
+/* flex: none because the brand is a flex item that the row may compress: without it the mark is
+   the first thing squeezed when the row runs out of space, which is exactly when it matters. */
+.navbar-logo {
+  display: block;
+  flex: none;
+}
+
+/* Stretched to the bar's full height, with its own children re-centred: a group's panel is
+   `top: 100%` of the group, and a group centred in the row is a 34px box in a 56px bar — the panel
+   then opened 7px *above* the bar's bottom edge and overlapped it. Stretching moves 100% to where
+   the bar actually ends; `align-items: center` keeps the links themselves the size they were. */
 .navbar-links {
   display: flex;
+  align-self: stretch;
+  align-items: center;
   gap: 0.25rem;
+}
+
+/* A navbar entry that expands rather than navigating. Above the breakpoint the trigger is the
+   entry and the panel hangs off it; below it (see the mobile block) the trigger disappears, the
+   heading takes its place and the panel becomes a plain section of the drawer — the whole
+   responsive switch is these rules and no JavaScript, which is what keeps the trigger's
+   aria-expanded from ever describing a panel the drawer is already showing. */
+.navbar-group {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+}
+
+.navbar-group-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-color);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.navbar-group-trigger:hover {
+  background-color: var(--background-color);
+}
+
+.navbar-group-trigger.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* Drawn rather than shipped, like the search lens and the hamburger beside it. */
+.navbar-group-caret {
+  width: 0;
+  height: 0;
+  border-top: 5px solid currentcolor;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.navbar-group-heading {
+  display: none;
+}
+
+.navbar-group-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 190px;
+  margin-top: 0.25rem;
+  padding: 0.35rem;
+  border-radius: 8px;
+  /* --ink-800, not --surface: .dropdown-menu is a white card, which is right hanging off a page
+     and wrong hanging off a black bar. */
+  background: var(--ink-800);
+  box-shadow: var(--e2);
+  z-index: 50;
+}
+
+/* The account menu is the last item in the row, so a panel anchored to its left edge would leave
+   the viewport rather than open into it. */
+.navbar-group-panel--right {
+  right: 0;
+  left: auto;
+}
+
+.navbar-group-panel--open {
+  display: block;
+}
+
+/* nowrap here and deliberately NOT on .navbar-link at large: the panel is a column that sizes
+   itself to its content, so there is nothing for a wide label to overflow. In the row there is —
+   measured, `white-space: nowrap` on every .navbar-link costs Ui::PublicNavbar 48px of document
+   overflow at 769px, where it currently has none, because that navbar's fit depends on "Shared
+   decks" wrapping to two lines. */
+.navbar-group-panel .navbar-link {
+  display: block;
+  white-space: nowrap;
+}
+
+.navbar-group-panel .navbar-user {
+  display: block;
+  padding: 0.4rem 0.75rem;
+}
+
+.navbar-group-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ink-700);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .navbar-link {
@@ -217,12 +341,25 @@ body {
   gap: 1rem;
 }
 
+/* The account menu is what replaced .navbar-right in the two signed-in navbars: the email plus
+   Settings/Admin/Sign out used to sit in the row, and the email — one unbreakable word — was the
+   single widest thing in it that no amount of flex shrinking could narrow. .navbar-right stays
+   because Ui::PublicNavbar still has one (Sign in / Sign up), so both rules are live. */
+.navbar-account {
+  order: 2;
+  margin-left: auto;
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+}
+
 /* Two flex items with `margin-left: auto` split the free space between them rather than one of
    them taking it, which parked the trigger mid-navbar — the same construct, and the same fix, as
    the mobile block below applies to the hamburger. Only the first item needs the margin; scoping
    it to a navbar that has a trigger leaves the admin one, which has none, pushing its own
-   .navbar-right right. */
-.navbar-search-trigger ~ .navbar-menu .navbar-right {
+   account menu right. */
+.navbar-search-trigger ~ .navbar-menu .navbar-right,
+.navbar-search-trigger ~ .navbar-menu .navbar-account {
   margin-left: 0;
 }
 
@@ -2384,7 +2521,52 @@ textarea.form-input {
     padding: 0.6rem 0.75rem;
   }
 
-  .navbar-right {
+  /* The whole responsive half of Ui::NavGroup, and it is entirely here: the trigger goes away, the
+     heading it shares a label with takes its place, and the panel stops floating and becomes a
+     plain section of the drawer that is always shown. No second tap to reach a link on a phone,
+     and — because the button is gone rather than restyled — no aria-expanded="false" describing a
+     panel the drawer is displaying. */
+  .navbar-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .navbar-group-trigger,
+  .navbar-group-initial {
+    display: none;
+  }
+
+  .navbar-group-heading {
+    display: block;
+    padding: 0.7rem 0.75rem 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .navbar-group-panel {
+    display: block;
+    position: static;
+    min-width: 0;
+    margin-top: 0;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .navbar-group-panel .navbar-link {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .navbar-group-panel .navbar-user {
+    padding: 0.4rem 0.75rem;
+  }
+
+  .navbar-right,
+  .navbar-account {
     flex-direction: column;
     align-items: flex-start;
     gap: 0;
@@ -2841,6 +3023,14 @@ h1, h2, h3, h4 {
 .navbar-link { color: var(--ink-200); }
 .navbar-link:hover { background: rgba(255, 255, 255, 0.08); }
 .navbar-link.active { color: #fff; font-weight: 600; }
+.navbar-group-trigger { color: var(--ink-200); }
+.navbar-group-trigger:hover { background: rgba(255, 255, 255, 0.08); }
+.navbar-group-trigger.active { color: #fff; font-weight: 600; }
+.navbar-group-heading { color: var(--ink-300); }
+/* The brand is already the loudest thing in the bar, so it cannot get louder to say it is the
+   active entry — Dashboard's marker is a rule in brand red under the word, which is the same
+   colour .navbar-link.active carries away from the dark rail. */
+.navbar-brand.active .navbar-brand-word { box-shadow: inset 0 -2px 0 var(--flare); }
 .navbar-user { color: var(--ink-300); font-family: var(--font-mono); font-size: 0.78rem; }
 .navbar-toggle-icon,
 .navbar-toggle-icon::before,
@@ -2868,7 +3058,8 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 }
 
 @media (max-width: 768px) {
-  .navbar-right { border-top-color: rgba(255, 255, 255, 0.12); }
+  .navbar-right,
+  .navbar-account { border-top-color: rgba(255, 255, 255, 0.12); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3102,6 +3293,20 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
    park it against the right edge, far from the paragraph describing it. */
 .sg-search-trigger-demo .navbar-search-trigger {
   margin-left: 0;
+}
+
+/* Ui::Logo and Ui::NavGroup only ever exist on the dark bar, and the group's own colours come from
+   the unscoped dark-navbar layer, so a paper ground would document them wrong. min-height leaves
+   room for the panel, which is absolutely positioned and would otherwise open over the next
+   section. */
+.sg-nav-demo {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  min-height: 5rem;
+  padding: 0 1rem;
+  border-radius: 8px;
+  background: var(--ink-900);
 }
 
 /* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in —

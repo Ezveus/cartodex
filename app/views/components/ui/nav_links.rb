@@ -37,5 +37,14 @@ module Ui
       active = sections.include?(@active_section)
       link_to label, path, class: [ "navbar-link", ("active" if active) ].compact.join(" ")
     end
+
+    # An entry that expands instead of navigating. `entries` are `[label, path, [section, …]]`
+    # triples, and passing them as data is what makes the group's own lit state the union of
+    # theirs — see Ui::NavGroup for why that is not a style preference.
+    def nav_group(label, id, *entries, **options)
+      render Ui::NavGroup.new(
+        label: label, id: id, entries: entries, active_section: @active_section, **options
+      )
+    end
   end
 end

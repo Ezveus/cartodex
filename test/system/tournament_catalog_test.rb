@@ -8,7 +8,7 @@ class TournamentCatalogTest < ApplicationSystemTestCase
 
   test "a member searches the catalog, catalogues the missing event, and records a participation" do
     visit dashboard_path
-    click_nav_link "Tournaments"
+    click_nav_link "All tournaments"
 
     fill_in "Search tournaments", with: "toulouse"
     assert_text "No tournaments match this search"

@@ -186,9 +186,14 @@ class GlobalSearchNavbarLayoutTest < ApplicationSystemTestCase
   drive_at 1400, 900
 
   # The navbar's own `gap`, which is what separates the trigger from its neighbour once nothing
-  # else claims the free space.
-  NAVBAR_GAP = 32
+  # else claims the free space. 24, not 32, since the grouped navbar took `.navbar-inner`'s gap
+  # from 2rem to 1.5rem — `.navbar-menu` is `display: contents`, so that gap falls between four
+  # items here and 2rem of it was 96px of whitespace in a row that had none to spare.
+  NAVBAR_GAP = 24
 
+  # `.navbar-right` and not `.navbar-account`, which is what the two *signed-in* navbars now carry:
+  # this class is deliberately a visitor's, per the comment above, and Ui::PublicNavbar's Sign in /
+  # Sign up row is the last .navbar-right in the app.
   test "the trigger sits beside the links on the right rather than mid-navbar" do
     visit cards_path
 

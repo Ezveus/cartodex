@@ -139,6 +139,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     NAV_ATTEMPTS.times do
       begin
         open_navbar_menu
+        open_navbar_group(label)
 
         return find(:link, label, class: "navbar-link", wait: Capybara.default_max_wait_time).click
       rescue Capybara::Ambiguous
@@ -174,6 +175,37 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     find(".navbar-toggle").click
   rescue Selenium::WebDriver::Error::StaleElementReferenceError
     # The page swapped underneath the toggle. The caller's next attempt sees the new one.
+    nil
+  end
+
+  # A no-op below the breakpoint, where the drawer shows every group's panel already and the
+  # trigger is `display: none`, and a no-op for an ungrouped entry. Above it, a grouped link sits
+  # in a closed panel, so the link is located ignoring visibility and its own group's trigger is
+  # clicked — which is why callers still pass the leaf's label and nothing else changed at the
+  # twelve call sites but the three labels that were actually renamed.
+  #
+  # The early return is on the link already being visible rather than on the viewport: that is the
+  # question this method actually has, and asking it that way means the mobile path never depends
+  # on knowing which side of the breakpoint it is on.
+  def open_navbar_group(label)
+    link = find(:link, label, class: "navbar-link", visible: :all, wait: 0)
+    return if link.visible?
+
+    # The space-padded normalize-space idiom, not `contains(@class, 'navbar-group')`: the link's
+    # nearest ancestor is `.navbar-group-panel`, whose class *contains* that substring, so the
+    # naive predicate matches the panel, finds no trigger inside it, and silently opens nothing.
+    # Measured — every grouped call site failed with "the navbar never offered a visible link".
+    link.find(:xpath, "ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' navbar-group ')][1]", wait: 0)
+        .find(".navbar-group-trigger", wait: 0)
+        .click
+  rescue Capybara::Ambiguous
+    # A subclass of ElementNotFound, so the rescue below would swallow it — and the caller's own
+    # find, which looks only at visible links, might then match exactly one and never report that
+    # two navbar entries share a label. Same reasoning as click_nav_link's own re-raise.
+    raise
+  rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::StaleElementReferenceError
+    # No such link yet, no enclosing group, or the page swapped. click_nav_link's own retry is
+    # what handles all three — raising a different error here would only mask its message.
     nil
   end
 end

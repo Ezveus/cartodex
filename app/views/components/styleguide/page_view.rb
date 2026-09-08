@@ -47,6 +47,7 @@ module Styleguide
         stats_section
         form_section
         spotlight_section
+        navigation_section
         deck_card_section
         sharing_section
         printing_picker_section
@@ -219,6 +220,42 @@ module Styleguide
           plain "focus au champ déjà affiché."
         end
         div(class: "sg-row sg-search-trigger-demo") { render Ui::SearchTrigger.new }
+      end
+    end
+
+    # The mark and the grouped entry, both shipped components rather than copies of their markup.
+    # They sit on a dark strip because that is the only ground either of them ever has: the group's
+    # colours come from the dark-navbar layer, which — unlike the search trigger's, deliberately
+    # scoped to `.navbar` — is unscoped, so on paper the trigger would be ink-200 on white.
+    def navigation_section
+      sg_section("Composants", "Navigation",
+              "La marque et l'entrée groupée. Au-dessus de 768px l'entrée est un bouton qui " \
+              "déplie son panneau ; en dessous, le bouton disparaît, un titre de section portant " \
+              "le même libellé prend sa place et le panneau devient une simple section du tiroir, " \
+              "déjà ouverte — la bascule est entièrement en CSS, aucun JS ne connaît le point de " \
+              "rupture.") do
+        div(class: "sg-nav-demo") do
+          # Three sizes of one drawing. The mat is --ink-700 rather than the mark's own #0E1320,
+          # which is exactly the bar's background: served as a file, the logo's body vanishes.
+          render Ui::Logo.new(size: 26)
+          render Ui::Logo.new(size: 40)
+          render Ui::Logo.new(size: 64)
+        end
+
+        p { "L'entrée groupée est vivante : cliquez-la." }
+
+        div(class: "sg-nav-demo") do
+          # `id:` must not collide with the navbar's own groups on this page — that is what
+          # StyleguideControllerTest's page-wide id assertion is for.
+          render Ui::NavGroup.new(
+            label: "Decks", id: "styleguide", active_section: "decks",
+            entries: [
+              [ "My decks", "#", %w[decks] ],
+              [ "Shared decks", "#", %w[shared_decks] ],
+              [ "Collection", "#", %w[collections] ]
+            ]
+          )
+        end
       end
     end
 
