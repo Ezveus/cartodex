@@ -519,6 +519,24 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The badge withheld its href from a visitor while /archetypes required a session, and nothing
+  # in the suite asked for it either way — this is the pair of assertions that now does. The URL
+  # is spelled out rather than built from the helper, so it pins the address and not `to_param`.
+  test "a standing's archetype badge links to the report for a visitor as well as a member" do
+    sign_out @user
+
+    get tournament_path(@tournament)
+
+    assert_response :success
+    assert_select ".data-table-row a[href=?][data-turbo-frame=_top]", "/archetypes/standings-marker"
+  end
+
+  test "a member sees the same archetype link" do
+    get tournament_path(@tournament)
+
+    assert_select ".data-table-row a[href=?][data-turbo-frame=_top]", "/archetypes/standings-marker"
+  end
+
   test "a standing with a field list links to it, and one without says so" do
     tournament_standings(:ash_masters).update!(deck: decks(:field_list))
 

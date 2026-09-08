@@ -128,3 +128,41 @@ paragraph becomes the record of what shipped, keeping the seven-edit history).
 `SYSTEM_TEST_VIEWPORT=mobile bin/rails test:system`, `bin/rubocop` on the written files,
 `bin/brakeman --no-pager`, `bin/importmap audit`. Sabotage every new test. Open both pages as a
 visitor in a real browser at 1400 and at 390.
+
+## What this plan got wrong, found by attacking it before it existed in code
+
+The adversarial pass over the plan (mandate: "which of these decisions would the existing suite
+fail to notice if they were implemented wrong?") returned twelve items. Two were live defects the
+plan walked straight into, four were real coverage holes, four were errors about this codebase,
+and two were already covered by tests the plan had.
+
+**Two defects, both reproduced before being fixed:**
+
+1. `Decks::PublicBadges` is rendered inside an anchor at **two of its three** call sites
+   (`Decks::DeckCard`'s `a.deck-item-link`, `Home::DashboardView`'s showcase tile), so the
+   unconditional `href:` the plan prescribed nested an `<a>` in an `<a>` — measured: the
+   description, the card count and the whole badge row fell outside the deck's own link. The
+   existing `Nokogiri::HTML5` guard covers `/decks`, which renders `ClassificationBadges`, and
+   stayed green. Fixed with a `linked:` keyword; two new guards, both asserting containment
+   before emptiness (the parser makes the escaped anchor a *sibling*, so the emptiness half alone
+   passes over broken markup — my first draft of the showcase test did exactly that, and also
+   picked the first tile on the page, which carries no badge).
+2. `to_param` reading the in-memory slug made a refused admin rename re-render a form posting to
+   **another archetype's** URL, where `find_by!` resolved it and renamed the wrong row — 200, no
+   error. Fixed with `slug_in_database || slug`.
+
+**Four coverage holes the plan did not name:** the migration's backfill is unreachable by CI
+(`db:test:prepare` loads the schema, never a migration) and carries its own copy of the slug
+rule, so it is now called by name from `ArchetypeTest`; both flat-cost tests on `#index`/`#show`
+are *relative*, so a constant added query is invisible to them and an absolute, signed-out one
+was added; `Api::ArchetypesController#create` has no name field, so a slug collision there is a
+422 nothing could act on (documented, pinned); and the visitor system test needed
+`Warden.test_reset!`, without which it would have passed as a member and defended edit 5 without
+exercising it.
+
+**Four errors about the codebase, all noisy rather than silent:** §1.4 named
+`archetype_badge_test.rb` as building an unpersisted archetype (it does not — it hardcodes a
+numeric href instead, which is the line that went red), missed
+`name_group_row_test.rb`'s unpersisted record, missed `Styleguide::PageView`'s five, and missed
+three `Archetype.insert_all` calls in `ArchetypeTest` against a NOT NULL column. All four
+surfaced as red on the first full run.

@@ -225,37 +225,58 @@ nil on every imported event. `by_division` walks `TournamentStanding::DIVISIONS`
 `group(:division)` comes back alphabetical (junior, masters, senior) while players read junior,
 senior, masters — the correction the standings sheet had to make in SQL for its page boundaries.
 
-**Member-only, and opening the pages to visitors is seven edits, not three** — the list lives in
-the comment atop `ArchetypesController` and was produced by applying the obvious three and reading
-what broke *and what did not*. Three make the route reachable and are each covered by a test that
-goes red without them: move the resource out of `authenticate :user`, `include PubliclyReachable`
-with `publicly_reachable :index, :show`, flip `ArchetypePolicy` from `user.present?` to `true`.
-**Four more decide what a visitor then sees, and no test would report any of them missing**: the
-per-IP `rate_limit … unless: -> { user_signed_in? }` sized like `tournaments#index`'s 60/min
-(deliberately absent now — no anonymous request can reach the route, so nothing could exercise it,
+**Public, and it took seven edits and not three** — the list lived in the comment atop
+`ArchetypesController` as a to-do before it shipped, produced by applying the obvious three and
+reading what broke *and what did not*, and it is kept there now as the record of what it cost.
+Three make the route reachable and are each covered by a test that goes red without them: the
+resource sits outside `authenticate :user`, `include PubliclyReachable` with
+`publicly_reachable :index, :show`, `ArchetypePolicy#index?`/`#show?` answer `true`.
+**Four more decide what a visitor then sees, and no test would have reported any of them
+missing**: the per-IP `rate_limit … unless: -> { user_signed_in? }` at
+`tournaments#index`'s 60/min (absent before, because no anonymous request could reach the route,
 and a limiter nobody can exercise is a limiter nobody knows works); `nav_link "Archetypes"` in
 `Ui::PublicNavbar`, without which a visitor on those pages lights **zero** navbar entries, a hole
-`NavbarActiveSectionTest` cannot see because it names no visitor archetype page; dropping
+`NavbarActiveSectionTest` could not see because it named no visitor archetype page;
 `Search::Global#archetype_scope`'s `Archetype.none` branch, whose trap is the opposite kind — its
-test keeps *passing* while defending a rule that has become false, so it has to be inverted in the
-same commit; and the two archetype links a public page withholds today, `Tournaments::Standings::Row`'s
-`if @viewer.present?` guard and `Decks::PublicBadges` (which passes no `href:` at all) — the
+test kept *passing* while defending a rule that had become false, so it was inverted in the same
+commit; and the two archetype links a public page used to withhold, `Tournaments::Standings::Row`'s
+`if @viewer.present?` guard and `Decks::PublicBadges` (which passed no `href:` at all) — the
 standings sheet and a shared deck are both public, and a link to a sign-in wall is worse than no
-link, right up until the wall is gone. `Ui::ArchetypeBadge` gained the optional `href:` that all
-three sites pass or withhold, and its anchor carries `data-turbo-frame="_top"` — the breakout
-belongs to the component and not to a call site, because every surface that passes an href renders
-it inside a Turbo Frame, and frame-scoped the click swaps that frame for Turbo's missing-frame
-error instead of navigating; only a system test tells those two outcomes apart, since the markup is
-identical and a request test sees a 200 for a page nobody reaches. `Decks::ClassificationBadges`
-takes `linked:` rather than linking unconditionally, because its two callers have opposite
-constraints: `Decks::HeaderFrame` renders the row in a plain div, while `Decks::DeckCard` renders
-it inside `a.deck-item-link` and an `<a>` within an `<a>` makes an HTML5 parser close the outer one
-at the second start tag — the deck's own link ended after its `<h2>`, and the description and card
-count fell outside any link. `assert_select` parses HTML4 and nests anchors happily, so the guard
-is a controller test reading `Nokogiri::HTML5`. `Search::Global`'s fifth group prefixes its option ids
+link, right up until the wall is gone. `Ui::ArchetypeBadge`'s optional `href:` stays opt-in, and
+its anchor carries `data-turbo-frame="_top"` — the breakout belongs to the component and not to a
+call site, because every surface that passes an href renders it inside a Turbo Frame, and
+frame-scoped the click swaps that frame for Turbo's missing-frame error instead of navigating;
+only a system test tells those two outcomes apart, since the markup is identical and a request
+test sees a 200 for a page nobody reaches. **`Decks::PublicBadges` needed a `linked:` keyword and
+not an href**, for `Decks::ClassificationBadges`' own reason reaching a second component: two of
+its three callers render it inside an anchor (`Decks::DeckCard`'s `a.deck-item-link`,
+`Home::DashboardView`'s showcase tile), and measured with an unconditional href the description,
+the card count and the whole badge row fell outside the deck's link — see
+`docs/architecture/public-surface.md`. `assert_select` parses HTML4 and nests anchors happily, so
+the guards read `Nokogiri::HTML5`, and they assert containment *before* emptiness because the
+parser makes the escaped anchor a sibling. `Search::Global`'s fifth group prefixes its option ids
 `spotlight-option-archetype-` for the reason `shared_decks` had to. The two archetype rows in
-`public_access_test.rb` move from `owner_only_gets` to `public_gets` that day, and three tests
-asserting today's refusal turn round with them.
+`public_access_test.rb` moved from `owner_only_gets` to `public_gets`, and three tests asserting
+the old refusal turned round with them — what the move gives up is the signed-in half, which is
+what exercises `verify_authorized`; a missing `authorize` is still caught, because a public
+request halts no `before_action` and so reaches the concern's `after_action`.
+
+**The address is a slug of the name, and the name is the member cards' unless somebody typed
+one.** `/archetypes/dragapult-ex`, from `archetypes.slug` — `name_normalized`, parameterized; a
+stored, NOT NULL, UNIQUE column recomputed `before_validation` on every save, so a rename moves
+the URL and nothing records the old one. It is stored rather than computed per request because
+`parameterize` is Ruby: `find_by!(slug:)` stays the one indexed query `find` was, and the page's
+17 are unmoved. `assign_slug` is declared **after** `auto_generate_name`, which is load-bearing —
+that callback is what supplies the name when nobody typed one, so a slug computed first would be
+blank, and blank is refused, which would 422 every `Api::ArchetypesController` create. Two
+refusals, both reported on `:name` because that is the only field the admin form has: a collision
+(measured, two pairs of the catalogue's 1806 card names parameterize alike, both Nidoran
+gender-symbol pairs, and neither leads an archetype) and a blank (zero instances; #111 is what
+reaches it). `to_param` returns `slug_in_database || slug` and **not** the in-memory value: a
+refused rename leaves the rejected name's slug on the record, which in the one case the
+uniqueness validation exists for is *another archetype's*, and the re-rendered admin form then
+posted to that archetype's URL and renamed the wrong row. Full record in
+`docs/superpowers/specs/2026-09-08-public-archetypes-and-slugs-design.md`.
 
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list
 archetype (39 000 `deck_cards` rows): `MetagameScope` 4 queries / 15.6 ms, `CardStats` 3 / 137.3 ms,

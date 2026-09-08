@@ -342,11 +342,55 @@ class ArchetypeTest < ActiveSupport::TestCase
 
   # The third half of what the fixture file's comment promises: fixtures skip callbacks, so the
   # slug is spelled out by hand beside name_normalized and nothing keeps the two in step.
+  #
+  # Derived from `name` and not from `name_normalized` on purpose, even though the callback reads
+  # the mirror: the sibling assertion above compares `name.downcase` to `name_normalized`
+  # *without* squishing, so a fixture whose name carries a double space could satisfy both checks
+  # while disagreeing with what a save would produce. Going back to `name` closes that.
   test "every archetype fixture carries the slug its name implies" do
     Archetype.find_each do |archetype|
-      assert_equal archetype.name_normalized.parameterize, archetype.slug,
+      assert_equal archetype.name.squish.downcase.parameterize, archetype.slug,
         "#{archetype.name.inspect} fixture is out of step"
     end
+  end
+
+  # CI loads db/schema.rb and never runs a migration, so the backfill is code the suite would
+  # otherwise never execute — and it carries its own copy of the slug rule, spelled out so the
+  # migration survives the model moving on. A divergence between the two produces slugs that are
+  # wrong while being unique and non-blank, which is exactly what neither the NOT NULL nor the
+  # UNIQUE index can catch. Same reason AddFingerprintsToArchetypes' three checks are called by
+  # name from this file.
+  test "the migration's backfill writes what the model's callback would" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    [ "Mega Absol ex / N's Zoroark ex", "  Double  Spaced  Name  ", "Flabébé Box",
+      "Nidoran♀ Toolbox" ].each do |name|
+      archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1", name: name)
+
+      assert_equal archetype.slug, AddSlugToArchetypes.slug_for(name),
+        "the migration and the callback disagree on #{name.inspect}"
+
+      archetype.destroy!
+    end
+  end
+
+  test "the migration's backfill actually writes the column" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    # A placeholder slug rather than none: the column is NOT NULL, and what this exercises is the
+    # loop overwriting a wrong value, not the nullable window the migration opens for itself.
+    Archetype.insert_all([
+      { name: "Backfill  Me", name_normalized: "backfill me", slug: "placeholder",
+        primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "backfill_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    AddSlugToArchetypes.new.backfill_slugs
+
+    assert_equal "backfill-me", Archetype.find_by!(name: "Backfill  Me").slug
+    # Every other row is rewritten too, and must come out where it went in.
+    assert_equal "teal-mask-ogerpon-ex", archetypes(:ogerpon).reload.slug
   end
 
   private

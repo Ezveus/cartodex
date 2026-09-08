@@ -154,4 +154,28 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "TWM", entry["primary_card"]["set_name"]
     assert_equal "25", entry["primary_card"]["set_number"]
   end
+  # The one place the slug's uniqueness rule bites a member rather than an admin. This endpoint
+  # builds the archetype with no name at all — `auto_generate_name` supplies it from the two
+  # cards — so two distinct card pairs whose generated names parameterize alike are refused here
+  # with no field the picker could let the user change. Measured, the whole 1806-name catalogue
+  # holds two such pairs (Nidoran♀/♂ and Team Rocket's Nidoran♀/♂) and neither leads an archetype
+  # today; the fix when it happens is an admin typing a custom name, which this form has not got.
+  # Pinned so the message stays one a reader can at least understand, and so the 422 is a
+  # decision rather than a surprise.
+  test "a create whose generated name collides on the address is refused with a readable error" do
+    existing = Card.create!(name: "Slugmate\u2640", card_type: "Pok\u00e9mon", hp: 60,
+                            rarity: "Common", type_symbol: "Colorless", retreat_cost: 1,
+                            set_name: "SLG", set_number: "1")
+    twin = Card.create!(name: "Slugmate\u2642", card_type: "Pok\u00e9mon", hp: 60,
+                        rarity: "Common", type_symbol: "Colorless", retreat_cost: 1,
+                        set_name: "SLG", set_number: "2")
+    Archetype.create!(primary_card: existing)
+
+    assert_no_difference -> { Archetype.count } do
+      post api_archetypes_path, params: { primary_card_id: twin.id }
+    end
+
+    assert_response :unprocessable_entity
+    assert_match "/archetypes/slugmate", JSON.parse(response.body)["errors"].join
+  end
 end

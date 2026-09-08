@@ -82,7 +82,18 @@ class Archetype < ApplicationRecord
   # column. No fallback to the id: a record whose callbacks have not run has no address, and a
   # component test that renders an unpersisted archetype spells the slug out by hand, the rule
   # the fixtures already follow for name_normalized.
-  def to_param = slug
+  #
+  # **The value in the database, not the one in memory**, and that is not a nicety: an address
+  # names a row as it is stored. `assign_slug` runs before_validation, so a *rejected* update
+  # leaves the new name's slug on the in-memory record — and in the one case the uniqueness
+  # validation exists for, that slug is another archetype's. Reading the dirty attribute made
+  # `Admin::ArchetypesController#update`'s `render :edit` emit a form posting to
+  # /admin/archetypes/<the other archetype>, so the admin's corrected resubmission renamed the
+  # wrong row, with a 200 and no error anywhere. Admin::ArchetypesControllerTest pins it.
+  #
+  # `slug_in_database` is nil only for a new record, which is what the `||` covers — and a new
+  # record's `_path` is a collection path anyway.
+  def to_param = slug_in_database || slug
 
   private
 

@@ -735,6 +735,20 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-compare-checkbox", count: 0
   end
 
+  # Decks::PublicBadges passed no href at all while /archetypes was a sign-in wall, and nothing
+  # asked for it. A visitor reading someone else's shared deck can now follow the tag to the
+  # report behind it.
+  test "a visitor's shared deck links its archetype badge to the report" do
+    sign_out @user
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon))
+
+    get deck_path(theirs)
+
+    assert_response :success
+    assert_select ".deck-badges a[href=?]", "/archetypes/teal-mask-ogerpon-ex"
+  end
+
   test "the shared index's archetype filter comes from the shared decks, not from mine" do
     theirs = decks(:two)
     # Fixtures are `ogerpon` and `budew_ogerpon` (test/fixtures/archetypes.yml); there is no :one.
@@ -1053,6 +1067,59 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       "the card count must sit inside the deck's link — a nested anchor closes it early"
     assert_empty link.css("a"),
       "no anchor may be nested inside the deck card's link"
+  end
+
+  # The same rule on the two surfaces that render Decks::PublicBadges instead of
+  # ClassificationBadges, and the reason it is a second test rather than a third `get` in the one
+  # above: those two answer for a *visitor*, so they were outside every assertion this file made
+  # while the badge carried no link at all. The day /archetypes went public and the badge grew an
+  # `href`, both of them nested an anchor inside the deck's own — measured before the fix, the
+  # description and the card count both fell outside `a.deck-item-link` entirely.
+  test "a shared deck card's whole body stays inside its link, badge and all" do
+    sign_out @user
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon),
+                   description: "A shared list")
+
+    get shared_decks_path
+    assert_response :success
+
+    card = Nokogiri::HTML5(response.body).css(".deck-item").find do |node|
+      node.at_css("h2")&.text == theirs.name
+    end
+    assert card, "expected a deck card for #{theirs.name}"
+
+    link = card.at_css("a.deck-item-link")
+    assert link.at_css("p.deck-card-count"),
+      "the card count must sit inside the deck's link — a nested anchor closes it early"
+    assert link.at_css("p.deck-description"),
+      "the description must sit inside the deck's link too"
+    assert_empty link.css("a"),
+      "the archetype badge must not be a link inside the deck card's link"
+  end
+
+  test "the dashboard showcase's deck tiles carry no nested anchor either" do
+    sign_out @user
+    decks(:two).update!(user: users(:two), shared: true, archetype: archetypes(:ogerpon))
+
+    get dashboard_path
+    assert_response :success
+
+    # The tile for *this* deck, not the first one on the page: the showcase lists several shared
+    # decks and only a tagged one renders an archetype badge, so `at_css` picked a tile that
+    # could not exhibit the bug and both assertions below passed over it.
+    tile = Nokogiri::HTML5(response.body).css("a.dashboard-showcase-deck").find do |node|
+      node.text.include?(decks(:two).name)
+    end
+    assert tile, "expected a showcase tile for #{decks(:two).name}"
+    # The containment assertion comes first, and `assert_empty tile.css("a")` alone is why: when
+    # the parser closes the tile at a nested anchor, that anchor becomes the tile's *sibling*, so
+    # the emptiness check passes over broken markup. What actually distinguishes the two outcomes
+    # is whether the badges are still inside.
+    assert tile.at_css(".deck-badges"),
+      "the badges must sit inside the tile's link — a nested anchor closes it early"
+    assert_empty tile.css("a"),
+      "the archetype badge must not be a link inside the showcase tile's link"
   end
 
   private

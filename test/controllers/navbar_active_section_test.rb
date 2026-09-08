@@ -63,6 +63,16 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav_link "Archetypes", archetype_path(archetypes(:ogerpon))
   end
 
+  # The hole this closes: `Ui::NavLinks.section_for` resolves both archetype pages to
+  # "archetypes", and Ui::PublicNavbar had no link declaring that section, so a visitor on either
+  # page lit **zero** entries — outside every assertion this file made, because it named no
+  # visitor archetype page. Adding the nav_link without adding this test leaves the same hole
+  # for the next entry.
+  test "a visitor's archetype pages light the archetype entry alone" do
+    assert_active_nav_link "Archetypes", archetypes_path
+    assert_active_nav_link "Archetypes", archetype_path(archetypes(:ogerpon))
+  end
+
   test "a visitor's tournament pages light the catalog entry" do
     assert_active_nav_link "Tournaments", tournaments_path
     # One section, not two: unlike "Shared decks", this link has no second list to stand in

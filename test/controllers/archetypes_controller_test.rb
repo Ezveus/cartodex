@@ -264,6 +264,26 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the catalog: #{small} -> #{large}"
   end
 
+  # An absolute number, and for a visitor. The test above is relative — `assert_equal small,
+  # large` — so a *constant* query added to this action (a second lookup, a policy `exists?`, a
+  # preload split in two) lands in both measurements and is invisible to it. And it signs a
+  # member in, while the 60/min limiter this action now carries was sized on what a visitor
+  # costs: 5 queries, measured against the production dump before the pages went public.
+  test "the catalog costs a visitor five queries" do
+    sign_out @user
+
+    get archetypes_path # warm: the first request of a test pays for the schema and the session
+
+    sql = capture_queries { get archetypes_path }
+
+    assert_response :success
+    # Worth knowing when this goes red or, worse, does not: a query whose SQL is *identical* to
+    # one the action already runs is served by the per-request query cache and never reaches this
+    # count — an added `Archetype.count` beside `scope.count` is invisible here, an added
+    # `Card.count` is not.
+    assert_equal 5, sql.size, "the visitor catalog cost #{sql.size} queries:\n#{sql.join("\n")}"
+  end
+
   test "show renders the archetype's report" do
     get archetype_path(archetypes(:standings_marker))
 
@@ -726,14 +746,30 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "a visitor is sent to sign in for both pages" do
+  test "a visitor reads both pages" do
     sign_out @user
 
     get archetypes_path
-    assert_redirected_to new_user_session_path
+    assert_response :success
+    assert_select ".data-table-row", minimum: 1
 
     get archetype_path(archetypes(:ogerpon))
-    assert_redirected_to new_user_session_path
+    assert_response :success
+    assert_select "h1", text: /Teal Mask Ogerpon ex/
+  end
+
+  # PubliclyReachable routes RecordNotFound and Pundit::NotAuthorizedError onto one renderer, and
+  # that renderer is the app's static 404 rather than an in-app page — CardsController's answer
+  # and not DecksController's, since nothing in this catalog is private and a missing archetype
+  # is a missing archetype. Asserted on the body and not only on the status: Rails' own
+  # RecordNotFound handling is also a 404, so the status alone cannot tell the two apart.
+  test "an unknown archetype answers the app's static 404 to a visitor" do
+    sign_out @user
+
+    get "/archetypes/no-such-archetype"
+
+    assert_response :not_found
+    assert_equal Rails.public_path.join("404.html").read, response.body
   end
 
   private

@@ -263,30 +263,30 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_predicate archetype.association(:secondary_card), :loaded?
   end
 
-  # /archetypes is inside the `authenticate :user` block, so an option here would be a link to a
-  # sign-in wall. Deck.none is the pattern archetype_scope copies, and the point of it is that
-  # nothing is *queried* either: the assertion below is on the SQL, not just on the result.
+  # /archetypes is public, so a visitor's spotlight offers archetypes and queries for them. This
+  # assertion is the inversion of the one that stood here while the pages required a session
+  # ("a visitor gets no archetypes, and none are queried for"): that test kept passing after the
+  # rule became false, which is why it had to be turned round in the same commit rather than
+  # left to be discovered.
   #
-  # Three query shapes mention the archetypes table for a visitor, and only one of them is the
-  # archetype *group*:
+  # It still asserts on the SQL and not only on the result, because the two claims are different
+  # and only the first one distinguishes the group's own query from the two other shapes that
+  # mention this table for a visitor:
   #
   #   * `Deck.search` embeds `Archetype.search(q).select(:id)` as a subquery, so the shared-deck
   #     query names archetypes inside a statement whose FROM is `decks`, and always has;
-  #   * `shared_deck_scope` carries `includes(:archetype)` — one line of master, not of this
-  #     feature — which preloads by id whenever a matching shared deck is tagged, and that is a
-  #     query the archetype group did not ask for;
+  #   * `shared_deck_scope` carries `includes(:archetype)`, which preloads by id whenever a
+  #     matching shared deck is tagged — a query the archetype group did not ask for;
   #   * the group itself loads rows through `Archetype.search`, which is a `SELECT DISTINCT
-  #     "archetypes".*` with two LEFT OUTER JOINs onto cards.
+  #     "archetypes".*` with two LEFT OUTER JOINs onto cards. That is the one this counts.
   #
-  # The sample below deliberately produces the second one — the earlier version of this test
-  # matched every `SELECT "archetypes".*` and passed only because no shared deck happened to
-  # match the query and carry an archetype, which is an accident of the fixtures rather than a
-  # property of the code. The preload is excluded by name, so the claim it makes is still
-  # "no archetype rows were loaded for the archetype group".
+  # The sample deliberately produces the second shape as well, so the exclusion is exercised
+  # rather than merely written: an assertion that matched every `SELECT "archetypes".*` would
+  # pass or fail on whether a shared deck happened to match and carry a tag.
   ARCHETYPE_ROWS = /\ASELECT (DISTINCT )?"archetypes"\.\*/i
   ARCHETYPE_PRELOAD = /\ASELECT "archetypes"\.\* FROM "archetypes" WHERE "archetypes"\."id"/i
 
-  test "a visitor gets no archetypes, and none are queried for" do
+  test "a visitor gets archetypes, and the group's own query is what fetched them" do
     tag = Archetype.create!(primary_card: cards(:doublade), custom_name: true,
                             name: "Metal Toolbox")
     # A shared deck matching the same query and tagged with an archetype: this is what makes
@@ -296,16 +296,15 @@ class Search::GlobalTest < ActiveSupport::TestCase
     sql = capture_queries { @result = Search::Global.call(user: nil, query: "metal toolbox") }
 
     assert_equal [ "Metal Toolbox List" ], @result.shared_decks.map(&:name),
-      "sanity: the sample must actually reach the preload this assertion excludes"
+      "sanity: the sample must actually reach the preload the count below excludes"
     assert_equal 1, sql.grep(ARCHETYPE_PRELOAD).size,
       "sanity: the shared-deck preload is what the exclusion below is about"
 
-    # Asserted before the two below, so that a regression is reported as "the database was
-    # touched" rather than as "the list was not empty" — the second is a consequence, and the
-    # first is the claim.
-    assert_empty sql.grep(ARCHETYPE_ROWS).grep_v(ARCHETYPE_PRELOAD),
-      "a visitor's spotlight loaded archetype rows"
-    assert_empty @result.archetypes
-    assert_equal 0, @result.archetype_total
+    # The group's own query ran — asserted before the result, so a regression is reported as
+    # "the group never queried" rather than as "the list was empty", which is its consequence.
+    assert_equal 1, sql.grep(ARCHETYPE_ROWS).grep_v(ARCHETYPE_PRELOAD).size,
+      "a visitor's spotlight must load archetype rows through the group's own query"
+    assert_equal [ "Metal Toolbox" ], @result.archetypes.map(&:name)
+    assert_equal 1, @result.archetype_total
   end
 end

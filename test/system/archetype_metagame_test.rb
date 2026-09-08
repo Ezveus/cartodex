@@ -474,6 +474,74 @@ end
 # only CDP escapes that floor). The header puts a heading and a two-link control on one line, which
 # is the shape that overlaps or overflows when it stops fitting — and neither failure is visible to
 # a text assertion, because the links render either way. They render in the wrong place.
+# A visitor, end to end. Separate class rather than a test in the one above, because that one's
+# setup signs a member in and the whole point here is that nothing does.
+#
+# What no request test reaches: the visitor navbar's "Archetypes" entry has to exist *and* be
+# clickable below the breakpoint (where `.navbar-menu` is display:none until the hamburger opens
+# it), and the sample selector's change event has to submit its form on a page nobody signed in
+# for. Both were unreachable while the route sat inside `authenticate :user`.
+class ArchetypePublicMetagameTest < ApplicationSystemTestCase
+  test "a visitor reaches the catalog from the navbar, opens a report and switches rotation" do
+    # Warden's test session is process-wide and survives across classes, so a member logged in by
+    # another test in this file would otherwise carry over and this test would pass as a *member*
+    # — rendering the member navbar and defending edit 5 without ever exercising it. The
+    # `assert_link "Sign in"` below is the second guard on the same thing.
+    Warden.test_reset!
+    archetype = recorded_archetype
+
+    visit dashboard_path
+    click_nav_link "Archetypes"
+
+    assert_selector "h1", text: "Archetypes"
+    # The visitor navbar and not the member one — a signed-in page carries no "Sign in" link at
+    # all. `visible: :all` because below the breakpoint `.navbar-menu` is display:none until the
+    # hamburger opens it, so a plain assert_link is a claim about the toggle rather than about
+    # which navbar rendered; the toggle is already exercised by click_nav_link above.
+    assert_link "Sign in", visible: :all
+
+    click_on archetype.name
+
+    assert_selector "h1", text: archetype.name
+    assert_text "Recorded in Cartodex"
+    # The address is the slug, and this is where a copied link is what a visitor is handed.
+    assert_current_path(/\A\/archetypes\/#{archetype.slug}/)
+
+    select "TWM-ASC — 12 lists", from: "Sample"
+
+    assert_text "Across 12 lists"
+  end
+
+  private
+
+  # Two events in two pools, so the Sample select renders at all — the same shape the member test
+  # above builds, kept here rather than shared because that one's helpers live in a class whose
+  # setup signs a user in.
+  def recorded_archetype
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+
+    old_event = tournament("Public Rotation Past", Date.new(2025, 12, 6), standard_pools(:twm_asc))
+    new_event = tournament("Public Rotation Present", Date.new(2026, 2, 7), standard_pools(:twm_por))
+
+    12.times { |i| standing(old_event, archetype, "Past Player #{i}") }
+    standing(new_event, archetype, "Present Player")
+
+    archetype
+  end
+
+  def tournament(name, date, pool)
+    Tournament.create!(name: name, date: date, format: "standard", standard_pool: pool)
+  end
+
+  def standing(event, archetype, player)
+    deck = Deck.create!(name: "#{player} list", format: "standard",
+                        standard_pool: event.standard_pool, shared: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    event.standings.create!(player_name: player, division: "masters", archetype: archetype,
+                            deck: deck)
+  end
+end
+
 class ArchetypeReportModesNarrowTest < ApplicationSystemTestCase
   drive_at 390, 844
 

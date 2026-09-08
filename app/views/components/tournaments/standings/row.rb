@@ -58,13 +58,13 @@ module Tournaments
       # precisely for this, and a nil viewer is a visitor, who owns nothing.
       def mine? = @viewer.present? && @standing.tournament_entry&.user_id == @viewer.id
 
-      # Linked for a member, plain for a visitor. This sheet is public and /archetypes is not,
-      # so a bare `href:` here would hand every visitor a link to a sign-in wall. The viewer is
-      # already in hand — TournamentsController#show and StandingListImportJob both pass one —
-      # so nothing here has to call a policy to answer it.
+      # Linked for everybody. It was linked for a member and plain for a visitor while
+      # /archetypes required a session — a link to a sign-in wall being worse than no link — and
+      # that guard came off the day the wall did. `@viewer` is still read by #mine?, which is a
+      # question about ownership and not about reachability.
       def archetype_badge
-        href = archetype_path(@standing.archetype) if @viewer.present?
-        render Ui::ArchetypeBadge.new(archetype: @standing.archetype, href: href)
+        render Ui::ArchetypeBadge.new(archetype: @standing.archetype,
+                                      href: archetype_path(@standing.archetype))
       end
 
       def list_link
