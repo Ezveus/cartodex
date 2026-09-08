@@ -49,11 +49,11 @@ gem "kamal", require: false
 gem "thruster", require: false
 
 # libvips bindings, for the composed Open Graph banners (app/services/og). The
-# native library is already in the production base image (the Dockerfile's
-# apt line installs `libvips`, 8.14.1 with svgload) and is added to CI's two
-# Rails-booting jobs. ruby-vips *without* image_processing is deliberate — see
-# the note immediately below, which still holds: ActiveStorage's Vips
-# transformer requires "image_processing/vips", which still fails as "cannot
+# native library is already in the production base image (the Dockerfile's apt
+# line installs `libvips`, 8.16.1 on the trixie base, with svgload) and is added
+# to CI's two Rails-booting jobs. ruby-vips *without* image_processing is
+# deliberate — see the note immediately below, which still holds: ActiveStorage's
+# Vips transformer requires "image_processing/vips", which still fails as "cannot
 # load such file" and so still matches engine.rb's rescue filter.
 #
 # `require: false`, and it is load-bearing rather than tidy. Bundler.require pulls every gem in
