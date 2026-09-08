@@ -10,9 +10,9 @@ twelve plus three. Above 768px `.navbar-inner` is a single flex row with no `wra
 those items has an incompressible *min-content* width — the email is one unbreakable word,
 `.navbar-links` is itself a flex container. The row cannot shrink to fit, so it overflows.
 
-This change replaces the flat rows with four top-level entries in the member navbar and three in the
-admin one, each an expanding group, plus an account menu that takes the email and the account links
-out of the row. It also puts the app's mark in the brand, which has been a bare word since the icon
+This change replaces the flat rows with five top-level entries in the member navbar — two of them
+expanding groups — and three in the admin one, plus an account menu that takes the email and the
+account links out of the row. It also puts the app's mark in the brand, which has been a bare word since the icon
 shipped in #178.
 
 ## The measurements
@@ -54,9 +54,15 @@ still exceeds the container, so the row wraps *and* overflows.
 
 ## Confirmed decisions (from the brainstorming interview)
 
-1. **Group by object, not by ownership.** `Decks▾`, `Tournaments▾`, `Cards`, `Archetypes` in the
-   member navbar. A "Mine / Browse" split was considered and rejected: two abstract labels that have
-   to be opened before they say anything.
+1. **Group by object, not by ownership.** `Decks▾`, `Collection`, `Tournaments▾`, `Cards`,
+   `Archetypes` in the member navbar. A "Mine / Browse" split was considered and rejected: two
+   abstract labels that have to be opened before they say anything. *Collection* was first filed
+   inside `Decks▾` — it is what feeds a physical deck — and pulled back out to the top level after
+   review: it is an inventory of cards, reached on its own, and a destination that is neither a deck
+   list nor the card catalogue does not belong behind either one's disclosure. It sits beside
+   `Decks▾` rather than beside `Cards` on purpose, those two names being confusable enough already.
+   The fifth entry cost the row 37 px of overflow at 769 px, which is what the responsive wordmark
+   below pays for.
 2. **Dashboard moves onto the logo.** The brand link already pointed at it.
 3. **The account block becomes a menu**, taking the email — the single widest incompressible item in
    the row — out of the row.
@@ -75,7 +81,8 @@ still exceeds the container, so the row wraps *and* overflows.
 | Entry | Contains | Sections it lights |
 | --- | --- | --- |
 | *(the brand)* | Dashboard | `home` |
-| `Decks▾` | My decks, Shared decks, Collection | `decks`, `shared_decks`, `collections` |
+| `Decks▾` | My decks, Shared decks | `decks`, `shared_decks` |
+| `Collection` | — | `collections` |
 | `Tournaments▾` | All tournaments, My tournaments, Profiles | `tournaments`, `my_tournaments`, `entries`, `tournament_profiles` |
 | `Cards` | — | `cards` |
 | `Archetypes` | — | `archetypes` |
@@ -106,8 +113,8 @@ Renders the reduced mark inline, `Ui::Logo.new(size: 24)`. Inline rather than
 `--ink-900`, and an `<img>` cannot be recoloured.
 
 This puts the drawing in a second place. `public/icon-small.svg` stays the favicon's source and
-`bin/rails icons:build` stays its rasteriser; the component is a third copy of the same five
-numbers. **A test parses both and asserts the geometry agrees** — the `rect`/`g` coordinates, not
+`bin/rails icons:build` stays its rasteriser; the component redraws the same **three** shapes (a
+`<g>` holding two rects, plus one outside it). **A test parses both and asserts the geometry agrees** — the `rect`/`g` coordinates, not
 the fills, which are exactly what is meant to differ. That is the same anti-drift mechanism
 `icons:build` exists to provide for the PNGs, applied to the one derivative it cannot cover.
 
@@ -119,8 +126,7 @@ render Ui::NavGroup.new(
   active_section: @active_section,
   entries: [
     [ "My decks",     decks_path,        %w[decks] ],
-    [ "Shared decks", shared_decks_path, %w[shared_decks] ],
-    [ "Collection",   collections_path,  %w[collections] ]
+    [ "Shared decks", shared_decks_path, %w[shared_decks] ]
   ]
 )
 ```
@@ -136,8 +142,9 @@ It renders three children:
 
 - `<button class="navbar-group-trigger">Decks ▾</button>` with `aria-expanded` and
   `aria-controls`, **`display: none` below 768px**;
-- `<span class="navbar-group-heading" aria-hidden="true">Decks</span>`, **`display: none` above
-  768px**;
+- `<span class="navbar-group-heading">Decks</span>`, **`display: none` above 768px** — and *not*
+  `aria-hidden`, since below the breakpoint it is the only label on screen and hiding it left the
+  drawer as eleven undifferentiated links;
 - `<div class="navbar-group-panel">` holding the entries as ordinary `.navbar-link`s.
 
 Two elements carrying one label, rather than one element restyled, so that no JavaScript has to know

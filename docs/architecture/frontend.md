@@ -50,6 +50,15 @@ measurably takes it from 0 to 48 px of document overflow. `nowrap` lives on
 falls between four items in the visitor's row, and adding the brand mark at 2rem took that navbar
 to 6 px of overflow.
 
+**A top-level entry is added at a price, and the price is measured.** The member navbar carries
+five — `Decks▾ Collection Tournaments▾ Cards Archetypes` — and the fifth cost the row 37 px of
+overflow at 769 px the moment *Collection* was pulled out of `Decks▾`. What paid for it is the
+wordmark: `.navbar-brand-word` is `display: none` between 769 and 880 px, so just above the
+breakpoint the brand is the mark alone, which is what a mark is for. The crossover was measured at
+838 px (the row needs 806 px and `.navbar-inner` gives `viewport − 32`); the band ends at 880 to
+leave the next entry somewhere to go. Two `drive_at` cases pin its edges, 880 and 881, because a
+band's boundary is the whole of the rule.
+
 **`Ui::NavGroup` is an entry that expands, and it takes its entries as data rather than as a
 block.** The group lights when the request's section is in the union of its entries' sections, and
 that union is computed from the entries — so a link added to a group cannot be forgotten by a

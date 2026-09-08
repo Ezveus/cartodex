@@ -251,8 +251,7 @@ module Styleguide
             label: "Decks", id: "styleguide", active_section: "decks",
             entries: [
               [ "My decks", "#", %w[decks] ],
-              [ "Shared decks", "#", %w[shared_decks] ],
-              [ "Collection", "#", %w[collections] ]
+              [ "Shared decks", "#", %w[shared_decks] ]
             ]
           )
         end

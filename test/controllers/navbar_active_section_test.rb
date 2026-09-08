@@ -31,7 +31,6 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav [ "Decks", "My decks" ], decks_path
     assert_active_nav [ "Decks", "My decks" ], deck_path(@deck)
     assert_active_nav [ "Decks", "Shared decks" ], shared_decks_path
-    assert_active_nav [ "Decks", "Collection" ], collections_path
   end
 
   test "a visitor's deck pages light the only deck entry there is" do
@@ -61,6 +60,8 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     sign_in @user
 
     assert_active_nav [ "Cards" ], cards_path
+    # Top level rather than inside Decks▾, so the trail is one deep and no group lights beside it.
+    assert_active_nav [ "Collection" ], collections_path
   end
 
   # Dashboard has no entry of its own since the navbar was grouped: the brand is the only thing

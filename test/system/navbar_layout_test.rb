@@ -146,6 +146,35 @@ class NavbarLayoutTest < ApplicationSystemTestCase
     end
   end
 
+  # Making "Collection" a top-level entry cost the member's row 37px of overflow at 769px, and the
+  # 91px wordmark is what paid for it — which is what a mark is for. The band is narrow and its
+  # edges are the whole rule, so both are pinned: hidden at 880, back at 881, and no overflow on
+  # either side of the boundary.
+  class AtTheWordmarkBoundary < NavbarLayoutTest
+    drive_at 880, 900
+
+    test "the wordmark gives way to the mark where the row has no slack" do
+      login_as users(:one), scope: :user
+      visit dashboard_path
+
+      assert_selector ".navbar-brand .navbar-logo"
+      assert_no_selector ".navbar-brand-word"
+      assert_navbar_fits "member at 880"
+    end
+  end
+
+  class JustAboveTheWordmarkBoundary < NavbarLayoutTest
+    drive_at 881, 900
+
+    test "one pixel wider, the word is back and still fits" do
+      login_as users(:one), scope: :user
+      visit dashboard_path
+
+      assert_selector ".navbar-brand-word", text: "Cartodex"
+      assert_navbar_fits "member at 881"
+    end
+  end
+
   # The responsive half of Ui::NavGroup is pure CSS — the trigger disappears below the breakpoint
   # and the heading that carries the same label takes its place — and nothing else in the suite
   # looks at either element: `click_nav_link` only needs the leaf to be visible, so a trigger left

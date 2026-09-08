@@ -151,6 +151,17 @@ body {
   flex: none;
 }
 
+/* Just above the breakpoint the member's row has no slack left, and the wordmark is the cheapest
+   91px in it — which is what a mark is for. Measured on the member navbar: the row needs 806px,
+   `.navbar-inner` gives `viewport − 32`, so the word fits from 838px up; the band ends at 880 to
+   leave the next entry somewhere to go rather than reopening this question. Below 768px it comes
+   back: the drawer's bar holds nothing but the brand, the search trigger and the hamburger. */
+@media (min-width: 769px) and (max-width: 880px) {
+  .navbar-brand-word {
+    display: none;
+  }
+}
+
 .navbar-links {
   display: flex;
   gap: 0.25rem;

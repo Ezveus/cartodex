@@ -36,8 +36,14 @@ module Ui
         # (see Ui::NavLinks.section_for).
         nav_group "Decks", "decks",
           [ "My decks", decks_path, %w[decks] ],
-          [ "Shared decks", shared_decks_path, %w[shared_decks] ],
-          [ "Collection", collections_path, %w[collections] ]
+          [ "Shared decks", shared_decks_path, %w[shared_decks] ]
+        # Top level, not inside Decks▾. It is what feeds a physical deck, so filing it there was
+        # defensible, but it is an inventory of *cards* and it is reached on its own — a
+        # destination that is neither a deck list nor the card catalogue does not belong behind
+        # either one's disclosure. Next to Decks rather than next to Cards on purpose: "Cards" is
+        # the printed catalogue and this is what you own, and sitting them side by side invites
+        # exactly the confusion the two names already risk.
+        nav_link "Collection", collections_path, "collections"
         # "entries" is Tournaments::EntriesController's own controller_name (nested resources are
         # named after the model, TournamentEntry, but the controller_name it reports is the route
         # segment); a participation's own show/new/edit pages have no entry of their own, so they
