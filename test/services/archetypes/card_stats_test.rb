@@ -145,6 +145,52 @@ class Archetypes::CardStatsTest < ActiveSupport::TestCase
     assert_equal [ 1, 4 ], [ result.fixed_core_cards, result.fixed_core_copies ]
   end
 
+  # Which printing the report *shows*, and — since Archetypes::NameGroupRow now names it and links
+  # to it — where a click lands. Nothing pinned it: the test above asserts the entry's numbers and
+  # never which card it carries, and "the printings of one name are ordered by set number" below
+  # builds two *different* fingerprints, so each group there has one candidate and the choice is
+  # never made. Flipping `[ lists, -card_id ]` would move the set code and the href of every card
+  # on the page with the suite fully green.
+  #
+  # The higher id is the one more lists play on purpose: picked by id alone this comes out the
+  # other way round, which is what makes the assertion discriminate rather than agree by accident.
+  test "the printing shown for a fingerprint is the one most lists play" do
+    first = pokemon("Squawkabilly", hp: 90)
+    second = pokemon("Squawkabilly", hp: 90)
+    assert_equal first.fingerprint, second.fingerprint
+    assert_operator second.id, :>, first.id
+
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, deck: field_list(first => 1, second => 1))
+    record(event, archetype, deck: field_list(second => 1))
+
+    entry = group_named(stats_for(archetype), "Squawkabilly").entries.sole
+
+    assert_equal second, entry.card,
+                 "the row must name the printing more lists play, not the lower id"
+  end
+
+  # The other half, and the reason there is a tie-break at all: two printings level on lists have
+  # to settle the same way on every load, or the set code and the link change under a reader who
+  # only reloaded the page.
+  test "two printings level on lists settle on the lower card id rather than on chance" do
+    first = pokemon("Squawkabilly", hp: 90)
+    second = pokemon("Squawkabilly", hp: 90)
+    assert_equal first.fingerprint, second.fingerprint
+    assert_operator second.id, :>, first.id
+
+    archetype = archetype_of_its_own
+    event = standard_event
+    record(event, archetype, deck: field_list(first => 1))
+    record(event, archetype, deck: field_list(second => 1))
+
+    entry = group_named(stats_for(archetype), "Squawkabilly").entries.sole
+
+    assert_equal 2, entry.inclusion_count, "sanity: one list each, so the two are genuinely level"
+    assert_equal first, entry.card
+  end
+
   # `subtype` is a free scraped string. A value the table does not know must arrive as a labelled
   # bucket rather than being dropped from a report that would still look complete.
   test "a card no category recognises surfaces in Other rather than vanishing" do

@@ -328,6 +328,28 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     end
   end
 
+  # The click, and it guards two things rather than one. `assert_select` parses HTML4 and nests
+  # anchors happily (docs/architecture/archetype-metagame.md says so about
+  # Decks::ClassificationBadges), so the day a card row gains a clickable wrapper the controller
+  # test stays green while an HTML5 parser moves the anchor out of it. And the report's links
+  # deliberately carry no `data-turbo-frame`, unlike Ui::ArchetypeBadge's: that is right only for
+  # as long as nothing on this page renders a frame, and frame-scoped the click would swap the
+  # report for Turbo's missing-frame error rather than navigating. The markup is identical either
+  # way, so only a browser tells the two outcomes apart.
+  test "a member clicks a card in the report and lands on that card's page" do
+    archetype = single_list_archetype
+    card = cards(:teal_mask_ogerpon_ex)
+
+    visit archetype_path(archetype)
+    assert_selector "h1", text: archetype.name
+
+    click_on card.printing_label
+
+    assert_current_path card_path(card)
+    assert_no_text "Content missing"
+    assert_selector "h1", text: card.name
+  end
+
   private
 
   def rect_of(element)

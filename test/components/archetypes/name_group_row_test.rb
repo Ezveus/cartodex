@@ -6,10 +6,13 @@ require "test_helper"
 # gets a case backwards — so each of those cases is pinned here rather than left to the page.
 #
 # Everything below is built from the service's own Structs and from unpersisted Cards: the
-# component reads `card.name`, `card.printing_label` and nothing else, and the questions this file
+# component reads `card.printing_label`, `card.id` and nothing else, and the questions this file
 # asks are about presentation, not about the aggregation Archetypes::CardStats already has its own
-# tests for. `.call` is enough because nothing in this component tree uses a route helper — the
-# trap Ui::ArchetypeBadgeTest documents does not apply here.
+# tests for. `.call` is still enough now that the rows carry links, but only because the component
+# builds its href through `Rails.application.routes.url_helpers` rather than through `card_path` —
+# the trap Ui::ArchetypeBadgeTest documents, which a bare `.call` walks straight into. The Cards
+# below need an id for that helper to have anything to route to; the helper at the bottom derives
+# it from the set number so an assertion can name the href it expects without a second lookup.
 class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
   # A name played as one card, by every list, always in the same number: the one shape that earns
   # the flag.
@@ -45,7 +48,7 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
     assert_no_match(/archetype-fixed-flag/, name_line)
     assert_includes printings, "archetype-fixed-flag"
     # And the flagged one is the printing whose entry is fixed, not merely the first sub-row.
-    assert_match(/Hoothoot \(SCR 114\)<span class="badge[^>]*archetype-fixed-flag/, printings)
+    assert_match(%r{Hoothoot \(SCR 114\)</a><span class="badge[^>]*archetype-fixed-flag}, printings)
   end
 
   # The badge follows the same rule the fixed flag does two tests above: a split name's printings
@@ -65,11 +68,11 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
 
     assert_no_match(/archetype-card-label/, name_line)
     assert_match(
-      %r{Hoothoot \(SCR 114\)<span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>ACE SPEC},
+      %r{Hoothoot \(SCR 114\)</a><span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>ACE SPEC},
       printings
     )
     assert_match(
-      %r{Hoothoot \(PRE 77\)<span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>Gust},
+      %r{Hoothoot \(PRE 77\)</a><span class="archetype-card-label-line"><span[^>]*archetype-card-label[^>]*>Gust},
       printings
     )
   end
@@ -159,6 +162,51 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
                     "played by every list"
   end
 
+  # A name played as one card *is* that card, so the line names the printing and links to it. All
+  # three halves are pinned in one regex on purpose: the text answers "does the row carry a set
+  # code", the href answers "does it point at the card it names", and the class is what
+  # ArchetypeMetagameTest's badge-geometry assertion finds by — dropped, that test stops measuring
+  # anything and says so with an ElementNotFound rather than a pass.
+  test "names the printing on a one-card row and links it to that card" do
+    html = row(group("Iono", 100.0, [ entry("Iono", "PAL", "185", pct: 100.0, count: 12,
+                                            min: 4, max: 4, modes: [ 4 ], core: true) ]))
+
+    assert_match(
+      %r{<a href="/cards/185" class="archetype-card-name-text archetype-card-link">Iono \(PAL 185\)</a>},
+      html
+    )
+  end
+
+  # Three printings, three *different* targets. Counting the anchors would stay green with every
+  # one of them pointing at the first entry's card — which is the shape a helper reaching for
+  # `@group.entries.first` instead of the entry in hand actually produces.
+  test "links every printing of a split name to its own card" do
+    _name_line, printings = row(split_group).split(%(<ul class="archetype-printing-list">), 2)
+
+    assert_match(%r{<a href="/cards/114" class="archetype-card-link">Hoothoot \(SCR 114\)</a>}, printings)
+    assert_match(%r{<a href="/cards/77" class="archetype-card-link">Hoothoot \(PRE 77\)</a>}, printings)
+    assert_match(%r{<a href="/cards/126" class="archetype-card-link">Hoothoot \(TEF 126\)</a>}, printings)
+  end
+
+  # The rule the fixed flag and the type labels already follow two tests above, applied to the set
+  # code and the link: a split name covers two genuinely different cards, so a code there would
+  # name one of them as if it were the group, and a link would send the reader to it. The sub-rows
+  # are the card rows and carry both.
+  #
+  # The class count is the other half, and it is not covered by the geometry test that reads the
+  # class: `labelled_archetype` builds one printing per name, so `printings` never runs there and a
+  # second element carrying the class would stay green until some fixture happened to split.
+  test "a split name line carries neither a set code nor a link" do
+    html = row(split_group)
+    name_line, = html.split(%(<ul class="archetype-printing-list">), 2)
+
+    assert_includes name_line, %(<span class="archetype-card-name-text">Hoothoot</span>)
+    assert_no_match(/<a /, name_line)
+    assert_no_match(/\(SCR 114\)/, name_line)
+    assert_equal 1, html.scan(/archetype-card-name-text/).size,
+                 "the name text class has to stay on exactly one element per row"
+  end
+
   private
 
   def row(group, single_list: false)
@@ -224,7 +272,7 @@ class Archetypes::NameGroupRowTest < ActiveSupport::TestCase
 
   def entry(name, set_name, set_number, pct:, count:, min:, max:, modes:, core: false, labels: [])
     Archetypes::CardStats::Entry.new(
-      card: Card.new(name: name, set_name: set_name, set_number: set_number),
+      card: Card.new(id: set_number.to_i, name: name, set_name: set_name, set_number: set_number),
       fingerprint: "#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
       min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
     )

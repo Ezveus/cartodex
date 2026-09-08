@@ -449,7 +449,10 @@ module Styleguide
 
     def sg_entry(name, set_name, set_number, count, pct, min, max, modes, core: false, labels: [])
       Archetypes::CardStats::Entry.new(
-        card: Card.new(name: name, set_name: set_name, set_number: set_number),
+        # An id, because the row now names the printing and links to it, and
+        # `url_helpers.card_path` raises UrlGenerationError on an unpersisted record — the demo
+        # links nowhere useful, which is what every other stub on this page does too.
+        card: Card.new(id: set_number.to_i, name: name, set_name: set_name, set_number: set_number),
         fingerprint: "sg-#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
         min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
       )

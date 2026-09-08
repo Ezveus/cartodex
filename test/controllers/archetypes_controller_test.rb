@@ -233,6 +233,43 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", text: /Standings Marker/
   end
 
+  # A card row names its printing and links to it. Here rather than only in
+  # Archetypes::NameGroupRowTest because the component test builds its own Cards and invents their
+  # ids — this is the only thing that proves the id reaching the page is the id of the card the
+  # report actually chose.
+  test "show names each card's printing and links it to that card" do
+    archetype = quiet_archetype(700, name: "Linked Archetype")
+    standing = listed_standing_for(archetype, 700)
+    card = standing.deck.deck_cards.first.card
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-card-row a.archetype-card-name-text[href=?]",
+                  card_path(card), text: card.printing_label
+  end
+
+  # No request test in the suite had ever rendered a printing sub-row: `listed_standing_for` gives
+  # every standing a uniquely-named card, and the system helpers use one printing each, so
+  # `NameGroupRow#printings` — where the sub-row links live — was reachable only from a component
+  # test. Two printings of one *name* under two different fingerprints is the shape, and the
+  # assertion is on two distinct hrefs: counting the anchors stays green with both pointing at the
+  # first entry's card.
+  test "show links each printing of a split name to its own card" do
+    archetype = quiet_archetype(710, name: "Split Name Archetype")
+    first, second = split_name_standing_for(archetype, 710)
+
+    get archetype_path(archetype)
+
+    assert_response :success
+    assert_select ".archetype-printing-row a[href=?]", card_path(first), text: first.printing_label
+    assert_select ".archetype-printing-row a[href=?]", card_path(second), text: second.printing_label
+    # And the name line above them stays a name: it covers two genuinely different cards, so a
+    # code there would name one of them as if it were the group.
+    assert_select ".archetype-card-main .archetype-card-name-text", text: "Owl Of Two Printings"
+    assert_select ".archetype-card-main a", count: 0
+  end
+
   # The page the spec costs out at greatest length, and the one the index's own flat-cost test
   # says nothing about. Four services run here — the sample selector's grouped query, the card report's
   # two, the performance panel's four — and every one of them is a grouped or aggregate query
@@ -702,10 +739,18 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # `online:` writes the event the way the import does — anchored to the same pool as the paper
   # ones, and `tier: "other"` — because the point of the two figures it feeds is that an online
   # event is indistinguishable from a paper one on both axes this page groups by.
+  # `card_set:` is what makes the pinned 17 defensive rather than decorative. A belongs_to whose
+  # FK is NULL emits no query, so a card built without one lets an implementation reaching for
+  # `card.card_set.code` instead of `set_name` — the obvious "improvement" on a line that names a
+  # printing — cost nothing here and one query per card in production. Measured: with the sets
+  # attached such a read reports "query count grew with the sample: 20 -> 27" and fails five
+  # tests; without them the same N+1 leaves every flat-cost test green. One set per card, so no
+  # two rows issue identical SQL the per-request query cache would serve.
   def listed_standing_for(archetype, index, online: false)
     card = Card.create!(
       name: "Report Pokémon #{index}", set_name: "RP#{index}", set_number: "1",
-      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1,
+      card_set: CardSet.create!(code: "RP#{index}", name: "Report Set #{index}")
     )
     tournament = Tournament.create!(
       name: "Report Cup #{index}", date: Date.new(2026, 4, 1) + index,
@@ -720,6 +765,37 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
       player_name: "Report Player #{index}", division: "masters", placement: index + 1,
       archetype: archetype, deck: field_list, created_by: @user
     )
+  end
+
+  # One list holding two printings of one card *name* under two different fingerprints — the
+  # `split?` shape of a NameGroup, which no request test could produce before: differing `hp` is
+  # what makes `compute_fingerprint` land on two values rather than folding them into one row.
+  # Returns the two cards, in the order the report sorts them (by inclusion, then set number
+  # numerically — equal here, so 7 before 77).
+  def split_name_standing_for(archetype, index)
+    cards = [ [ "7", 60 ], [ "77", 90 ] ].map do |set_number, hp|
+      Card.create!(
+        name: "Owl Of Two Printings", set_name: "SP#{index}", set_number: set_number,
+        card_type: "Pokémon", hp: hp, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1,
+        card_set: CardSet.create!(code: "SP#{index}#{set_number}", name: "Split Set #{set_number}")
+      )
+    end
+    assert_equal 2, cards.map(&:fingerprint).uniq.size, "sanity: the two printings must not fold"
+
+    tournament = Tournament.create!(
+      name: "Split Name Cup #{index}", date: Date.new(2026, 4, 1) + index, tier: "league_cup",
+      format: "standard", standard_pool: standard_pools(:twm_por), created_by: @user
+    )
+    field_list = Deck.create!(
+      name: "Split Name List #{index}", shared: true, standard_pool: standard_pools(:twm_por)
+    )
+    cards.each { |card| field_list.deck_cards.create!(card: card, quantity: 1) }
+    tournament.standings.create!(
+      player_name: "Split Name Player #{index}", division: "masters", placement: 1,
+      archetype: archetype, deck: field_list, created_by: @user
+    )
+
+    cards
   end
 
   # An online standing carrying the division the online importer actually writes. Neither
