@@ -40,17 +40,32 @@ class Decks::ArchetypeDetector < ApplicationService
     )
   end
 
+  # The deck's own Pokémon, most representative first: rule-box before the rest, then highest HP,
+  # then most copies, one card per name. Reads the loaded association and issues no query, so a
+  # caller that preloaded `deck_cards → card → pokemon_subtype` pays nothing for it.
+  #
+  # Public because it has a second caller, and because a second *copy* is what this repo warns
+  # against: Og::DeckPayload draws the two most notable Pokémon on a deck's link-preview banner
+  # when the deck carries no archetype, and a banner ranking them differently from the archetype
+  # this service would suggest is two answers to one question. Reusing the method makes them agree
+  # structurally rather than by a comment asking the next reader to keep them in step.
+  #
+  # `.uniq(&:name)` is part of the ranking and not a tidy-up: without it two printings of one
+  # Pokémon take both slots, which on a banner draws the same card twice.
+  def self.notable_pokemon(deck)
+    deck.deck_cards
+        .select { |deck_card| deck_card.card&.card_type == "Pokémon" }
+        .sort_by { |deck_card|
+          [ deck_card.card.pokemon_subtype&.rule_box ? 0 : 1, -deck_card.card.hp.to_i, -deck_card.quantity ]
+        }
+        .map(&:card)
+        .uniq(&:name)
+  end
+
   private
 
   # Distinct Pokémon cards, most representative first. Suggestion only.
-  def notable_pokemon
-    pokemon = @deck.deck_cards.select { |dc| dc.card&.card_type == "Pokémon" }
-
-    pokemon
-      .sort_by { |dc| [ dc.card.pokemon_subtype&.rule_box ? 0 : 1, -dc.card.hp.to_i, -dc.quantity ] }
-      .map(&:card)
-      .uniq(&:name)
-  end
+  def notable_pokemon = self.class.notable_pokemon(@deck)
 
   # Every card in the deck, keyed on Card#fingerprint — the "same card, any
   # printing" key. Strictly more correct than the name matching it replaces,

@@ -43,6 +43,14 @@ module Cartodex
     # included, so this runs on the way out regardless of what built the response.
     config.middleware.insert_before 0, XRobotsTagMiddleware
 
+    # Adding ruby-vips for the Open Graph banners flipped ActiveStorage::VIPS_AVAILABLE to true,
+    # which made it try `require "image_processing/vips"` and warn on every boot that the
+    # image_processing gem is missing. It is missing on purpose: this app has no attachments at all
+    # — no has_one_attached anywhere, no active_storage tables in the schema — so there are no
+    # variants to process and the warning describes a feature nobody uses. Saying so here is
+    # cheaper than carrying a gem to silence a message, and it is what the warning itself suggests.
+    config.active_storage.variant_processor = :disabled
+
     I18n.available_locales = %i[en]
     I18n.default_locale    = ENV.fetch("LOCALE", "en").to_sym
 

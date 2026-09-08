@@ -59,15 +59,10 @@ module Og
     #
     # The `uniq(&:name)` is half of it: two printings of one Pokémon otherwise rank first and
     # second and the banner draws the same card twice.
-    def notable_pokemon
-      deck_cards
-        .select { |deck_card| deck_card.card&.card_type == "Pokémon" }
-        .sort_by { |deck_card|
-          [ deck_card.card.pokemon_subtype&.rule_box ? 0 : 1, -deck_card.card.hp.to_i, -deck_card.quantity ]
-        }
-        .map(&:card)
-        .uniq(&:name)
-    end
+    # Decks::ArchetypeDetector's own ranking, called rather than copied: the banner must not rank a
+    # deck's Pokémon differently from the archetype that service would suggest for it. It reads the
+    # loaded association and issues no query.
+    def notable_pokemon = Decks::ArchetypeDetector.notable_pokemon(@deck)
 
     # DeckCard belongs_to :deck carries no `touch: true` (deck_card.rb:2), so adding,
     # requantifying or removing a card leaves decks.updated_at alone — measured: create, update

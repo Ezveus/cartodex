@@ -106,20 +106,27 @@ implementation" does not hold, and it holds everywhere else.
 committed with its licence) is the file. Omitting it does not fail — it renders DejaVu, correctly,
 silently, at slightly different metrics. Nothing about the output says the brand font was not used.
 
-**The scrim adapts to the artwork.** The title is `--paper` on whatever colour the card happens to
-be, and a pale illustration would put white text on near-white. So the renderer measures rather
-than hopes: it crops the blurred background to the text column, converts to `b_w`, reads `.avg`,
-and computes the WCAG contrast ratio against `--paper`. While that ratio is **below 4.5:1** it
-darkens the scrim one step down the ladder `[0.45, 0.60, 0.75, 0.88, 0.96]` of top-stop opacity
-(the bottom stop tracks it, staying 0.04 from opaque). Five steps take the darkest realistic art
-to near-black, so the loop terminates by construction. The threshold and the measurement are the
-testable part; the ladder is a tuning table.
+**The scrim is a fixed `SCRIM_TOP` to `SCRIM_BOTTOM` gradient, and the adaptive ladder this spec
+first described is deliberately not shipped.** The worry was real — the title is `--paper` over
+whatever colour the card happens to be — but the geometry already answers it, and the ladder was a
+mechanism in appearance only. `TEXT_COLUMN` sits at y 336..604, low in the frame, where a
+0.45 → 0.96 gradient is nearly opaque: measured there, a flat **white** art (the palest ground a
+card illustration could present) reads **10.67:1** against a 4.5 target, a flat light grey 12.23:1
+and a flat black 17.96:1. No artwork that exists can drive a walk off the first rung.
+
+Keeping the walk alive would have meant weakening the gradient until it mattered — a 0.45 → 0.49
+wash makes white read 3.14:1, so the ladder does fire — and that is a visibly lighter banner than
+the layout that was approved. So the guarantee became an assertion instead: `Og::RendererTest`
+measures the worst case and requires it to clear the threshold, which turns red if `TEXT_COLUMN`
+moves up into the lighter part of the gradient, if `SCRIM_BOTTOM` is lowered, or if the scrim goes
+away. The WCAG arithmetic lives in the test rather than in the renderer, because a measurement the
+renderer performed on itself could only ever agree with itself.
 
 Output is `jpg[Q=85]`: 92.8 KB against the PNG's 443 KB, for a photographic image where nobody can
 see the difference.
 
 Fewer than two arts is normal — a deck with one notable Pokémon, a card page — and the layout
-takes 0, 1 or 2. Zero resolvable arts falls back to the static Cartodex banner.
+takes 0, 1 or 2. Zero resolvable arts draws the branded frame with **the subject's own title and subtitle** — not `og-default.jpg`, which is the *site* payload and a different thing: a deck whose artwork could not be fetched still previews as that deck.
 
 ### What each surface says
 

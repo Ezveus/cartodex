@@ -25,6 +25,13 @@ module Og
       raise ArgumentError, "an og payload needs a kind" if kind.blank?
       raise ArgumentError, "an og payload needs a title" if title.blank?
       raise ArgumentError, "a #{kind} og payload needs a digest" if kind != "site" && digest.blank?
+      # The contract says 0 to MAX_ARTS and every builder enforces it with `.first(MAX_ARTS)`, so
+      # this guards the contract rather than the builders: a fifth caller written later, or a
+      # payload hand-built in a test, would otherwise hand Og::Renderer more arts than the layout
+      # has positions for.
+      if Array(art_urls).size > MAX_ARTS
+        raise ArgumentError, "an og payload draws at most #{MAX_ARTS} arts, got #{art_urls.size}"
+      end
 
       self
     end
@@ -41,7 +48,7 @@ module Og
     # a digest, and three copies of a format that appears in every preview URL in the app is
     # exactly the kind of thing that drifts by one term.
     def self.digest_of(parts)
-      ::Digest::SHA256.hexdigest(parts.join("\x1f")).first(16)
+      ::Digest::SHA256.hexdigest(parts.join("\x1f")).first(DIGEST_LENGTH)
     end
   end
 end

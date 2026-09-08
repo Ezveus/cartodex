@@ -2,6 +2,7 @@
 # config/environments/test.rb eager-loads under CI: a missing native library must
 # be a boot failure in CI (loud, once) rather than a 500 on the first crawler
 # request in production.
+require "cgi"
 require "vips"
 
 # Draws one 1200x630 Open Graph banner from an Og::Payload and hands back JPEG
@@ -29,7 +30,6 @@ module Og
     # Design tokens, as RGB triples (the text compositor needs numbers) and as
     # hex (the SVG needs strings). Kept in one place so the two cannot drift.
     INK_900 = "#0E1320".freeze
-    INK_300 = "#93A0B4".freeze
     PAPER   = "#F7F8FA".freeze
     FLARE   = "#DD2C16".freeze
 
@@ -67,6 +67,14 @@ module Og
 
     # 92.8 KB against a PNG's 443 KB for the same image, measured on the spike.
     QUALITY = 85
+
+    # Much shorter than HttpFetcher's own 10/30, because two serial fetches sit inside one web
+    # request here: at the defaults a host that accepts and never answers held a Puma thread for
+    # 120.4 s (measured), and there are five threads. A banner is the most disposable thing this
+    # app serves — a missed art costs one card in one preview — so failing fast is strictly better
+    # than waiting, and the 60/min budget cannot bound thread-seconds on its own.
+    ART_OPEN_TIMEOUT = 3
+    ART_READ_TIMEOUT = 5
 
     FONT = Rails.root.join("vendor/fonts/Archivo.ttf")
 
@@ -137,12 +145,16 @@ module Og
     # `Vips::Error: svgload_buffer: operation is blocked`, and the spike could not have caught it:
     # it ran without Rails. This re-enables exactly that one loader, and nothing else.
     #
-    # Safe here, measured rather than assumed: the block protects untrusted *input*, and the only
-    # SVG this process ever loads is the frame #svg builds from a heredoc in this file — never user
-    # input, never anything off the network (the remote card arts are PNGs, and pngload is fuzzed
-    # and stays trusted). ActiveStorage, whose protection this narrows, is not used at all: no
-    # has_one_attached or has_many_attached anywhere in app/, and no active_storage tables in
-    # db/schema.rb. Should this app ever accept a file upload, this line has to be revisited.
+    # Safe here, and #load_art is what makes it so rather than a promise in a comment. The block
+    # protects untrusted *input*; the only SVG this process loads is the frame #svg builds from a
+    # heredoc in this file, and every byte that arrives off the network goes to a loader named from
+    # its URL's extension instead of one libvips picked by sniffing. Written the sniffing way — and
+    # it was — an unblocked svgload meant the CDN chose the loader for its own response, which a
+    # review reproduced as a 16000x16000 SVG holding a Puma thread for 66.8 s at 1160 MB.
+    #
+    # ActiveStorage, whose protection this narrows, is not used at all: no has_one_attached or
+    # has_many_attached anywhere in app/, and no active_storage tables in db/schema.rb. Should this
+    # app ever accept a file upload, this line has to be revisited.
     #
     # Called from #svg and not at require-time, because ActiveStorage installs its block during
     # boot and eager loading may pull this class in before that: a load-time unblock would be
@@ -157,15 +169,25 @@ module Og
       @svg_allowed = true
     end
 
-    # => String, JPEG bytes, exactly WIDTH x HEIGHT.
+    # `complete` is false when any art the payload asked for did not resolve, and it exists so
+    # that Og::Cache can serve a degraded banner without storing it. The digest cannot express
+    # this — it is computed from the record and the art URLs, never from whether the fetch worked
+    # — so without the flag one transient CDN failure pins an artless banner at that address until
+    # the subject is next edited, under a `Cache-Control: immutable` that tells every client never
+    # to look again.
+    Result = Struct.new(:bytes, :complete, keyword_init: true)
+
+    # => Result, whose bytes are a JPEG of exactly WIDTH x HEIGHT.
     def call
+      wanted = Array(@payload.art_urls).first(CARDS.size).size
       arts = fetch_arts
       frame = arts.empty? ? plain_frame : photo_frame(arts.first)
 
       layers = whole_cards(arts) + text_layers
       frame = frame.composite(layers.map { |l| l[:image] }, [ :over ] * layers.size,
                               x: layers.map { |l| l[:x] }, y: layers.map { |l| l[:y] })
-      flatten(frame).write_to_buffer(".jpg[Q=#{QUALITY}]")
+      Result.new(bytes: flatten(frame).write_to_buffer(".jpg[Q=#{QUALITY}]"),
+                 complete: arts.size == wanted)
     end
 
     private
@@ -185,11 +207,31 @@ module Og
     # same number: this is how many cards the *layout* can draw, and a third art
     # would otherwise be fetched over the network and then indexed off the end of
     # CARDS. The payload builders enforce MAX_ARTS; this enforces the drawing.
+    # The loader is named, never sniffed, and that is the other half of what makes
+    # .allow_generated_svg! safe. `new_from_buffer(bytes, "")` lets libvips choose by inspecting
+    # the bytes, so once the SVG loader is unblocked the *CDN* decides which loader runs on its
+    # response — and librsvg is exactly the one upstream has not fuzzed. Measured through that
+    # path: a 16000x16000 SVG took 66.8 s and 1160 MB, and 25000x25000 never finished, wedging one
+    # of five Puma threads on a single unauthenticated request.
+    #
+    # Card arts are PNG or JPEG (Limitless serves `…_LG.png`), so the loader is picked from the
+    # URL's extension the way CardsController#image already picks a content type, and anything
+    # else is refused rather than guessed at. An unrecognised extension raises Vips::Error, which
+    # the rescue below turns into "one fewer card" like any other failed art.
     def fetch_arts
       Array(@payload.art_urls).first(CARDS.size).filter_map do |url|
-        Vips::Image.new_from_buffer(HttpFetcher.call(url), "")
+        load_art(HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT,
+                                      read_timeout: ART_READ_TIMEOUT), url)
       rescue HttpFetcher::FetchError, Vips::Error
         nil
+      end
+    end
+
+    def load_art(bytes, url)
+      case File.extname(URI.parse(url).path).downcase
+      when ".jpg", ".jpeg" then Vips::Image.jpegload_buffer(bytes)
+      when ".png"          then Vips::Image.pngload_buffer(bytes)
+      else raise Vips::Error, "og: refusing to guess a loader for #{url}"
       end
     end
 
@@ -329,9 +371,25 @@ module Og
     def text_layer(string, size:, weight: "ExtraBold", color: PAPER_RGB, width: nil, fontfile: FONT.to_s)
       options = { font: "#{FONT_FAMILY} #{weight} #{size}", dpi: DPI,
                   width: width, wrap: width ? :word : :none, fontfile: fontfile }
-      mask = Vips::Image.text(string, **options.compact)
+      mask = Vips::Image.text(escape_markup(string), **options.compact)
       mask.new_from_image(color).copy(interpretation: :srgb).bandjoin(mask)
     end
+
+    # libvips' `text` hands the string to pango_layout_set_markup, so what looks like a plain-text
+    # argument is parsed as Pango markup. Unescaped, that is two live bugs rather than one style
+    # question:
+    #
+    #   * `&` and a bare `<` are markup syntax errors and raise Vips::Error — an unrescued 500 on a
+    #     public endpoint. Not hypothetical: the catalogue holds "Anthea & Concordia",
+    #     "Billy & O'Nare", "Sordward & Shielbert" and "Gengar & Mimikyu-GX" today, every Tag Team
+    #     card ever printed is "X & Y-GX", and "Sword & Shield" is a set name that reaches
+    #     Og::CardPayload's subtitle. /og/cards/542 was a 500 before this line existed.
+    #   * `<b>bold</b>` in a deck name rendered *as bold*, with the tags swallowed, so the banner's
+    #     title was not the deck's name.
+    #
+    # CGI.escapeHTML covers exactly the five characters GLib's own g_markup_escape_text does, and
+    # Pango accepts the entities it produces.
+    def escape_markup(string) = CGI.escapeHTML(string.to_s)
 
     # --- band plumbing -------------------------------------------------------
 
@@ -339,9 +397,6 @@ module Og
       image.has_alpha? ? image : image.bandjoin(255)
     end
 
-    def without_alpha(image)
-      image.has_alpha? ? image.extract_band(0, n: image.bands - 1) : image
-    end
 
     # JPEG has no alpha channel; flattening explicitly against --ink-900 keeps
     # any transparent edge a rotated card leaves in the brand's dark rather than

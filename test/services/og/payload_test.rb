@@ -64,4 +64,27 @@ class Og::PayloadTest < ActiveSupport::TestCase
   test "a nil part is stringified consistently" do
     assert_equal Og::Payload.digest_of([ "a", "" ]), Og::Payload.digest_of([ "a", nil ])
   end
+  # The contract says 0 to MAX_ARTS and every builder enforces it with `.first(MAX_ARTS)`, so this
+  # guards the contract rather than the builders — a fifth caller written later, or a payload
+  # hand-built in a test, would otherwise hand Og::Renderer more arts than the layout has positions
+  # for. Added because a sabotage found the guard itself untested: removing it left the suite green.
+  test "validate! refuses more arts than the layout draws" do
+    too_many = Array.new(Og::MAX_ARTS + 1) { |i| "https://example.test/#{i}.png" }
+
+    error = assert_raises ArgumentError do
+      Og::Payload.new(kind: "deck", key: "abc", title: "Deck", subtitle: nil,
+                      art_urls: too_many, digest: "deadbeefdeadbeef").validate!
+    end
+
+    assert_match(/at most #{Og::MAX_ARTS}/, error.message)
+  end
+
+  test "validate! accepts exactly MAX_ARTS" do
+    exactly = Array.new(Og::MAX_ARTS) { |i| "https://example.test/#{i}.png" }
+
+    payload = Og::Payload.new(kind: "deck", key: "abc", title: "Deck", subtitle: nil,
+                              art_urls: exactly, digest: "deadbeefdeadbeef")
+
+    assert_equal payload, payload.validate!, "validate! returns self so a builder can end on it"
+  end
 end

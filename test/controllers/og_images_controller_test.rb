@@ -17,23 +17,27 @@ class OgImagesControllerTest < ActionDispatch::IntegrationTest
     @card = cards(:doublade)
 
     @dir = Dir.mktmpdir
-    @file = File.join(@dir, "stub.jpg")
-    # Not a real JPEG and it does not need to be — send_file streams bytes and asserts nothing
+    # Not a real JPEG and it does not need to be — send_data streams bytes and asserts nothing
     # about them. The SOI marker is here so a failure that dumps the body is recognisable.
-    File.binwrite(@file, "\xFF\xD8\xFF\xDB".b + ("og" * 64).b)
+    @bytes = "\xFF\xD8\xFF\xDB".b + ("og" * 64).b
     @original_fetch = Og::Cache.method(:fetch)
-    file = @file
+    @previous_root = Og::Cache.root
+    bytes = @bytes
     @fetch_calls = []
     calls = @fetch_calls
     Og::Cache.define_singleton_method(:fetch) do |payload|
       calls << payload
-      Pathname.new(file)
+      bytes
     end
   end
 
   teardown do
     Og::Cache.singleton_class.remove_method(:fetch)
     Og::Cache.define_singleton_method(:fetch, @original_fetch)
+    # Restored, unlike the first version of this file: the end-to-end test below sets it, and
+    # leaving it pointing into a removed tmpdir hands every later test in this forked worker a
+    # broken cache root — the hazard test_helper's parallelize_setup exists for.
+    Og::Cache.root = @previous_root
     FileUtils.remove_entry(@dir)
   end
 
@@ -86,6 +90,28 @@ class OgImagesControllerTest < ActionDispatch::IntegrationTest
     get card_og_image_path(@card.id)
     assert_response :success
     assert_equal "image/jpeg", response.media_type
+  end
+
+  # The assertion that holds the lookup order, and nothing else in the suite can: a refused deck
+  # and an unknown key answer identically, so what leaked was never the response — it was the work
+  # done before the refusal. Spelled with the payload's `includes` on the lookup, an existing
+  # private deck paid every preload and an unknown key paid one query, which is an existence oracle
+  # by timing and by cost (measured at 1 query / 3.2 ms against 3 / 8.6 ms for a 60-card deck).
+  #
+  # Query count rather than wall time, because the query count is deterministic and the timing is
+  # what the query count causes.
+  test "a refused deck costs exactly what an unknown key costs" do
+    @deck.update!(shared: false)
+    3.times { @deck.deck_cards.create!(card: cards(:doublade), quantity: 1) rescue nil }
+
+    get deck_og_image_path("warming-the-session")
+
+    unknown = count_queries { get deck_og_image_path("no-such-deck-key") }
+    refused = count_queries { get deck_og_image_path(@deck.key) }
+
+    assert_response :not_found
+    assert_equal unknown, refused,
+                 "a private deck must not be distinguishable from an unknown one by cost"
   end
 
   test "the response is cacheable forever and marked immutable" do

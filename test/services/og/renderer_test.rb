@@ -25,6 +25,7 @@ class Og::RendererTest < ActiveSupport::TestCase
   setup do
     @original_http_fetcher_call = HttpFetcher.method(:call)
     @fetched = []
+    @fetch_options = []
   end
 
   teardown do
@@ -36,7 +37,7 @@ class Og::RendererTest < ActiveSupport::TestCase
   test "renders a JPEG of exactly 1200x630" do
     stub_arts(ART_URLS => flat_art([ 40, 90, 160 ]))
 
-    bytes = Og::Renderer.call(payload(art_urls: ART_URLS))
+    bytes = Og::Renderer.call(payload(art_urls: ART_URLS)).bytes
 
     # Read back through Vips rather than trusting the writer: the WIDTH/HEIGHT
     # constants describe the SVG frame, and a composite placed past its edge, or
@@ -109,7 +110,6 @@ class Og::RendererTest < ActiveSupport::TestCase
     # turn this red so somebody re-measures rather than shipping a silently different banner.
     assert_equal [ 437, 320 ], [ layer.width, layer.height ],
                  "the title is no longer Archivo at these metrics — DejaVu measures 492x342 here"
-    refute_equal [ 492, 342 ], [ layer.width, layer.height ], "the title fell back to DejaVu"
     assert_path_exists Og::Renderer::FONT, "vendor/fonts/Archivo.ttf must be committed"
   end
 
@@ -146,19 +146,19 @@ class Og::RendererTest < ActiveSupport::TestCase
   # --- 0, 1 and 2 arts -------------------------------------------------------
 
   test "renders with no art at all" do
-    assert_banner Og::Renderer.call(payload(art_urls: []))
+    assert_banner Og::Renderer.call(payload(art_urls: [])).bytes
   end
 
   test "renders with one art" do
     stub_arts(ART_URLS.first(1) => flat_art([ 230, 90, 40 ]))
 
-    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS.first(1)))
+    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS.first(1))).bytes
   end
 
   test "renders with two arts" do
     stub_arts(ART_URLS => flat_art([ 230, 90, 40 ]))
 
-    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS))
+    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS)).bytes
 
     assert_equal ART_URLS, @fetched, "both arts are fetched, once each"
   end
@@ -167,15 +167,15 @@ class Og::RendererTest < ActiveSupport::TestCase
     urls = ART_URLS + [ "https://limitlesstcg.com/img/three.png" ]
     stub_arts(urls => flat_art([ 230, 90, 40 ]))
 
-    Og::Renderer.call(payload(art_urls: urls))
+    Og::Renderer.call(payload(art_urls: urls)).bytes
 
     assert_equal ART_URLS, @fetched, "the layout holds two cards, so the third is never fetched"
   end
 
   test "two arts put the cards on the frame, not merely a valid JPEG of the right size" do
     stub_arts(ART_URLS => flat_art([ 230, 90, 40 ]))
-    photographed = Og::Renderer.call(payload(art_urls: ART_URLS))
-    branded = Og::Renderer.call(payload(art_urls: []))
+    photographed = Og::Renderer.call(payload(art_urls: ART_URLS)).bytes
+    branded = Og::Renderer.call(payload(art_urls: [])).bytes
 
     # The whole compositing half of this class can be broken while every other
     # test here passes, because a broken composite still writes a 1200x630 JPEG.
@@ -193,8 +193,8 @@ class Og::RendererTest < ActiveSupport::TestCase
     # the renderer catches whatever class the stub chose to raise. This one runs
     # the real fetcher against a real closed port, so the exception really is the
     # Errno::ECONNREFUSED that HttpFetcher maps to FetchError.
-    degraded = Og::Renderer.call(payload(art_urls: [ UNROUTABLE_URL ]))
-    branded = Og::Renderer.call(payload(art_urls: []))
+    degraded = Og::Renderer.call(payload(art_urls: [ UNROUTABLE_URL ])).bytes
+    branded = Og::Renderer.call(payload(art_urls: [])).bytes
 
     assert_banner degraded
     assert_in_delta mean_luminance(branded, ART_REGION), mean_luminance(degraded, ART_REGION), 1.0,
@@ -206,8 +206,8 @@ class Og::RendererTest < ActiveSupport::TestCase
     # filter_map — one nil among two arts costing one card and not the
     # photograph — and not which exception class arrives.
     stub_arts(ART_URLS.first(1) => flat_art([ 230, 90, 40 ]))
-    with_one = Og::Renderer.call(payload(art_urls: ART_URLS))
-    branded = Og::Renderer.call(payload(art_urls: []))
+    with_one = Og::Renderer.call(payload(art_urls: ART_URLS)).bytes
+    branded = Og::Renderer.call(payload(art_urls: [])).bytes
 
     assert_banner with_one
     assert_operator (mean_luminance(with_one, ART_REGION) - mean_luminance(branded, ART_REGION)).abs,
@@ -216,9 +216,104 @@ class Og::RendererTest < ActiveSupport::TestCase
   end
 
   test "a 200 carrying something that is not an image degrades rather than raising" do
-    HttpFetcher.define_singleton_method(:call) { |_url| "<html>404 not found</html>" }
+    HttpFetcher.define_singleton_method(:call) { |_url, **| "<html>404 not found</html>" }
 
-    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS))
+    assert_banner Og::Renderer.call(payload(art_urls: ART_URLS)).bytes
+  end
+
+  # --- Pango markup, and the 500 it was ------------------------------------
+
+  # libvips' `text` hands its argument to pango_layout_set_markup, so a plain-looking string is
+  # parsed as markup. Unescaped, `&` and a bare `<` are syntax errors that raise Vips::Error, which
+  # nothing rescues — an unauthenticated 500 on a public endpoint. Not a hypothetical input: the
+  # catalogue holds "Anthea & Concordia", "Billy & O'Nare", "Sordward & Shielbert" and
+  # "Gengar & Mimikyu-GX" today, every Tag Team card ever printed is "X & Y-GX", and
+  # "Sword & Shield" is a set name that reaches Og::CardPayload's subtitle. None of the fifteen
+  # sabotages run against this feature could have found it, because no test rendered one of those
+  # characters.
+  test "an ampersand in a title renders instead of raising" do
+    assert_banner Og::Renderer.call(payload(title: "Anthea & Concordia")).bytes
+  end
+
+  test "a bare angle bracket in a title renders instead of raising" do
+    assert_banner Og::Renderer.call(payload(title: "Gholdengo <3", subtitle: "60 cards & counting")).bytes
+  end
+
+  # The other half of the same bug, and the silent half: markup was *interpreted*, so a deck named
+  # "<b>Mill</b>" drew as bold with the tags swallowed and the banner's title was not the deck's
+  # name. The two layers must differ, because one really has six more characters to draw.
+  test "markup in a title is printed, not obeyed" do
+    renderer = Og::Renderer.new(payload)
+    plain = renderer.send(:text_layer, "Mill", size: 60, width: 520)
+    marked = renderer.send(:text_layer, "<b>Mill</b>", size: 60, width: 520)
+
+    refute_equal plain.width, marked.width,
+                 "identical widths mean the tags were parsed as markup and swallowed"
+  end
+
+  # Not a behavioural assertion, and deliberately so: proving the timeouts by behaviour needs a
+  # socket that accepts and never answers, which is a test that takes as long as the timeout it is
+  # checking. What it guards is real — HttpFetcher's own defaults are 10 and 30, fetch_arts makes
+  # two serial calls inside one web request, and a hung image host was measured holding a Puma
+  # thread for 120.4 s while the request still *succeeded*, degraded to the artless banner, so
+  # nothing surfaced it. A request budget cannot bound thread-seconds. Sabotaged: dropping the
+  # keywords from the call site leaves every other test in this file green.
+  test "art fetches are bounded far below HttpFetcher's own defaults" do
+    stub_arts(ART_URLS => flat_art([ 40, 90, 160 ]))
+
+    Og::Renderer.call(payload(art_urls: ART_URLS))
+
+    assert_equal 2, @fetch_options.size
+    @fetch_options.each do |options|
+      assert_equal Og::Renderer::ART_OPEN_TIMEOUT, options[:open_timeout]
+      assert_equal Og::Renderer::ART_READ_TIMEOUT, options[:read_timeout]
+    end
+    assert_operator Og::Renderer::ART_OPEN_TIMEOUT, :<, HttpFetcher::OPEN_TIMEOUT
+    assert_operator Og::Renderer::ART_READ_TIMEOUT, :<, HttpFetcher::READ_TIMEOUT
+  end
+
+  # --- the loader is named, never sniffed ----------------------------------
+
+  # `new_from_buffer(bytes, "")` lets libvips choose a loader by inspecting the bytes, so with
+  # svgload unblocked the CDN would decide which loader runs on its own response — and a
+  # 16000x16000 SVG through librsvg was measured at 66.8 s and 1160 MB, wedging one of five Puma
+  # threads on a single request. The loader now comes from the URL's extension, and anything else
+  # is refused rather than guessed at.
+  test "an art whose bytes are an SVG is refused rather than decoded" do
+    svg = <<~SVG
+      <svg xmlns="http://www.w3.org/2000/svg" width="4000" height="4000">
+        <rect width="4000" height="4000" fill="#ff0000"/>
+      </svg>
+    SVG
+    stub_arts("https://example.test/art.png" => svg)
+
+    result = Og::Renderer.call(payload(art_urls: [ "https://example.test/art.png" ]))
+
+    refute result.complete, "an art that could not be decoded is a degraded render"
+    assert_banner result.bytes
+  end
+
+  test "an art at an extension the renderer does not know is refused" do
+    stub_arts("https://example.test/art.tiff" => "whatever".b)
+
+    result = Og::Renderer.call(payload(art_urls: [ "https://example.test/art.tiff" ]))
+
+    refute result.complete
+  end
+
+  # --- Result#complete -----------------------------------------------------
+
+  # Og::Cache reads this to decide whether to *store* a render, so it is the difference between a
+  # transient CDN failure costing one preview and costing that deck its artwork permanently.
+  test "complete says whether every art the payload asked for resolved" do
+    stub_arts(ART_URLS => flat_art([ 40, 90, 160 ]))
+
+    assert Og::Renderer.call(payload(art_urls: [])).complete,
+           "a payload with no artwork asked for nothing and got it"
+    assert Og::Renderer.call(payload(art_urls: ART_URLS)).complete
+    refute Og::Renderer.call(payload(art_urls: [ UNROUTABLE_URL ])).complete
+    refute Og::Renderer.call(payload(art_urls: [ ART_URLS.first, UNROUTABLE_URL ])).complete,
+           "one art of two failing is still incomplete"
   end
 
   private
@@ -234,8 +329,13 @@ class Og::RendererTest < ActiveSupport::TestCase
   def stub_arts(bodies_by_urls)
     served = bodies_by_urls.flat_map { |urls, body| Array(urls).map { |url| [ url, body ] } }.to_h
     fetched = @fetched
-    HttpFetcher.define_singleton_method(:call) { |url|
+    # The keywords are captured rather than swallowed: Og::Renderer passes its own short
+    # open/read timeouts, and a stub taking only |url| would ArgumentError, which is a confusing
+    # way to learn about a keyword.
+    options = @fetch_options
+    HttpFetcher.define_singleton_method(:call) { |url, **kwargs|
       fetched << url
+      options << kwargs
       served.fetch(url) { raise HttpFetcher::FetchError, "Unexpected URL: #{url}" }
     }
   end

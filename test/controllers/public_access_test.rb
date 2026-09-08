@@ -336,17 +336,13 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
   # The house stubbing idiom (define_singleton_method, as in test/services/cards/
   # fetcher_cache_test.rb), so this file never needs libvips.
   def with_stubbed_og_cache
-    dir = Dir.mktmpdir
-    file = File.join(dir, "stub.jpg")
-    File.binwrite(file, "\xFF\xD8\xFF\xDB".b)
     original = Og::Cache.method(:fetch)
-    Og::Cache.define_singleton_method(:fetch) { |_payload| Pathname.new(file) }
+    Og::Cache.define_singleton_method(:fetch) { |_payload| "\xFF\xD8\xFF\xDB".b }
 
     yield
   ensure
     Og::Cache.singleton_class.remove_method(:fetch)
     Og::Cache.define_singleton_method(:fetch, original)
-    FileUtils.remove_entry(dir)
   end
 
   def owner_only_gets

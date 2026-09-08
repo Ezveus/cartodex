@@ -15,6 +15,12 @@ module Og
   # every already-generated file in place and the change appears to do nothing.
   LAYOUT_VERSION = 1
 
+  # How long a digest is, in hex characters. Read in two places that must never disagree:
+  # Payload.digest_of truncates to it, and Og::Cache's sibling pattern anchors on exactly that many
+  # characters to tell one subject's file from a longer-keyed subject's. Spelled once for that
+  # reason — the two drifting apart is how a prefix key came to evict another subject's banner.
+  DIGEST_LENGTH = 16
+
   # How many cards the layout draws. Fewer is normal — a deck with one notable Pokémon, a card
   # page — and zero falls back to the branded banner with no artwork at all.
   MAX_ARTS = 2

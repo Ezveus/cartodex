@@ -1,14 +1,19 @@
 namespace :icons do
   desc "Rasterise the icon SVGs into the committed PNGs, so the derived files cannot drift unnoticed"
-  task :build do
+  task build: :environment do
     # The SVGs are the source of truth and the PNGs are committed derivatives, which is a pair that
     # rots quietly: edit icon.svg, forget the raster, and the favicon a browser actually shows is
     # the old drawing while the repo looks correct. This task is what makes that visible — re-run
     # it and `git status` names every PNG that had drifted. Nothing runs it at boot; the production
     # image serves the committed files.
     #
-    # Not :environment — this touches no model and wants no eager load. `Rails.root` is available
-    # regardless, because the Rakefile requires config/application before loading any task.
+    # `:environment`, and the first version's reasoning for avoiding it was wrong twice over.
+    # Skipping it does not skip ActiveStorage — Vips.block_untrusted(true) runs at *require* time
+    # of active_storage/vips.rb, which `require "rails/all"` in config/application pulls in, and
+    # the Rakefile requires config/application before it defines a single task, so svgload is
+    # blocked here exactly as it is in a request. Measured: the task raised Vips::Error on its
+    # first image, so the anti-drift mechanism it *is* produced nothing at all. And the unblock
+    # below reads an autoloaded constant, which needs the initializers Zeitwerk is set up by.
     require "vips"
 
     # Two drawings, not one. `icon.svg` carries the bench, `icon-small.svg` does not: rendered at
@@ -25,6 +30,8 @@ namespace :icons do
     ]
 
     public_dir = Rails.root.join("public")
+
+    Og::Renderer.allow_generated_svg!
 
     specs.each do |spec|
       source = public_dir.join(spec[:source])
@@ -55,7 +62,7 @@ namespace :og do
     # to be able to regenerate. Every page outside the three surfaces that have artwork to show
     # gets this banner, so it must exist as a file — no request path builds it.
     path = Rails.root.join("public/og-default.jpg")
-    path.binwrite(Og::Renderer.call(Og::SitePayload.call))
+    path.binwrite(Og::Renderer.call(Og::SitePayload.call).bytes)
 
     puts "Wrote #{path.relative_path_from(Rails.root)} (#{path.size} bytes)."
   end

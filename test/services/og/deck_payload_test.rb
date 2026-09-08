@@ -275,7 +275,7 @@ class Og::DeckPayloadTest < ActiveSupport::TestCase
   #
   # Reading Og::LAYOUT_VERSION requires app/services/og/payload.rb to have been loaded, which
   # is why callers compute a digest before calling this: Zeitwerk autoloads Og::Payload, and
-  # the constant lives beside it rather than in a namespace file of its own.
+  # the constant lives in app/services/og.rb, the explicit namespace file that exists for this.
   def with_layout_version(version)
     original = Og::LAYOUT_VERSION
     Og.send(:remove_const, :LAYOUT_VERSION)

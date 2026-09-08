@@ -16,8 +16,16 @@ class HttpFetcher < ApplicationService
   OPEN_TIMEOUT = 10
   READ_TIMEOUT = 30
 
-  def initialize(url)
+  # A caller that would rather fail fast than wait may say so. Og::Renderer does: it makes two
+  # serial fetches inside one web request, so the defaults above bound *it* at 2 x (10 + 30) — and
+  # a host that accepts a connection and then never answers was measured holding one Puma thread
+  # for 120.4 s, with the request still succeeding (degraded to the artless banner) so that nothing
+  # surfaced it. A per-IP request budget cannot bound that, because it counts requests rather than
+  # thread-seconds.
+  def initialize(url, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT)
     @url = url
+    @open_timeout = open_timeout
+    @read_timeout = read_timeout
     @uri = URI.parse(url)
   rescue URI::InvalidURIError => e
     raise FetchError, "#{url.inspect} is not a URL (#{e.message})"
@@ -41,8 +49,8 @@ class HttpFetcher < ApplicationService
     Net::HTTP.start(
       @uri.hostname, @uri.port,
       use_ssl: @uri.scheme == "https",
-      open_timeout: OPEN_TIMEOUT,
-      read_timeout: READ_TIMEOUT
+      open_timeout: @open_timeout,
+      read_timeout: @read_timeout
     ) { |http| http.request(Net::HTTP::Get.new(@uri, "User-Agent" => USER_AGENT)) }
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     # Rescued into FetchError rather than left to propagate, because every caller already handles

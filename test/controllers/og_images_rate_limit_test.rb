@@ -18,20 +18,24 @@ class OgImagesRateLimitTest < ActionDispatch::IntegrationTest
     @deck.update!(user: users(:one), shared: true)
     @archetype = archetypes(:standings_marker)
 
-    @dir = Dir.mktmpdir
-    file = File.join(@dir, "stub.jpg")
-    File.binwrite(file, "\xFF\xD8\xFF\xDB".b)
     @original_fetch = Og::Cache.method(:fetch)
-    Og::Cache.define_singleton_method(:fetch) { |_payload| Pathname.new(file) }
+    Og::Cache.define_singleton_method(:fetch) { |_payload| "\xFF\xD8\xFF\xDB".b }
   end
 
   teardown do
     Og::Cache.singleton_class.remove_method(:fetch)
     Og::Cache.define_singleton_method(:fetch, @original_fetch)
-    FileUtils.remove_entry(@dir)
   end
 
-  test "throttles an anonymous client past the limit, but never a signed-in one" do
+  # The budget applies to a signed-in member too, which is the one place this app's rate-limit
+  # idiom is deliberately not followed — every other limiter carries
+  # `unless: -> { user_signed_in? }`. The reasoning inverts here: those endpoints serve members,
+  # this one serves crawlers, which never carry a session. Exempting members would buy legitimate
+  # traffic nothing at all while lifting the cap off the only caller able to abuse a generator: a
+  # member could otherwise walk /og/cards/:id across the catalogue for ~1800 renders and ~3600
+  # outbound CDN fetches. Asserted rather than described, because the keyword is one word and its
+  # absence is invisible.
+  test "throttles an anonymous client past the limit" do
     with_real_rate_limit_store do
       limit = OgImagesController::RATE_LIMIT_TO
 
@@ -42,13 +46,20 @@ class OgImagesRateLimitTest < ActionDispatch::IntegrationTest
 
       get deck_og_image_path(@deck.key)
       assert_response :too_many_requests
+    end
+  end
 
+  test "and throttles a signed-in member on the same budget" do
+    with_real_rate_limit_store do
       sign_in users(:one)
 
-      (limit + 1).times do
+      OgImagesController::RATE_LIMIT_TO.times do
         get deck_og_image_path(@deck.key)
         assert_response :success
       end
+
+      get deck_og_image_path(@deck.key)
+      assert_response :too_many_requests, "a member must not be exempt from a generator's budget"
     end
   end
 
