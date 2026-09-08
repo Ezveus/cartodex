@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Cartodex is a Pokémon Trading Card Game card manager built with Rails 8.1 and Ruby 3.4.1. Features include collection tracking (with webcam scanning), deck management with archetype tagging and per-result win/loss tracking, tournament profiles (Play! Pokémon divisions), and decklist import plus multiple export formats (JSON, PTCG text, Cardmarket wishlist, tournament PDF, image). Card data is scraped from Limitless TCG. An admin panel provides dashboard, CRUD for card sets/cards/users/decks/archetypes/imports, and bulk import/rescrape actions.
+Cartodex is a Pokémon Trading Card Game card manager built with Rails 8.1 and Ruby 4.0.1. Features include collection tracking (with webcam scanning), deck management with archetype tagging and per-result win/loss tracking, tournament profiles (Play! Pokémon divisions), and decklist import plus multiple export formats (JSON, PTCG text, Cardmarket wishlist, tournament PDF, image). Card data is scraped from Limitless TCG. An admin panel provides dashboard, CRUD for card sets/cards/users/decks/archetypes/imports, and bulk import/rescrape actions.
 
 ## Common Commands
 
