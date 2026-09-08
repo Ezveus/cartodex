@@ -234,7 +234,11 @@ resource sits outside `authenticate :user`, `include PubliclyReachable` with
 **Four more decide what a visitor then sees, and no test would have reported any of them
 missing**: the per-IP `rate_limit … unless: -> { user_signed_in? }` at
 `tournaments#index`'s 60/min (absent before, because no anonymous request could reach the route,
-and a limiter nobody can exercise is a limiter nobody knows works); `nav_link "Archetypes"` in
+and a limiter nobody can exercise is a limiter nobody knows works) — joined by a second at 120/min
+on `#show`, which shipped uncapped on the argument that a report is one request per deliberate
+click, until that was measured and found false: Turbo prefetches on hover and the catalog renders
+24 row links, so ten hovers produced ten full report loads (see
+`docs/architecture/public-surface.md`); `nav_link "Archetypes"` in
 `Ui::PublicNavbar`, without which a visitor on those pages lights **zero** navbar entries, a hole
 `NavbarActiveSectionTest` could not see because it named no visitor archetype page;
 `Search::Global#archetype_scope`'s `Archetype.none` branch, whose trap is the opposite kind — its

@@ -14,16 +14,13 @@
 # what a visitor then *meets*, and the suite would have stayed green with every one of them
 # missing:
 #
-#   4. the per-IP `rate_limit` below. Sized like tournaments#index's because #index is the same
-#      shape — a field debounced at 300 ms driving a paginated listing behind a Turbo Frame —
-#      and, at 5 queries measured on the production dump, a cheaper one. #show gets none,
-#      deliberately: its two selects auto-submit, so a click is a full page load of **16
-#      queries / ~31 ms / 85 KB** for a visitor (17 with a session, which the flat-cost test
-#      pins) — the app's largest uncapped anonymous response — but that is still one request
-#      per deliberate click and not one per keystroke, which is the line decks#show and
-#      tournaments#show sit on the same side of. The counter-argument is written down in
-#      docs/architecture/public-surface.md rather than left out: decks#export is also one
-#      click and *is* capped, at a third of the cost. ArchetypesRateLimitTest pins both halves.
+#   4. the two per-IP `rate_limit`s below — 60 on #index, 120 on #show. #show shipped without
+#      one, on the argument that it is one request per deliberate click; that argument was
+#      wrong, and measuring it is what settled the question. Turbo 8 prefetches on hover and
+#      #index renders 24 row links: ten hovers produced ten full report loads, at 16 queries /
+#      ~31 ms / 85 KB each. So the largest anonymous response in the app was reachable 24 times
+#      by a cursor moving down a list. ArchetypesRateLimitTest pins both budgets and their
+#      separation.
 #   5. `nav_link "Archetypes"` in Ui::PublicNavbar. Without it a visitor on either page lights
 #      **zero** navbar entries — NavbarActiveSectionTest asserts "exactly one is lit" per page
 #      it names, and it named no visitor archetype page until this shipped.
@@ -50,18 +47,40 @@ class ArchetypesController < ApplicationController
 
   PER_PAGE = 24
 
-  # An explicit `name:`, as every other limiter in the app carries: Rails keys a limiter on
-  # ["rate-limit", scope, name, by] with `scope` defaulting to controller_path, so with one
-  # limiter on one action the name buys nothing today — #show is not rationed because no
-  # limiter runs on it at all, not because this budget is separate. It starts mattering the day
-  # a second limiter lands on this controller, which is why it is spelled rather than left to
-  # the default.
+  # Two limiters, two budgets, and the `name:` on each is what keeps them apart: Rails keys a
+  # limiter on ["rate-limit", scope, name, by] with `scope` defaulting to controller_path, so one
+  # shared name would mean a reader who exhausted the catalog could not open a report.
+  # ArchetypesRateLimitTest asserts that in both directions.
+  #
+  # 60 for the catalog, the number tournaments#index and decks#shared carry for the reason those
+  # two share it: a field debounced at 300 ms driving a paginated listing behind a Turbo Frame,
+  # and at 5 queries the cheapest of the three.
   INDEX_RATE_LIMIT_TO = 60
+  # **120 for the report — higher than the catalog, which reads backwards until the amplifier is
+  # named.** This action is not one request per deliberate click, which is what an earlier
+  # version of this comment claimed and what kept it uncapped: Turbo 8 prefetches on hover,
+  # nothing in this app opts out (no `<meta name="turbo-prefetch">`, no `data-turbo-prefetch` on
+  # the row links), and #index renders 24 of those links. Measured in a browser against the
+  # production dump: **ten hovers produced ten full report loads**, at 16 queries / 85 KB each —
+  # so a cursor sweeping the catalog, not a click, sets this action's peak rate, and four pages of
+  # 24 rows put a thorough reader's own ceiling near 100/min. 120 clears that while capping one IP
+  # at roughly 10 MB/min against the 2 MB/s a single client sustained uncapped.
+  #
+  # The alternative was to remove the amplifier instead of rationing it — `data-turbo-prefetch:
+  # "false"` on Archetypes::IndexView's row link — and it is deliberately not taken here: prefetch
+  # is what makes the catalog feel instant, and dropping it is a UX decision rather than a
+  # protection one. `/tournaments` amplifies identically (measured: six hovers, six loads) and
+  # tournaments#show is still uncapped; that is its own decision and not this one.
+  SHOW_RATE_LIMIT_TO = 120
   RATE_LIMIT_WITHIN = 1.minute
 
   rate_limit to: INDEX_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "archetypes-index", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :index
+
+  rate_limit to: SHOW_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "archetypes-show", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :show
 
   def index
     authorize Archetype, :index?

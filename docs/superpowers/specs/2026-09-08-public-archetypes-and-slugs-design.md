@@ -238,24 +238,48 @@ tile of the *tagged* deck: `at_css` took the first tile on the page, which carri
 could not exhibit the bug. The pre-existing guard of this kind covers `/decks`, which renders
 `ClassificationBadges`, so it could not have seen either of these two.
 
+**The report carries a limiter too, at 120/min, and the argument that kept it uncapped was
+false.** This shipped without one on the rule the other show pages sit on — one request per
+deliberate click — and the owner asked for the limiter afterwards, which sent the question back to
+a measurement. Turbo 8 prefetches on hover, nothing in this app opts out (no
+`<meta name="turbo-prefetch">`, no `data-turbo-prefetch` on any row link, and
+`DecksController#remember_return_to?` exists because those prefetches arrive), and `#index`
+renders **24** row links. Measured in a browser against the production dump: **ten hovers produced
+ten full report loads**, six down `/tournaments` produced six. So a cursor moving through the
+listing, not a click, sets this page's peak rate, and the largest anonymous response in the app
+was reachable 24 times per catalog page by a mouse.
+
+120 rather than the catalog's 60, and the asymmetry is the argument: the catalog is bounded by a
+300 ms debounce and its own frame short-circuit, the report by nothing. Four pages of 24 rows is
+79 archetypes, so a thorough reader's own ceiling is under 100/min; 120 clears it and still caps
+one IP near 10 MB/min against the 2 MB/s a single client sustained uncapped. The number is
+`SearchController`'s, not an invention.
+
+Two things follow. **The test that pinned the absence had to be inverted, not watched** — it
+looped `INDEX_RATE_LIMIT_TO + 5` requests, and the new budget is twice that, so it would have gone
+on passing in defence of a rule that had become false: the second instance of that trap in this
+feature, after `Search::Global`'s. And **the separation of the two budgets needs asserting in both
+directions**: one shared `name:` leaves a single counter, which after exhausting the catalog sits
+at 61 — under the report's 120 — so a test that checks one request into the report cannot see it.
+It spends the report's whole budget instead. Both sabotaged.
+
+The alternative, rejected: `data-turbo-prefetch: "false"` on the catalog's row link removes the
+amplifier instead of rationing it, but prefetch is what makes the listing feel instant, and that
+is a UX decision rather than a protection one. `tournaments#show` amplifies identically and is
+still uncapped — the same decision one page over, left unmade, since what tipped this one is the
+85 KB behind the hover rather than the hover.
+
 **The 5-query figure the limiter was sized on is now an assertion, and for a visitor.**
 `"index issues a constant number of queries regardless of how many archetypes"` is *relative*
 (`assert_equal small, large`), so a constant query added to the action lands in both measurements
 and is invisible to it — and it signs a member in. `"the catalog costs a visitor five queries"`
 is the absolute, signed-out counterpart.
 
-**`#show` gets no rate limiter, and that is the precedent rather than an omission.** Its two
-`<select>`s auto-submit (`card-filter`), so a click is a full page load of 16 queries / ~31 ms /
-85 KB — the app's largest uncapped anonymous response. It still matches the rule the other
-limiters were sized by: one request per deliberate click, not one per keystroke, which is why
-`tournaments#show` and `decks#show` carry none either while their listings do. A test pins the
-absence, the way `tournaments_rate_limit_test.rb` pins it for an event page.
-
-The counter-argument, recorded rather than omitted: `decks#export` is also one deliberate click
-and *is* capped, at 30/min and a third of the cost. What settles it is `tournaments#show` — the
-same shape, uncapped, measured at 55 req/s against this page's 23.
-`docs/architecture/public-surface.md` carries both numbers and names 120/min as the option if the
-trade is ever revisited.
+**`#show`'s cost is what made the limiter above worth having**: 16 queries / ~31 ms / 85 KB for
+a visitor, the app's largest anonymous response, flat across every `?pool=&venue=&group=`
+combination. The counter-argument that was recorded here while it went uncapped — `decks#export`
+is also one deliberate click and *is* capped, at 30/min and a third of the cost — is the one the
+measurement then confirmed.
 
 **Nothing about the two pages is member-specific, and that was checked rather than assumed.**
 No component under `app/views/components/archetypes/` reads `current_user`, `user_signed_in?`, a
