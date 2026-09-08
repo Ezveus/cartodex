@@ -31,12 +31,54 @@ module Archetypes
     def main_line
       div(class: "archetype-card-main") do
         div(class: "archetype-card-name") do
-          span(class: "archetype-card-name-text") { @group.name }
+          name_text
           fixed_flag if fixed_group?
           label_flags(type_labels)
         end
         share(@group.inclusion_pct, @group.inclusion_count)
         div(class: "archetype-card-copies") { name_copies_text }
+      end
+    end
+
+    # A name played as one card *is* that card, so the line names the printing and links to it.
+    # A split name is not: it covers two or more genuinely different cards, and one printing's
+    # code there would name one of them as if it were the group — the rule that already withholds
+    # the fixed flag and the type labels from a split name, two methods down. Its own sub-rows
+    # carry both instead, and they are the card rows.
+    #
+    # The code names a printing of the card, not the printing the sample played: the report is
+    # keyed on the printing-independent card key, so a single-entry group folds reprints together
+    # (measured on the production data, 81 card ids under 72 keys) and what is shown is the
+    # most-played of them. That is a different thing from a split name — one card under two codes
+    # rather than two cards under one name — and it is the distinction Archetypes::MethodNote
+    # draws; it gained a clause naming the code for exactly this row.
+    #
+    # `archetype-card-name-text` stays on whichever element carries the text, span or anchor:
+    # ArchetypeMetagameTest measures that element's box against the label badge's, and it is the
+    # only assertion proving .archetype-card-label-line's wrapper works.
+    def name_text
+      return span(class: "archetype-card-name-text") { @group.name } if @group.split?
+
+      card_link(@group.entries.first.card, "archetype-card-name-text archetype-card-link")
+    end
+
+    # A plain `a` over the routes module, and not `link_to card_path(card)`, for the reason
+    # Archetypes::CardReport#path_for builds its mode links that way: this component tree is
+    # unit-tested through a bare Phlex `.call`, where Phlex::Rails' LinkTo and Routes helpers
+    # delegate to a nil view_context and raise NoMethodError. An element takes an href with no
+    # url_for involved, so this renders in a request and out of one alike.
+    #
+    # No `data-turbo-frame="_top"`, unlike Ui::ArchetypeBadge's anchor, whose every call site
+    # renders it inside a frame. Measured in the browser rather than read off this component:
+    # /archetypes/:id does carry one frame — `search_results`, the spotlight's, from the layout —
+    # but it holds neither the report nor any card row, so `closest("turbo-frame")` on one of
+    # these anchors is null and the click is not frame-scoped. `_top` here would be copied across
+    # without the condition that earns it; the system test is what would notice if a frame ever
+    # did come to wrap the report, since frame-scoped the click renders Turbo's missing-frame
+    # error instead of navigating and the markup is identical either way.
+    def card_link(card, css_class)
+      a(href: Rails.application.routes.url_helpers.card_path(card), class: css_class) do
+        card.printing_label
       end
     end
 
@@ -106,7 +148,7 @@ module Archetypes
         @group.entries.each do |entry|
           li(class: "archetype-printing-row") do
             div(class: "archetype-card-name") do
-              plain entry.card.printing_label
+              card_link(entry.card, "archetype-card-link")
               fixed_flag if fixed?(entry)
               label_flags(labels_for([ entry ]))
             end

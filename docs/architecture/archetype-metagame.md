@@ -158,6 +158,60 @@ the one selector in the archetype CSS block that buys weight rather than scope, 
 preamble names it: an unconditional negative `margin-top` on the overlap note would pull it under
 the summary in the one-list case, where the range note above it is withheld.
 
+**Every card row names a printing and links to it, and the fold is what made that need a
+sentence.** `Buddy-Buddy Poffin (TEF 144)` is `Card#printing_label`, the printing
+`representative_ids` picks — more lists than any other, lowest card id breaking a tie so the page
+does not change between two loads. The anchor is a plain `a` over
+`Rails.application.routes.url_helpers`, not `link_to card_path`, for the reason
+`CardReport#path_for` is: this component tree is unit-tested through a bare Phlex `.call`, where
+`Phlex::Rails`' `LinkTo` and `Routes` delegate to a nil `view_context` and raise. It carries **no**
+`data-turbo-frame="_top"`, unlike `Ui::ArchetypeBadge`'s anchor — measured rather than assumed,
+since the page does render one frame (`search_results`, the layout's spotlight) and it holds
+neither the report nor any row, so `closest("turbo-frame")` on one of these anchors is null. That
+also gives this file's nested-anchor lesson (below, `Decks::ClassificationBadges`) a second
+instance: `assert_select` parses HTML4 and nests anchors happily, so a future clickable wrapper
+around a card row would leave the controller test green — only
+`archetype_metagame_test.rb`'s click test tells the two outcomes apart. Opening the pages to
+visitors costs nothing extra here: `/cards/:id` is already public.
+
+**A split name line carries neither a code nor a link, and a folded row carries both plus a
+sentence.** The first is the third application of the rule that already withholds the *fixed* flag
+and the type labels from a split name: it covers two or more genuinely different cards (`Applin`
+and `Charcadet` reach four), so one printing's code would name one member as if it were the group.
+Its sub-rows are the card rows and carry both. The second is the case that rule does *not* cover
+and that the code made visible — `GROUPING_KEY` is printing-independent, so a **non-split** row can
+name one printing while its share, its copies and its *fixed* flag count every reprint of that
+card. Measured on the dump: **16 distinct card keys** fold two printings a list actually played (53
+split name groups over 36 distinct names sit beside them), worst `Ultra Ball (MEG 131)` reading
+"100 % of lists (154)" where 56 of those lists played SVI 196 — a 36-point gap between the line and
+the code on it; and two such rows carry *fixed*, whose title says "played by every list, always in
+the same number", true of Fezandipiti ex and false of the SFA 38 beside it. So
+`CardStats::Result#reprinted_cards` counts the **distinct cards** in that state — over `entries`,
+not over rendered rows, or role mode reports one card twice — and `CardReport#reprint_note` says it,
+**only where the sample holds an instance**: 242 of the 246 reachable samples hold none, and the
+pool note's rule is that a disclaimer with no instance is one nobody reads. It costs no query:
+`printings_played_by_key` is the size of the group `representative_ids` already picks from, so
+`CardStats` stays at five and the page at seventeen. Two things about its wording are decisions.
+It says *more lists than any other* and not *most*, because the pick is a **plurality**: no fold in
+the dump has three printings, but 371 catalogue fingerprints do, and one import reaches it. And it
+names the *fixed* flag beside the share and the copies, because that flag is the one of the three
+that is not itself a number — `Entry#fixed?` is derived from both — so a sentence covering only the
+two figures left a reader to guess which of them a "fixed" badge came from, on the two rows where
+its title is false of the printing printed beside it.
+
+**The links have no affordance but `:hover`, and that is the one thing here no test can see.**
+`.archetype-card-link` is `color: inherit; text-decoration: none` with a hover underline — two of
+`.deck-compare-card-link`'s five declarations, which is `/decks/compare`'s existing answer for a
+list of linked card names. Its `display: flex`/`align-items`/`gap` are **inert** on an anchor
+holding one run of text (measured: identical boxes with and without them at 1400px and at 344px),
+so copying them would assert a layout this element does not have. Nothing in `test/` reads a
+computed style, so reverting the rule to a bare anchor is a mutation the whole suite survives —
+recorded here rather than annotated as covered. Two consequences are open rather than settled:
+126 links on one page are indistinguishable from body text until hovered, and there is no hover on
+the touch side of the breakpoint; and the anchors are 19-20px tall against WCAG 2.5.8's 24px, in
+rows that are themselves 88-113px. Both are properties `/decks/compare` already has, so changing
+them is one decision about two pages.
+
 **The performance panel counts all standings; the card report counts only the listed ones**, which
 is why `MetagameScope` exposes two relations rather than letting one number stand for both — a
 placement is a result whether or not anybody typed the decklist. `unlisted_count` and

@@ -53,7 +53,11 @@ class Archetypes::CategorySectionTest < ActiveSupport::TestCase
 
   def section(copies_per_list: [])
     entry = Archetypes::CardStats::Entry.new(
-      card: Card.new(name: "Iono", set_name: "PAL", set_number: "185"),
+      # The id is what the row's link routes to: Archetypes::NameGroupRow now names the
+      # printing and links to it, and url_helpers refuses an unpersisted record. Deliberately not
+      # 185: an id equal to the set number cannot tell `card_path(card)` from
+      # `card_path(card.set_number)`.
+      card: Card.new(id: 1185, name: "Iono", set_name: "PAL", set_number: "185"),
       fingerprint: "PAL-185", inclusion_count: 4, inclusion_pct: 100.0,
       min_copies: 4, max_copies: 4, modes: [ 4 ], core: true
     )

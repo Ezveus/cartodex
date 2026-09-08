@@ -449,7 +449,14 @@ module Styleguide
 
     def sg_entry(name, set_name, set_number, count, pct, min, max, modes, core: false, labels: [])
       Archetypes::CardStats::Entry.new(
-        card: Card.new(name: name, set_name: set_name, set_number: set_number),
+        # A **negative** id, and that is the whole point. The row now names the printing and links
+        # to it, and `url_helpers.card_path` raises UrlGenerationError on an unpersisted record —
+        # so the stub needs one. Any plausible id names a real card: measured, `id: 1` is
+        # Spinarak (POR 1) and deriving it from the set number sent "Raging Bolt ex (PRE 166)" to
+        # Fletchling (POR 66), which is worse than linking nowhere on the one page whose purpose
+        # is to be browsed. Negative routes fine, resolves to nothing, and cannot collide.
+        card: Card.new(id: -set_number.to_i, name: name, set_name: set_name,
+                       set_number: set_number),
         fingerprint: "sg-#{set_name}-#{set_number}", inclusion_count: count, inclusion_pct: pct,
         min_copies: min, max_copies: max, modes: modes, core: core, labels: labels
       )

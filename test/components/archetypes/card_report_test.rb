@@ -165,20 +165,55 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     assert_match(/Lists exist under “All” venues/, html)
   end
 
+  # The row now names a printing while its share and its copies count every reprint of that card,
+  # so the page has to say which of the two a figure is about — but only where the sample holds an
+  # instance. Measured, 242 of the 246 reachable samples hold none, and a disclaimer on all of
+  # them is a disclaimer nobody reads.
+  test "says a card is played in more than one printing only when one is" do
+    html = report(grouping: :type, reprinted: 3)
+
+    assert_includes html, "3 cards below are played in more than one printing"
+    assert_includes html, "counts every printing of that card"
+    # The flag is the third figure the sentence has to cover and the only one that is not a
+    # number: `Entry#fixed?` is derived from the share *and* the copies, so naming only those two
+    # left a reader to guess which of them a "fixed" badge came from. Two production rows carry it
+    # on a folded card, with a title that is false of the printing named beside it.
+    assert_includes html, "whether it is marked “fixed”"
+    assert_no_match(/card below is played/, html)
+  end
+
+  test "says nothing about reprints on a sample that holds none" do
+    assert_no_match(/played in more than one printing/, report(grouping: :type))
+  end
+
+  # The count is genuinely 1 often enough to matter: 16 of the production instances sit on samples
+  # holding a single one.
+  test "agrees with itself in the singular" do
+    html = report(grouping: :type, reprinted: 1)
+
+    assert_includes html, "1 card below is played in more than one printing"
+    assert_no_match(/cards below are/, html)
+  end
+
   private
 
-  def report(grouping:, pool: nil, proposed: 0, decided: 0, lists_count: 4)
+  def report(grouping:, pool: nil, proposed: 0, decided: 0, lists_count: 4, reprinted: 0)
     Archetypes::CardReport.new(
-      stats: stats(grouping, proposed: proposed, decided: decided, lists_count: lists_count),
+      stats: stats(grouping, proposed: proposed, decided: decided, lists_count: lists_count,
+                   reprinted: reprinted),
       scope: scope(pool: pool)
     ).call
   end
 
   # One card in one section, which is all the header needs — what this file asks about is the
   # header, and Archetypes::CardStatsTest owns the grouping itself.
-  def stats(grouping, proposed: 0, decided: 0, lists_count: 4)
+  def stats(grouping, proposed: 0, decided: 0, lists_count: 4, reprinted: 0)
     entry = Archetypes::CardStats::Entry.new(
-      card: Card.new(name: "Iono", set_name: "PAL", set_number: "185"),
+      # The id is what the row's link routes to: Archetypes::NameGroupRow now names the
+      # printing and links to it, and url_helpers refuses an unpersisted record. Deliberately not
+      # 185: an id equal to the set number cannot tell `card_path(card)` from
+      # `card_path(card.set_number)`.
+      card: Card.new(id: 1185, name: "Iono", set_name: "PAL", set_number: "185"),
       fingerprint: "PAL-185", inclusion_count: 4, inclusion_pct: 100.0,
       min_copies: 4, max_copies: 4, modes: [ 4 ], core: true
     )
@@ -193,7 +228,8 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
 
     Archetypes::CardStats::Result.new(
       lists_count: lists_count, categories: [ category ], fixed_core_cards: 1,
-      fixed_core_copies: 4, grouping: grouping, proposed_roles: proposed, decided_roles: decided
+      fixed_core_copies: 4, grouping: grouping, proposed_roles: proposed, decided_roles: decided,
+      reprinted_cards: reprinted
     )
   end
 

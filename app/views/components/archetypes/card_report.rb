@@ -27,6 +27,7 @@ module Archetypes
           range_note unless single_list?
           overlap_note if role_mode?
           provenance_note if role_mode? && @stats.unconfirmed_roles?
+          reprint_note if @stats.reprints?
           @stats.categories.each do |category|
             render Archetypes::CategorySection.new(category: category, single_list: single_list?)
           end
@@ -155,6 +156,39 @@ module Archetypes
         plain "#{@stats.proposed_roles} of the #{total} roles below "
         plain "#{@stats.proposed_roles == 1 ? 'is a proposal a rule made' : 'are proposals a rule made'} "
         plain "from the card's own text, which nobody has confirmed yet."
+      end
+    end
+
+    # The sentence the set code on a card row makes necessary, and the fourth on this page written
+    # to stop a reader taking a figure for something it is not.
+    #
+    # The report is keyed on the printing-independent card key, so a row can name one printing
+    # while its share, its copies and its `fixed` flag count every reprint of that card. Measured
+    # on the production data: 16 distinct card keys fold two printings a list actually played, and
+    # the worst of them is `Ultra Ball (MEG 131)` reading "100% of lists (154)" where 56 of those
+    # 154 lists played SVI 196 instead — a 36-point gap between the line and the code on it. Two
+    # such rows also carry the `fixed` flag, whose title says "played by every list, always in the
+    # same number": true of Fezandipiti ex, false of the SFA 38 printed beside it — which is why
+    # the sentence names the flag as well as the two figures. It is the one of the three that is
+    # not itself a number, so a sentence covering only "the share and the copies" left the reader
+    # to decide which of the two it was derived from, and `Entry#fixed?` is both.
+    #
+    # It renders only where the sample holds an instance, the rule the pool note follows: a
+    # disclaimer on every page is a disclaimer nobody reads, and 242 of the 246 reachable samples
+    # have nothing to disclaim. Withheld before this feature there was nothing to say — the row
+    # named no printing, so nothing on it was about one.
+    #
+    # Placed after the provenance note so `.archetype-range-note + .archetype-overlap-note` keeps
+    # its adjacency; that selector is the one thing in the archetype CSS block that buys weight.
+    def reprint_note
+      count = @stats.reprinted_cards
+
+      p(class: "archetype-reprint-note") do
+        plain "#{count} #{'card'.pluralize(count)} below #{count == 1 ? 'is' : 'are'} played in "
+        plain "more than one printing, and the code names whichever of them more lists chose than "
+        plain "any other. Everything beside it — its share, its copies, and whether it is marked "
+        plain "“fixed” — counts every printing of that card, so some of the lists counted there "
+        plain "played a different one."
       end
     end
 
