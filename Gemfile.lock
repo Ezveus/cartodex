@@ -172,7 +172,7 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
-    mcp (1.4.0)
+    mcp (1.5.0)
       json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.6)
@@ -352,7 +352,7 @@ GEM
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
-    simpleidn (0.2.3)
+    simpleidn (0.3.0)
     solid_cable (4.0.2)
       actioncable (>= 7.2)
       activejob (>= 7.2)
@@ -440,7 +440,7 @@ DEPENDENCIES
   importmap-rails
   jbuilder
   kamal
-  mcp (~> 1.4)
+  mcp (~> 1.5)
   minitest (~> 6.0)
   mission_control-jobs
   phlex-rails (~> 2.2)
