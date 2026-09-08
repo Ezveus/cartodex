@@ -35,7 +35,12 @@ module Ui
 
     def nav_link(label, path, *sections)
       active = sections.include?(@active_section)
-      link_to label, path, class: [ "navbar-link", ("active" if active) ].compact.join(" ")
+
+      link_to label, path,
+        class: [ "navbar-link", ("active" if active) ].compact.join(" "),
+        # The `active` class is what the eye reads; `aria-current` is the same fact for everyone
+        # else, and the app already spells it that way in Archetypes::CardReport.
+        aria: { current: ("page" if active) }.compact
     end
 
     # An entry that expands instead of navigating. `entries` are `[label, path, [section, …]]`

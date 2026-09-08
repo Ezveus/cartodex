@@ -23,7 +23,7 @@ module Ui
         brand_path: admin_root_path, brand_label: "Cartodex Admin",
         # Admin::DashboardController's own controller_name, not "home" — the admin panel's front
         # page is a different section from the app's.
-        brand_active: @active_section == "dashboard",
+        brand_active: @active_section == "dashboard", brand_destination: "Dashboard",
         nav_class: "admin-navbar", search: false
       ) do
         nav_links

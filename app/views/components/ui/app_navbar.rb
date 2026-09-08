@@ -17,7 +17,10 @@ module Ui
     def view_template
       # Dashboard has no entry of its own any more: the brand already pointed there, and it is the
       # one destination a logo can plausibly carry.
-      render Ui::NavbarShell.new(brand_path: dashboard_path, brand_active: @active_section == "home") do
+      render Ui::NavbarShell.new(
+        brand_path: dashboard_path, brand_active: @active_section == "home",
+        brand_destination: "Dashboard"
+      ) do
         nav_links
         account_menu
       end

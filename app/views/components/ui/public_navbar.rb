@@ -13,7 +13,9 @@ module Ui
     # this navbar 48px of overflow at that width, which is the defect the grouping exists to
     # remove, reintroduced on the one navbar the grouping does not touch.
     def view_template
-      render Ui::NavbarShell.new(brand_path: root_path, brand_active: @active_section == "home") do
+      render Ui::NavbarShell.new(
+        brand_path: root_path, brand_active: @active_section == "home", brand_destination: "Home"
+      ) do
         div(class: "navbar-links") do
           nav_link "Cards", cards_path, "cards"
           nav_link "Archetypes", archetypes_path, "archetypes"

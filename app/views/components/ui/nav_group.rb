@@ -51,7 +51,13 @@ module Ui
         }
       ) do
         trigger
-        span(class: "navbar-group-heading", aria_hidden: "true") { @label }
+        # Not `aria-hidden`. Above the breakpoint the attribute would be redundant — the heading is
+        # `display: none` and already out of the tree — and below it the *trigger* is what is
+        # hidden, so hiding this one too left a screen reader with eleven undifferentiated links
+        # where the eye sees three labelled sections. Measured on the open drawer at 500px: the AX
+        # tree carried no group name at all. The duplicate reading it was meant to prevent cannot
+        # happen, because the two elements are never displayed at the same width.
+        span(class: "navbar-group-heading") { @label }
         panel(&block)
       end
     end
@@ -62,6 +68,9 @@ module Ui
       button(
         type: "button",
         class: [ "navbar-group-trigger", ("active" if active?) ].compact.join(" "),
+        # No `aria-haspopup`, deliberately, though a review asked for it: the attribute announces a
+        # `role="menu"` this panel does not have and does not want (its children are links, not
+        # menuitems). `aria-expanded` on a <button> is the whole of the disclosure contract.
         aria: { expanded: "false", controls: dom_id, label: (@label if @initial) }.compact,
         data: { action: "dropdown#toggle", dropdown_target: "trigger" }
       ) do
@@ -80,17 +89,26 @@ module Ui
         id: dom_id,
         data: { dropdown_target: "menu" }
       ) do
-        @entries.each { |label, path, sections| entry(label, path, sections) }
+        # Splatted rather than destructured, so a two-element entry really does reach `entry`'s
+        # default: block destructuring would hand it an explicit nil and the default would never
+        # apply.
+        @entries.each { |entry_data| entry(*entry_data) }
         # Passed `self` so a caller outside a Phlex render — a component test — can write into the
         # panel; a caller inside one ignores the argument and writes through its own buffer.
         yield(self) if block
       end
     end
 
-    def entry(label, path, sections)
+    # `sections` defaults to none so that a two-element entry — the easy typo, since the third slot
+    # is the only one a reader might take for optional — is an entry that never lights rather than
+    # a NoMethodError on nil at render time, which is a 500 on every page in the app.
+    def entry(label, path, sections = [])
+      active = sections.include?(@active_section)
+
       a(
         href: path,
-        class: [ "navbar-link", ("active" if sections.include?(@active_section)) ].compact.join(" ")
+        class: [ "navbar-link", ("active" if active) ].compact.join(" "),
+        aria: { current: ("page" if active) }.compact
       ) { label }
     end
 
@@ -100,7 +118,7 @@ module Ui
     def active?
       return false if @active_section.nil?
 
-      @entries.any? { |_label, _path, sections| sections.include?(@active_section) }
+      @entries.any? { |_label, _path, sections| (sections || []).include?(@active_section) }
     end
 
     def dom_id

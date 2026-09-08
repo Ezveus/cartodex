@@ -81,6 +81,40 @@ class Ui::NavGroupTest < ActiveSupport::TestCase
     assert_equal "Tournaments", doc.at_css(".navbar-group-heading").text.strip
   end
 
+  # The heading is the ONLY label on screen below the breakpoint, where the trigger is
+  # `display: none` — hiding it from assistive technology too left the drawer as eleven
+  # undifferentiated links. The two never render together, so there is no duplicate to suppress.
+  test "the drawer heading is not hidden from assistive technology" do
+    doc = Nokogiri::HTML5.fragment(group)
+
+    assert_nil doc.at_css(".navbar-group-heading")["aria-hidden"]
+    assert_equal "true", doc.at_css(".navbar-group-caret")["aria-hidden"]
+  end
+
+  # aria-haspopup is deliberately absent: it announces a role="menu" this panel does not have.
+  test "the trigger announces a disclosure and not a menu" do
+    trigger = Nokogiri::HTML5.fragment(group).at_css(".navbar-group-trigger")
+
+    assert_nil trigger["aria-haspopup"]
+  end
+
+  test "the lit leaf says so to assistive technology as well as to the eye" do
+    doc = Nokogiri::HTML5.fragment(group(active_section: "second"))
+
+    assert_equal "page", doc.at_css("a.navbar-link.active")["aria-current"]
+    assert_nil doc.at_css("a.navbar-link:not(.active)")["aria-current"]
+  end
+
+  # The third slot is the only one a reader might take for optional, so a two-element entry is the
+  # easy typo. It must be an entry that never lights, not a NoMethodError on nil at render time —
+  # which is a 500 on every page in the app, the navbar being in the layout.
+  test "an entry written without its sections renders rather than raising" do
+    html = group(entries: [ [ "Jobs", "/jobs" ] ], active_section: "imports")
+
+    assert_not_includes trigger_class(html), "active"
+    assert_equal "Jobs", Nokogiri::HTML5.fragment(html).at_css(".navbar-group-panel a").text.strip
+  end
+
   test "the trigger starts closed and says so" do
     doc = Nokogiri::HTML5.fragment(group)
 

@@ -126,6 +126,44 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
     assert_active_nav [ "Imports", "Limitless import" ], new_admin_standings_import_path
   end
 
+  # "Put the mark in the brand" is half of what this branch was asked for, and nothing rendered
+  # asserted it: `Ui::LogoTest` only ever constructs the component directly, so deleting the
+  # `render Ui::Logo.new` from Ui::NavbarShell left every suite green — measured. The brand's
+  # accessible name is asserted beside it, because since grouping dropped "Dashboard" as an entry
+  # the brand is the only thing that reaches it, and a link named "Cartodex" alone is a Dashboard
+  # that voice control and a screen reader's link list cannot find.
+  test "every navbar's brand carries the mark and says where it goes" do
+    get root_path
+    assert_response :success
+    assert_select "a.navbar-brand svg.navbar-logo", 1
+    assert_select %(a.navbar-brand[aria-label="Cartodex — Home"]), 1
+
+    sign_in @user
+    get dashboard_path
+    assert_response :success
+    assert_select "a.navbar-brand svg.navbar-logo", 1
+    assert_select %(a.navbar-brand[aria-label="Cartodex — Dashboard"][aria-current="page"]), 1
+
+    @user.update!(admin: true)
+    get admin_root_path
+    assert_response :success
+    assert_select "a.navbar-brand svg.navbar-logo", 1
+    assert_select %(a.navbar-brand[aria-label="Cartodex Admin — Dashboard"][aria-current="page"]), 1
+  end
+
+  # `aria-current` is the active class's counterpart for everyone not looking at the screen, and it
+  # has to land on the leaf rather than on the group: a group is not a page.
+  test "the lit leaf carries aria-current and nothing else does" do
+    sign_in @user
+
+    get shared_decks_path
+
+    assert_response :success
+    assert_select %(a.navbar-link[aria-current="page"]), 1
+    assert_select %(a.navbar-link[aria-current="page"]), text: "Shared decks"
+    assert_select %(.navbar-group-trigger[aria-current]), 0
+  end
+
   # The email is the widest incompressible item the old row carried, and moving it is half the
   # reason the row now fits. `count: 1` on the bare selector is the half that matters: it says the
   # email is *only* in the panel, rather than also still sitting in the row.

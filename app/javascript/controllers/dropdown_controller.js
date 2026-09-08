@@ -21,16 +21,21 @@ export default class extends Controller {
     this.boundClose = this.close.bind(this)
     this.boundCloseOnEscape = this.closeOnEscape.bind(this)
     this.boundCloseNow = this.closeNow.bind(this)
+    this.boundCloseOnFocusOut = this.closeOnFocusOut.bind(this)
 
     document.addEventListener("click", this.boundClose)
     document.addEventListener("keydown", this.boundCloseOnEscape)
     document.addEventListener("turbo:before-cache", this.boundCloseNow)
+    // On the element, not the document: focusout bubbles, and relatedTarget tells us where focus
+    // went, which is the only way to distinguish "tabbed away" from "moved within the panel".
+    this.element.addEventListener("focusout", this.boundCloseOnFocusOut)
   }
 
   disconnect() {
     document.removeEventListener("click", this.boundClose)
     document.removeEventListener("keydown", this.boundCloseOnEscape)
     document.removeEventListener("turbo:before-cache", this.boundCloseNow)
+    this.element.removeEventListener("focusout", this.boundCloseOnFocusOut)
   }
 
   toggle() {
@@ -66,6 +71,21 @@ export default class extends Controller {
     this.closeNow()
   }
 
+  // Tabbing out of an open panel closes it. Without this the panel stayed on screen announcing
+  // aria-expanded="true" while focus had already moved on — the mouse had a way out (the document
+  // click listener) and the keyboard had none.
+  //
+  // relatedTarget is where focus is *going*, and the guard is what keeps a mouse click on a panel
+  // link working: pressing the mouse moves focus to the link, which is inside, so the panel is
+  // still there when the click lands on it. A click outside is left to `close` above; arriving
+  // here with a null relatedTarget (focus left the document, or went to something unfocusable)
+  // closes too, which is the same answer.
+  closeOnFocusOut(event) {
+    if (event.relatedTarget && this.element.contains(event.relatedTarget)) return
+
+    this.closeNow()
+  }
+
   get #open() {
     return this.menuTarget.classList.contains(this.openClassValue)
   }
@@ -74,7 +94,15 @@ export default class extends Controller {
   // on the way to it must not be able to strand the panel open. The guard makes the throw
   // impossible; the ordering makes it harmless anyway.
   #render(open) {
+    // Read before the class is removed, because `display: none` is what makes the focused link
+    // stop being focusable: the browser then drops activeElement to <body> and the keyboard user
+    // is at the top of the document. The disclosure pattern says Escape hands focus back to the
+    // trigger, and this is the only place that can tell the difference between closing with focus
+    // inside (Escape) and closing because focus already left (a click, a Tab out).
+    const reclaimFocus = !open && this.hasTriggerTarget && this.menuTarget.contains(document.activeElement)
+
     this.menuTarget.classList.toggle(this.openClassValue, open)
     if (this.hasTriggerTarget) this.triggerTarget.setAttribute("aria-expanded", String(open))
+    if (reclaimFocus) this.triggerTarget.focus()
   }
 }

@@ -151,15 +151,31 @@ body {
   flex: none;
 }
 
-/* Stretched to the bar's full height, with its own children re-centred: a group's panel is
-   `top: 100%` of the group, and a group centred in the row is a 34px box in a 56px bar — the panel
-   then opened 7px *above* the bar's bottom edge and overlapped it. Stretching moves 100% to where
-   the bar actually ends; `align-items: center` keeps the links themselves the size they were. */
 .navbar-links {
   display: flex;
+  gap: 0.25rem;
+}
+
+/* Stretched to the bar's full height, with its own children re-centred: a group's panel is
+   `top: 100%` of the group, and a group centred in the row is a 35px box in a 56px bar — the panel
+   then opened 7px *above* the bar's bottom edge and overlapped it. Stretching moves 100% to where
+   the bar actually ends.
+
+   `:has(.navbar-group)` and not the bare class, because `align-items: center` is the half of this
+   that must NOT reach `Ui::PublicNavbar`. Centring sizes each link to its own content, and a row
+   where one label wraps then holds a 35px box beside a 54px one and centres both independently:
+   measured on the visitor's navbar at 769px, "Cards / Archetypes / Tournaments" sat 10px below the
+   first line of "Shared decks" — in the one navbar this change leaves flat, at the one desktop
+   width CI renders every run. Without these two declarations the children stretch to the tallest,
+   which is what master did and what keeps the first lines on one baseline; with them, a grouped
+   navbar keeps its 35px pills, and nothing in a grouped navbar wraps (0px overflow at 769 and
+   1280, member and admin, asserted in navbar_layout_test).
+
+   A browser without `:has()` loses the anchoring and gets the 7px overlap back — a degradation,
+   not a break, and the right way round. */
+.navbar-links:has(.navbar-group) {
   align-self: stretch;
   align-items: center;
-  gap: 0.25rem;
 }
 
 /* A navbar entry that expands rather than navigating. Above the breakpoint the trigger is the

@@ -10,10 +10,12 @@ module Ui
   # picked up a future toggle or aria fix made here. test/system/admin_navigation_test.rb is
   # the coverage that made moving it safe.
   class NavbarShell < ApplicationComponent
-    def initialize(brand_path:, brand_label: "Cartodex", brand_active: false, nav_class: nil, search: true)
+    def initialize(brand_path:, brand_label: "Cartodex", brand_active: false, brand_destination: nil,
+                   nav_class: nil, search: true)
       @brand_path = brand_path
       @brand_label = brand_label
       @brand_active = brand_active
+      @brand_destination = brand_destination
       @nav_class = nav_class
       @search = search
     end
@@ -48,7 +50,17 @@ module Ui
     # does not know what a section is, and each navbar resolves its own home ("home" for the two
     # app ones, "dashboard" for the admin panel).
     def brand
-      link_to @brand_path, class: [ "navbar-brand", ("active" if @brand_active) ].compact.join(" ") do
+      link_to @brand_path,
+        class: [ "navbar-brand", ("active" if @brand_active) ].compact.join(" "),
+        # The brand's accessible name has to say where it goes, because since grouping dropped
+        # "Dashboard" as an entry it is the only thing that goes there: named "Cartodex" alone, a
+        # voice-control user saying "click Dashboard" reaches nothing and a screen-reader user
+        # scanning the links list finds no Dashboard at all. It still contains the visible word, so
+        # the label and the name agree (WCAG 2.5.3).
+        aria: {
+          label: ("#{@brand_label} — #{@brand_destination}" if @brand_destination),
+          current: ("page" if @brand_active)
+        }.compact do
         render Ui::Logo.new
         span(class: "navbar-brand-word") { @brand_label }
       end

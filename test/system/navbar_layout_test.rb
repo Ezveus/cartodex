@@ -224,6 +224,48 @@ class NavbarLayoutTest < ApplicationSystemTestCase
       assert_no_selector ".navbar-group-panel--open"
     end
 
+    # Nothing in the suite observed focus before these two, and both defects they cover were found
+    # by driving a browser rather than by reading the code: the whole navigation became a
+    # disclosure widget in this change, and a disclosure that loses the user's place is a
+    # regression a green suite cannot see.
+
+    # The disclosure contract: Escape hands focus back to the trigger. Without it, closing the
+    # panel destroys the focused link — `display: none` — and the browser drops activeElement to
+    # <body>, which puts a keyboard user back at the top of the document.
+    test "escape from inside a panel returns focus to its trigger" do
+      open_decks_group
+
+      # Focused through the DOM and the key sent to whatever is focused, rather than
+      # `element.send_keys`: Selenium refuses that on an `<a>` as not interactable, and what this
+      # test is about is precisely where focus *is* when the key arrives.
+      execute_script(<<~JS)
+        [...document.querySelectorAll(".navbar-group-panel--open a.navbar-link")]
+          .find(a => a.textContent.trim() === "Shared decks").focus()
+      JS
+      assert_equal "Shared decks", evaluate_script("document.activeElement.textContent.trim()")
+
+      page.driver.browser.action.send_keys(:escape).perform
+
+      assert_no_selector ".navbar-group-panel--open"
+      assert_equal "Decks", evaluate_script("document.activeElement.textContent.trim()")
+      # The class list, not an equality: on /dashboard the lit entry is the brand, so this trigger
+      # carries no `active` — which is beside the point and would make the assertion a trap for the
+      # next person who moves this test to another page.
+      assert_includes evaluate_script("document.activeElement.className"), "navbar-group-trigger"
+    end
+
+    # The mouse had a way out of an open panel — the document click listener — and the keyboard had
+    # none: tabbing past the last link left the panel on screen, still announcing
+    # aria-expanded="true", while focus had moved on to the next entry.
+    test "tabbing out of an open panel closes it" do
+      open_decks_group
+
+      find(".navbar-group-trigger", text: "Decks").send_keys %i[shift tab]
+
+      assert_no_selector ".navbar-group-panel--open"
+      assert_selector ".navbar-group-trigger[aria-expanded=false]", text: "Decks"
+    end
+
     private
 
     def open_decks_group
