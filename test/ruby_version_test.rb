@@ -20,7 +20,7 @@ require "test_helper"
 class RubyVersionTest < ActiveSupport::TestCase
   REFERENCE = File.read(Rails.root.join(".ruby-version")).strip.delete_prefix("ruby-").freeze
 
-  # A bare `4.0.1` and not `ruby-4.0.1` in `.ruby-version` would still install correctly —
+  # A bare `4.0.6` and not `ruby-4.0.6` in `.ruby-version` would still install correctly —
   # setup-ruby and mise both accept either — but the Dockerfiles interpolate their `ARG` into an
   # image tag (`ruby:$RUBY_VERSION-slim`), where the prefix is not a spelling variant: it names
   # no image. Pinning the shape here is what lets the comparisons below be string equality.
@@ -56,7 +56,7 @@ class RubyVersionTest < ActiveSupport::TestCase
 
   # `config/deploy.yml`'s builder section carries a commented example of passing `RUBY_VERSION`
   # as a build arg, and it is the one place where the prefixed spelling is not merely redundant
-  # but wrong: the value lands in `ruby:$RUBY_VERSION-slim`, and `ruby:ruby-4.0.1-slim` is not
+  # but wrong: the value lands in `ruby:$RUBY_VERSION-slim`, and `ruby:ruby-4.0.6-slim` is not
   # an image — `docker manifest inspect` answers "no such manifest". Rails generated it
   # prefixed, so it was a landmine from the first commit, waiting for whoever uncommented it.
   #

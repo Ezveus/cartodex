@@ -84,8 +84,8 @@ builder:
   # # Pass arguments and secrets to the Docker build process
   # args:
   #   # Bare, not ruby-prefixed: the Dockerfile interpolates this into an image tag
-  #   # (ruby:$RUBY_VERSION-slim), and ruby:ruby-4.0.1-slim is not an image.
-  #   RUBY_VERSION: 4.0.1
+  #   # (ruby:$RUBY_VERSION-slim), and ruby:ruby-4.0.6-slim is not an image.
+  #   RUBY_VERSION: 4.0.6
   # secrets:
   #   - GITHUB_TOKEN
   #   - RAILS_MASTER_KEY
