@@ -11,6 +11,7 @@ module Ui
       render Ui::NavbarShell.new(brand_path: root_path) do
         div(class: "navbar-links") do
           nav_link "Cards", cards_path, "cards"
+          nav_link "Archetypes", archetypes_path, "archetypes"
           nav_link "Tournaments", tournaments_path, "tournaments"
           # Both sections, unlike Ui::AppNavbar: a visitor has no "Decks" entry, so this is
           # the one a shared deck's own page has to light.

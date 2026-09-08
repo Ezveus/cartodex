@@ -45,8 +45,10 @@ module Archetypes
           # prints for the same archetype.
           Arel.sql("COUNT(DISTINCT tournament_standings.deck_id)"),
           # A term in the query that is already grouped and already joins tournaments, not a
-          # second query: /archetypes is pinned at a flat 7 queries by its own test, and this
-          # column is printed for every row of every page.
+          # second query: /archetypes costs a visitor **5** queries and a member 6, and this
+          # column is printed for every row of every page. (This comment said "a flat 7 queries
+          # by its own test" and no such test existed; the absolute count is asserted now, in
+          # ArchetypesControllerTest's "the catalog costs a visitor five queries".)
           Arel.sql("SUM(CASE WHEN tournaments.online THEN 1 ELSE 0 END)"),
           Arel.sql("COUNT(DISTINCT CASE WHEN tournaments.online THEN tournaments.id END)"),
           Arel.sql("MAX(tournaments.date)")

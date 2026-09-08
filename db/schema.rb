@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_08_090000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -30,9 +30,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_180000) do
     t.string "primary_fingerprint", null: false
     t.integer "secondary_card_id"
     t.string "secondary_fingerprint", default: "", null: false
+    t.string "slug", null: false
     t.datetime "updated_at", null: false
     t.index ["parent_id"], name: "index_archetypes_on_parent_id"
     t.index ["primary_fingerprint", "secondary_fingerprint"], name: "index_archetypes_on_fingerprint_pair", unique: true
+    t.index ["slug"], name: "index_archetypes_on_slug", unique: true
+    t.check_constraint "slug <> ''", name: "archetypes_slug_not_blank"
   end
 
   create_table "attacks", force: :cascade do |t|

@@ -49,8 +49,12 @@ module Admin
 
     private
 
+    # By slug, like every other lookup of an archetype: `Archetype#to_param` returns it, so
+    # `admin_archetype_path(@archetype)` emits it and `find` would cast that string to 0 and
+    # 404 every screen in this controller. Admin::DecksController already had to make the same
+    # move when a deck became addressable by its key.
     def set_archetype
-      @archetype = Archetype.find(params[:id])
+      @archetype = Archetype.find_by!(slug: params[:id])
     end
 
     def archetype_params

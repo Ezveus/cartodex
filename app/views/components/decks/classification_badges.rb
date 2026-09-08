@@ -27,9 +27,10 @@ module Decks
         span(class: "badge badge-format") { @deck.format_label }
         # Owner views only — this component is never rendered on a public surface.
         span(class: "badge") { "Shared" } if @deck.shared?
-        # This row is owner-only and therefore always behind a session, which is what /archetypes
-        # needs — but see `linked` above for why the link is still the call site's decision.
-        # Decks::PublicBadges, the row a visitor can reach, has no link at all.
+        # See `linked` above for why the link is the call site's decision — and note that the
+        # reason is the nested anchor, not the session: /archetypes is public now, and
+        # Decks::PublicBadges had to grow the same keyword for the same reason once it started
+        # linking.
         #
         # The route helper is called as a module method, exactly as Decks::DeckCard calls
         # deck_path: Decks::ImportJob renders that card — and this row inside it — with a bare

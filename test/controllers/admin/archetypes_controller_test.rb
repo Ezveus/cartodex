@@ -57,6 +57,72 @@ class Admin::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "This archetype is still named on 2 tournament standings.", flash[:alert]
   end
 
+  # Admin::DecksController had to make the same move when a deck became addressable by its key:
+  # `admin_archetype_path` goes through `Archetype#to_param`, so `find` would cast the slug to 0
+  # and 404 every screen here.
+  test "an archetype's admin URL names its slug and resolves" do
+    assert_equal "/admin/archetypes/budew-teal-mask-ogerpon-ex", admin_archetype_path(@archetype)
+
+    get "/admin/archetypes/budew-teal-mask-ogerpon-ex"
+
+    assert_response :success
+  end
+
+  test "renaming an archetype redirects to its new address" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "Budew Toolbox", primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_redirected_to "/admin/archetypes/budew-toolbox"
+    assert_equal "budew-toolbox", @archetype.reload.slug
+  end
+
+  # The slug is UNIQUE, so a rename onto a name another archetype already owns modulo
+  # punctuation is refused — and refused on :name, the only field this form has.
+  test "a rename whose address is already taken is refused on the name field" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "Teal Mask Ogerpon ex",
+                             primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_response :unprocessable_entity
+    assert_match "/archetypes/teal-mask-ogerpon-ex", response.body
+    assert_equal "budew-teal-mask-ogerpon-ex", @archetype.reload.slug
+  end
+
+  # The re-rendered form must post back to the archetype being edited, and `to_param` is what
+  # decides that. `assign_slug` has already written the rejected name's slug onto the in-memory
+  # record by the time `render :edit` runs, and in the one case this validation exists for that
+  # slug belongs to **another** archetype — so a `to_param` reading the dirty attribute sent the
+  # admin's corrected resubmission to `/admin/archetypes/<the other one>`, where `find_by!`
+  # resolved it and renamed the wrong row, with a 200 and no error.
+  test "the form re-rendered after a refused rename still posts back to the same archetype" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "Teal Mask Ogerpon ex",
+                             primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_response :unprocessable_entity
+    assert_select "form[action=?]", "/admin/archetypes/budew-teal-mask-ogerpon-ex"
+    assert_select "form[action=?]", "/admin/archetypes/teal-mask-ogerpon-ex", count: 0
+  end
+
+  # `custom_name` is set only when the submitted name is present, so blanking the field hands the
+  # archetype back to `auto_generate_name` — which now moves its public address as well as its
+  # label. Reachable from this form and nowhere else: the only other saver is
+  # Api::ArchetypesController#create (new records), and Archetypes::FingerprintSync writes with
+  # `update_columns`, which skips the callback entirely.
+  test "blanking the name field regenerates the name and the address from the member cards" do
+    patch admin_archetype_path(@archetype),
+      params: { archetype: { name: "", primary_card_id: @archetype.primary_card_id,
+                             secondary_card_id: @archetype.secondary_card_id } }
+
+    assert_redirected_to "/admin/archetypes/budew-teal-mask-ogerpon-ex"
+    @archetype.reload
+    assert_equal "Budew / Teal Mask Ogerpon ex", @archetype.name
+    assert_equal "budew-teal-mask-ogerpon-ex", @archetype.slug
+  end
+
   test "deletes an archetype no standing names" do
     assert_difference -> { Archetype.count }, -1 do
       delete admin_archetype_path(@archetype)

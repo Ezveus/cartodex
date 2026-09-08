@@ -537,3 +537,64 @@ class ArchetypeReportModesNarrowTest < ApplicationSystemTestCase
     archetype
   end
 end
+
+# A visitor, end to end, and deliberately the cheapest test that can be. Its own class rather
+# than a test in ArchetypeMetagameTest, because that class's setup signs a member in
+# unconditionally and the whole point here is that nothing does.
+#
+# What no request test reaches, and the only thing this covers: the visitor navbar's "Archetypes"
+# entry has to exist *and* be clickable below the breakpoint, where `.navbar-menu` is
+# display:none until the hamburger toggles it. Everything else about these two pages — the
+# sample selector's change event, the report's mode links, the catalog's debounced filter — is
+# already exercised by the member journey above, and nothing about it differs without a session.
+#
+# It is written this lean because it is not free. Adding a 98th system test to a run of 8 workers
+# on 8 cores, each driving its own Chrome, tipped an already-saturated suite over: two unrelated
+# tests raced their own network round trips and failed intermittently (2 runs in 5 on mobile),
+# where master's 97 passed 7 times out of 7. One of those was a genuinely under-budgeted
+# assertion and is fixed in double_submit_test.rb; the answer to the rest is not to add page
+# loads this test does not need.
+class ArchetypePublicMetagameTest < ApplicationSystemTestCase
+  test "a visitor reaches the catalog from the navbar and opens a report" do
+    # Warden's test session is process-wide and survives across classes, so a member logged in by
+    # another test in this file would otherwise carry over and this test would pass as a *member*
+    # — rendering the member navbar and defending the navbar entry without ever exercising it.
+    # The `assert_link "Sign in"` below is the second guard on the same thing.
+    Warden.test_reset!
+    archetype = recorded_archetype
+
+    visit dashboard_path
+    click_nav_link "Archetypes"
+
+    assert_selector "h1", text: "Archetypes"
+    # The visitor navbar and not the member one — a signed-in page carries no "Sign in" link at
+    # all. `visible: :all` because below the breakpoint `.navbar-menu` is display:none until the
+    # hamburger opens it, so a plain assert_link is a claim about the toggle rather than about
+    # which navbar rendered; the toggle is already exercised by click_nav_link above.
+    assert_link "Sign in", visible: :all
+
+    click_on archetype.name
+
+    assert_selector "h1", text: archetype.name
+    assert_text "Recorded in Cartodex"
+    # The address is the slug, and this is where a copied link is what a visitor is handed.
+    assert_current_path(/\A\/archetypes\/#{archetype.slug}/)
+  end
+
+  private
+
+  # One event, one standing, one list: the report only has to render for a reader with no
+  # session. The member journey above is what covers a sample big enough to have controls.
+  def recorded_archetype
+    archetype = Archetype.create!(primary_card: cards(:honedge))
+    event = Tournament.create!(name: "Public Rotation Present", date: Date.new(2026, 2, 7),
+                               format: "standard", standard_pool: standard_pools(:twm_por))
+    deck = Deck.create!(name: "Visitor list", format: "standard",
+                        standard_pool: event.standard_pool, shared: true)
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    event.standings.create!(player_name: "Present Player", division: "masters",
+                            archetype: archetype, deck: deck)
+
+    archetype
+  end
+end

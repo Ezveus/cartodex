@@ -60,6 +60,13 @@ Rails.application.routes.draw do
     get :image, on: :member
   end
 
+  # The archetype catalog and one archetype's metagame report. Both read, both public: nothing
+  # on either page is anybody's private data, and every link they emit points at /archetypes,
+  # /cards/:id or the card image proxy — all three already reachable without a session. This is
+  # the sixth route entry to leave the `authenticate :user` block below, and unlike decks and
+  # tournaments it carries no nested resource out with it.
+  resources :archetypes, only: [ :index, :show ]
+
   # index and show only; the rest of the resource, and every nested entry route, gates itself
   # through Devise. The entry routes ride out of `authenticate :user` by nesting alone, the
   # same way deck_results do under decks.
@@ -111,11 +118,6 @@ Rails.application.routes.draw do
       post :reallocate, on: :collection
     end
     resources :tournament_profiles, except: [ :show ]
-
-    # Member-only for now. Moving this resource out of the `authenticate :user` block is the first
-    # of the edits that open the two pages to visitors; the rest — and the four nothing would ask
-    # for, which no test would go red over — are listed above ArchetypesController.
-    resources :archetypes, only: [ :index, :show ]
 
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do

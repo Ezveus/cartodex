@@ -120,6 +120,44 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?][data-turbo-frame=_top]", archetype_path(archetypes(:ogerpon))
   end
 
+  # The URL spelled out rather than built from the helper: `archetype_path` goes through
+  # `to_param`, so an assertion written that way agrees with whatever the model decides and
+  # says nothing about what the address *is*.
+  test "index links each row by slug, not by id" do
+    get archetypes_path
+
+    assert_select "a[href=?]", "/archetypes/teal-mask-ogerpon-ex"
+    assert_select "a[href=?]", "/archetypes/#{archetypes(:ogerpon).id}", count: 0
+  end
+
+  test "show resolves an archetype by its slug" do
+    get "/archetypes/teal-mask-ogerpon-ex"
+
+    assert_response :success
+    assert_select "h1", text: /Teal Mask Ogerpon ex/
+  end
+
+  # The id is not an address any more. It routes — `:id` matches any segment — and resolves to
+  # nothing, which is the same answer an unknown slug gets.
+  test "show no longer resolves an archetype by its id" do
+    get archetype_path(id: archetypes(:ogerpon).id)
+
+    assert_response :not_found
+  end
+
+  # A rename moves the address and nothing records the old one; this is where that is written
+  # down as a request rather than as a model assertion.
+  test "a renamed archetype answers on its new address and not its old one" do
+    archetype = archetypes(:ogerpon)
+    archetype.update!(name: "Ogerpon Toolbox", custom_name: "1")
+
+    get "/archetypes/ogerpon-toolbox"
+    assert_response :success
+
+    get "/archetypes/teal-mask-ogerpon-ex"
+    assert_response :not_found
+  end
+
   test "index filters by name" do
     get archetypes_path(q: "budew")
 
@@ -224,6 +262,26 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal small, large, "query count grew with the catalog: #{small} -> #{large}"
+  end
+
+  # An absolute number, and for a visitor. The test above is relative — `assert_equal small,
+  # large` — so a *constant* query added to this action (a second lookup, a policy `exists?`, a
+  # preload split in two) lands in both measurements and is invisible to it. And it signs a
+  # member in, while the 60/min limiter this action now carries was sized on what a visitor
+  # costs: 5 queries, measured against the production dump before the pages went public.
+  test "the catalog costs a visitor five queries" do
+    sign_out @user
+
+    get archetypes_path # warm: the first request of a test pays for the schema and the session
+
+    sql = capture_queries { get archetypes_path }
+
+    assert_response :success
+    # Worth knowing when this goes red or, worse, does not: a query whose SQL is *identical* to
+    # one the action already runs is served by the per-request query cache and never reaches this
+    # count — an added `Archetype.count` beside `scope.count` is invisible here, an added
+    # `Card.count` is not.
+    assert_equal 5, sql.size, "the visitor catalog cost #{sql.size} queries:\n#{sql.join("\n")}"
   end
 
   test "show renders the archetype's report" do
@@ -688,14 +746,30 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "a visitor is sent to sign in for both pages" do
+  test "a visitor reads both pages" do
     sign_out @user
 
     get archetypes_path
-    assert_redirected_to new_user_session_path
+    assert_response :success
+    assert_select ".data-table-row", minimum: 1
 
     get archetype_path(archetypes(:ogerpon))
-    assert_redirected_to new_user_session_path
+    assert_response :success
+    assert_select "h1", text: /Teal Mask Ogerpon ex/
+  end
+
+  # PubliclyReachable routes RecordNotFound and Pundit::NotAuthorizedError onto one renderer, and
+  # that renderer is the app's static 404 rather than an in-app page — CardsController's answer
+  # and not DecksController's, since nothing in this catalog is private and a missing archetype
+  # is a missing archetype. Asserted on the body and not only on the status: Rails' own
+  # RecordNotFound handling is also a 404, so the status alone cannot tell the two apart.
+  test "an unknown archetype answers the app's static 404 to a visitor" do
+    sign_out @user
+
+    get "/archetypes/no-such-archetype"
+
+    assert_response :not_found
+    assert_equal Rails.public_path.join("404.html").read, response.body
   end
 
   private

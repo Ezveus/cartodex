@@ -120,9 +120,12 @@ class ArchetypeTest < ActiveSupport::TestCase
 
   # The pair is spelled out rather than left to sync_fingerprints: `validate: false`
   # skips before_validation too, so the callback would not run and the row would
-  # die on NOT NULL instead of reaching the index this test is about.
+  # die on NOT NULL instead of reaching the index this test is about. `slug` is spelled out for
+  # exactly that reason and must not collide with a fixture's, or the row dies on the *slug*
+  # index and this test would pass while asserting nothing about the fingerprint pair.
   test "the database refuses two single-member archetypes on the same fingerprint" do
     duplicate = Archetype.new(primary_card: cards(:teal_mask_ogerpon_ex), name: "Ogerpon again",
+      slug: "ogerpon-again",
       primary_fingerprint: "ogerpon_shared", secondary_fingerprint: "")
 
     assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save(validate: false) }
@@ -134,6 +137,7 @@ class ArchetypeTest < ActiveSupport::TestCase
     reprint = cards(:froakie_cri)
     reprint.update_column(:fingerprint, "ogerpon_shared")
     duplicate = Archetype.new(primary_card: reprint, name: "Ogerpon reprint",
+      slug: "ogerpon-reprint",
       primary_fingerprint: "ogerpon_shared", secondary_fingerprint: "")
 
     assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save(validate: false) }
@@ -168,10 +172,12 @@ class ArchetypeTest < ActiveSupport::TestCase
     connection = ActiveRecord::Base.connection
     connection.remove_index :archetypes, name: "index_archetypes_on_fingerprint_pair"
     Archetype.insert_all([
-      { name: "Clone A", name_normalized: "clone a", primary_card_id: cards(:doublade).id,
+      { name: "Clone A", name_normalized: "clone a", slug: "clone-a",
+        primary_card_id: cards(:doublade).id,
         primary_fingerprint: "clone_fp", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current },
-      { name: "Clone B", name_normalized: "clone b", primary_card_id: cards(:doublade).id,
+      { name: "Clone B", name_normalized: "clone b", slug: "clone-b",
+        primary_card_id: cards(:doublade).id,
         primary_fingerprint: "clone_fp", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current }
     ])
@@ -193,10 +199,12 @@ class ArchetypeTest < ActiveSupport::TestCase
     connection = ActiveRecord::Base.connection
     connection.remove_index :archetypes, name: "index_archetypes_on_fingerprint_pair"
     Archetype.insert_all([
-      { name: "Clone A", name_normalized: "clone a", primary_card_id: cards(:doublade).id,
+      { name: "Clone A", name_normalized: "clone a", slug: "clone-a",
+        primary_card_id: cards(:doublade).id,
         primary_fingerprint: "clone_fp", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current },
-      { name: "Clone B", name_normalized: "clone b", primary_card_id: cards(:doublade).id,
+      { name: "Clone B", name_normalized: "clone b", slug: "clone-b",
+        primary_card_id: cards(:doublade).id,
         primary_fingerprint: "clone_fp", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current }
     ])
@@ -214,10 +222,12 @@ class ArchetypeTest < ActiveSupport::TestCase
 
     Archetype.insert_all([
       { name: "No Primary Fingerprint", name_normalized: "no primary fingerprint",
+        slug: "no-primary-fingerprint",
         primary_card_id: cards(:trainer_card).id, secondary_card_id: nil,
         primary_fingerprint: "", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current },
       { name: "No Secondary Fingerprint", name_normalized: "no secondary fingerprint",
+        slug: "no-secondary-fingerprint",
         primary_card_id: cards(:doublade).id, secondary_card_id: cards(:trainer_card).id,
         primary_fingerprint: "doublade_fp", secondary_fingerprint: "",
         created_at: Time.current, updated_at: Time.current }
@@ -229,6 +239,243 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_match "(primary)", error.message
     assert_match "No Secondary Fingerprint", error.message
     assert_match "(secondary)", error.message
+  end
+
+  # --- The slug, which is the archetype's address ---
+  #
+  # Derived from name_normalized on every save and kept nowhere else: renaming an archetype
+  # moves its URL and breaks links to the old one, which is the decision recorded in
+  # docs/superpowers/specs/2026-09-08-public-archetypes-and-slugs-design.md.
+
+  test "the slug is the parameterized name" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Mega Absol ex / N's Zoroark ex")
+
+    assert_equal "mega-absol-ex-n-s-zoroark-ex", archetype.slug
+    assert_equal archetype.name_normalized.parameterize, archetype.slug
+  end
+
+  # The callback is a before_validation and not a before_create, and nothing else in the app
+  # would report the difference: no page reads a stale slug, so a renamed archetype would keep
+  # answering on its old URL and every link the page emits would keep working.
+  test "renaming an archetype moves its slug" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Metal Toolbox")
+    assert_equal "metal-toolbox", archetype.slug
+
+    archetype.update!(name: "Steel Box", custom_name: "1")
+
+    assert_equal "steel-box", archetype.slug
+    assert_equal "steel-box", archetype.reload.slug
+  end
+
+  # assign_slug is declared after auto_generate_name, and this is the test that says so: an
+  # archetype created the way Api::ArchetypesController creates one carries no name at all until
+  # that callback has run, so a slug computed first would be blank — and blank is refused, which
+  # would turn every API create into a 422.
+  test "an archetype named by its member cards gets the slug of the generated name" do
+    archetype = Archetype.create!(primary_card: cards(:doublade),
+                                  secondary_card: cards(:bosss_orders_meg))
+
+    assert_equal "Doublade / Boss's Orders", archetype.name
+    assert_equal "doublade-boss-s-orders", archetype.slug
+  end
+
+  test "changing the member cards of an auto-named archetype moves its slug" do
+    archetype = Archetype.create!(primary_card: cards(:doublade),
+                                  secondary_card: cards(:bosss_orders_meg))
+
+    archetype.update!(secondary_card: nil)
+
+    assert_equal "Doublade", archetype.name
+    assert_equal "doublade", archetype.reload.slug
+  end
+
+  # The hazard, pinned rather than fixed. `custom_name` is a non-persisted `attr_accessor`, so
+  # `auto_generate_name` fires on any save that does not set it — and now that the name decides
+  # the *address*, a bare save rewrites a public URL. Not live: the only savers are
+  # `Admin::ArchetypesController` (which sets `custom_name` whenever the submitted name is
+  # present, and whose blank-name path is deliberate) and `Api::ArchetypesController#create`
+  # (new records only); `Archetypes::FingerprintSync` writes with `update_columns` and
+  # `dependent: :nullify` with `update_all`. The day anything calls `save`/`update!` on an
+  # archetype for an unrelated reason — a parent reassignment, a bulk action — every hand-named
+  # archetype loses its name *and* every link ever shared to it. Fixing that means persisting
+  # `custom_name`, which is a schema decision about how archetypes are named and not about
+  # publishing pages, so this test states the behaviour instead of asserting the one we want.
+  test "a bare save regenerates a hand-typed name, and therefore the address" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Metal Toolbox")
+    assert_equal "metal-toolbox", archetype.slug
+
+    # Reloaded first, which is the realistic shape: the accessor lives on the instance that was
+    # handed the typed name, so it is a *fresh* read of the row that has lost it. Any code path
+    # that finds an archetype and saves it is this.
+    reloaded = Archetype.find(archetype.id)
+    reloaded.save!
+
+    assert_equal "Doublade", reloaded.name, "the accessor is not persisted, so the name regenerates"
+    assert_equal "doublade", reloaded.reload.slug, "and the public address moves with it"
+  end
+
+  test "to_param is the slug, so every URL of this archetype names it" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Metal Toolbox")
+
+    assert_equal "metal-toolbox", archetype.to_param
+  end
+
+  # Two archetypes may share nothing but punctuation, and the slug is what makes that a
+  # collision. It is refused rather than disambiguated, and the error lands on :name because
+  # that is the field the admin form has — "Slug has already been taken" names nothing a user
+  # typed. The escape hatch is the custom name they are already typing.
+  test "a name whose slug collides with another archetype's is refused, on :name" do
+    Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                      name: "Gardevoir ex / Munkidori")
+
+    duplicate = Archetype.new(primary_card: cards(:doublade),
+                              secondary_card: cards(:bosss_orders_meg),
+                              custom_name: "1", name: "Gardevoir ex Munkidori")
+
+    assert_not duplicate.valid?
+    assert_empty duplicate.errors[:slug], "the error belongs on the field the form has"
+    assert_match(/Gardevoir ex \/ Munkidori/, duplicate.errors[:name].join)
+  end
+
+  # An archetype may not carry a name no URL can express. Zero rows and zero card names in the
+  # catalogue are in that state; #111 (Japanese card sets) is what reaches it, and this is where
+  # the refusal is written down so that issue has something to argue with.
+  test "a name with nothing a URL can carry is refused, on :name" do
+    archetype = Archetype.new(primary_card: cards(:doublade), custom_name: "1", name: "ポケモン")
+
+    assert_not archetype.valid?
+    assert_empty archetype.errors[:slug]
+    assert_not_empty archetype.errors[:name]
+  end
+
+  # The other half of the same division of labour, and a hole the first version of this feature
+  # opened by accident: `assign_slug` is a before_save, so a validation-skipping save still runs
+  # it — and it happily wrote `""`, which `NOT NULL` does not refuse and which the UNIQUE index
+  # refuses only on a *second* offender. `archetype_path` on such a row emits `/archetypes/`, the
+  # collection path, so the row links to the listing it sits in and cannot be repaired from the
+  # panel (the model's own blank refusal rejects any save of it). A CHECK constraint is what makes
+  # the state unreachable rather than merely invalid.
+  test "the database refuses a blank slug even when validations are skipped" do
+    archetype = Archetype.new(primary_card: cards(:doublade), custom_name: "1", name: "ポケモン",
+                              primary_fingerprint: cards(:doublade).fingerprint,
+                              secondary_fingerprint: "")
+
+    assert_raises(ActiveRecord::StatementInvalid) { archetype.save!(validate: false) }
+  end
+
+  # `resources :archetypes` in the admin namespace emits GET /admin/archetypes/new *before*
+  # GET /admin/archetypes/:id, so an archetype whose slug is "new" has no reachable admin show
+  # page — and `#create`/`#update` both redirect to `admin_archetype_path`, which would land the
+  # admin on a blank "New Archetype" form carrying the flash "Archetype updated.": a 200 that
+  # reads as if the edit had been lost. Reachable by typing "New" in the one field the form has.
+  test "a name whose slug would shadow a route is refused, on :name" do
+    [ "New", "new", "NEW" ].each do |name|
+      archetype = Archetype.new(primary_card: cards(:doublade), custom_name: "1", name: name)
+
+      assert_not archetype.valid?, "#{name.inspect} must be refused"
+      assert_empty archetype.errors[:slug]
+      assert_match(/reserved/, archetype.errors[:name].join)
+    end
+  end
+
+  # The validation is for the readable error; the index is the guarantee. Same division of
+  # labour as (set_name, set_number) on Card and the fingerprint pair above.
+  test "the unique index refuses a duplicate slug the validation never saw" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Metal Toolbox")
+    other = Archetype.create!(primary_card: cards(:doublade),
+                              secondary_card: cards(:bosss_orders_meg),
+                              custom_name: "1", name: "Steel Toolbox")
+
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      other.update_column(:slug, archetype.slug)
+    end
+  end
+
+  # The third half of what the fixture file's comment promises: fixtures skip callbacks, so the
+  # slug is spelled out by hand beside name_normalized and nothing keeps the two in step.
+  #
+  # Derived from `name` and not from `name_normalized` on purpose, even though the callback reads
+  # the mirror: the sibling assertion above compares `name.downcase` to `name_normalized`
+  # *without* squishing, so a fixture whose name carries a double space could satisfy both checks
+  # while disagreeing with what a save would produce. Going back to `name` closes that.
+  test "every archetype fixture carries the slug its name implies" do
+    Archetype.find_each do |archetype|
+      assert_equal archetype.name.squish.downcase.parameterize, archetype.slug,
+        "#{archetype.name.inspect} fixture is out of step"
+    end
+  end
+
+  # CI loads db/schema.rb and never runs a migration, so the backfill is code the suite would
+  # otherwise never execute — and it carries its own copy of the slug rule, spelled out so the
+  # migration survives the model moving on. A divergence between the two produces slugs that are
+  # wrong while being unique and non-blank, which is exactly what neither the NOT NULL nor the
+  # UNIQUE index can catch. Same reason AddFingerprintsToArchetypes' three checks are called by
+  # name from this file.
+  test "the migration's backfill writes what the model's callback would" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    [ "Mega Absol ex / N's Zoroark ex", "  Double  Spaced  Name  ", "Flabébé Box",
+      "Nidoran♀ Toolbox" ].each do |name|
+      archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1", name: name)
+
+      assert_equal archetype.slug, AddSlugToArchetypes.slug_for(name),
+        "the migration and the callback disagree on #{name.inspect}"
+
+      archetype.destroy!
+    end
+  end
+
+  # The readable half of the blank refusal. `change_column_null` only refuses NULL and the UNIQUE
+  # index only refuses a *second* blank, so what actually stops a blank shipping is the CHECK
+  # constraint — and that constraint is added **after** the backfill, so during a real migration
+  # run the blank is written first and this is what names it. Without it `add_check_constraint`
+  # would fail on a row it cannot identify.
+  #
+  # The constraint is dropped for the length of the test, exactly as the fingerprint tests below
+  # drop the unique index they are about: it is what makes the state unreachable, so a test about
+  # the window before it exists has to reopen that window. Transactional fixtures roll the DDL
+  # back.
+  test "the migration names a blank slug the CHECK constraint would refuse unhelpfully" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    ActiveRecord::Base.connection.remove_check_constraint :archetypes, name: "archetypes_slug_not_blank"
+    Archetype.insert_all([
+      { name: "ポケモン", name_normalized: "ポケモン", slug: "",
+        primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "blank_slug_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    # Through backfill_slugs, not the check directly: the two are one operation, so this also
+    # asserts that filling the column cannot silently skip the refusal.
+    error = assert_raises(RuntimeError) { AddSlugToArchetypes.new.backfill_slugs }
+
+    assert_match "ポケモン", error.message
+    assert_match "no URL can carry", error.message
+  end
+
+  test "the migration's backfill actually writes the column" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    # A placeholder slug rather than none: the column is NOT NULL, and what this exercises is the
+    # loop overwriting a wrong value, not the nullable window the migration opens for itself.
+    Archetype.insert_all([
+      { name: "Backfill  Me", name_normalized: "backfill me", slug: "placeholder",
+        primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "backfill_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    AddSlugToArchetypes.new.backfill_slugs
+
+    assert_equal "backfill-me", Archetype.find_by!(name: "Backfill  Me").slug
+    # Every other row is rewritten too, and must come out where it went in.
+    assert_equal "teal-mask-ogerpon-ex", archetypes(:ogerpon).reload.slug
   end
 
   private

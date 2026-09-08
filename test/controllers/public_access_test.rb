@@ -256,7 +256,15 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "deck show (shared)" => deck_path(@deck),
       "shared decks index" => shared_decks_path,
       "tournament catalog" => tournaments_path,
-      "tournament page" => tournament_path(tournaments(:one))
+      "tournament page" => tournament_path(tournaments(:one)),
+      # These two moved up from owner_only_gets when the pages went public. What they stop
+      # asserting in the move is the signed-in half — owner_only_gets is what exercises
+      # `verify_authorized`, and a public row never reaches it. ArchetypesControllerTest signs a
+      # member in for all of its 50-odd tests, both actions among them, so the `authorize` call
+      # is still covered; what is not is "a *missing* authorize would be caught here", and the
+      # concern's own after_action is what answers that for a request that reaches the action.
+      "archetypes index" => archetypes_path,
+      "archetype page" => archetype_path(archetypes(:standings_marker))
     }
   end
 
@@ -287,15 +295,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       # Worth having as a smoke test.
       "new tournament standing" => new_tournament_standing_path(tournaments(:one)),
       "edit tournament standing" =>
-        edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters)),
-      # "owner-only" is this hash's historical name; what it tests is "a session is required, and
-      # the action authorizes once there is one", which is exactly the archetype pages' rule.
-      # Unlike the entry and standing rows above, these two *can* catch a missing `authorize`:
-      # ArchetypesController carries after_action :verify_authorized. The day the pages open to
-      # visitors — three edits, listed atop that controller — these two rows move into
-      # public_gets.
-      "archetypes index" => archetypes_path,
-      "archetype show" => archetype_path(archetypes(:standings_marker))
+        edit_tournament_standing_path(tournaments(:one), tournament_standings(:ash_masters))
     }
   end
 end

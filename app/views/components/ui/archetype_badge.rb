@@ -7,11 +7,14 @@ module Ui
   # rows show different things, but an archetype looks the same on both.
   class ArchetypeBadge < ApplicationComponent
     # `href` is optional and defaults to nil, which renders exactly what this component has
-    # always rendered. It is opt-in rather than derived from the archetype because /archetypes
-    # requires a session: a caller knows whether its own surface is behind one, and the badge
-    # has no business asking a policy. Decks::ClassificationBadges is owner-only and always
-    # passes it; Tournaments::Standings::Row passes it only when it has a viewer, since the
-    # standings sheet is public; Decks::PublicBadges never does.
+    # always rendered. It stays opt-in rather than derived from the archetype, but the reason
+    # changed when /archetypes went public: it is no longer "does this reader have a session"
+    # — every caller's target is now reachable by anybody — it is **"is this badge already
+    # inside an anchor"**, which only the call site can know and which no policy could answer.
+    # Decks::ClassificationBadges takes `linked:` because Decks::DeckCard wraps its row in
+    # `a.deck-item-link`; Decks::PublicBadges takes it for the same reason on two of its three
+    # surfaces; Tournaments::Standings::Row passes an href unconditionally, its cell being a
+    # plain div.
     def initialize(archetype:, href: nil)
       @archetype = archetype
       @href = href

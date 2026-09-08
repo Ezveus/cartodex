@@ -34,9 +34,9 @@ module Ui
         # so they light the list they hang off, same as a deck's own page lights "Decks".
         nav_link "My tournaments", mine_tournaments_path, "my_tournaments", "entries"
         nav_link "Cards", cards_path, "cards"
-        # Members only: /archetypes is declared inside the `authenticate :user` block, and
-        # Ui::PublicNavbar therefore gets no entry — a navbar link that walks a visitor into a
-        # sign-in wall is worse than no link. "archetypes" is ArchetypesController's own
+        # Ui::PublicNavbar carries this entry too, since /archetypes went public — it used to
+        # be the one member link a visitor's navbar deliberately withheld, a link into a sign-in
+        # wall being worse than no link. "archetypes" is ArchetypesController's own
         # controller_name, so Ui::NavLinks.section_for resolves it with no SECTION_OVERRIDES row.
         # Admin::ArchetypesController reports that same controller_name and Ui::AdminNavbar
         # already lights a link on it, which is not a collision: the two navbars are never

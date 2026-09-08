@@ -29,7 +29,7 @@ module Decks
       div(class: "deck-show-header") do
         div do
           h1 { @deck.name }
-          render Decks::PublicBadges.new(deck: @deck)
+          render Decks::PublicBadges.new(deck: @deck, linked: true)
           p(class: "deck-show-description") { @deck.description } if @deck.description.present?
         end
       end
