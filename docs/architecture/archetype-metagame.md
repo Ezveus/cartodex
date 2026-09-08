@@ -272,10 +272,12 @@ blank, and blank is refused, which would 422 every `Api::ArchetypesController` c
 refusals, both reported on `:name` because that is the only field the admin form has: a collision
 (measured, two pairs of the catalogue's 1806 card names parameterize alike, both Nidoran
 gender-symbol pairs, and neither leads an archetype) and a blank (zero instances; #111 is what
-reaches it). `to_param` returns `slug_in_database || slug` and **not** the in-memory value: a
-refused rename leaves the rejected name's slug on the record, which in the one case the
-uniqueness validation exists for is *another archetype's*, and the re-rendered admin form then
-posted to that archetype's URL and renamed the wrong row. Full record in
+reaches it). `assign_slug` is a **`before_save`** and not a
+`before_validation`, which is what lets `to_param` read the column plainly: a refused rename
+leaves the rejected name's slug nowhere, where the first version left it on the record — and in
+the one case the uniqueness validation exists for that slug is *another archetype's*, so the
+re-rendered admin form posted to that archetype's URL and renamed the wrong row. Both the
+validation and the callback read one `derived_slug`. Full record in
 `docs/superpowers/specs/2026-09-08-public-archetypes-and-slugs-design.md`.
 
 **No cache, and the threshold was written before the measurement.** On a synthetic 1500-list

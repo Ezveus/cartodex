@@ -17,6 +17,15 @@ class Archetype < ApplicationRecord
   # the FK carries no on_delete, so it would raise a bare ActiveRecord::InvalidForeignKey.
   has_many :tournament_standings, dependent: :restrict_with_error
 
+  # Slugs a route already claims. Derived, not guessed: `resources :archetypes` in the admin
+  # namespace emits GET /admin/archetypes/**new** before GET /admin/archetypes/:id, so an
+  # archetype slugged "new" has no reachable admin show page and `#create`/`#update`'s
+  # `redirect_to admin_archetype_path` lands on a blank New form carrying "Archetype updated."
+  # `edit` needs no entry — it is nested under `:id`, so /admin/archetypes/edit matches `show`
+  # with id "edit" — and the public resource declares neither, being `only: [:index, :show]`.
+  # This list grows if a collection route is ever added to either resource.
+  RESERVED_SLUGS = %w[new].freeze
+
   validates :name, presence: true
   # These two are denormalised copies of the member cards' fingerprints, and they
   # back the unique index — identity is the fingerprint pair, not the card-id
@@ -38,15 +47,21 @@ class Archetype < ApplicationRecord
   before_validation :sync_fingerprints
   before_validation :auto_generate_name, unless: :custom_name?
   # normalize_name here as well as in NameNormalizable's own before_save, the addition Tournament
-  # already carries for the same reason: assign_slug below reads name_normalized, and a
-  # before_save mirror is still stale at validation time.
+  # already carries for the same reason: `derived_slug` reads name_normalized and both the
+  # validation above and the callback below read `derived_slug`, so a before_save-only mirror is
+  # still stale when the validation runs.
   #
-  # The order of these two lines is load-bearing and is what ArchetypeTest's "an archetype named
-  # by its member cards gets the slug of the generated name" holds down: auto_generate_name is
-  # what produces the name when nobody typed one, so a slug assigned before it would be blank —
-  # and blank is refused, which would turn every Api::ArchetypesController create into a 422.
+  # Declared after auto_generate_name, and that order is load-bearing: that callback is what
+  # produces the name when nobody typed one, so a name normalized before it would be the previous
+  # one, or nothing at all — and a blank slug is refused, which would turn every
+  # Api::ArchetypesController create into a 422. ArchetypeTest holds it down.
   before_validation :normalize_name
-  before_validation :assign_slug
+  # **before_save, not before_validation**, and that is what makes the whole dirty-slug hazard
+  # unreachable rather than merely handled: a refused update never touches this column, so
+  # `to_param` can read it plainly and the re-rendered admin form cannot post to the archetype
+  # whose slug the rejected name collided with. The validation asks `derived_slug` instead, so
+  # nothing needs the column to be written early.
+  before_save :assign_slug
 
   scope :roots, -> { where(parent_id: nil) }
   # Matches the archetype's own name or either member card's, all three through their
@@ -83,17 +98,15 @@ class Archetype < ApplicationRecord
   # component test that renders an unpersisted archetype spells the slug out by hand, the rule
   # the fixtures already follow for name_normalized.
   #
-  # **The value in the database, not the one in memory**, and that is not a nicety: an address
-  # names a row as it is stored. `assign_slug` runs before_validation, so a *rejected* update
-  # leaves the new name's slug on the in-memory record — and in the one case the uniqueness
-  # validation exists for, that slug is another archetype's. Reading the dirty attribute made
-  # `Admin::ArchetypesController#update`'s `render :edit` emit a form posting to
-  # /admin/archetypes/<the other archetype>, so the admin's corrected resubmission renamed the
-  # wrong row, with a 200 and no error anywhere. Admin::ArchetypesControllerTest pins it.
-  #
-  # `slug_in_database` is nil only for a new record, which is what the `||` covers — and a new
-  # record's `_path` is a collection path anyway.
-  def to_param = slug_in_database || slug
+  # It can read the column plainly because `assign_slug` is a **before_save**: a rejected update
+  # leaves `slug` exactly as the database holds it. That ordering is the whole reason — with a
+  # before_validation callback, a refused rename left the *new* name's slug on the record, and in
+  # the one case the uniqueness validation exists for that slug is another archetype's, so
+  # `Admin::ArchetypesController#update`'s `render :edit` emitted a form posting to
+  # /admin/archetypes/<the other archetype> and the admin's corrected resubmission renamed the
+  # wrong row, with a 200 and no error anywhere. Admin::ArchetypesControllerTest pins it, and it
+  # goes red if the callback moves back.
+  def to_param = slug
 
   private
 
@@ -101,12 +114,19 @@ class Archetype < ApplicationRecord
     custom_name.present?
   end
 
+  def assign_slug
+    self.slug = derived_slug
+  end
+
+  # The one definition of the rule, read by the validation and by the callback. Two readers
+  # computing it separately is how the check and the write come to disagree.
+  #
   # name_normalized, not name: parameterize folds case and runs of separators itself, so the two
   # agree on every name measured — but deriving from the mirror is the cheaper claim to keep
   # true, and it makes `slug == name_normalized.parameterize` an invariant a test can assert over
   # every row, fixtures included.
-  def assign_slug
-    self.slug = name_normalized.to_s.parameterize
+  def derived_slug
+    name_normalized.to_s.parameterize
   end
 
   # Two refusals, both about the URL and both reported on :name.
@@ -124,16 +144,24 @@ class Archetype < ApplicationRecord
   # the custom name the admin is already typing. The message names the archetype in the way so
   # that they can.
   def slug_is_addressable_and_unique
-    if slug.blank?
+    candidate = derived_slug
+
+    if candidate.blank?
       errors.add(:name, "must contain at least one letter or digit that can appear in a URL")
       return
     end
 
-    conflict = Archetype.where(slug: slug).where.not(id: id).first
+    if RESERVED_SLUGS.include?(candidate)
+      errors.add(:name, "would give this archetype the address /archetypes/#{candidate}, which " \
+                        "is reserved by a route — give it a name of its own")
+      return
+    end
+
+    conflict = Archetype.where(slug: candidate).where.not(id: id).first
     return if conflict.nil?
 
     errors.add(:name, "is too close to #{conflict.name.inspect}, which already has the " \
-                      "address /archetypes/#{slug} — give this archetype a name of its own")
+                      "address /archetypes/#{candidate} — give this archetype a name of its own")
   end
 
   def auto_generate_name

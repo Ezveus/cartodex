@@ -24,8 +24,8 @@ the development database (1238 standings, 79 archetypes).
 | How many archetypes, and do their slugs collide today? | 79 rows, **79 distinct slugs, 0 collisions, 0 blanks** | `Archetype.pluck(:name_normalized).map(&:parameterize)` grouped |
 | Can two *card* names produce one slug? | **Yes, 2 groups out of 1806 distinct card names**: `Nidoran♀`/`Nidoran♂` and `Team Rocket's Nidoran♀`/`Team Rocket's Nidoran♂`, both → `nidoran` / `team-rocket-s-nidoran` | `Card.distinct.pluck(:name)` grouped by slug |
 | Can a real card name produce a *blank* slug? | **No** — 0 of 1806. `parameterize` transliterates: `Flabébé` → `flabebe`, `Nidoran♀` → `nidoran`, `Heat Factory ♢` → `heat-factory`. It returns `""` only for a name with no Latin-transliterable character at all (`ポケモン` → `""`, `Ω` → `""`) | measured on the catalogue plus those probes |
-| What does the report page cost? | **13 queries / 78.3 ms** for the three services on the largest archetype (Dragapult ex, 174 lists) | `ActiveSupport::Notifications` counter + `CLOCK_MONOTONIC` |
-| What does the catalog cost? | **5 queries / 10.9 ms** | same |
+| What does the report page cost? | **16 queries / ~31 ms / 85 KB** for a visitor on the largest archetype (Dragapult ex, 174 lists), 17 with a session; the three archetype services are **13** of those 16 | `ActiveSupport::Notifications` + `CLOCK_MONOTONIC` around an `ActionDispatch::Integration::Session` request |
+| What does the catalog cost? | **5 queries** for a visitor, now asserted | same |
 | Do any archetypes carry a NULL `name_normalized`? | 0 | `Archetype.where(name_normalized: nil).count` |
 
 ## The slug
@@ -52,6 +52,18 @@ over every row. It needs `normalize_name` to have run, so `Archetype` gains
 addition `Tournament` already carries, for the same reason (a validation has to see the
 normalized value before the record is validated, not only once it is saved).
 
+**A third refusal: a slug a route already claims.** `resources :archetypes` in the admin
+namespace emits `GET /admin/archetypes/new` *before* `GET /admin/archetypes/:id`, so an archetype
+slugged `new` has no reachable admin show page — and `#create`/`#update` both end in
+`redirect_to admin_archetype_path`, which lands the admin on a blank "New Archetype" form
+carrying the flash "Archetype updated.": a 200 that reads as if the edit had been lost. Reachable
+by typing "New" in the one field the form has. `Archetype::RESERVED_SLUGS` is `%w[new]` and the
+list is *derived*, not guessed: `edit` needs no entry because it is nested under `:id`
+(`/admin/archetypes/edit` matches `show` with id `"edit"`, measured), and the public resource
+declares neither, being `only: [:index, :show]`. It grows if either resource gains a collection
+route. `Deck#key` cannot collide this way — it is random base64 — so this class of bug is new with
+the slug.
+
 **A collision refuses, with the error on `:name`.** Two archetypes can share a name today —
 nothing on the table is unique but the fingerprint pair — so a UNIQUE slug adds a rule: names
 must differ by more than punctuation. The measured surface for it is two pairs of cards out of
@@ -69,32 +81,68 @@ address" for every archetype in order to serve a case the whole catalogue can pr
 currently does not. A test pins the message so it is at least readable, and an admin can create
 the row.
 
-**Under a real race the index answers, and `Api::ArchetypesController` already rescues it.**
-Measured: forcing a duplicate slug past the validation raises `ActiveRecord::RecordNotUnique`
-(`SQLite3::ConstraintException: UNIQUE constraint failed: archetypes.slug`), which that
-controller's existing `rescue ActiveRecord::RecordNotUnique` catches — `render_race_winner`
-re-reads by fingerprint, finds nothing, and answers 422 with its fallback message. Not a 500, and
-no new rescue needed. As with `Tournaments::StandingsImporter`'s event lookup, the *validation* is
-the likely path (a non-atomic `exists?` fires long before the index can), so the readable message
-is what a real user meets; the index is what covers the window between them. The fallback message
-says "Archetype already exists" rather than naming the address, which is left alone: that path
-exists for exactly the case where the refusal was not the race it looked like, and rewriting it
-would touch race handling this change has no business touching.
+**Under a real race the index answers, and the two writers answer it differently — one badly,
+one not at all.** Measured: forcing a duplicate slug past the validation raises
+`ActiveRecord::RecordNotUnique` (`SQLite3::ConstraintException: UNIQUE constraint failed:
+archetypes.slug`). In `Api::ArchetypesController` that is caught by the existing
+`rescue ActiveRecord::RecordNotUnique` — so a 422 and not a 500 — but `render_race_winner`
+re-reads through `existing(primary, secondary)`, which keys on the **fingerprint pair**, and a
+slug collision means the winner has a *different* pair, so the re-read finds nothing and the
+client gets the fallback `"Archetype already exists"`. That message is false (no archetype with
+that pair exists) and it hides the one actionable thing the model produced. In
+`Admin::ArchetypesController` nothing rescues it at all, so there the same race is an unrescued
+500 — a door the fingerprint-pair index has had since it existed, and to which this adds a
+second.
 
-**A blank slug refuses too, and that is the one known limit.** A name with no transliterable
-character produces `""`, which cannot address a page. Zero rows and zero card names are in that
+Both are left as they are, and the reason is the window rather than the shape: the validation is
+a non-atomic `exists?` that fires long before the index can, so the readable refusal is what a
+real user meets — the same division `Tournaments::StandingsImporter`'s event lookup makes — and
+the index covers only an interleaving nobody has produced. Neither case was reproducible without
+editing code to stage the interleaving. Widening the rescues is a change to *race handling* on two
+controllers, one of them the archetype picker's idempotency contract, and it is written down here
+rather than made in passing.
+
+**A blank slug refuses twice: the validation for the message, a `CHECK` for the guarantee.**
+Because `assign_slug` is a `before_save`, a validation-skipping write (`save(validate: false)`,
+`update_attribute`) still runs the callback and reached the column with the refusal skipped —
+and `""` offends neither `NOT NULL` nor the UNIQUE index, which only sees a *second* blank. The
+row that shipped was worse than unaddressable: `archetype_path` on it emits `/archetypes/`, the
+collection path, so the catalog links it to the listing it sits in, and the model's own refusal
+then makes it unsavable from the panel. `CHECK (slug <> '')` is what makes the state unreachable.
+No app path skips validations on an `Archetype` today, so this was latent — and it is the hazard
+the `before_save` move created in exchange for the one it removed, which is why both are named
+here.
+
+A name with no transliterable character produces `""`, which cannot address a page. Zero rows and zero card names are in that
 state, and the way to reach it is #111 (Japanese card sets): a Japanese-named archetype cannot be
 created while this validation stands. Recorded here rather than solved, because every solution
 (a digest, an id suffix, a transliteration table) is a URL nobody can read for a case nobody can
 currently produce, and #111 will have to decide it anyway.
 
-**`to_param` returns the slug *the database holds*, not the one in memory.** `assign_slug` runs
-`before_validation`, so a refused update leaves the new name's slug on the record — and in the one
-case the uniqueness validation exists for, that slug belongs to another archetype. Reading the
-dirty attribute made `Admin::ArchetypesController#update`'s `render :edit` emit a form posting to
-`/admin/archetypes/<the other archetype>`, so the admin's corrected resubmission renamed the
-wrong row, with a 200 and no error anywhere. Reproduced as a request test before the fix;
-`slug_in_database || slug` is the fix, and the `||` covers a new record alone.
+**The name decides the address, and the name is regenerated on any save that does not set the
+non-persisted `custom_name`.** Measured: a hand-named archetype, *read fresh from the database*
+and saved, comes back named after its member cards, and its public URL moves with it — the
+accessor lives on the instance that was handed the typed name, so only a reloaded record loses
+it. Not live: the only savers are `Admin::ArchetypesController` (which sets `custom_name` whenever
+the submitted name is present, and whose blank-name path is a deliberate "regenerate from the
+cards") and `Api::ArchetypesController#create` (new records); `Archetypes::FingerprintSync` writes
+with `update_columns` and `dependent: :nullify` with `update_all`. But the address of a public,
+shareable page is now a function of an in-memory accessor, so the day anything saves an archetype
+for an unrelated reason, every hand-named one loses its name *and* every link shared to it.
+Fixing it means persisting `custom_name`, which is a decision about how archetypes are named
+rather than about publishing pages. `ArchetypeTest` states the behaviour instead, so the next
+reader meets it as a pinned fact rather than discovering it.
+
+**`assign_slug` is a `before_save`, and that is what makes `to_param` safe to write plainly.**
+The first version ran it `before_validation`, so a *refused* update left the new name's slug on
+the in-memory record — and in the one case the uniqueness validation exists for, that slug belongs
+to another archetype. `Admin::ArchetypesController#update`'s `render :edit` then emitted a form
+posting to `/admin/archetypes/<the other archetype>`, and the admin's corrected resubmission
+renamed the wrong row, with a 200 and no error anywhere. Reproduced as a request test before the
+fix. The first fix was `to_param = slug_in_database || slug`; the one that shipped moves the
+callback instead, so a rejected save never touches the column and the hazard is unreachable rather
+than handled. Both the validation and the callback read one `derived_slug` — two readers computing
+the rule separately is how a check and a write come to disagree.
 
 **`to_param` returns the slug, so `/admin/archetypes/:id` becomes a slug too.**
 `Admin::ArchetypesController#set_archetype` switches to `find_by!(slug: params[:id])`. This is
@@ -107,11 +155,15 @@ eleven admin call sites, is a rule the next call site cannot know about.
 address of a page — the same split `decks.id` keeps against `decks.key` for the tournament entry
 form. Nothing in that controller takes a `params[:id]`.
 
-**An unsaved record must be given a slug by hand.** `to_param` is `slug`, and a callback has not
-run on `Archetype.new(...)`, so a component test that renders an unpersisted archetype through
+**An unsaved record must be given a slug by hand.** `to_param` is `slug`, and no callback has
+run on `Archetype.new(...)`, so anything that renders an unpersisted archetype through
 `archetype_path` has to spell the slug out — the rule fixtures already follow for
-`name_normalized` and the fingerprint pair. Two files do this today
-(`test/components/archetypes/sample_selector_test.rb`, `test/components/ui/archetype_badge_test.rb`).
+`name_normalized` and the fingerprint pair. Three files do:
+`test/components/archetypes/sample_selector_test.rb`,
+`test/components/archetypes/name_group_row_test.rb` (whose scope reaches `Archetypes::CardReport`,
+which builds the path) and, in `app/` rather than `test/`, `Styleguide::PageView`'s four
+stand-ins. `test/components/ui/archetype_badge_test.rb` is *not* one of them — it renders a
+fixture, and what it needed was the numeric href in its assertion replaced by the real slug.
 
 **The migration backfills, and the UNIQUE index is what proves the backfill was safe.** Add the
 column nullable, write `name.squish.downcase.parameterize` into every row with `update_all` —
@@ -193,11 +245,17 @@ and is invisible to it — and it signs a member in. `"the catalog costs a visit
 is the absolute, signed-out counterpart.
 
 **`#show` gets no rate limiter, and that is the precedent rather than an omission.** Its two
-`<select>`s auto-submit (`card-filter`), so a click is a full page load of 13 queries / 78.3 ms —
-the most expensive public page in the app. It still matches the rule the other limiters were
-sized by: one request per deliberate click, not one per keystroke, which is why
+`<select>`s auto-submit (`card-filter`), so a click is a full page load of 16 queries / ~31 ms /
+85 KB — the app's largest uncapped anonymous response. It still matches the rule the other
+limiters were sized by: one request per deliberate click, not one per keystroke, which is why
 `tournaments#show` and `decks#show` carry none either while their listings do. A test pins the
 absence, the way `tournaments_rate_limit_test.rb` pins it for an event page.
+
+The counter-argument, recorded rather than omitted: `decks#export` is also one deliberate click
+and *is* capped, at 30/min and a third of the cost. What settles it is `tournaments#show` — the
+same shape, uncapped, measured at 55 req/s against this page's 23.
+`docs/architecture/public-surface.md` carries both numbers and names 120/min as the option if the
+trade is ever revisited.
 
 **Nothing about the two pages is member-specific, and that was checked rather than assumed.**
 No component under `app/views/components/archetypes/` reads `current_user`, `user_signed_in?`, a

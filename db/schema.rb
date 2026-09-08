@@ -35,6 +35,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_08_090000) do
     t.index ["parent_id"], name: "index_archetypes_on_parent_id"
     t.index ["primary_fingerprint", "secondary_fingerprint"], name: "index_archetypes_on_fingerprint_pair", unique: true
     t.index ["slug"], name: "index_archetypes_on_slug", unique: true
+    t.check_constraint "slug <> ''", name: "archetypes_slug_not_blank"
   end
 
   create_table "attacks", force: :cascade do |t|

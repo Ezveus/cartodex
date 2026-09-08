@@ -291,6 +291,32 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_equal "doublade", archetype.reload.slug
   end
 
+  # The hazard, pinned rather than fixed. `custom_name` is a non-persisted `attr_accessor`, so
+  # `auto_generate_name` fires on any save that does not set it — and now that the name decides
+  # the *address*, a bare save rewrites a public URL. Not live: the only savers are
+  # `Admin::ArchetypesController` (which sets `custom_name` whenever the submitted name is
+  # present, and whose blank-name path is deliberate) and `Api::ArchetypesController#create`
+  # (new records only); `Archetypes::FingerprintSync` writes with `update_columns` and
+  # `dependent: :nullify` with `update_all`. The day anything calls `save`/`update!` on an
+  # archetype for an unrelated reason — a parent reassignment, a bulk action — every hand-named
+  # archetype loses its name *and* every link ever shared to it. Fixing that means persisting
+  # `custom_name`, which is a schema decision about how archetypes are named and not about
+  # publishing pages, so this test states the behaviour instead of asserting the one we want.
+  test "a bare save regenerates a hand-typed name, and therefore the address" do
+    archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
+                                  name: "Metal Toolbox")
+    assert_equal "metal-toolbox", archetype.slug
+
+    # Reloaded first, which is the realistic shape: the accessor lives on the instance that was
+    # handed the typed name, so it is a *fresh* read of the row that has lost it. Any code path
+    # that finds an archetype and saves it is this.
+    reloaded = Archetype.find(archetype.id)
+    reloaded.save!
+
+    assert_equal "Doublade", reloaded.name, "the accessor is not persisted, so the name regenerates"
+    assert_equal "doublade", reloaded.reload.slug, "and the public address moves with it"
+  end
+
   test "to_param is the slug, so every URL of this archetype names it" do
     archetype = Archetype.create!(primary_card: cards(:doublade), custom_name: "1",
                                   name: "Metal Toolbox")
@@ -324,6 +350,36 @@ class ArchetypeTest < ActiveSupport::TestCase
     assert_not archetype.valid?
     assert_empty archetype.errors[:slug]
     assert_not_empty archetype.errors[:name]
+  end
+
+  # The other half of the same division of labour, and a hole the first version of this feature
+  # opened by accident: `assign_slug` is a before_save, so a validation-skipping save still runs
+  # it — and it happily wrote `""`, which `NOT NULL` does not refuse and which the UNIQUE index
+  # refuses only on a *second* offender. `archetype_path` on such a row emits `/archetypes/`, the
+  # collection path, so the row links to the listing it sits in and cannot be repaired from the
+  # panel (the model's own blank refusal rejects any save of it). A CHECK constraint is what makes
+  # the state unreachable rather than merely invalid.
+  test "the database refuses a blank slug even when validations are skipped" do
+    archetype = Archetype.new(primary_card: cards(:doublade), custom_name: "1", name: "ポケモン",
+                              primary_fingerprint: cards(:doublade).fingerprint,
+                              secondary_fingerprint: "")
+
+    assert_raises(ActiveRecord::StatementInvalid) { archetype.save!(validate: false) }
+  end
+
+  # `resources :archetypes` in the admin namespace emits GET /admin/archetypes/new *before*
+  # GET /admin/archetypes/:id, so an archetype whose slug is "new" has no reachable admin show
+  # page — and `#create`/`#update` both redirect to `admin_archetype_path`, which would land the
+  # admin on a blank "New Archetype" form carrying the flash "Archetype updated.": a 200 that
+  # reads as if the edit had been lost. Reachable by typing "New" in the one field the form has.
+  test "a name whose slug would shadow a route is refused, on :name" do
+    [ "New", "new", "NEW" ].each do |name|
+      archetype = Archetype.new(primary_card: cards(:doublade), custom_name: "1", name: name)
+
+      assert_not archetype.valid?, "#{name.inspect} must be refused"
+      assert_empty archetype.errors[:slug]
+      assert_match(/reserved/, archetype.errors[:name].join)
+    end
   end
 
   # The validation is for the readable error; the index is the guarantee. Same division of
@@ -372,6 +428,35 @@ class ArchetypeTest < ActiveSupport::TestCase
 
       archetype.destroy!
     end
+  end
+
+  # The readable half of the blank refusal. `change_column_null` only refuses NULL and the UNIQUE
+  # index only refuses a *second* blank, so what actually stops a blank shipping is the CHECK
+  # constraint — and that constraint is added **after** the backfill, so during a real migration
+  # run the blank is written first and this is what names it. Without it `add_check_constraint`
+  # would fail on a row it cannot identify.
+  #
+  # The constraint is dropped for the length of the test, exactly as the fingerprint tests below
+  # drop the unique index they are about: it is what makes the state unreachable, so a test about
+  # the window before it exists has to reopen that window. Transactional fixtures roll the DDL
+  # back.
+  test "the migration names a blank slug the CHECK constraint would refuse unhelpfully" do
+    require Rails.root.join("db/migrate/#{migration_filename('add_slug_to_archetypes')}")
+
+    ActiveRecord::Base.connection.remove_check_constraint :archetypes, name: "archetypes_slug_not_blank"
+    Archetype.insert_all([
+      { name: "ポケモン", name_normalized: "ポケモン", slug: "",
+        primary_card_id: cards(:doublade).id,
+        primary_fingerprint: "blank_slug_fp", secondary_fingerprint: "",
+        created_at: Time.current, updated_at: Time.current }
+    ])
+
+    # Through backfill_slugs, not the check directly: the two are one operation, so this also
+    # asserts that filling the column cannot silently skip the refusal.
+    error = assert_raises(RuntimeError) { AddSlugToArchetypes.new.backfill_slugs }
+
+    assert_match "ポケモン", error.message
+    assert_match "no URL can carry", error.message
   end
 
   test "the migration's backfill actually writes the column" do

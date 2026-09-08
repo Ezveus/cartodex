@@ -128,10 +128,6 @@ module Search
       end
     end
 
-    # Archetype.none for a visitor, exactly as deck_scope above: /archetypes is inside the
-    # `authenticate :user` block, so an option offered here would be a link to a sign-in wall —
-    # and, like Deck.none, it never touches the database, so a visitor pays nothing for a group
-    # they cannot use.
     # No visitor branch, unlike deck_scope: /archetypes is public, so an option here leads
     # somewhere a reader with no session can actually go. It was `Archetype.none` for a nil user
     # while the pages sat behind the sign-in wall, and Search::GlobalTest's assertion turned

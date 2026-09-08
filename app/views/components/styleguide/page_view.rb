@@ -161,7 +161,7 @@ module Styleguide
         p(class: "sg-eyebrow", style: "margin-top: 1.5rem") { "Ui::ArchetypeBadge" }
         div(class: "sg-row") { render Ui::ArchetypeBadge.new(archetype: sg_sample_archetype) }
         p(class: "sg-eyebrow", style: "margin-top: 1.5rem") { "Decks::PublicBadges" }
-        div(class: "sg-row") { render Decks::PublicBadges.new(deck: sg_sample_deck) }
+        div(class: "sg-row") { render Decks::PublicBadges.new(deck: sg_sample_deck, linked: true) }
       end
     end
 
@@ -305,9 +305,9 @@ module Styleguide
     end
 
     # Carries a slug for the reason sg_sample_deck carries a key: Archetype#to_param is the
-    # slug, and a callback has not run on an unpersisted record, so anything that builds
-    # archetype_path from this stand-in — Decks::PublicBadges below, the spotlight's archetype
-    # group above — would raise without one.
+    # slug, a callback has not run on an unpersisted record, and Decks::PublicBadges is rendered
+    # `linked: true` below — the variant a shared deck's own page ships, and the one that builds
+    # archetype_path — so this would raise without one.
     def sg_sample_archetype
       Archetype.new(name: "Charizard ex", slug: "charizard-ex",
                     primary_card: Card.new(type_symbol: "Fire"))

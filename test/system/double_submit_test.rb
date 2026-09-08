@@ -35,7 +35,15 @@ class DoubleSubmitTest < ApplicationSystemTestCase
   test "a double-clicked Create & select sends one request" do
     visit edit_deck_path(@deck)
     click_button "Suggest"
-    assert_field(with: "Froakie (TWM 56)")
+    # `wait:` generous, and not decoration: "Suggest" is a fetch to
+    # /api/decks/:key/suggested_archetype that runs Decks::ArchetypeDetector before the JS fills
+    # this field, so the assertion races a real round trip. On the default two seconds it failed
+    # 2 runs in 5 of the *mobile* suite the day a 98th system test joined it — 8 workers, 8
+    # cores, one Chrome each, and the whole machine saturated; the same test passed 4 times out
+    # of 4 in isolation and 7 times out of 7 before that test existed. Nothing here was broken,
+    # and nothing about the next test to be added will be either: the budget was simply sized
+    # for an unloaded machine.
+    assert_field(with: "Froakie (TWM 56)", wait: 10)
 
     count_posts_to("/api/archetypes")
     double_click("[data-archetype-picker-target='createButton']")

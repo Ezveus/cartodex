@@ -154,6 +154,7 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "TWM", entry["primary_card"]["set_name"]
     assert_equal "25", entry["primary_card"]["set_number"]
   end
+
   # The one place the slug's uniqueness rule bites a member rather than an admin. This endpoint
   # builds the archetype with no name at all — `auto_generate_name` supplies it from the two
   # cards — so two distinct card pairs whose generated names parameterize alike are refused here

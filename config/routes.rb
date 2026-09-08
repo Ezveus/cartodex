@@ -119,7 +119,6 @@ Rails.application.routes.draw do
     end
     resources :tournament_profiles, except: [ :show ]
 
-
     # Admin
     constraints ->(request) { request.env["warden"].user&.admin? } do
       mount MissionControl::Jobs::Engine, at: "/admin/jobs"

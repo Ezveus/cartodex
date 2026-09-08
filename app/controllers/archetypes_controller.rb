@@ -16,11 +16,14 @@
 #
 #   4. the per-IP `rate_limit` below. Sized like tournaments#index's because #index is the same
 #      shape — a field debounced at 300 ms driving a paginated listing behind a Turbo Frame —
-#      and, at 5 queries / 10.9 ms measured on the production dump, a cheaper one. #show gets
-#      none, deliberately: its two selects auto-submit, so a click is a full page load of 13
-#      queries / 78.3 ms, but that is still one request per deliberate click and not one per
-#      keystroke, which is the line decks#show and tournaments#show sit on the same side of.
-#      ArchetypesRateLimitTest pins both halves.
+#      and, at 5 queries measured on the production dump, a cheaper one. #show gets none,
+#      deliberately: its two selects auto-submit, so a click is a full page load of **16
+#      queries / ~31 ms / 85 KB** for a visitor (17 with a session, which the flat-cost test
+#      pins) — the app's largest uncapped anonymous response — but that is still one request
+#      per deliberate click and not one per keystroke, which is the line decks#show and
+#      tournaments#show sit on the same side of. The counter-argument is written down in
+#      docs/architecture/public-surface.md rather than left out: decks#export is also one
+#      click and *is* capped, at a third of the cost. ArchetypesRateLimitTest pins both halves.
 #   5. `nav_link "Archetypes"` in Ui::PublicNavbar. Without it a visitor on either page lights
 #      **zero** navbar entries — NavbarActiveSectionTest asserts "exactly one is lit" per page
 #      it names, and it named no visitor archetype page until this shipped.
@@ -29,7 +32,8 @@
 #      so it was inverted in the same commit rather than merely watched.
 #   7. the two archetype links a public page withheld while /archetypes was a sign-in wall:
 #      Tournaments::Standings::Row#archetype_badge no longer guards on `@viewer.present?`, and
-#      Decks::PublicBadges passes an `href:`.
+#      Decks::PublicBadges grew a `linked:` keyword — **not** an unconditional href, since two
+#      of its three callers render it inside an anchor of their own.
 #
 # The pages are `noindex` like everything else the app serves — XRobotsTagMiddleware and the
 # layout's meta tag cover them for free. Discovery and SEO are #142, for the whole app at once;
@@ -46,8 +50,12 @@ class ArchetypesController < ApplicationController
 
   PER_PAGE = 24
 
-  # Named "archetypes-index" so this budget is its own: a visitor exhausting it must still be
-  # able to read an archetype's page, which carries no limiter of its own.
+  # An explicit `name:`, as every other limiter in the app carries: Rails keys a limiter on
+  # ["rate-limit", scope, name, by] with `scope` defaulting to controller_path, so with one
+  # limiter on one action the name buys nothing today — #show is not rationed because no
+  # limiter runs on it at all, not because this budget is separate. It starts mattering the day
+  # a second limiter lands on this controller, which is why it is spelled rather than left to
+  # the default.
   INDEX_RATE_LIMIT_TO = 60
   RATE_LIMIT_WITHIN = 1.minute
 
