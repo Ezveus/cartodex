@@ -227,16 +227,22 @@ old fingerprint with the guess sitting on the live one — which is what the rep
 aborted on every later run, taking the repair tool out of service for good.
 
 **The `role` family is what a card *does*, and it is a constant because code reads it.**
-`CardLabel::ROLES` — `draw`, `search`, `gust`, `switch`, `recovery`, `disruption` and
-`energy-acceleration` — is walked by `db/seeds/card_labels.rb` (skip-if-exists, so a `db:seed` on
-every boot never reverts an admin's correction, and a role's *name* stays editable while the row
-cannot be created or destroyed from the panel). The slugs are kebab-case because `CardLabel`'s own
-format validation refuses anything else, and `energy_acceleration` reads better in Ruby: a test
-walks every entry through the model, since nothing else would report the mismatch — the seed skips
-a slug it cannot create as readily as one that already exists, and a fresh database would come up
-one role short in silence. Roles are game mechanics and a property of the **card**, never of the
-archetype playing it (Fezandipiti ex is `draw` in a deck that attacks with it); "attacker" is
-deliberately not a role, since every Pokémon is one.
+`CardLabel::ROLES` — `draw`, `search`, `gust`, `switch`, `free-retreat`, `recovery`, `disruption`,
+`retreat-tax` and `energy-acceleration` — is walked by `db/seeds/card_labels.rb` (skip-if-exists,
+so a `db:seed` on every boot never reverts an admin's correction, and a role's *name* stays
+editable while the row cannot be created or destroyed from the panel). The slugs are kebab-case
+because `CardLabel`'s own format validation refuses anything else, and `energy_acceleration` reads
+better in Ruby: a test walks every entry through the model, since nothing else would report the
+mismatch — the seed skips a slug it cannot create as readily as one that already exists, and a
+fresh database would come up one role short in silence. Roles are game mechanics and a property of
+the **card**, never of the archetype playing it (Fezandipiti ex is `draw` in a deck that attacks
+with it); "attacker" is deliberately not a role, since every Pokémon is one. **The list is
+declared in `position` order, and that is load-bearing rather than tidy**: `CardLabel.roles` is
+`order(:position, :slug)` and `CardLabelSeedTest` asserts the seeded rows come back in the order
+the array declares them, so a role appended with an interleaving position turns it red — which is
+how `free-retreat` (45) and `retreat-tax` (65) were found to belong in their slots rather than at
+the end. The two retreat roles and the guards on their rules are written out in
+`docs/architecture/card-labels-and-roles.md`.
 
 **The rules carry no version, and the "played" filter is not a fixed population.** Changing a regex
 silently rewrites every `suggested` row it owns — the run's `withdrawn` count is the only trace and

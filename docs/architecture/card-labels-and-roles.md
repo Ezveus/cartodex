@@ -60,7 +60,7 @@ Guidance, Bug Catching Set or Professor Turo's Scenario — the cards a player n
 is not the problem; an error it makes is invisible on the rendered page, which is why a human
 decides. It writes and withdraws **only its own `suggested` rows**, never examines a pair carrying
 a `curated` decision (a yes *or* a refusal), and **refuses before writing anything** when the
-vocabulary has not been seeded, rather than writing four families out of seven and leaving a report
+vocabulary has not been seeded, rather than writing four families out of nine and leaving a report
 that looks complete. A role label whose rule has gone — reachable only by a code change, since the
 seed never deletes and the panel refuses to — keeps its curated decisions and loses its
 suggestions, which nothing would ever withdraw again. Two details with measurements behind them:
@@ -73,6 +73,59 @@ reprint whose wording is scraped differently withdrawing a role on the next run.
 read **before** `serialized_transaction` opens, the discipline `Tournaments::StandingsImporter`
 already follows: `BEGIN IMMEDIATE` holds SQLite's single write lock, and the reading half is 0.4 s
 of that 1.2 s.
+
+**`free-retreat` and `retreat-tax` are two roles because they are opposites** (#169), and the
+measurement is what made it two rather than one: 41 catalogue fingerprints mention a retreat cost,
+8 of them are played in a recorded list, and those 8 carry **both** senses — Air Balloon, Latias
+ex, N's Castle, Archaludon, Magnetic Metal Energy and Charmander make retreating cheaper while
+Gravity Gemstone and Mega Chandelure ex make it dearer. A single `/retreat cost/i` role would have
+rendered a section that looks complete with a quarter of it backwards, and it is not `disruption`
+either: raising the opponent's retreat traps their Active, which is adjacent to `gust` and to
+`disruption` without being either. Nothing mislabelled these cards before — `switch`'s rule is the
+wording of the *Switch card* and has nothing to do with a retreat cost, so **0 of the 41 carried
+`switch` and 0 carried any role at all**. Their positions **are** the answer to "these get used the
+way Switch does": the model has no notion of two roles being adjacent — a card carries several,
+roles do not relate to each other — so 45 seats Free retreat beside `switch` (40) and 65 seats
+Retreat tax beside `disruption` (60), each next to the role a reader compares it against, filling
+gaps that renumber nothing. "Free retreat" over-claims for Air Balloon, which is −2 rather than
+free; the idiom won over the literal `retreat-reduction`/`retreat-increase` pair on `gust`'s
+precedent, and the description does **not** make up for it where a reader meets the name — it
+reaches the curation checkbox's `title` and the `type` badge, and a role never renders as a badge,
+so the report's heading is the name alone.
+
+**The tax rule needs two guards, and each excludes a different sentence that talks about a retreat
+cost without changing one.** `(?! damage)` keeps out *Future Booster Energy Capsule* ("has no
+Retreat Cost, and the attacks it uses do 20 more damage") and *Carnivine*, both of which also match
+`free-retreat` — one card opening two opposite sections at once. `(?<!or )` keeps out *Talonflame*
+SCR 123, "If the Retreat Cost of your opponent's Active Pokémon is [C][C] **or more**, this attack
+does 110 more damage" — a *threshold* on a retreat cost rather than a change to one, which the
+lookahead cannot see because the offending "more" is followed by a comma. That second guard was
+found by a review after the first version shipped, and it is the same family as Grimmsnarl,
+Heracross, Iron Bundle, Marshadow, Oddish and Throh, which the rule correctly ignores.
+
+**The window is 120, and neither the 60 the issue proposed nor the 80 that shipped first.** At 60
+the rule misses *Calamitous Wasteland*, a card the issue's own table lists as making retreating
+dearer; at 80 it catches it with **one character to spare** (the gap from anchor to "more" is 79),
+so a reprint adding three words would drop it in silence. `[^.]` stops at the sentence and is what
+actually bounds the reach, which is the argument for a width with room rather than one that just
+fits — 80 and 120 read the identical set. Overlap with `free-retreat` is 0 at every width tried,
+and `free-retreat` carries no `(?! damage)` of its own because measured, 0 cards would change: the
+six catalogue cards pairing "less damage" with "Retreat Cost" all write the "less" *before* the
+anchor. One known false positive survives per rule, both conditions read as grants and both
+unplayed — telling a condition from a grant is not a one-line regex's job, which is what the
+`curated` source is for. Adding the pair is **purely additive** on the existing seven: measured
+against the production snapshot, a `card_labels:suggest_roles` run creates exactly 31 assignments
+(23 `free-retreat`, 6 of them played; 8 `retreat-tax`, 2 played) and withdraws **0**.
+
+**What the pair deliberately does not cover, named because its population was chosen by a search
+string and not by the mechanic**: 65 catalogue fingerprints, **13 of them played**, say a Pokémon
+"can't retreat" without the words "retreat cost" — Pecharunt, Wellspring Mask Ogerpon ex,
+Dusknoir's Shadow Bind among them, against the 8 played fingerprints the two new roles reach
+between them. An infinite cost holds a Pokémon in play exactly as a raised one does, so they
+arguably belong under `retreat-tax` or under a lock role of their own. Left out on purpose: it is a
+vocabulary decision, not a regex tweak. `free-retreat` has a smaller version of the same gap — its
+description says nothing about *whose* Pokémon, and 3 of its 23 matches (N's Castle, played, among
+them) grant free retreat to both players, which a curator cannot resolve from the screen.
 
 **`/admin/card_roles` is where a human decides, one row per fingerprint.** Ticking writes `curated`
 present, unticking writes `curated` **rejected** — never a deletion, because a deletion reads as
@@ -96,7 +149,7 @@ import beside it, it makes no HTTP request. **Save and Clear are two different a
 says "I agree with what is ticked" — without it the row submitted on `change` alone, so confirming
 a suggestion meant ticking a role that is wrong, publishing it, and unticking it again. Clear
 deletes every `curated` row for that fingerprint and is **the only deletion the app offers on an
-assignment**: a save decides all seven roles at once, so one misclick otherwise removes a card from
+assignment**: a save decides all nine roles at once, so one misclick otherwise removes a card from
 the suggester's reach for good. Deleting *on request* is not the act unticking would be — that
 would erase a refusal, which is the one thing the store exists to keep — and the button lives in
 the row while the form it submits is a hidden sibling, because forms cannot nest. A `curated`
@@ -162,14 +215,14 @@ deck page, not in the JSON API, not in an MCP tool.
 
 **The label filter (#164) is measured against that same rule and passes it.** `?label=` and
 `?role=` add a flat **+2 queries, unconditionally** — `CardLabel.types` and `CardLabel.roles`,
-two index seeks on an eight-row table, 0.8 ms of a 10.5 ms page — and nothing that grows with
+two index seeks on a ten-row table, 0.8 ms of a 10.5 ms page — and nothing that grows with
 anything a visitor controls. They are deliberately **not** folded into `Card.filter_values`: those
 two are unindexed scans behind an hour-long cache while these are always-correct indexed reads, and
 sharing that entry would tie them to `Card.forget_filter_values`, called by the set importer and
 the rescrape job, so an admin's new label would be invisible for up to an hour. They are loaded
 with `to_a`, because the view asks `empty?` before iterating and on a relation that is a second
 query **per family** — invisible to any relative query-count comparison, since both lists are one
-and seven rows whatever the catalogue holds, which is why the cost is pinned by a literal. The
+and nine rows whatever the catalogue holds, which is why the cost is pinned by a literal. The
 filter itself is the **only indexed filter on the endpoint**: every pre-existing one (`card_type`,
 `type_symbol`, `rarity`, `regulation_mark`, the `LIKE`) is a full scan, while
 `Card.with_label` is an index seek on both sides and, measured against a synthetic label carrying
@@ -192,6 +245,6 @@ the filter **fails closed**; both params are read through `to_s`, so a Hash- or 
 can never reach `cards_path` and raise `UnfilteredParameters` on a public page. And **a role filter
 says that it is showing proposals**: `active` is `rejected: false` and says nothing about
 provenance, `Archetypes::CardReport` already answers that for the member-only report, and this
-surface is anonymous — on production, 709 of 850 assignments are a rule's guess and **no role is
-yet fully curated**, so the sentence renders for all seven. It carries no number, because the counts
+surface is anonymous — on production, 740 of 881 assignments are a rule's guess and **no role is
+yet fully curated**, so the sentence renders for all nine. It carries no number, because the counts
 available are of assignments while the grid shows printings.
