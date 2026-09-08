@@ -7,6 +7,18 @@ module ActiveSupport
     # Run tests in parallel with specified workers
     parallelize(workers: :number_of_processors)
 
+    # Og::Cache writes real JPEGs to disk, and its default root — storage/og — is
+    # a gitignored directory that eight forked workers share and that survives
+    # between runs. Two tests naming the same subject would delete each other's
+    # file and then pass or fail by order, across runs as well as within one.
+    # Every cache test also points the root at a Dir.mktmpdir of its own; this is
+    # the second line of defence, covering anything that renders a banner without
+    # setting out to. It only fires when Rails actually forks (more than one
+    # worker), which is why it is not the only line.
+    parallelize_setup do |worker|
+      Og::Cache.root = Rails.root.join("tmp/og-test", worker.to_s)
+    end
+
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
 

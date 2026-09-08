@@ -9,4 +9,5 @@ class ArchetypePolicy < ApplicationPolicy
   # factual data with no owner, so being an admin buys nothing, which ArchetypePolicyTest pins.
   def index? = true
   def show? = true
+  def og_image? = true
 end

@@ -129,6 +129,12 @@ class OauthConsentTest < ActionDispatch::IntegrationTest
     assert_select "head title", text: "Cartodex"
     # The app's own chrome, which only Layouts::ApplicationLayout renders.
     assert_select "body nav.navbar a.navbar-brand", text: "Cartodex"
+    # And the layout's preview tags, which reach this controller only because it includes
+    # OgPreviewHost itself — it does not descend from ApplicationController, so a helper the
+    # layout calls unconditionally is a 500 here and on no other page in the app. The assertion is
+    # on the tag rather than on the 200 above, because a 200 would also be green if og_preview
+    # were defined and returned something unusable.
+    assert_select "meta[property='og:image'][content=?]", "#{root_url}og-default.jpg"
   end
 
   # Both consent forms answer with a 302 to the *client's* origin

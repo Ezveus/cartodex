@@ -25,4 +25,5 @@ class ApplicationComponent < Phlex::HTML
   register_value_helper :current_user
   register_value_helper :user_signed_in?
   register_value_helper :search_overlay?
+  register_value_helper :og_preview
 end

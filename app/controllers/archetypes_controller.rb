@@ -137,6 +137,12 @@ class ArchetypesController < ApplicationController
       grouping: params[:group].to_s == "role" ? :role : :type
     )
     @performance = Archetypes::Performance.call(standings: @scope.standings)
+
+    # Reads primary_card and secondary_card and nothing else, which is the whole budget: this
+    # action is pinned to a literal 17 queries by three assertions in
+    # ArchetypesControllerTest, and those two associations are already preloaded above, so
+    # the payload costs zero. Any other association read here turns those three red.
+    @og_payload = Og::ArchetypePayload.call(@archetype)
   end
 
   private

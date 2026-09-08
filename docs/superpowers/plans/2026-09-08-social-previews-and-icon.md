@@ -159,7 +159,14 @@ Lane 3 rasterises through the Docker container the spike already used, so it is 
 
 ## Tests
 
-Red first, both outputs reported. The list below is the adversary's output turned into assertions;
+Tests are written before the code they cover, but **the red step is not an agent's to report**: the
+lanes are write-only, so no agent runs anything. The red proof therefore comes from phase 6's
+sabotage pass instead, which is strictly stronger — it breaks the finished mechanism and watches the
+test go red, rather than watching it fail against code that does not exist yet. Saying this plainly
+matters, because "red then green" reported by an agent that could not run the suite would be
+fabricated.
+
+The list below is the adversary's output turned into assertions;
 where a test is written as the *inverse* of the obvious one, that is deliberate.
 
 ### Payloads

@@ -7,6 +7,10 @@ module Oauth
     # Layouts::ApplicationLayout asks every host for search_overlay?; this one does not descend
     # from ApplicationController, so it has to include the concern itself.
     include SearchOverlayHost
+    # And for og_preview, for exactly the same reason. Without this the consent screen is a 500 —
+    # the only page in the app that would be, which is why oauth_consent_test.rb rendering this
+    # screen through the layout is what catches it.
+    include OgPreviewHost
 
     # Doorkeeper's controllers descend from ActionController::Base, so Rails'
     # layout lookup walks up to layouts/doorkeeper/application — the *gem's*

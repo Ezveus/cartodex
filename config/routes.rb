@@ -56,6 +56,15 @@ Rails.application.routes.draw do
     resources :deck_results, only: [ :index, :edit, :update, :destroy ]
   end
 
+  # The Open Graph preview images, outside `authenticate :user` because a crawler has no session.
+  # Keyed the way each subject is already addressed — decks.key, archetypes.slug, cards.id — so the
+  # URL a page emits in its <head> is derivable from what that page already knows. Flat routes
+  # rather than `member` blocks on the three resources: the endpoint is one controller and one
+  # budget, and hanging it off three unrelated resources would have spelled that as three.
+  get "og/decks/:id", to: "og_images#deck", as: :deck_og_image
+  get "og/archetypes/:id", to: "og_images#archetype", as: :archetype_og_image
+  get "og/cards/:id", to: "og_images#card", as: :card_og_image
+
   resources :cards, only: [ :index, :show ] do
     get :image, on: :member
   end
