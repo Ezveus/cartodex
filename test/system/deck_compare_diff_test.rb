@@ -33,6 +33,15 @@ class DeckCompareDiffTest < ApplicationSystemTestCase
     assert_no_selector ".deck-compare-group-header", text: /\A#{type}\z/i
   end
 
+  # Turbo files a cached snapshot under the address the page was *rendered* from — its own
+  # `lastRenderedLocation`, which neither our replaceState nor Turbo's own history API moves —
+  # so the DOM has to be back to what that address renders before the clone is taken. The flash
+  # itself lasts a frame and races the server response; the event Turbo fires immediately
+  # before cloning is the part that can be asserted.
+  def fire_before_cache
+    page.execute_script("document.dispatchEvent(new CustomEvent('turbo:before-cache'))")
+  end
+
   test "ticking the box drops the agreed rows and whole agreed groups, and unticking restores them" do
     visit compare_decks_path(ids: [ @left.key, @right.key ])
 
@@ -53,7 +62,9 @@ class DeckCompareDiffTest < ApplicationSystemTestCase
     # The totals keep describing the whole decks — 6 cards on the left, 5 on the right — and say
     # beside each how many copies sit on a row the decks disagree about.
     assert_selector ".deck-compare-total td", text: "6 (1)"
-    assert_selector ".deck-compare-total td", text: "5 (0)"
+    # The right-hand deck differs in nothing, and prints one number rather than "5 (0)".
+    assert_selector ".deck-compare-total td", text: /\A5\z/
+    assert_selector ".deck-compare-total .deck-compare-diff-count", count: 1
 
     # The state is in the address, so the reader can share or reload what they are looking at.
     assert_match(/diff=1/, page.current_url)
@@ -83,5 +94,29 @@ class DeckCompareDiffTest < ApplicationSystemTestCase
     check "Differences only"
 
     assert_selector ".deck-compare-no-diff", text: "same cards"
+  end
+
+  test "the snapshot Turbo caches is the page the address it is filed under would render" do
+    visit compare_decks_path(ids: [ @left.key, @right.key ])
+
+    check "Differences only"
+    assert_no_selector ".deck-compare-card-row", text: "Honedge"
+
+    fire_before_cache
+
+    assert_selector ".deck-compare-card-row", text: "Honedge"
+    assert_unchecked_field "Differences only"
+  end
+
+  test "and the same the other way round, on a link that arrived filtered" do
+    visit compare_decks_path(ids: [ @left.key, @right.key ], diff: "1")
+
+    uncheck "Differences only"
+    assert_selector ".deck-compare-card-row", text: "Honedge"
+
+    fire_before_cache
+
+    assert_no_selector ".deck-compare-card-row", text: "Honedge"
+    assert_checked_field "Differences only"
   end
 end

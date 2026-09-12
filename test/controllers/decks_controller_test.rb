@@ -374,6 +374,15 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # Deck sizes stay whole (5 and 3) and the diff counts sit beside them (4 and 2).
     assert_select ".deck-compare-total td", text: /\A5\s+\(4\)\z/
     assert_select ".deck-compare-total td", text: /\A3\s+\(2\)\z/
+
+    # The group they agree on prints no second figure at all, so the four in the page are the
+    # two Trainer subtotals and the two totals.
+    assert_select "tbody.is-uniform .deck-compare-diff-count", false
+    assert_select ".deck-compare-diff-count", 4
+
+    # And the parentheses are explained in words: the cells' `title` reaches neither touch nor
+    # keyboard, and the table's own header row is deck names.
+    assert_select ".deck-compare-toggle-hint", text: /parentheses/i
   end
 
   test "compare honours diff=1 so a shared link arrives filtered" do

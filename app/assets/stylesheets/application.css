@@ -1134,6 +1134,22 @@ textarea.form-input {
   margin-bottom: 1.5rem;
 }
 
+/* The box and the one sentence explaining the parenthesised figure are one item of the header
+   flex row, stacked: three siblings already wrap at 500px, and a fourth would wrap between the
+   hint and the box it describes. */
+.deck-compare-toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 22rem;
+}
+
+.deck-compare-toggle-hint {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--ink-300);
+}
+
 .deck-compare-toggle {
   display: flex;
   align-items: center;

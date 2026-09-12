@@ -14,7 +14,10 @@ module Decks
       # nothing has to be re-queried, and the server can render the filtered state directly.
       div(
         class: [ "deck-compare-container", ("is-diff-only" if @diff_only) ].compact,
-        data: { controller: "card-preview deck-diff-filter" }
+        data: {
+          controller: "card-preview deck-diff-filter",
+          action: "turbo:before-cache@document->deck-diff-filter#reset"
+        }
       ) do
         div(class: "deck-compare-header") do
           h1 { "Compare Decks" }
@@ -44,13 +47,26 @@ module Decks
     # The label wraps the box rather than pointing at it: an id would have to be unique on a
     # page that already renders two card-preview surfaces, and Capybara reads a wrapping label
     # just as well.
+    #
+    # The hint travels with the box because the parenthesised figure has nowhere else to be
+    # explained: the cells carry a `title`, which reaches neither touch nor keyboard, and the
+    # header row of the table is deck names.
     def diff_toggle
-      label(class: "deck-compare-toggle") do
-        input(
-          type: "checkbox", checked: @diff_only,
-          data: { action: "change->deck-diff-filter#toggle" }
-        )
-        span { "Differences only" }
+      div(class: "deck-compare-toggle-group") do
+        label(class: "deck-compare-toggle") do
+          input(
+            type: "checkbox", checked: @diff_only,
+            data: {
+              action: "change->deck-diff-filter#toggle",
+              deck_diff_filter_target: "box"
+            }
+          )
+          span { "Differences only" }
+        end
+
+        span(class: "deck-compare-toggle-hint") do
+          "In parentheses: copies on rows the decks disagree about."
+        end
       end
     end
 
@@ -112,12 +128,17 @@ module Decks
 
     # Two numbers, and the second is not a share of the first: the deck's own count, then how
     # many of those copies sit on a row the decks disagree about. Printed whether or not the
-    # filter is on, since hiding rows is what the filter does and this is what it cannot say.
+    # filter is on, since hiding rows is what the filter does and this is what it cannot say —
+    # but dropped at zero, where it repeats what the first number already implies and leaves a
+    # column of "(0)" down a page of two close decks.
     def count_cell(total, differing)
       td do
         plain total.to_s
-        whitespace
-        span(class: "deck-compare-diff-count", title: "Copies on differing rows") { "(#{differing})" }
+
+        if differing.positive?
+          whitespace
+          span(class: "deck-compare-diff-count", title: "Copies on differing rows") { "(#{differing})" }
+        end
       end
     end
 
