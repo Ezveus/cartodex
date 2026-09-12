@@ -1278,6 +1278,40 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
 
+  # The combination's answer rides on the page's own reads and adds none of its own — which is what
+  # lets #odds skip the early return every other framed action makes, and what keeps a click of the
+  # picker as cheap as the page it sits on.
+  #
+  # Asserted as an equality and not as `frame <= page`: the action runs the same code either way, so
+  # the inequality holds under every implementation, right or wrong, and would pass a version that
+  # had quietly stopped answering the frame at all. The second half is the property the first one
+  # rests on, measured directly against a Report that is already built — uncached, because
+  # SQLCounter ignores CACHE events and a query served from the query cache would read as zero.
+  test "the combination frame costs no more than the page" do
+    deck = @user.decks.create!(name: "Odds", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    deck.deck_cards.create!(card: cards(:bosss_orders_meg), quantity: 4)
+    param = "#{Decks::Odds::Groups.key_for(cards(:honedge))}|" \
+            "#{Decks::Odds::Groups.key_for(cards(:bosss_orders_meg))}"
+
+    get odds_deck_path(deck) # warm the session: the first request of a test also loads the Devise user
+
+    page = count_queries { get odds_deck_path(deck) }
+    frame = count_queries do
+      get odds_deck_path(deck, combo: param),
+        headers: { "Turbo-Frame" => Decks::Odds::ComboFrame::FRAME_ID }
+    end
+
+    assert_response :success
+    assert_equal page, frame, "the combination frame costs #{frame} queries against the page's #{page}"
+
+    report = Decks::Odds::Report.call(deck.reload)
+
+    assert_equal 0, ActiveRecord::Base.uncached {
+      count_queries { Decks::Odds::Combo.call(report: report, param: param) }
+    }
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

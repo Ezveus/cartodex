@@ -39,8 +39,7 @@ module Decks
           render RolePanel.new(report: @report)
           render PrizePanel.new(report: @report)
           render CardTable.new(report: @report)
-          # Decks::Odds::ComboCalculator is Task 8's file and outside this lane's allowlist; the
-          # render of it belongs here, between the card table and the method note.
+          render ComboCalculator.new(report: @report, combo: @combo)
           render MethodNote.new
         end
       end

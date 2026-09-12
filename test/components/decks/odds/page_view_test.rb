@@ -209,6 +209,21 @@ class Decks::Odds::PageViewTest < ActionDispatch::IntegrationTest
     assert_includes html, "Opponent mulligans are not modelled"
   end
 
+  # The picker's whole list ships with the page: the deck has about 25 groups and no request should
+  # be needed to look at them.
+  test "the combination picker ships the deck's own groups and nothing else" do
+    build_sixty
+    document = Nokogiri::HTML(render_page)
+
+    options = document.css('[data-deck-combo-target="option"]').map(&:text).map(&:strip)
+
+    # Whole labels, not name fragments: the option carries its copy count.
+    assert_includes options, "Honedge (4)"
+    assert_includes options, "Psychic Energy (40)"
+    assert_not_includes options.join(" "), "Froakie", "a card this deck does not play is not an option"
+    assert_equal 6, options.size
+  end
+
   private
 
   # 60 cards, 12 of them Basic.
