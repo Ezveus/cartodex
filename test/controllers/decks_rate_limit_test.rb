@@ -55,6 +55,38 @@ class DecksRateLimitTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # #odds joined the public surface with a budget of its own, and nothing else in the suite can see
+  # it: outside `with_real_rate_limit_store` the cache is :null_store and every `rate_limit` is a
+  # no-op. Deleting the limiter, folding it into `name: "decks-export"` and dropping the `unless:`
+  # are three separate mistakes, and this case is built to go red on each one in turn.
+  test "throttles an anonymous odds page on a budget of its own, but never a signed-in one" do
+    with_real_rate_limit_store do
+      limit = DecksController::ODDS_RATE_LIMIT_TO
+
+      limit.times do
+        get odds_deck_path(@deck)
+        assert_response :success
+      end
+
+      get odds_deck_path(@deck)
+      assert_response :too_many_requests
+
+      # A `name:` of its own, so exhausting the odds page leaves the export's budget untouched:
+      # sharing one name would merge the two into a single counter this loop has already spent.
+      get export_deck_path(@deck)
+      assert_response :success
+
+      # The `unless: -> { user_signed_in? }` guard: the owner reading their own build odds must
+      # sail past the limit that just stopped the anonymous reader.
+      sign_in users(:one)
+
+      (limit + 1).times do
+        get odds_deck_path(@deck)
+        assert_response :success
+      end
+    end
+  end
+
   private
 
   def with_real_rate_limit_store

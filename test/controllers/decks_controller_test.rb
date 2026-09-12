@@ -1211,6 +1211,73 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       "the archetype badge must not be a link inside the showcase tile's link"
   end
 
+  # /decks/:id/odds is public on a shared deck and owner-only on a private one, through
+  # DeckPolicy#show? — the same rule that decides who may read the decklist, because this page is a
+  # pure function of that decklist and a rule of its own could only ever disagree with itself.
+  test "the owner reads the odds of their own private deck" do
+    deck = @user.decks.create!(name: "Private", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+
+    get odds_deck_path(deck)
+
+    assert_response :success
+    assert_select "h1", /Build odds/
+  end
+
+  test "a visitor reads the odds of a shared deck" do
+    deck = @user.decks.create!(name: "Public", shared: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    sign_out @user
+
+    get odds_deck_path(deck)
+
+    assert_response :success
+  end
+
+  # An unknown key and a deck that is not yours have to stay one answer, or the endpoint is an
+  # existence oracle for private decks.
+  test "a visitor asking for a private deck's odds is answered like an unknown key" do
+    deck = @user.decks.create!(name: "Private", standard_pool: standard_pools(:twm_por))
+    sign_out @user
+
+    get odds_deck_path(deck)
+    private_deck = response.status
+
+    get "/decks/thiskeydoesnotexist22/odds"
+
+    assert_equal response.status, private_deck
+  end
+
+  test "a signed-in member asking for somebody else's private deck's odds gets a 404" do
+    other = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
+
+    get odds_deck_path(other)
+
+    assert_response :not_found
+  end
+
+  # The page precomputes a curve per group in Ruby, so its cost must not grow with the decklist.
+  # force_over_allocation is not needed here — this action runs no allocation service — but the two
+  # measurements still have to straddle no branch: the role-label query is issued unconditionally by
+  # Decks::Odds::Groups for exactly that reason.
+  test "the odds page costs a fixed number of queries however large the deck" do
+    deck = @user.decks.create!(name: "Odds", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+
+    get odds_deck_path(deck) # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get odds_deck_path(deck) }
+
+    FLAT_COST_EXTRA_CARDS.each { |name| deck.deck_cards.create!(card: cards(name), quantity: 4) }
+    deck.deck_cards.create!(card: cards(:budew_asc), quantity: 4)
+    deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 4)
+
+    large = count_queries { get odds_deck_path(deck) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to

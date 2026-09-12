@@ -177,6 +177,17 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_user_session_path
   end
 
+  # The signed-in half for the one public action added since this file was written. `public_gets` is
+  # requested signed out only, and verify_authorized cannot fire on a request that never reaches the
+  # action — so a *missing* `authorize` in #odds would be invisible there. This is what sees it.
+  test "the odds page authorizes when a session is present" do
+    sign_in @user
+
+    get odds_deck_path(@deck)
+
+    assert_response :success
+  end
+
   test "the owner whose session expired is returned to the deck they asked for" do
     # The regression this replaces: the static 404 carries no navbar, no sign-in link and no
     # return-to, so an owner following their own bookmark had nowhere to go from it.
@@ -319,6 +330,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "cards index" => cards_path,
       "card show" => card_path(@card),
       "deck show (shared)" => deck_path(@deck),
+      "deck odds (shared)" => odds_deck_path(@deck),
       "shared decks index" => shared_decks_path,
       "tournament catalog" => tournaments_path,
       "tournament page" => tournament_path(tournaments(:one)),

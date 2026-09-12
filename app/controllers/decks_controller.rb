@@ -2,7 +2,7 @@ class DecksController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  publicly_reachable :show, :export, :shared
+  publicly_reachable :show, :export, :shared, :odds
 
   SHARED_PER_PAGE = 24
 
@@ -21,8 +21,14 @@ class DecksController < ApplicationController
   # preload deck_cards → card → attacks/abilities for a whole deck, which is what makes 30
   # the right order of magnitude rather than 300 — and only an anonymous reader of a shared
   # deck spends it, since the owner is signed in and exempt.
+  #
+  # 30/min for the odds page, matching the export and for the same reason: it is a click, not an
+  # automatic fire, over a whole deck's preload. #show is exempt because it has "no live control
+  # behind it" — the odds page's scenario steppers are client-side and emit nothing, but the
+  # combination calculator *is* a live control, and it navigates a Turbo Frame back to this action.
   SHARED_RATE_LIMIT_TO = 60
   EXPORT_RATE_LIMIT_TO = 30
+  ODDS_RATE_LIMIT_TO = 30
   RATE_LIMIT_WITHIN = 1.minute
 
   rate_limit to: SHARED_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
@@ -32,6 +38,10 @@ class DecksController < ApplicationController
   rate_limit to: EXPORT_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-export", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :export
+
+  rate_limit to: ODDS_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-odds", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :odds
 
   def index
     authorize Deck, :index?
@@ -110,6 +120,34 @@ class DecksController < ApplicationController
     @deck = current_user.decks.includes(:archetype).find_by!(key: params[:id])
     authorize @deck
     @results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ])
+  end
+
+  # How this deck *opens*, from the decklist alone — as against #stats, which is how it has *done*,
+  # from DeckResult rows.
+  #
+  # The third unscoped deck lookup in the app, after #show and #export, and `authorize` is the next
+  # line for that reason: nothing else loads until it has run.
+  def odds
+    @deck = Deck.find_by!(key: params[:id])
+    # DeckPolicy#show?, deliberately not an `odds?` of its own: this page is a pure function of the
+    # decklist, which #show already renders in full, so a separate rule could only ever come to
+    # disagree with itself. #stats stays owner-only and is untouched.
+    authorize @deck, :show?
+
+    # No assign_og_payload: Og::DeckPayload walks the archetype and the pool, neither of which this
+    # action preloads, and the layout already falls back to the committed default banner.
+    #
+    # No preload of deck_cards: :card either, and that is a measurement rather than an oversight.
+    # Decks::Odds::Groups issues its own `deck_cards.includes(:card)` — it has to, or its cost stops
+    # being flat — and nothing here reads @deck.deck_cards afterwards, the view walking
+    # @report.card_rows instead. Measured on this action: preloading costs two extra statements, 8
+    # against 6, and both are served by the query cache, so SQLCounter cannot see them and the
+    # flat-cost test below stays green either way. Should a view ever walk @deck.deck_cards, put the
+    # preload back — the test will not ask for it.
+    @report = Decks::Odds::Report.call(@deck)
+    # No early return for a combination-frame request, unlike #index and #shared: there is no work
+    # outside the frame to skip, because the frame's answer *is* @combo and @combo needs @report.
+    @combo = Decks::Odds::Combo.call(report: @report, param: params[:combo])
   end
 
   # Aggregated matchup breakdown grouped by the player's own deck archetype:
