@@ -144,6 +144,11 @@ class DecksController < ApplicationController
     end
 
     @comparison = Decks::Comparator.call(decks)
+    # The filter's state travels in the URL so a shared link arrives filtered, and it is
+    # honoured server-side rather than by the Stimulus controller on connect: the class it
+    # would add lands after first paint, which is a visible flash of the full table on the
+    # very page whose point is that it is shorter.
+    @diff_only = params[:diff] == "1"
   end
 
   def export
