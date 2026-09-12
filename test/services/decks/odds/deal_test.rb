@@ -181,6 +181,46 @@ class Decks::Odds::DealTest < ActiveSupport::TestCase
     assert_nothing_raised { deal.accessible(copies: 4, non_basic_copies: 4, seen: deal.max_seen + 1) }
   end
 
+  # The fifth limit on the page is the only one carrying *numbers*, and the numbers were wrong once
+  # already: it used to say the two measures differ "by a few hundredths of a point", which is off
+  # by two orders of magnitude on the row where it matters most. The measure the page does **not**
+  # compute is computed here — Deal has no conditional prize formula and must not grow one, since
+  # the decision is to print the unconditional answer — checked against enumeration on the small
+  # deck first, and only then trusted at 60 cards.
+  #
+  # The direction is what the sentence claims and the reason it is not symmetric: knowing the hand
+  # held a Basic leaves the rest of the deck slightly poorer in Basics and slightly richer in
+  # everything else, so the printed figure is high for a Basic Pokémon and low for anything else.
+  test "the conditional prize measure equals enumeration, and the page quotes the real gap" do
+    [
+      [ [ 3 ],    "1 copy, not a Basic" ],
+      [ [ 0 ],    "1 copy, and it is a Basic" ],
+      [ [ 0, 1 ], "2 copies, both Basics" ],
+      [ [ 3, 4 ], "2 copies, neither a Basic" ]
+    ].each do |target, label|
+      copies, non_basic_copies = bucket_for(target)
+
+      assert_equal enumerate_prized(target),
+        conditional_prized(deck_size: SMALL_N, hand_size: SMALL_H, prize_count: SMALL_PRIZES,
+                           basics: SMALL_BASICS.size, copies: copies,
+                           basic_copies: copies - non_basic_copies),
+        label
+    end
+
+    # …and the two figures the page prints, at the size it prints them for. A 4-of Basic, because
+    # the gap widens with the copies, at the two Basic counts that bracket a real deck.
+    { 12 => "0.93", 6 => "3.34" }.each do |basics, quoted|
+      printed = Decks::Odds::Deal.new(deck_size: 60, basics: basics).at_least_one_prized(copies: 4)
+      conditional = conditional_prized(deck_size: 60, hand_size: 7, prize_count: 6,
+                                       basics: basics, copies: 4, basic_copies: 4)
+
+      assert_equal quoted, Kernel.format("%.2f", (printed - conditional) * 100),
+        "the gap at #{basics} Basics is not what the page says it is"
+      assert Decks::Odds::MethodNote::NOTES.last.include?("#{quoted} "),
+        "the page no longer quotes the #{basics}-Basic gap"
+    end
+  end
+
   private
 
   def small_deal
@@ -222,6 +262,65 @@ class Decks::Odds::DealTest < ActiveSupport::TestCase
     Rational(hit, kept)
   end
 
+  # P(at least one copy of `target` is in the prize block | the hand was keepable), by walking every
+  # permutation of the small deck. The oracle for the closed form below, and the only reason that
+  # form is trusted at 60 cards, where enumeration is impossible.
+  def enumerate_prized(target)
+    prize_positions = (SMALL_H...(SMALL_H + SMALL_PRIZES)).to_a
+    kept = 0
+    hit = 0
+
+    (0...SMALL_N).to_a.permutation do |permutation|
+      hand = (0...SMALL_H).map { |position| permutation[position] }
+      next if (hand & SMALL_BASICS).empty?
+
+      kept += 1
+      prizes = prize_positions.map { |position| permutation[position] }
+      hit += 1 if (prizes & target).any?
+    end
+
+    Rational(hit, kept)
+  end
+
+  # The same question in closed form: the multivariate hypergeometric split of three categories —
+  # the target's copies, the other Basics, everything else — across the three blocks a deal has, hand
+  # / prizes / rest. Summed over the splits whose hand holds a Basic, which is the conditioning, and
+  # counted where a copy reached the prize block.
+  def conditional_prized(deck_size:, hand_size:, prize_count:, basics:, copies:, basic_copies:)
+    other = basics - basic_copies
+    filler = deck_size - copies - other
+    numerator = 0
+    denominator = 0
+
+    (0..copies).each do |copies_in_hand|
+      (0..copies - copies_in_hand).each do |copies_in_prizes|
+        (0..other).each do |basics_in_hand|
+          (0..other - basics_in_hand).each do |basics_in_prizes|
+            filler_in_hand = hand_size - copies_in_hand - basics_in_hand
+            filler_in_prizes = prize_count - copies_in_prizes - basics_in_prizes
+            next if filler_in_hand.negative? || filler_in_prizes.negative?
+            next if filler_in_hand + filler_in_prizes > filler
+            next unless (basic_copies.positive? ? copies_in_hand + basics_in_hand : basics_in_hand).positive?
+
+            ways = split(copies, copies_in_hand, copies_in_prizes) *
+                   split(other, basics_in_hand, basics_in_prizes) *
+                   split(filler, filler_in_hand, filler_in_prizes)
+
+            denominator += ways
+            numerator += ways if copies_in_prizes.positive?
+          end
+        end
+      end
+    end
+
+    Rational(numerator, denominator)
+  end
+
+  # Ways to send `first` of `n` cards to the hand and `second` to the prizes, the rest following.
+  def split(n, first, second)
+    combinations(n, first) * combinations(n - first, second)
+  end
+
   # The table this feature exists to replace: "at least one of `copies` among 7 of 60", with no
   # regard for whether the hand was keepable. Spelled out here rather than borrowed from Deal, since
   # the point of the assertion is that two different formulas disagree.
@@ -230,6 +329,8 @@ class Decks::Odds::DealTest < ActiveSupport::TestCase
   end
 
   def combinations(n, k)
+    return 0 if k.negative? || n.negative? || k > n
+
     (0...k).reduce(1) { |product, i| product * (n - i) / (i + 1) }
   end
 end

@@ -24,8 +24,10 @@ module Decks
           "Accessibility is conditional on a keepable opening hand; prize risk is not, because " \
           "where your copies sit is a fact about the deal that happened rather than about the " \
           "deals that were thrown away. The hand and the prizes come off one deck, so the two " \
-          "measures do differ — by a few hundredths of a point at 60 cards, upward for a Basic " \
-          "Pokemon and downward for anything else."
+          "measures really do differ, and by more than a rounding: a Basic Pokémon is printed " \
+          "high here and everything else low, and the gap widens with the copies and with the " \
+          "mulligan rate — 0.93 of a point for a 4-of Basic in a deck holding twelve of them, " \
+          "3.34 in one holding six."
       ].freeze
 
       def view_template

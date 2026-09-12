@@ -176,9 +176,29 @@ Five states, and the order of the first two is load-bearing:
 | `N < 13` | a hand is dealt and no prizes; the prize section is absent, not zeroed |
 | Partial role curation | the count of copies carrying no role label yet, Basic Energy included, because that is literally true and the alternative is inventing a rule for which cards *could* carry one |
 
-The four limits of the model are printed on the page itself, in `MethodNote`: it knows nothing about
+**Five** limits of the model are printed on the page itself, in `MethodNote`: it knows nothing about
 draw Supporters, about mulligan redraws changing the deck, about an opponent's disruption, or about
-what a player would keep.
+what a player would keep — and the two prize columns answer a different question from every other
+number on the page.
+
+**The prize columns are deliberately *not* conditioned on a keepable hand, and the fifth limit is
+what makes that honest rather than hidden.** Everything else on the page is conditional: a hand with
+no Basic is redealt, so only the deals that were kept are counted. "Where are my copies" is not that
+question — it is a fact about the deal that happened, not about the deals that were thrown away, and
+6/60 = 10.00 % for a one-of is the figure players already know. The two measures are not the same
+one, though, because the hand and the prizes come off a single deck: knowing the hand held a Basic
+leaves the rest slightly poorer in Basics and richer in everything else, so the printed figure runs
+**high for a Basic Pokémon and low for anything else**.
+
+The size of that gap was wrong on the page before it was right. It first read "a few hundredths of a
+point", which is off by two orders of magnitude on the row where it matters: measured on 60 cards,
+a **4-of Basic** is printed 0.93 of a point high in a deck holding twelve Basics and **3.34** in one
+holding six — the gap widens with the copies and with the mulligan rate, so it is largest exactly on
+the decks whose opening is worst. A non-Basic one-of is the small case, under a tenth of a point.
+`DealTest` now computes the measure the page does **not** — `Deal` has no conditional prize formula
+and must not grow one — checks that closed form against exhaustive enumeration on the small deck,
+and then asserts that `MethodNote` quotes those two figures. A sentence carrying a number is held
+down by the number.
 
 ## Public surface
 

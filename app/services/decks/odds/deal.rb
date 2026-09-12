@@ -110,7 +110,11 @@ module Decks
       # 1-of Basic is printed at 10.0000 % where the conditional answer is 9.6889 %, a 4-of Basic
       # 0.0031 % against 0.0026 %, and a 1-of Trainer 10.0000 % against 10.0778 % — the sign follows
       # the card type, because knowing the hand held a Basic makes the rest of the deck slightly
-      # poorer in Basics and slightly richer in everything else.
+      # poorer in Basics and slightly richer in everything else. The gap grows with the copies and
+      # with the mulligan rate, and the widest case is what MethodNote quotes: a 4-of Basic is
+      # printed 0.93 of a point high at twelve Basics and 3.34 at six. deal_test.rb computes that
+      # conditional measure — this class deliberately does not, and must not grow it — against
+      # exhaustive enumeration first, then holds the page's sentence to it.
       #
       # It stays unconditional on purpose. "Where are my copies" is a question about the deal that
       # happened, not about the deals that were thrown away, and a player looking at a prize map is
