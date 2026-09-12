@@ -250,6 +250,23 @@ class Decks::Odds::PageViewTest < ActionDispatch::IntegrationTest
     assert_equal 6, options.size
   end
 
+  # The refusal the page cannot render when it happens: past the ration the response is a 429 with
+  # no body in production, so nothing can be swapped into the frame at that moment. The notice
+  # therefore ships hidden with the page, *outside* the frame — inside it, the first navigation
+  # would take it away — and deck_combo_controller.js unhides it.
+  test "the combination carries a hidden refusal notice, outside the frame" do
+    build_sixty
+    document = Nokogiri::HTML(render_page)
+
+    notice = document.at_css('[data-deck-combo-target="throttled"]')
+
+    assert_not_nil notice, "the page ships no throttle notice for the combination to reveal"
+    assert notice.attributes.key?("hidden"), "the notice is not hidden until a refusal happens"
+    assert_includes notice.text, "#{DecksController::ODDS_RATE_LIMIT_TO} requests a minute"
+    assert_nil notice.at_xpath("ancestor::turbo-frame"),
+      "a notice inside the frame is replaced by the first navigation that succeeds"
+  end
+
   private
 
   # 60 cards, 12 of them Basic.

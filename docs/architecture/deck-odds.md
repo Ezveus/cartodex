@@ -199,6 +199,31 @@ control and it navigates a frame back to this action. The `name:` is not cosmeti
 the deck's own signed-in owner. Both were invisible until tested, the test environment's cache being
 `:null_store`, which makes `rate_limit` a no-op everywhere else in the suite.
 
+**The ration is the one refusal on this page the server cannot render**, and it is the only one of
+the app's ten that a reader could not see at all. The five states above are properties of the
+**deck**, decided server-side and printed with the page; this one is a property of the reader's
+minute, and it arrives as a 429 with **no body** — Action Dispatch finds no `public/429.html`, so
+`ShowExceptions` answers an empty `text/plain`. Turbo's frame loader gives up on a falsy
+`responseHTML` *before* it asks whether the frame it wanted was in the response, so it replaces
+nothing and never dispatches `turbo:frame-missing` either: the pick simply did not happen, with no
+trace anywhere but the network tab.
+
+`turbo:before-fetch-response` is therefore the only event a refusal reaches. `ComboFrame` declares it
+on the `<turbo-frame>` itself, `deck_combo_controller.js#answered` filters on **429 alone** — a
+failure that is not a ration must keep reaching Turbo's own reporting rather than be dressed up as
+"wait a minute" — and unhides a notice `ComboCalculator` ships with the page, **outside** the frame,
+because the whole point of it is that the composition it sits under was *not* replaced.
+`stateTargetConnected` hides it again on the next load that succeeds. Two details were measured
+rather than assumed: the handler calls `preventDefault()`, so Turbo's `requestPreventedHandlingResponse`
+runs instead of `loadResponse` — in production that would no-op anyway, but in development the same
+refusal is the debug exception page, which carries `turbo-visit-control="reload"` and would replace
+the whole page with a stack trace; and nothing is done to the frame's `src`, because `setAttribute`
+fires `attributeChangedCallback` whether or not the value changed, so retrying the very same card a
+minute later does navigate. `DeckOddsComboTest` spends the real budget from the test process — the
+browser being local, it is the same IP — and asserts the notice, the composition standing under it,
+and the next pick being sent; it skips under `CAPYBARA_SERVER_PORT`, where the browser is another
+container with another address.
+
 The action assigns **no `assign_og_payload`**: `Og::DeckPayload` walks the archetype and the pool,
 neither of which this action loads, and the layout already falls back to the committed default
 banner.

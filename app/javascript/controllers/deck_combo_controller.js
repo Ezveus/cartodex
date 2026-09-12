@@ -19,8 +19,15 @@ import { Controller } from "@hotwired/stimulus"
 const CARD_SEPARATOR = "."
 const BUCKET_SEPARATOR = "|"
 
+// Past the odds page's ration, `rate_limit` raises ActionController::TooManyRequests and Action
+// Dispatch answers 429 — with an *empty* body in production, there being no public/429.html for it
+// to serve. Turbo's frame loader reads no HTML out of that, so it replaces nothing and dispatches
+// no turbo:frame-missing either: the click leaves no trace anywhere on the screen. This is the one
+// status that has to be watched for, to unhide a notice ComboCalculator has already rendered.
+const TOO_MANY_REQUESTS = 429
+
 export default class extends Controller {
-  static targets = ["frame", "state", "picker", "filter", "option", "addCard"]
+  static targets = ["frame", "state", "picker", "filter", "option", "addCard", "throttled"]
   static values = { url: String, maxBuckets: Number }
 
   // `state` and not `frame`: Turbo replaces a frame's *children* on navigation and leaves the
@@ -29,6 +36,28 @@ export default class extends Controller {
   // cards has just changed, and the picker, living outside the frame, has to be re-greyed.
   stateTargetConnected() {
     this.#refreshOptions()
+    this.throttledTarget.hidden = true
+  }
+
+  // Every response to a frame navigation, refused ones included. Only the refusal is handled: a
+  // failure that is not a ration — there is none this action can currently produce, the page being
+  // a pure function of the decklist — must keep reaching Turbo's own reporting rather than be
+  // dressed up as "wait a minute", which would be a lie.
+  //
+  // Turbo is told not to handle the response, rather than left to no-op on it. It *would* no-op in
+  // production, where the refusal has no body; in development the same refusal is the debug
+  // exception page, which carries turbo-visit-control="reload" and would replace the whole page
+  // with a stack trace. preventDefault is what makes the two environments agree.
+  //
+  // Nothing is done to the frame's `src`, and that was measured rather than assumed: a reader who
+  // retries the very same card once the minute has passed writes the src the frame already holds,
+  // and `setAttribute` fires `attributeChangedCallback` whether or not the value changed — so Turbo
+  // does navigate again. Clearing it first would be a guard against a bug that is not there.
+  answered(event) {
+    if (event.detail.fetchResponse.statusCode !== TOO_MANY_REQUESTS) return
+
+    event.preventDefault()
+    this.throttledTarget.hidden = false
   }
 
   openPicker(event) {

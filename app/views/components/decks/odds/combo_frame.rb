@@ -23,7 +23,16 @@ module Decks
         # The frame target sits on the <turbo-frame> itself, which is what the controller navigates
         # by writing `src`. Turbo replaces the element's children and leaves the element alone, so
         # this attribute survives every load — and so does the target binding.
-        turbo_frame_tag(FRAME_ID, data: { deck_combo_target: "frame" }) do
+        #
+        # `turbo:before-fetch-response` and not `turbo:frame-missing`: a response refused by the
+        # action's ration has no body in production, and Turbo's frame loader gives up on a falsy
+        # `responseHTML` *before* it ever asks whether the frame it wanted was in it. The
+        # frame-missing event is therefore never dispatched, and this is the only event a refusal
+        # reaches. It is declared here because the element it fires on is this one.
+        turbo_frame_tag(FRAME_ID, data: {
+          deck_combo_target: "frame",
+          action: "turbo:before-fetch-response->deck-combo#answered"
+        }) do
           # The controller reads the assignment back off this element rather than holding it, so a
           # frame load is the only thing that has to be right for the next click to be.
           div(data: { deck_combo_target: "state", assignment: serialized })

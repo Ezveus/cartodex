@@ -25,11 +25,29 @@ module Decks
           end
 
           render ComboFrame.new(report: @report, combo: @combo)
+          throttle_notice
           picker
         end
       end
 
       private
+
+      # The one refusal the page cannot render at the moment it happens. Every other refusal is a
+      # property of the deck and is decided server-side; this one is a property of the *reader's*
+      # minute, and the 429 that carries it has no body at all in production — Action Dispatch finds
+      # no public/429.html to serve — so Turbo replaces nothing and the click dies in silence. Hence
+      # a notice that ships with the page, hidden, and a controller that unhides it.
+      #
+      # It is rendered outside the frame on purpose: a navigation replaces the frame's children, and
+      # the whole point of this notice is that the composition it sits under was *not* replaced.
+      def throttle_notice
+        p(class: "odds-combo-error", hidden: true, role: "status",
+          data: { deck_combo_target: "throttled" }) do
+          plain "That combination was not sent: this page answers at most " \
+                "#{DecksController::ODDS_RATE_LIMIT_TO} requests a minute to a signed-out reader. " \
+                "Wait a minute and click again — the groups above are unchanged."
+        end
+      end
 
       # The whole list, shipped with the page and filtered in the browser: about 25 entries, so no
       # request should be needed to look at them. Hidden until a group asks for it.
