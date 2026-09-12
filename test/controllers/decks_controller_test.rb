@@ -353,6 +353,53 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-compare-table thead th", text: "Original"
   end
 
+  test "compare prints the differing copies beside each total and marks the uniform groups" do
+    other = @user.decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
+    # decks(:one) already holds one Honedge, which `other` matches: a whole uniform group.
+    other.deck_cards.create!(card: cards(:honedge), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4)
+    other.deck_cards.create!(card: cards(:trainer_card), quantity: 2)
+
+    get compare_decks_path(ids: [ @deck.key, other.key ])
+
+    assert_response :success
+    # Nothing filtered until the reader asks for it.
+    assert_select ".deck-compare-container.is-diff-only", false
+    assert_select ".deck-compare-toggle input[checked]", false
+
+    # Pokémon is the uniform group; Trainer is not, so only one tbody may carry the class.
+    assert_select "tbody.is-uniform", 1
+    assert_select "tbody.is-uniform .deck-compare-group-header th", text: "Pokémon"
+
+    # Deck sizes stay whole (5 and 3) and the diff counts sit beside them (4 and 2).
+    assert_select ".deck-compare-total td", text: /\A5\s+\(4\)\z/
+    assert_select ".deck-compare-total td", text: /\A3\s+\(2\)\z/
+  end
+
+  test "compare honours diff=1 so a shared link arrives filtered" do
+    other = @user.decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
+    other.deck_cards.create!(card: cards(:honedge), quantity: 1)
+
+    get compare_decks_path(ids: [ @deck.key, other.key ], diff: "1")
+
+    assert_response :success
+    assert_select ".deck-compare-container.is-diff-only"
+    assert_select ".deck-compare-toggle input[checked]"
+  end
+
+  test "compare offers the identical-decks message only when nothing differs" do
+    other = @user.decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
+    other.deck_cards.create!(card: cards(:honedge), quantity: 1)
+
+    get compare_decks_path(ids: [ @deck.key, other.key ])
+    assert_select ".deck-compare-no-diff"
+
+    other.deck_cards.find_by!(card: cards(:honedge)).update!(quantity: 2)
+
+    get compare_decks_path(ids: [ @deck.key, other.key ])
+    assert_select ".deck-compare-no-diff", false
+  end
+
   test "compare redirects when fewer than two decks are selected" do
     get compare_decks_path(ids: [ @deck.key ])
 

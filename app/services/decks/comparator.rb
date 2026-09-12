@@ -4,6 +4,13 @@ module Decks
   # breakdown) and grand totals. Cards are matched by fingerprint within a type,
   # so functionally identical prints merge into one row while genuinely different
   # cards that happen to share a name (e.g. Froakie CRI 20 vs TWM 56) stay apart.
+  #
+  # Beside every subtotal and total it also counts the copies carried by the rows
+  # the decks disagree on (`diff_subtotals`, `diff_totals`). The two are answers to
+  # two different questions and the page prints both: the total says how big the
+  # deck is, the diff count how much of it is in dispute. `differing` says whether
+  # a whole type group holds any disagreement at all, which is what lets the page
+  # drop the group — header and subtotal included — when only differences are shown.
   class Comparator < ApplicationService
     TYPE_ORDER = %w[Pokémon Trainer Energy].freeze
 
@@ -12,10 +19,13 @@ module Decks
     end
 
     def call
+      groups = build_groups
+
       {
         decks: @decks,
-        groups: build_groups,
-        totals: @decks.map { |deck| deck.deck_cards.sum(&:quantity) }
+        groups: groups,
+        totals: @decks.map { |deck| deck.deck_cards.sum(&:quantity) },
+        diff_totals: @decks.map.with_index { |_deck, i| groups.sum { |group| group[:diff_subtotals][i] } }
       }
     end
 
@@ -26,10 +36,14 @@ module Decks
         rows = build_rows(type)
         next if rows.empty?
 
+        differing = rows.select { |row| row[:differ] }
+
         {
           type: type,
           rows: rows,
-          subtotals: @decks.map { |deck| rows.sum { |row| row[:quantities][deck.id] || 0 } }
+          differing: differing.any?,
+          subtotals: @decks.map { |deck| rows.sum { |row| row[:quantities][deck.id] || 0 } },
+          diff_subtotals: @decks.map { |deck| differing.sum { |row| row[:quantities][deck.id] || 0 } }
         }
       end
     end

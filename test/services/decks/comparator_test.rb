@@ -62,6 +62,44 @@ module Decks
       assert_equal 3, twm_row[:quantities][@deck_b.id]
     end
 
+    test "counts the copies carried by differing rows beside every subtotal and total" do
+      # Pokémon: the decks disagree (2 vs 1), so both copies count on A and the single one on B.
+      @deck_a.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
+      @deck_b.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1)
+      # Trainer: identical, so the group contributes nothing to the diff counts and is uniform.
+      @deck_a.deck_cards.create!(card: cards(:trainer_card), quantity: 4)
+      @deck_b.deck_cards.create!(card: cards(:trainer_card), quantity: 4)
+      # Energy: present in one deck only, which is the sharpest kind of disagreement.
+      @deck_a.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 3)
+
+      result = Decks::Comparator.call([ @deck_a.reload, @deck_b.reload ])
+      groups = result[:groups].index_by { |group| group[:type] }
+
+      assert groups["Pokémon"][:differing]
+      assert_equal [ 2, 1 ], groups["Pokémon"][:diff_subtotals]
+
+      assert_not groups["Trainer"][:differing]
+      assert_equal [ 4, 4 ], groups["Trainer"][:subtotals]
+      assert_equal [ 0, 0 ], groups["Trainer"][:diff_subtotals]
+
+      assert groups["Energy"][:differing]
+      assert_equal [ 3, 0 ], groups["Energy"][:diff_subtotals]
+
+      # The totals stay the decks' own sizes; the diff counts are the other question.
+      assert_equal [ 9, 5 ], result[:totals]
+      assert_equal [ 5, 1 ], result[:diff_totals]
+    end
+
+    test "reports no difference at all when the decks agree on every card" do
+      @deck_a.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
+      @deck_b.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 2)
+
+      result = Decks::Comparator.call([ @deck_a.reload, @deck_b.reload ])
+
+      assert_not result[:groups].any? { |group| group[:differing] }
+      assert_equal [ 0, 0 ], result[:diff_totals]
+    end
+
     test "exposes a representative card on each row for linking" do
       @deck_a.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
       @deck_b.deck_cards.create!(card: cards(:budew_asc), quantity: 1)

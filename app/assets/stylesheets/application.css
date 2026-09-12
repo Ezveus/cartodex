@@ -1127,7 +1127,27 @@ textarea.form-input {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+  /* Three items now, and the title alone is already 40% of the row at 500px: let them stack
+     rather than squeeze the toggle's label onto four lines. */
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
+}
+
+.deck-compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-500);
+  white-space: nowrap;
+}
+
+.deck-compare-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
 }
 
 .deck-compare-header h1 {
@@ -1228,6 +1248,37 @@ textarea.form-input {
 
 .deck-compare-table tr.is-diff td {
   background: var(--bolt-bg);
+}
+
+/* The whole filter: one class on the container, so the server renders the filtered state as
+   readily as the checkbox toggles it. A group the decks agree on goes entirely — its header
+   and its subtotal name nothing the reader asked to see. */
+.deck-compare-container.is-diff-only .deck-compare-card-row:not(.is-diff),
+.deck-compare-container.is-diff-only tbody.is-uniform {
+  display: none;
+}
+
+/* Rendered only when nothing differs at all, and then only worth showing while filtered —
+   unfiltered, the table above it is the answer. */
+.deck-compare-no-diff {
+  display: none;
+}
+
+.deck-compare-container.is-diff-only .deck-compare-no-diff {
+  display: table-row-group;
+}
+
+.deck-compare-no-diff td {
+  padding: 1.5rem;
+  color: var(--ink-500);
+}
+
+/* Second figure in a subtotal or total cell, and not a share of the first — it is dimmed so
+   the deck's own count stays the one the eye lands on. */
+.deck-compare-diff-count {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--ink-300);
 }
 
 .deck-compare-table .is-absent {
