@@ -9,8 +9,13 @@ module Decks
     # the prize columns are the exception, being a question about the prize block itself, and carry
     # a seven-point curve indexed by prizes taken.
     #
-    # Measured: 1 350 evaluations — 25 groups over 54 points — take about 5 ms, which is less than
-    # the page render around them.
+    # Measured on a realistic 60-card list — 25 groups, so 1 350 evaluations over 54 points — in the
+    # test container on this machine: the evaluations alone cost 23.5 ms warm and 29.7 ms against a
+    # freshly built Deal, and `Report.call` end to end costs 30.5 ms. The page ships 9 671 bytes of
+    # data-curve inside a 51 KB body. An earlier note here said 5 ms; it was out by a factor of
+    # five, which matters because this is the number anybody weighing a *third* scenario axis would
+    # reach for — every axis added multiplies the curve, and the cost is already tens of
+    # milliseconds rather than units.
     class Report < ApplicationService
       # What the scenario opens on: one turn taken, no effect draws, no prizes collected.
       DEFAULT_TURN = 1

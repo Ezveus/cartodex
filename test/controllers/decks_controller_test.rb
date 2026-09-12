@@ -1312,6 +1312,37 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     }
   end
 
+  # Both deck pages link to the odds, because the page is a function of the decklist alone and both
+  # readers can see the decklist. "Match stats" rather than "Stats", so the two are told apart: one
+  # is how the deck has done, the other how it opens.
+  test "the owner's deck page links to the odds and to the match stats" do
+    get deck_path(@deck)
+
+    assert_select "a[href=?]", odds_deck_path(@deck), text: "Odds"
+    assert_select "a[href=?]", stats_deck_path(@deck), text: "Match stats"
+  end
+
+  test "a visitor's shared deck page links to the odds and not to the match stats" do
+    @deck.update!(shared: true)
+    sign_out @user
+
+    get deck_path(@deck)
+
+    assert_select "a[href=?]", odds_deck_path(@deck), text: "Odds"
+    assert_select "a[href=?]", stats_deck_path(@deck), count: 0
+  end
+
+  # An ownerless field list is shared by construction, and is the population the page is most
+  # interesting on: it is somebody else's tournament list, and nothing about it is private.
+  test "an ownerless field list offers its odds to a visitor" do
+    sign_out @user
+    field_list = decks(:field_list)
+
+    get deck_path(field_list)
+
+    assert_select "a[href=?]", odds_deck_path(field_list), text: "Odds"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
