@@ -67,6 +67,51 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".card-grid-name", text: "Budew", count: 1
   end
 
+  # How a player reads a card off a stack, and the shape this page has to answer the same way
+  # the MCP tool does. Doublade is the neighbouring number in the same set: it says the number
+  # narrowed the set rather than the set alone answering.
+  test "index finds a printing from a set code and a number alone" do
+    get cards_path(q: "POR 56")
+
+    assert_response :success
+    assert_select ".card-grid-name", text: "Honedge", count: 1
+    assert_select ".card-grid-name", { text: "Doublade", count: 0 }, "the number must narrow the set"
+  end
+
+  # Where the parser and the tool deliberately still differ: `\A\d+\z` never pops "GG12", so
+  # this query is a name and finds nothing. The tool, which takes set_number as its own
+  # argument, does find the card. Pinned so the divergence is a decision and not a surprise.
+  test "index does not read a non-numeric collector number as a number" do
+    crz = CardSet.create!(code: "CRZ", name: "Crown Zenith", release_date: Date.new(2023, 1, 20))
+    Card.create!(name: "Lugia VSTAR", card_type: "Pokémon", card_set: crz,
+      set_name: "CRZ", set_number: "GG12", rarity: "Rare", hp: 280,
+      stage: "VSTAR", type_symbol: "Colorless", retreat_cost: 2)
+
+    get cards_path(q: "CRZ GG12")
+
+    assert_response :success
+    assert_select ".card-grid-name", { text: "Lugia VSTAR", count: 0 }
+    assert_select "p.cards-empty"
+  end
+
+  # Decision 4's whole justification, asserted across the two surfaces at once: the MCP tool
+  # stopped joining card_sets so that it and this page answer one question one way. froakie_twm
+  # carries no card_set link, so under the old INNER JOIN the tool found nothing here while the
+  # page found the card — a divergence neither surface's own tests could see.
+  test "the cards page and the MCP tool name the same printing for a set and a number" do
+    tool_payload = SearchCardsTool.call(set_code: "TWM", set_number: "56",
+      server_context: { user: users(:one) }).content.first[:text]
+    tool_ids = JSON.parse(tool_payload).map { |card| card["id"] }
+
+    assert_equal [ cards(:froakie_twm).id ], tool_ids, "sanity: the tool resolves the printing"
+
+    get cards_path(q: "TWM 56")
+
+    assert_response :success
+    assert_select "a.card-grid-item", count: 1
+    assert_select "a.card-grid-item[href=?]", card_path(cards(:froakie_twm))
+  end
+
   test "index without a search shows the selected set grid" do
     get cards_path(set: card_sets(:por).code)
 

@@ -47,6 +47,18 @@ class Api::CardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "16", results[0]["set_number"]
   end
 
+  # The third caller of the shared parser: a set code and a collector number with no name,
+  # which is what a bulk collection add is typed as.
+  test "index finds a printing from a set code and a number alone" do
+    get api_cards_path, params: { q: "por 56" }, as: :json
+
+    assert_response :success
+    results = JSON.parse(response.body)
+    assert_equal 1, results.length
+    assert_equal "Honedge", results[0]["name"]
+    assert_equal [ "POR", "56" ], [ results[0]["set_name"], results[0]["set_number"] ]
+  end
+
   test "index does not treat unknown trailing short word as a set code" do
     get api_cards_path, params: { q: "boss ex" }, as: :json
     assert_response :success

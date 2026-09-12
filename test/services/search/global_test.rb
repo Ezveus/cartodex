@@ -176,6 +176,43 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ card ], result.cards
   end
 
+  # The lookup the whole feature exists for: a set code and a collector number, no name at all.
+  test "finds a printing from a set code and a number alone" do
+    assert_equal [ cards(:honedge) ], Search::Global.call(user: @user, query: "POR 56").cards
+  end
+
+  # The other half of the code guard: a lone token is a name, whatever the set table holds.
+  # Read as a code it would list all of ASC instead.
+  test "a bare set code stays a name and lists no set" do
+    assert_empty Search::Global.call(user: @user, query: "asc").cards
+  end
+
+  # The mirror rule on the number guard: a lone number is a name too, or "56" answers with
+  # every card numbered 56 in every set.
+  test "a bare number stays a name and lists no printing" do
+    assert_empty Search::Global.call(user: @user, query: "56").cards
+  end
+
+  test "a name, a set code and a number still parse together" do
+    assert_equal [ cards(:honedge) ], Search::Global.call(user: @user, query: "Honedge POR 56").cards
+  end
+
+  # Where the two readings collide the set wins, and this is the query that loses its old
+  # answer. Asserted in both directions on purpose: the trade is deliberate (11 of the 28 set
+  # codes are also substrings of card names), so reverting it must turn a test red rather than
+  # merely widen a result.
+  test "a short name that is also a set code reads as the set" do
+    CardSet.create!(code: "MEW", name: "151", release_date: Date.new(2023, 6, 16))
+    Card.create!(name: "Mew ex", card_type: "Pokémon", set_name: "PAF", set_number: "25",
+      rarity: "Double Rare", hp: 180, stage: "Basic", type_symbol: "Psychic", retreat_cost: 0)
+    Card.create!(name: "Pikachu", card_type: "Pokémon", set_name: "MEW", set_number: "25",
+      rarity: "Common", hp: 60, stage: "Basic", type_symbol: "Lightning", retreat_cost: 1)
+
+    names = Search::Global.call(user: @user, query: "Mew 25").cards.map(&:name)
+
+    assert_equal [ "Pikachu" ], names
+  end
+
   test "a visitor searches cards and shared decks, and nothing personal" do
     decks(:two).update!(user: users(:two), shared: true, name: "Zoroark Box")
 
