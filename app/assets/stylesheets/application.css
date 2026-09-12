@@ -4104,3 +4104,148 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   gap: 0.15rem;
   min-width: 0;
 }
+
+/* ============================================================
+   DECK BUILD ODDS — /decks/:id/odds
+   ============================================================ */
+
+.odds-panel {
+  margin-block: 2rem;
+}
+
+.odds-scenario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--e1);
+}
+
+.odds-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.odds-stepper-label {
+  color: var(--ink-500);
+  font-size: 0.875rem;
+}
+
+/* Wide enough for two digits plus the number spinner, and it must not stretch: the row wraps to one
+   column below the breakpoint, and a flex-grown input would push its own buttons off it. */
+.odds-stepper-input {
+  width: 5rem;
+  flex: none;
+  text-align: center;
+}
+
+.odds-scenario-summary {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-500);
+}
+
+/* Tabular figures: every one of these is rewritten in place as a stepper moves, and proportional
+   digits make the whole column jitter on each notch. */
+.odds-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.odds-refusal,
+.odds-notice {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.odds-note,
+.odds-coverage-note,
+.odds-overlap-note {
+  color: var(--ink-500);
+  font-size: 0.875rem;
+}
+
+.odds-combo-group {
+  margin-block: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.odds-combo-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.odds-combo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+
+.odds-combo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.odds-combo-chip-drop {
+  border: 0;
+  background: none;
+  color: var(--ink-500);
+  cursor: pointer;
+}
+
+.odds-combo-picker {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--e2);
+}
+
+/* The whole deck ships here — about 25 entries — so the list scrolls rather than pushing the answer
+   below the fold, at either viewport. */
+.odds-combo-options {
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.odds-combo-option {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.odds-combo-option[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.odds-combo-answer .odds-value {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+}
+
+.odds-combo-error {
+  color: var(--loss);
+}

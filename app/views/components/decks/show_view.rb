@@ -54,7 +54,10 @@ module Decks
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
         render Decks::ExportDropdown.new(deck: @deck, tournament_pdf: true)
         link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
-        link_to "Stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        # "Match stats", not "Stats": the Odds link beside it is also a page of statistics, and one
+        # of them is about games played while the other is about the list itself.
+        link_to "Match stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        link_to "Odds", odds_deck_path(@deck), class: "btn btn-secondary btn-sm"
         render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true)
       end
     end

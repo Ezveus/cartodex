@@ -51,6 +51,9 @@ Rails.application.routes.draw do
     get :shared, on: :collection
     get :export, on: :member
     get :stats, on: :member
+    # Rides out of `authenticate :user` with the rest of `resources :decks`, and gates itself
+    # through PubliclyReachable — see DecksController#odds and docs/architecture/public-surface.md.
+    get :odds, on: :member
     post :duplicate, on: :member
     patch :share, on: :member
     resources :deck_results, only: [ :index, :edit, :update, :destroy ]

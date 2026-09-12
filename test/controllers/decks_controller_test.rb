@@ -1211,6 +1211,138 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       "the archetype badge must not be a link inside the showcase tile's link"
   end
 
+  # /decks/:id/odds is public on a shared deck and owner-only on a private one, through
+  # DeckPolicy#show? — the same rule that decides who may read the decklist, because this page is a
+  # pure function of that decklist and a rule of its own could only ever disagree with itself.
+  test "the owner reads the odds of their own private deck" do
+    deck = @user.decks.create!(name: "Private", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+
+    get odds_deck_path(deck)
+
+    assert_response :success
+    assert_select "h1", /Build odds/
+  end
+
+  test "a visitor reads the odds of a shared deck" do
+    deck = @user.decks.create!(name: "Public", shared: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    sign_out @user
+
+    get odds_deck_path(deck)
+
+    assert_response :success
+  end
+
+  # An unknown key and a deck that is not yours have to stay one answer, or the endpoint is an
+  # existence oracle for private decks.
+  test "a visitor asking for a private deck's odds is answered like an unknown key" do
+    deck = @user.decks.create!(name: "Private", standard_pool: standard_pools(:twm_por))
+    sign_out @user
+
+    get odds_deck_path(deck)
+    private_deck = response.status
+
+    get "/decks/thiskeydoesnotexist22/odds"
+
+    assert_equal response.status, private_deck
+  end
+
+  test "a signed-in member asking for somebody else's private deck's odds gets a 404" do
+    other = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
+
+    get odds_deck_path(other)
+
+    assert_response :not_found
+  end
+
+  # The page precomputes a curve per group in Ruby, so its cost must not grow with the decklist.
+  # force_over_allocation is not needed here — this action runs no allocation service — but the two
+  # measurements still have to straddle no branch: the role-label query is issued unconditionally by
+  # Decks::Odds::Groups for exactly that reason.
+  test "the odds page costs a fixed number of queries however large the deck" do
+    deck = @user.decks.create!(name: "Odds", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+
+    get odds_deck_path(deck) # warm the session: the first request of a test also loads the Devise user
+
+    small = count_queries { get odds_deck_path(deck) }
+
+    FLAT_COST_EXTRA_CARDS.each { |name| deck.deck_cards.create!(card: cards(name), quantity: 4) }
+    deck.deck_cards.create!(card: cards(:budew_asc), quantity: 4)
+    deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 4)
+
+    large = count_queries { get odds_deck_path(deck) }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
+  end
+
+  # The combination's answer rides on the page's own reads and adds none of its own — which is what
+  # lets #odds skip the early return every other framed action makes, and what keeps a click of the
+  # picker as cheap as the page it sits on.
+  #
+  # Asserted as an equality and not as `frame <= page`: the action runs the same code either way, so
+  # the inequality holds under every implementation, right or wrong, and would pass a version that
+  # had quietly stopped answering the frame at all. The second half is the property the first one
+  # rests on, measured directly against a Report that is already built — uncached, because
+  # SQLCounter ignores CACHE events and a query served from the query cache would read as zero.
+  test "the combination frame costs no more than the page" do
+    deck = @user.decks.create!(name: "Odds", standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    deck.deck_cards.create!(card: cards(:bosss_orders_meg), quantity: 4)
+    param = "#{Decks::Odds::Groups.key_for(cards(:honedge))}|" \
+            "#{Decks::Odds::Groups.key_for(cards(:bosss_orders_meg))}"
+
+    get odds_deck_path(deck) # warm the session: the first request of a test also loads the Devise user
+
+    page = count_queries { get odds_deck_path(deck) }
+    frame = count_queries do
+      get odds_deck_path(deck, combo: param),
+        headers: { "Turbo-Frame" => Decks::Odds::ComboFrame::FRAME_ID }
+    end
+
+    assert_response :success
+    assert_equal page, frame, "the combination frame costs #{frame} queries against the page's #{page}"
+
+    report = Decks::Odds::Report.call(deck.reload)
+
+    assert_equal 0, ActiveRecord::Base.uncached {
+      count_queries { Decks::Odds::Combo.call(report: report, param: param) }
+    }
+  end
+
+  # Both deck pages link to the odds, because the page is a function of the decklist alone and both
+  # readers can see the decklist. "Match stats" rather than "Stats", so the two are told apart: one
+  # is how the deck has done, the other how it opens.
+  test "the owner's deck page links to the odds and to the match stats" do
+    get deck_path(@deck)
+
+    assert_select "a[href=?]", odds_deck_path(@deck), text: "Odds"
+    assert_select "a[href=?]", stats_deck_path(@deck), text: "Match stats"
+  end
+
+  test "a visitor's shared deck page links to the odds and not to the match stats" do
+    @deck.update!(shared: true)
+    sign_out @user
+
+    get deck_path(@deck)
+
+    assert_select "a[href=?]", odds_deck_path(@deck), text: "Odds"
+    assert_select "a[href=?]", stats_deck_path(@deck), count: 0
+  end
+
+  # An ownerless field list is shared by construction, and is the population the page is most
+  # interesting on: it is somebody else's tournament list, and nothing about it is private.
+  test "an ownerless field list offers its odds to a visitor" do
+    sign_out @user
+    field_list = decks(:field_list)
+
+    get deck_path(field_list)
+
+    assert_select "a[href=?]", odds_deck_path(field_list), text: "Odds"
+  end
+
   private
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
