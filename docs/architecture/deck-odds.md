@@ -90,6 +90,17 @@ is recorded in a comment there: the action's own preload became dead weight and 
 been measured at two extra statements, 8 against 6, **both served by the query cache** and therefore
 invisible to `SQLCounter`.
 
+**A `force: true` rescrape splits a group, silently, and there is no repair tool.** `compute_fingerprint`
+recomputes from the card's own text, so a rescrape can move one printing's fingerprint out from under
+the group it shared. Measured by moving a printing's fingerprint with `update_column` between two
+reads of one deck: *3 groups, "Budew" 4 copies, opening 44.35 %* became *4 groups, "Budew" twice at 2
+copies each, opening 24.59 % each*. The page writes nothing, so nothing is corrupted — it simply
+answers a different, wrong question until the printings agree again, with no notice.
+`bin/rails card_labels:resync_fingerprints` repairs label assignments and does **not** help here,
+because this page keys on the live fingerprint rather than on a stored copy of it. That is the same
+trade `Decks::ArchetypeDetector` makes and for the same reason: nothing to drift out of date, at the
+price of nothing to repair.
+
 ## The page ships curves, and JavaScript only indexes into them
 
 `Report` precomputes, per group, the whole curve over every reachable scenario — 54 points on a

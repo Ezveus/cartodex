@@ -68,6 +68,13 @@ export default class extends Controller {
     if (!Number.isFinite(value)) return field === "turn" ? 1 : 0
     if (field === "prizesTaken") return Math.min(Math.max(value, 0), this.maxPrizesValue)
 
-    return Math.min(Math.max(value, field === "turn" ? 1 : 0), this.maxDrawsValue)
+    // Turn floors at 1 and so must its ceiling, or the two halves of the page disagree: the server
+    // renders the field with max="[max_draws, 1].max", and clamping here against maxDrawsValue
+    // alone rewrote a 13-card deck's turn to 0 the instant Stimulus connected — below the min="1"
+    // it had just been rendered with, leaving the field :invalid. render() clamps the *sum* against
+    // maxDrawsValue anyway, so the printed numbers were right and only the control lied.
+    if (field === "turn") return Math.min(Math.max(value, 1), Math.max(this.maxDrawsValue, 1))
+
+    return Math.min(Math.max(value, 0), this.maxDrawsValue)
   }
 }

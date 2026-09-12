@@ -23,7 +23,8 @@ module Decks
             "prizes. Add cards and the odds will appear."
         else
           "This deck holds no Basic Pokémon, so it cannot start a game. " \
-            "Every number on this page is conditional on a keepable opening hand, and there is none."
+            "Every accessibility number on this page is conditional on a keepable opening hand, " \
+            "and there is none."
         end
       end
     end

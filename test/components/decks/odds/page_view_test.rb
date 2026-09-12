@@ -173,6 +173,27 @@ class Decks::Odds::PageViewTest < ActionDispatch::IntegrationTest
     assert_equal "7 cards seen (7 hand + 0 drawn + 0 prizes)", summary_of(document)
   end
 
+  # Thirteen cards is the one size where the page's two halves could name two different scenarios:
+  # max_draws is 0 while max_seen is 6, so a default index clamped against max_seen opened every
+  # cell one notch ahead of the summary printed above it — 61.11 % under a line reading "0 drawn",
+  # corrected to 53.33 % the instant Stimulus connected and never corrected at all for a reader
+  # without it. The seven-card test above cannot see this: there the curve is one point, and
+  # Cell#view_template's out-of-range fallback hides the wrong index behind the right number.
+  test "a thirteen-card deck opens its cells on the same scenario its summary names" do
+    thirteen = deck_of([ cards(:honedge), 4 ], [ cards(:bosss_orders_meg), 9 ])
+    report = Decks::Odds::Report.call(thirteen)
+    curve = report.card_rows.find { |row| row.name == "Honedge" }.accessible_curve
+    document = Nokogiri::HTML(render_page(thirteen))
+
+    assert_equal 0, report.max_draws
+    assert_equal 6, report.max_seen, "a 13-card deck still deals prizes, so seen outruns drawn"
+    assert_equal 7, curve.size, "and its curve has the points the prizes make reachable"
+
+    assert_equal 0, report.default_seen
+    assert_equal Kernel.format("%.2f %%", curve[0]), seen_cell_for(document, "Honedge").text
+    assert_equal "7 cards seen (7 hand + 0 drawn + 0 prizes)", summary_of(document)
+  end
+
   # The by-card table decides its header and its cells by two separate reads of `prizes?`, and
   # nothing else compares them: six headers over four cells shifts every data-label one column left
   # and mislabels the whole table on a phone, where the label is all there is.
@@ -194,12 +215,15 @@ class Decks::Odds::PageViewTest < ActionDispatch::IntegrationTest
     assert_no_match(/no Basic Pokémon/, html)
   end
 
-  # Four limits of the model, stated on the page rather than left to be discovered. The Iono clause
+  # Five limits of the model, stated on the page rather than left to be discovered. The Iono clause
   # is the one a player would otherwise never guess: shuffling the hand back in makes already-seen
-  # cards drawable again, so the page's answer is an over-estimate.
+  # cards drawable again, so the page's answer is an over-estimate. The fifth was owed to two
+  # reviews that found it independently — the prize columns are the one place the page prints a
+  # different probability measure, unconditional where everything else is conditional, and a page
+  # that does not say so invites a reader to take one for the other.
   # Asserted on phrases carrying no apostrophe and no quotation mark: Phlex escapes both, so a
   # substring holding one would be looked for in a body that does not contain it.
-  test "the page states the four things the model does not do" do
+  test "the page states the five things the model does not do" do
     build_sixty
     html = render_page
 
@@ -207,6 +231,8 @@ class Decks::Odds::PageViewTest < ActionDispatch::IntegrationTest
     assert_includes html, "are approximated upward"
     assert_includes html, "A card reached and then discarded counts as seen"
     assert_includes html, "Opponent mulligans are not modelled"
+    assert_includes html, "The two prize columns answer a different question"
+    assert_includes html, "prize risk is not"
   end
 
   # The picker's whole list ships with the page: the deck has about 25 groups and no request should

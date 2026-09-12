@@ -60,7 +60,14 @@ module Decks
 
         # The index every reactive cell opens on. Clamped, because a deck of seven cards has a
         # zero-length draw pile and no first turn to take.
-        def default_seen = [ DEFAULT_TURN, max_seen ].min
+        # Clamped against max_draws and not max_seen, because this index and ScenarioControls'
+        # summary have to name one scenario. They differ at exactly one size: a 13-card deck has
+        # max_draws 0 and max_seen 6, so clamping against max_seen rendered every cell at index 1
+        # under a line reading "7 cards seen (7 hand + 0 drawn + 0 prizes)" — 61.11 % where the
+        # honest answer was 53.33 %, flashing to the right value the moment Stimulus connected and
+        # staying wrong forever for a reader with no JavaScript. Prizes taken open at 0, so the
+        # opening `seen` is the opening `drawn`.
+        def default_seen = [ DEFAULT_TURN, max_draws ].min
       end
 
       def initialize(deck)

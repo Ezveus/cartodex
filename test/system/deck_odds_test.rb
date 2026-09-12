@@ -20,6 +20,28 @@ class DeckOddsTest < ApplicationSystemTestCase
     @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 39)
   end
 
+  # A thirteen-card deck is the one size where the turn control has no room: max_draws is 0 while
+  # the field is still rendered min="1" max="1", because a max below its own min is not a control.
+  # Clamping the turn against maxDrawsValue alone rewrote that field to 0 the moment Stimulus
+  # connected — below its own min, so the browser marked it :invalid — while the numbers stayed
+  # right, render() clamping the *sum* anyway. Only the control lied, which is why no assertion
+  # about a percentage could have caught it.
+  test "a deck with no draw pile keeps the turn control the server rendered" do
+    small = @user.decks.create!(name: "Thirteen", standard_pool: standard_pools(:twm_por))
+    small.deck_cards.create!(card: cards(:honedge), quantity: 4)
+    small.deck_cards.create!(card: cards(:bosss_orders_meg), quantity: 9)
+
+    visit odds_deck_path(small)
+    assert_text "cards seen"
+
+    turn = find("[data-deck-odds-target='turn']")
+    assert_equal "1", turn.value
+    assert_equal "1", turn[:min]
+    assert_not page.evaluate_script("document.querySelector(\"[data-deck-odds-target='turn']\").validity.rangeUnderflow"),
+      "Stimulus wrote the turn field below the min the server gave it"
+    assert_text "7 cards seen (7 hand + 0 drawn + 0 prizes)"
+  end
+
   # A flag on `window` is the probe: a full page load or a Turbo visit would clear it, so its survival
   # is what proves nothing went to the server.
   def mark_page

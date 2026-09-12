@@ -102,9 +102,21 @@ module Decks
         all_buckets(buckets: [ [ copies, non_basic_copies ] ], seen: seen)
       end
 
-      # The prize questions are deliberately *not* conditioned on the mulligan: which cards sit in
-      # the prize block is a fact about positions h+1..h+prize_count, and the mulligan condition
-      # touches the hand alone.
+      # The prize questions are deliberately *not* conditioned on the mulligan, and the reason once
+      # written here was wrong. "The mulligan condition touches the hand alone" is true of the
+      # positions and false of the probability: the hand and the prize block are dealt from one
+      # deck, so they are dependent, and conditioning on a keepable hand does move these numbers.
+      # Measured against the same exhaustive enumeration deal_test.rb uses, on a 60-card deck: a
+      # 1-of Basic is printed at 10.0000 % where the conditional answer is 9.6889 %, a 4-of Basic
+      # 0.0031 % against 0.0026 %, and a 1-of Trainer 10.0000 % against 10.0778 % — the sign follows
+      # the card type, because knowing the hand held a Basic makes the rest of the deck slightly
+      # poorer in Basics and slightly richer in everything else.
+      #
+      # It stays unconditional on purpose. "Where are my copies" is a question about the deal that
+      # happened, not about the deals that were thrown away, and a player looking at a prize map is
+      # not asking a conditional question. What is *not* optional is saying so: Decks::Odds::MethodNote
+      # carries it as a stated limit, because two measures under one page is exactly the kind of
+      # thing a reader would otherwise take for one.
       def at_least_one_prized(copies:)
         return Rational(0) if prize_count.zero?
 

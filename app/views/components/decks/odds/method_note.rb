@@ -1,6 +1,6 @@
 module Decks
   module Odds
-    # Four limits of the model, stated on the page rather than left to be discovered.
+    # Five limits of the model, stated on the page rather than left to be discovered.
     #
     # The second is the one a player would otherwise never guess, and it is stated in the direction
     # of the error: Iono and Lillie's Determination shuffle the hand back in, so already-seen cards
@@ -19,7 +19,13 @@ module Decks
           "most to the combination calculator: it answers \"I have seen one of each\", not \"I hold " \
           "them at the same time\".",
         "Opponent mulligans are not modelled. They hand out extra cards, and how many depends on " \
-          "the other deck."
+          "the other deck.",
+        "The two prize columns answer a different question from every other number here. " \
+          "Accessibility is conditional on a keepable opening hand; prize risk is not, because " \
+          "where your copies sit is a fact about the deal that happened rather than about the " \
+          "deals that were thrown away. The hand and the prizes come off one deck, so the two " \
+          "measures do differ — by a few hundredths of a point at 60 cards, upward for a Basic " \
+          "Pokemon and downward for anything else."
       ].freeze
 
       def view_template

@@ -101,6 +101,22 @@ class Decks::Odds::ComboTest < ActiveSupport::TestCase
     assert_equal "A card can only be in one group.", result.error
   end
 
+  # The same card named twice inside *one* bucket, which every other case in this file misses: they
+  # all spell the collision across two buckets. The natural narrowing of the guard — comparing the
+  # buckets pairwise, which reads exactly like the message "A card can only be in one group." —
+  # refuses the cross-bucket spelling and lets this one through, and it does not merely answer: it
+  # sums the copies, so a 4-of named twice is computed as an 8-of and a row that should read
+  # 42.74 % reads 68.72 %. A wrong number, not an error, which is the failure disjointness exists
+  # to prevent.
+  test "a card named twice inside one bucket fails closed" do
+    result = combo("#{key(:honedge)}#{Decks::Odds::Combo::CARD_SEPARATOR}#{key(:honedge)}")
+
+    assert result.asked?
+    assert_not result.answered?
+    assert_nil result.curve
+    assert_equal "A card can only be in one group.", result.error
+  end
+
   test "a card this deck does not play fails closed" do
     result = combo("#{key(:honedge)}|#{key(:budew_pre)}")
 

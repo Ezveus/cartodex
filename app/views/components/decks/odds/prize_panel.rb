@@ -31,10 +31,25 @@ module Decks
             end
           end
           p(class: "odds-note") do
-            plain "A prize is not lost — taking it puts the card in hand. The last column is the " \
-                  "chance every copy is still in the prizes you have not taken."
+            plain "#{cap_sentence}A prize is not lost — taking it puts the card in hand. The " \
+                  "last column is the chance every copy is still in the prizes you have not taken."
           end
         end
+      end
+
+      private
+
+      # Said, not merely true. The panel exists for its ordering and is capped, so on a real deck it
+      # shows five of twenty-odd groups — and the cut can fall mid-tie, four groups sharing one risk
+      # and two of them appearing. A reader who is not told that reads the panel as the whole answer.
+      # Below the cap there is nothing to disclose, and claiming a cap there would be its own small
+      # lie.
+      def cap_sentence
+        return "" unless @report.card_rows.size > @report.prize_rows.size
+
+        "These are the #{@report.prize_rows.size} most at risk of this deck's " \
+          "#{@report.card_rows.size} groups, a tie at the cut broken by name; the table below " \
+          "carries every group's prize columns. "
       end
     end
   end
