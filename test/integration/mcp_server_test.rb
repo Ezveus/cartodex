@@ -198,6 +198,30 @@ class McpServerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
+  # The schema is enforced on the wire (mcp 1.5.0 defaults validate_tool_call_arguments
+  # to true), and an assistant reading "56" off a card sends the integer at least as
+  # often as the string. With a bare type: "string" the gem answers 200 with
+  # "Invalid arguments: value at `/set_number` is not a string", so assert_response
+  # :success — the shape every other test in this file uses — passes either way.
+  # Parsing the text as JSON is what tells the two apart.
+  test "search_cards accepts an integer set_number over the wire" do
+    post "/mcp", params: rpc("search_cards", { set_code: "POR", set_number: 56 }), headers: auth_headers
+
+    assert_response :success
+    assert_includes JSON.parse(result_text).map { |card| card["id"] }, cards(:honedge).id
+  end
+
+  # server.rb:1235-1250 answers a missing required argument with error_tool_response,
+  # the very shape the tool's own refusal uses — a 200 carrying one text block — so
+  # /Error/i cannot tell `required: []` from `required: ["query"]`.
+  test "search_cards refuses an empty call with its own message, not the gem's" do
+    post "/mcp", params: rpc("search_cards", {}), headers: auth_headers
+
+    assert_response :success
+    assert_match(/give at least one of query/, result_text)
+    assert_no_match(/Missing required arguments/, result_text)
+  end
+
   test "challenges with the protected resource metadata URL on 401" do
     post "/mcp", params: rpc("list_decks", {}), headers: auth_headers(token: "not-a-real-token")
 
@@ -233,6 +257,11 @@ class McpServerTest < ActionDispatch::IntegrationTest
   # comes from this one address, which is the scenario that matters: the
   # limiters have to tell clients apart by something other than their IP.
   SOURCE_IP = "203.0.113.1"
+
+  # The one text block a tool call answers with, whether it succeeded or refused.
+  def result_text
+    JSON.parse(response.body).dig("result", "content", 0, "text")
+  end
 
   def post_mcp(token: @token)
     post "/mcp",

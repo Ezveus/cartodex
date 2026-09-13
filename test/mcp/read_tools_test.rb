@@ -90,6 +90,164 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert_operator results.size, :<=, 1
   end
 
+  # The call shape the feature exists for: a player reading a stack of cards knows
+  # the set and the number and not the name.
+  test "SearchCardsTool finds a printing from its set code and collector number alone" do
+    response = SearchCardsTool.call(set_code: "por", set_number: "56", server_context: @context)
+
+    assert_equal [ cards(:honedge).id ], payload(response).map { |c| c["id"] }
+  end
+
+  # `.to_s` alone is invisible here: cards.set_number is a string column, so Active
+  # Record already renders where(set_number: 56) as `= '56'` and an implementation
+  # with no coercion at all passes the integer test. The fold is the observable half,
+  # and " 56 " is what a copy-paste actually delivers.
+  test "SearchCardsTool folds whitespace around set_number" do
+    response = SearchCardsTool.call(set_number: " 56 ", server_context: @context)
+
+    assert_equal [ cards(:froakie_twm).id, cards(:honedge).id ].sort,
+      payload(response).map { |c| c["id"] }.sort
+  end
+
+  # squish and not strip: String#strip folds ASCII whitespace only, and U+00A0 is
+  # exactly what a copy-paste out of a web page carries. NameNormalizable folds the
+  # same Unicode class on the name side, so the two halves of one lookup agree.
+  test "SearchCardsTool folds a non-breaking space in set_code and set_number" do
+    nbsp = " "
+
+    response = SearchCardsTool.call(set_code: "#{nbsp}por#{nbsp}", set_number: "#{nbsp}56#{nbsp}",
+      server_context: @context)
+
+    assert_equal [ cards(:honedge).id ], payload(response).map { |c| c["id"] }
+  end
+
+  # A LIKE '%5%' implementation answers this with POR 56 and TWM 56 as well.
+  test "SearchCardsTool matches set_number exactly, not as a substring" do
+    response = SearchCardsTool.call(set_number: "5", server_context: @context)
+
+    assert_equal [ cards(:basic_psychic_energy).id ], payload(response).map { |c| c["id"] }
+  end
+
+  # No printing in the catalogue carries a leading zero, so there is no padding to
+  # normalise and "056" is a number nothing is filed under.
+  test "SearchCardsTool does not normalise a zero-padded set_number" do
+    assert_empty payload(SearchCardsTool.call(set_number: "056", server_context: @context))
+  end
+
+  # No fixture carries a non-numeric collector number, so `.to_i` — or the
+  # CAST(set_number AS INTEGER) both card indexes already use in their ORDER BY —
+  # is bit-identical to text matching on every other row in this file.
+  test "SearchCardsTool matches a non-numeric collector number as text" do
+    CardSet.create!(code: "CRZ", name: "Crown Zenith", release_date: Date.new(2023, 1, 20))
+    gallery_card = Card.create!(name: "Bidoof", card_type: "Pokémon", set_name: "CRZ",
+      set_number: "GG12", rarity: "Illustration Rare",
+      hp: 70, stage: "Basic", type_symbol: "Colorless", retreat_cost: 1)
+
+    response = SearchCardsTool.call(set_code: "CRZ", set_number: "GG12", server_context: @context)
+
+    assert_equal [ gallery_card.id ], payload(response).map { |c| c["id"] }
+  end
+
+  # PAL has no card_sets row at all, so this also refuses the half-fix that resolves
+  # the code through that table before filtering on it. The Froakie row below does
+  # not: card_sets(:twm) exists.
+  test "SearchCardsTool finds a card whose set was never imported" do
+    response = SearchCardsTool.call(set_code: "PAL", set_number: "172", server_context: @context)
+
+    assert_equal [ cards(:trainer_card).id ], payload(response).map { |c| c["id"] }
+  end
+
+  # card_sets(:twm) exists but this card is not linked to it, which is exactly what
+  # the old joins(:card_set) dropped.
+  test "SearchCardsTool finds a card that carries no card_set link" do
+    response = SearchCardsTool.call(set_code: "twm", set_number: "56", server_context: @context)
+
+    assert_equal [ cards(:froakie_twm).id ], payload(response).map { |c| c["id"] }
+  end
+
+  # A `nil?` guard lets "" through, and Card.name_matching("") compiles to LIKE '%%':
+  # 20 arbitrary cards answered to a call that named no criterion at all.
+  test "SearchCardsTool refuses a call whose every criterion is blank" do
+    text = SearchCardsTool.call(query: "", set_code: "", set_number: "  ", server_context: @context)
+      .content.first[:text]
+
+    assert_equal "Error: give at least one of query, set_code or set_number.", text
+    assert_raises(JSON::ParserError, "the refusal must not also be a JSON array") { JSON.parse(text) }
+  end
+
+  # isError is the only field a client can read without parsing English: `text("Error: …")`
+  # and `text("[]")` are byte-identical on it, and the gem's own "Missing required arguments"
+  # — which this refusal replaces — sets it. Answering a refusal as a success is how a client
+  # ends up treating "you gave me no criterion" as "no such card exists".
+  test "SearchCardsTool's refusal is flagged as an error and an empty result is not" do
+    refusal = SearchCardsTool.call(server_context: @context)
+    empty = SearchCardsTool.call(set_code: "POR", set_number: "99999", server_context: @context)
+
+    assert_equal [], payload(empty), "sanity: this call succeeds and matches nothing"
+    assert_not empty.to_h[:isError], "an empty result is not an error"
+    assert empty.to_h.key?(:isError), "sanity: the flag is on the wire at all"
+    assert refusal.to_h[:isError], "the refusal must be distinguishable without parsing its text"
+  end
+
+  # Over the wire both refusals are a 200 with one text block, so the integration
+  # test cannot see this declaration; only a direct read of the schema can.
+  test "SearchCardsTool requires no argument" do
+    assert_empty SearchCardsTool.input_schema.to_h[:required]
+  end
+
+  test "SearchCardsTool declares set_number as a string or an integer" do
+    assert_equal [ "string", "integer" ],
+      SearchCardsTool.input_schema.to_h.dig(:properties, :set_number, :type)
+  end
+
+  # Nothing in the suite reads a description, so shipping the old one leaves the
+  # argument in place while no assistant can discover it — with a green suite.
+  test "SearchCardsTool's description names set_number" do
+    assert_match(/set_number/, SearchCardsTool.description_value)
+  end
+
+  # Every other test here reads ["name"] only, so `id` — the key a client chains
+  # into add_card_to_collection — could be dropped without a single failure.
+  test "SearchCardsTool returns the whole documented payload for a row" do
+    response = SearchCardsTool.call(set_code: "POR", set_number: "56", server_context: @context)
+
+    assert_equal({ "id" => cards(:honedge).id, "name" => "Honedge", "set_name" => "POR",
+                   "set_number" => "56", "card_type" => "Pokémon" }, payload(response).first)
+  end
+
+  # Both bounds survived mutation before this test existed: MAX_LIMIT could be raised to 500 and
+  # the default dropped to 3 with the whole suite green, because no fixture set is big enough for
+  # either to bite. They are what stops a set-code-only call — a shape `required: []` newly makes
+  # reachable — from serialising the catalogue, and what the description promises a client.
+  test "SearchCardsTool defaults to 20 results and caps at MAX_LIMIT" do
+    51.times { |i| Card.create!(name: "Bulk Filler #{i}", card_type: "Trainer", set_name: "ZZY", set_number: i.to_s, rarity: "Common") }
+
+    assert_equal 20, payload(SearchCardsTool.call(query: "bulk filler", server_context: @context)).size,
+      "no limit given must answer 20, not everything and not 3"
+    assert_equal MAX_LIMIT_EXPECTED,
+      payload(SearchCardsTool.call(query: "bulk filler", limit: 500, server_context: @context)).size,
+      "a limit above the cap must be reduced to it, not honoured"
+    assert_equal 5, payload(SearchCardsTool.call(query: "bulk filler", limit: 5, server_context: @context)).size,
+      "a limit below the cap is honoured"
+  end
+
+  # Spelled out rather than read off SearchCardsTool::MAX_LIMIT: a test that asks the
+  # implementation for its own bound agrees with it whatever it becomes.
+  MAX_LIMIT_EXPECTED = 50
+
+  # An implementation that reassigns from Card.all per filter instead of chaining
+  # answers the last criterion alone, and would still find Honedge under a name it
+  # does not carry.
+  test "SearchCardsTool ANDs query, set_code and set_number together" do
+    matching = SearchCardsTool.call(query: "honed", set_code: "POR", set_number: "56", server_context: @context)
+
+    assert_equal [ cards(:honedge).id ], payload(matching).map { |c| c["id"] }
+
+    mismatched = SearchCardsTool.call(query: "budew", set_code: "POR", set_number: "56", server_context: @context)
+
+    assert_empty payload(mismatched), "the name must narrow the set and number, not be replaced by them"
+  end
+
   test "ListCollectionTool with a matching query returns that entry" do
     response = ListCollectionTool.call(query: "honed", server_context: @context)
     card_ids = payload(response).map { |c| c["card_id"] }
