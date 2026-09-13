@@ -192,6 +192,27 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ cards(:trainer_card) ], Search::Global.call(user: @user, query: "PAL 172").cards
   end
 
+  # card_set_code?'s /\A[a-zA-Z]{2,5}\z/ survived being narrowed to exactly {3,3} with the whole
+  # suite green: every set code any parser test names — POR, ASC, TWM, MEW — happens to be three
+  # letters, so both edges of the bound were unexercised. Real codes sit at both (SVE, SVP are
+  # three; the two-letter and five-letter shapes are what a Japanese-set import, issue #111, will
+  # bring). The upper edge matters in the other direction too: a sixth letter must stay a name,
+  # or a six-letter card name followed by a number stops being findable.
+  test "a set code is read at both edges of the length bound, and not past them" do
+    # The names deliberately do not contain their own set code: the six-letter row has to be
+    # unreachable *as a name*, or the assertion below passes for the wrong reason.
+    { "SV" => "Edge Two", "SVPRO" => "Edge Five", "SIXCHR" => "Edge Six" }.each do |code, name|
+      Card.create!(name: name, card_type: "Trainer", set_name: code, set_number: "10", rarity: "Common")
+    end
+
+    assert_equal [ "Edge Two" ], Search::Global.call(user: @user, query: "SV 10").cards.map(&:name),
+      "two letters is a set code"
+    assert_equal [ "Edge Five" ], Search::Global.call(user: @user, query: "SVPRO 10").cards.map(&:name),
+      "five letters is a set code"
+    assert_empty Search::Global.call(user: @user, query: "SIXCHR 10").cards,
+      "six letters is a name, and nothing is named SIXCHR"
+  end
+
   # The other half of the code guard: a lone token is a name, whatever the set table holds.
   # Read as a code it would list all of ASC instead.
   test "a bare set code stays a name and lists no set" do

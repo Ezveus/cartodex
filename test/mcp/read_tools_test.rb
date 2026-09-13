@@ -215,6 +215,26 @@ class ReadToolsTest < ActiveSupport::TestCase
                    "set_number" => "56", "card_type" => "Pokémon" }, payload(response).first)
   end
 
+  # Both bounds survived mutation before this test existed: MAX_LIMIT could be raised to 500 and
+  # the default dropped to 3 with the whole suite green, because no fixture set is big enough for
+  # either to bite. They are what stops a set-code-only call — a shape `required: []` newly makes
+  # reachable — from serialising the catalogue, and what the description promises a client.
+  test "SearchCardsTool defaults to 20 results and caps at MAX_LIMIT" do
+    51.times { |i| Card.create!(name: "Bulk Filler #{i}", card_type: "Trainer", set_name: "ZZY", set_number: i.to_s, rarity: "Common") }
+
+    assert_equal 20, payload(SearchCardsTool.call(query: "bulk filler", server_context: @context)).size,
+      "no limit given must answer 20, not everything and not 3"
+    assert_equal MAX_LIMIT_EXPECTED,
+      payload(SearchCardsTool.call(query: "bulk filler", limit: 500, server_context: @context)).size,
+      "a limit above the cap must be reduced to it, not honoured"
+    assert_equal 5, payload(SearchCardsTool.call(query: "bulk filler", limit: 5, server_context: @context)).size,
+      "a limit below the cap is honoured"
+  end
+
+  # Spelled out rather than read off SearchCardsTool::MAX_LIMIT: a test that asks the
+  # implementation for its own bound agrees with it whatever it becomes.
+  MAX_LIMIT_EXPECTED = 50
+
   # An implementation that reassigns from Card.all per filter instead of chaining
   # answers the last criterion alone, and would still find Honedge under a name it
   # does not carry.
