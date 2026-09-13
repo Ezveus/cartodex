@@ -57,10 +57,16 @@ On `storage/development.sqlite3`, 4732 cards:
    the load-bearing half: it lets "PFL 86" reach code=PFL/number=86/name="", and it is what still
    stops the bare token "PFL" from being read as a set code and listing all 130 of them. Dropping it
    to `tokens.any?` passes every test in this plan except the one written to catch exactly that.
-   The *number* guard stays `tokens.length > 1` for the mirror reason, and has its own test: relaxed
-   to `tokens.any?`, the bare query "56" starts returning every card numbered 56 in every set.
-6. **Where the two readings collide, the set wins, and one real query loses its answer.** 11 of the
-   28 set codes are also substrings of card names, so a two-token query has two readings.
+   The *number* guard stays `tokens.length > 1` for the mirror reason, and has its own test.
+   **Correction after review:** relaxing it does not widen the answer, it raises — `|| number` lets
+   the code guard reach `tokens.last` on the array the number pop just emptied, so "56" is a
+   `NoMethodError` on nil. The two guards are coupled; the code comment says so and this line used
+   to say otherwise.
+6. **Where the two readings collide, the set wins, and one real query loses its answer.** 12 of the
+   28 imported set codes are also substrings of card names (measured 11 on a narrower count that
+   required a shared collector number; the plain substring count is 12), so a two-token query has
+   two readings. Reviewed against the whole catalogue: of the 439 two-token queries that answer
+   something today, **224 go empty and 179 name a different card**.
    Measured on the dump: "MEG 113" reads today as Mega Lucario ex (ASC 113) + Mega Sharpedo ex
    (PFL 113) and reads tomorrow as Acerola's Mischief (MEG 113); "PAL 49" moves from Palafin
    (TEF 49) to Quaxly (PAL 49); and **"Mew 216" goes from two cards to none**, because `MEW` is a
@@ -174,3 +180,28 @@ twin on the host (no Chrome in the image). Baseline to beat: **1755 runs, 8428 a
 0 failures**. Then sabotage every test in the two tables above.
 
 No UI: this changes a tool argument and a scope builder, nothing rendered.
+
+## What the three reviews changed (2026-09-13)
+
+The reviews landed four defects, all in the branch's own justification rather than in the feature:
+
+1. **Decision 4 was half-applied, and the half that was missing was the point.** The tool moved to
+   `cards.set_name`; `CardSearchable#card_set_code?` still resolved a code through `card_sets`. So
+   the two surfaces disagreed on **all 44** printings whose set was never imported — the very rows
+   the move was made for — and on `ROS 89` they named two *different* cards, the page answering
+   *Xerosic's Machinations* (SFA 89, whose name contains "ros"). Both now read one `Card.in_set_code`
+   scope, which also closes the same bug's slow form: keyed on `card_sets`, a query's meaning
+   changed the day an admin imported an unrelated set. The cross-surface test picked `TWM`, a code
+   that already agreed, and so proved nothing; it now uses `PAL 172`, which has no `card_sets` row.
+2. **The refusal shipped `isError: false`.** This plan asserted the gem's missing-argument branch
+   and the tool's own refusal were the same shape; only the gem's sets the flag. `McpTool.error_text`
+   is the fix. The nine older `text("Error: …")` refusals are a pre-existing gap, left alone.
+3. **`strip` is ASCII-only** and U+00A0 is exactly what a copy-paste out of a web page carries.
+   `squish` — the Unicode class `NameNormalizable.normalize_for_match` already folds — replaces it,
+   on `set_code` as well as `set_number`.
+4. Two counts were wrong: "11 of the 28" is 12, and the number guard raises rather than widening.
+
+Escalated rather than fixed: `search_cards` caps at 50 with no `ORDER BY`, no total and no offset,
+so `set_code` alone — a call shape `required: []` newly makes reachable — answers 20 of MEG's 188
+rows indistinguishably from a complete answer. Changing the payload is a contract decision.
+Not fixed either: nothing rendered on `/cards` tells the reader the query was read as a set code.

@@ -94,22 +94,26 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_select "p.cards-empty"
   end
 
-  # Decision 4's whole justification, asserted across the two surfaces at once: the MCP tool
-  # stopped joining card_sets so that it and this page answer one question one way. froakie_twm
-  # carries no card_set link, so under the old INNER JOIN the tool found nothing here while the
-  # page found the card — a divergence neither surface's own tests could see.
+  # Decision 4's whole justification, asserted across the two surfaces at once. **PAL and not
+  # TWM**: `card_sets(:twm)` exists, so TWM is the code that already agreed, and the first version
+  # of this test picked it and proved nothing. `trainer_card` is PAL 172 with no card_set link
+  # *and* no card_sets row at all, which is where the two surfaces actually diverged — the tool
+  # filtering `cards.set_name` while the page resolved the code through `card_sets` and so read
+  # "PAL" as a name. Measured before the fix: they disagreed on all 44 such printings.
   test "the cards page and the MCP tool name the same printing for a set and a number" do
-    tool_payload = SearchCardsTool.call(set_code: "TWM", set_number: "56",
+    assert_nil CardSet.find_by(code: "PAL"), "sanity: this set was never imported"
+
+    tool_payload = SearchCardsTool.call(set_code: "PAL", set_number: "172",
       server_context: { user: users(:one) }).content.first[:text]
     tool_ids = JSON.parse(tool_payload).map { |card| card["id"] }
 
-    assert_equal [ cards(:froakie_twm).id ], tool_ids, "sanity: the tool resolves the printing"
+    assert_equal [ cards(:trainer_card).id ], tool_ids, "sanity: the tool resolves the printing"
 
-    get cards_path(q: "TWM 56")
+    get cards_path(q: "PAL 172")
 
     assert_response :success
     assert_select "a.card-grid-item", count: 1
-    assert_select "a.card-grid-item[href=?]", card_path(cards(:froakie_twm))
+    assert_select "a.card-grid-item[href=?]", card_path(cards(:trainer_card))
   end
 
   test "index without a search shows the selected set grid" do

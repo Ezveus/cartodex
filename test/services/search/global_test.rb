@@ -181,6 +181,17 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ cards(:honedge) ], Search::Global.call(user: @user, query: "POR 56").cards
   end
 
+  # A set nobody imported is still a set. `trainer_card` is PAL 172 and there is no
+  # card_sets(:pal), so while card_set_code? resolved through that table this query read "PAL"
+  # as a name and answered nothing, while SearchCardsTool — reading cards.set_name — answered
+  # the card. Measured on the production catalogue, the two disagreed on all 44 such printings,
+  # and on ROS 89 they named two different cards.
+  test "a set code with no imported set row is still read as a set code" do
+    assert_nil CardSet.find_by(code: "PAL"), "sanity: this set was never imported"
+
+    assert_equal [ cards(:trainer_card) ], Search::Global.call(user: @user, query: "PAL 172").cards
+  end
+
   # The other half of the code guard: a lone token is a name, whatever the set table holds.
   # Read as a code it would list all of ASC instead.
   test "a bare set code stays a name and lists no set" do

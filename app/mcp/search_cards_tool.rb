@@ -1,16 +1,16 @@
 class SearchCardsTool < McpTool
   MAX_LIMIT = 50
 
-  description "Search the card database by name substring, set code and/or collector number (set_number). Give at least one of them. Returns matching cards with their ids."
+  description "Search the card database by name substring, set code and/or collector number. Give at least one of them, as separate arguments: a printing reference typed as one string (\"POR 56\") goes in set_code plus set_number, never in query. Returns matching cards with their ids, capped at #{MAX_LIMIT} and unordered — a full result is not distinguishable from a truncated one, so narrow rather than page."
   input_schema(
     properties: {
-      query: { type: "string", description: "Case-insensitive substring of the card name" },
-      set_code: { type: "string", description: "Set code to filter by (e.g. \"por\")" },
+      query: { type: "string", description: "Case-insensitive substring of the card name. Not parsed: it never contains a set code or a number" },
+      set_code: { type: "string", description: "Set code, matched case-insensitively (e.g. \"por\")" },
       set_number: {
         type: [ "string", "integer" ],
-        description: "Collector number within the set, matched exactly (e.g. \"86\" or \"GG12\")"
+        description: "Collector number, matched exactly and as text (e.g. \"86\" or \"GG12\"). Scoped to a set only when set_code is given too"
       },
-      limit: { type: "integer", description: "Max results (default 20, capped at 50)" }
+      limit: { type: "integer", description: "Max results (default 20, capped at 50; a value below 1 returns 1)" }
     },
     required: []
   )
@@ -21,20 +21,20 @@ class SearchCardsTool < McpTool
   # with the whole catalogue, truncated to `limit`.
   def self.call(server_context:, query: nil, set_code: nil, set_number: nil, limit: 20)
     if query.blank? && set_code.blank? && set_number.blank?
-      return text("Error: give at least one of query, set_code or set_number.")
+      return error_text("Error: give at least one of query, set_code or set_number.")
     end
 
     scope = Card.all
     scope = scope.name_matching(query) if query.present?
-    # cards.set_name rather than a join on card_sets: the INNER JOIN hid every card
-    # whose set was never imported (44 of them on the production catalogue), the two
-    # columns never disagree where both exist, and this is the column CardSearchable
-    # already reads — so the two surfaces answer the same question the same way.
-    scope = scope.where("UPPER(cards.set_name) = ?", set_code.to_s.upcase) if set_code.present?
-    # Matched as text: collector numbers like "GG12" exist and none is zero-padded, so
-    # there is no integer to cast to. `.to_s` accepts the integer the schema allows,
-    # `.strip` the whitespace a copy-paste carries.
-    scope = scope.where(set_number: set_number.to_s.strip) if set_number.present?
+    # Card.in_set_code, not a `where` spelled out here: CardSearchable#card_set_code? asks the
+    # same scope whether a token *is* a set code, and the two questions have to be one query or
+    # the page and this tool answer differently — see the note on the scope.
+    scope = scope.in_set_code(set_code) if set_code.present?
+    # Matched as text: collector numbers like "GG12" exist and none is zero-padded, so there is
+    # no integer to cast to. `.to_s` accepts the integer the schema allows; `squish` and not
+    # `strip` because a copy-paste from a web page carries U+00A0, which String#strip leaves in
+    # place — the same Unicode class NameNormalizable.normalize_for_match already folds.
+    scope = scope.where(set_number: set_number.to_s.squish) if set_number.present?
 
     cards = scope.limit(limit.to_i.clamp(1, MAX_LIMIT)).map do |card|
       { id: card.id, name: card.name, set_name: card.set_name, set_number: card.set_number, card_type: card.card_type }

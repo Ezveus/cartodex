@@ -100,13 +100,25 @@ class ReadToolsTest < ActiveSupport::TestCase
 
   # `.to_s` alone is invisible here: cards.set_number is a string column, so Active
   # Record already renders where(set_number: 56) as `= '56'` and an implementation
-  # with no coercion at all passes the integer test. `.strip` is the observable half,
+  # with no coercion at all passes the integer test. The fold is the observable half,
   # and " 56 " is what a copy-paste actually delivers.
-  test "SearchCardsTool strips whitespace around set_number" do
+  test "SearchCardsTool folds whitespace around set_number" do
     response = SearchCardsTool.call(set_number: " 56 ", server_context: @context)
 
     assert_equal [ cards(:froakie_twm).id, cards(:honedge).id ].sort,
       payload(response).map { |c| c["id"] }.sort
+  end
+
+  # squish and not strip: String#strip folds ASCII whitespace only, and U+00A0 is
+  # exactly what a copy-paste out of a web page carries. NameNormalizable folds the
+  # same Unicode class on the name side, so the two halves of one lookup agree.
+  test "SearchCardsTool folds a non-breaking space in set_code and set_number" do
+    nbsp = " "
+
+    response = SearchCardsTool.call(set_code: "#{nbsp}por#{nbsp}", set_number: "#{nbsp}56#{nbsp}",
+      server_context: @context)
+
+    assert_equal [ cards(:honedge).id ], payload(response).map { |c| c["id"] }
   end
 
   # A LIKE '%5%' implementation answers this with POR 56 and TWM 56 as well.
@@ -161,6 +173,20 @@ class ReadToolsTest < ActiveSupport::TestCase
 
     assert_equal "Error: give at least one of query, set_code or set_number.", text
     assert_raises(JSON::ParserError, "the refusal must not also be a JSON array") { JSON.parse(text) }
+  end
+
+  # isError is the only field a client can read without parsing English: `text("Error: …")`
+  # and `text("[]")` are byte-identical on it, and the gem's own "Missing required arguments"
+  # — which this refusal replaces — sets it. Answering a refusal as a success is how a client
+  # ends up treating "you gave me no criterion" as "no such card exists".
+  test "SearchCardsTool's refusal is flagged as an error and an empty result is not" do
+    refusal = SearchCardsTool.call(server_context: @context)
+    empty = SearchCardsTool.call(set_code: "POR", set_number: "99999", server_context: @context)
+
+    assert_equal [], payload(empty), "sanity: this call succeeds and matches nothing"
+    assert_not empty.to_h[:isError], "an empty result is not an error"
+    assert empty.to_h.key?(:isError), "sanity: the flag is on the wire at all"
+    assert refusal.to_h[:isError], "the refusal must be distinguishable without parsing its text"
   end
 
   # Over the wire both refusals are a 200 with one text block, so the integration
