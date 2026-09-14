@@ -46,6 +46,17 @@ class McpTool < MCP::Tool
       MCP::Tool::Response.new([ { type: "text", text: string } ])
     end
 
+    # A refusal, which is not the same wire object as an empty result: `error: true` is what
+    # puts `isError: true` in the JSON-RPC payload, and it is the only field a client can read
+    # programmatically — `text("Error: …")` and `text("[]")` are byte-identical on that flag.
+    # It is also the shape the gem's own refusals use (`Server#error_tool_response`), so a tool
+    # that answers a bad call with `text` silently downgrades what a missing required argument
+    # would have reported. Only the refusal this file's newest tool raises goes through here;
+    # the nine older `text("Error: …")` call sites are a pre-existing gap, tracked separately.
+    def error_text(string)
+      MCP::Tool::Response.new([ { type: "text", text: string } ], error: true)
+    end
+
     # Guard for write tools: the JSON schema already rejects quantity < 1 on
     # real MCP calls, but a direct in-process call bypasses that, so tools that
     # only add copies validate explicitly before touching the database.

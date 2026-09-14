@@ -37,6 +37,23 @@ class Card < ApplicationRecord
     where(fingerprint: CardLabelAssignment.active.where(card_label_id: label).select(:fingerprint))
   }
 
+  # Every printing filed under a set code. **On `cards.set_name`, never on a join to `card_sets`**:
+  # 44 printings on the production catalogue carry no `card_set_id` — their set was never imported
+  # — so an INNER JOIN silently hides them, while the two columns never once disagree on the 4688
+  # rows where both exist. It is a scope and not a `where` spelled out at each call site for the
+  # reason `name_matching` is one, and here that is load-bearing rather than tidy: `SearchCardsTool`
+  # asks it *what a set code answers with* and `CardSearchable#card_set_code?` asks it *whether a
+  # token is a set code at all*, and two spellings of that question drifted apart once already —
+  # the tool reading `cards.set_name` (54 codes) while the parser resolved through `card_sets`
+  # (28 rows) made `/cards?q=ROS 89` answer Xerosic's Machinations while the tool answered Sky
+  # Field, on all 44 of the very rows the move off the join was made for.
+  #
+  # `UPPER` on both sides rather than `where(set_name: code.upcase)`: every value in either column
+  # is uppercase today and nothing enforces it — `Cards::Fetcher` takes `set_name` from a URL path
+  # segment. It costs a covering-index scan instead of a seek, measured at 0.43 ms against 0.0025 ms
+  # on 4732 rows, next to the 0.79 ms LIKE count the spotlight already pays per keystroke.
+  scope :in_set_code, ->(code) { where("UPPER(cards.set_name) = ?", code.to_s.squish.upcase) }
+
 
   # Allowed values
   CARD_TYPES = %w[Pokémon Energy Trainer].freeze

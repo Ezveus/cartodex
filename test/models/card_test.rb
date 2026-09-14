@@ -112,6 +112,23 @@ class CardTest < ActiveSupport::TestCase
     end
   end
 
+  # in_set_code is the single answer to "what does this set code mean", asked both by
+  # SearchCardsTool as a filter and by CardSearchable#card_set_code? as a predicate. It reads
+  # cards.set_name and not a join, because 44 printings on the production catalogue carry no
+  # card_set_id: trainer_card is PAL 172 and there is no card_sets row for PAL at all.
+  test "in_set_code reaches a printing whose set was never imported" do
+    assert_nil CardSet.find_by(code: "PAL"), "sanity: this set was never imported"
+
+    assert_equal [ cards(:trainer_card).id ], Card.in_set_code("PAL").pluck(:id)
+    assert_empty Card.joins(:card_set).merge(Card.in_set_code("PAL")),
+      "sanity: a join on card_sets is what used to hide it"
+  end
+
+  test "in_set_code folds case and surrounding whitespace, including U+00A0" do
+    assert_equal [ cards(:trainer_card).id ], Card.in_set_code("pal").pluck(:id)
+    assert_equal [ cards(:trainer_card).id ], Card.in_set_code(" PAL ").pluck(:id)
+  end
+
   test "name_matching treats LIKE metacharacters in the query as literals" do
     assert_includes Card.name_matching("honedge").pluck(:name), "Honedge", "sanity: the plain spelling matches"
     assert_empty Card.name_matching("h_nedge"), "_ must not act as a wildcard"

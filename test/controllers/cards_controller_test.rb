@@ -67,6 +67,55 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".card-grid-name", text: "Budew", count: 1
   end
 
+  # How a player reads a card off a stack, and the shape this page has to answer the same way
+  # the MCP tool does. Doublade is the neighbouring number in the same set: it says the number
+  # narrowed the set rather than the set alone answering.
+  test "index finds a printing from a set code and a number alone" do
+    get cards_path(q: "POR 56")
+
+    assert_response :success
+    assert_select ".card-grid-name", text: "Honedge", count: 1
+    assert_select ".card-grid-name", { text: "Doublade", count: 0 }, "the number must narrow the set"
+  end
+
+  # Where the parser and the tool deliberately still differ: `\A\d+\z` never pops "GG12", so
+  # this query is a name and finds nothing. The tool, which takes set_number as its own
+  # argument, does find the card. Pinned so the divergence is a decision and not a surprise.
+  test "index does not read a non-numeric collector number as a number" do
+    crz = CardSet.create!(code: "CRZ", name: "Crown Zenith", release_date: Date.new(2023, 1, 20))
+    Card.create!(name: "Lugia VSTAR", card_type: "Pokémon", card_set: crz,
+      set_name: "CRZ", set_number: "GG12", rarity: "Rare", hp: 280,
+      stage: "VSTAR", type_symbol: "Colorless", retreat_cost: 2)
+
+    get cards_path(q: "CRZ GG12")
+
+    assert_response :success
+    assert_select ".card-grid-name", { text: "Lugia VSTAR", count: 0 }
+    assert_select "p.cards-empty"
+  end
+
+  # Decision 4's whole justification, asserted across the two surfaces at once. **PAL and not
+  # TWM**: `card_sets(:twm)` exists, so TWM is the code that already agreed, and the first version
+  # of this test picked it and proved nothing. `trainer_card` is PAL 172 with no card_set link
+  # *and* no card_sets row at all, which is where the two surfaces actually diverged — the tool
+  # filtering `cards.set_name` while the page resolved the code through `card_sets` and so read
+  # "PAL" as a name. Measured before the fix: they disagreed on all 44 such printings.
+  test "the cards page and the MCP tool name the same printing for a set and a number" do
+    assert_nil CardSet.find_by(code: "PAL"), "sanity: this set was never imported"
+
+    tool_payload = SearchCardsTool.call(set_code: "PAL", set_number: "172",
+      server_context: { user: users(:one) }).content.first[:text]
+    tool_ids = JSON.parse(tool_payload).map { |card| card["id"] }
+
+    assert_equal [ cards(:trainer_card).id ], tool_ids, "sanity: the tool resolves the printing"
+
+    get cards_path(q: "PAL 172")
+
+    assert_response :success
+    assert_select "a.card-grid-item", count: 1
+    assert_select "a.card-grid-item[href=?]", card_path(cards(:trainer_card))
+  end
+
   test "index without a search shows the selected set grid" do
     get cards_path(set: card_sets(:por).code)
 

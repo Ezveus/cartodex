@@ -176,6 +176,75 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ card ], result.cards
   end
 
+  # The lookup the whole feature exists for: a set code and a collector number, no name at all.
+  test "finds a printing from a set code and a number alone" do
+    assert_equal [ cards(:honedge) ], Search::Global.call(user: @user, query: "POR 56").cards
+  end
+
+  # A set nobody imported is still a set. `trainer_card` is PAL 172 and there is no
+  # card_sets(:pal), so while card_set_code? resolved through that table this query read "PAL"
+  # as a name and answered nothing, while SearchCardsTool — reading cards.set_name — answered
+  # the card. Measured on the production catalogue, the two disagreed on all 44 such printings,
+  # and on ROS 89 they named two different cards.
+  test "a set code with no imported set row is still read as a set code" do
+    assert_nil CardSet.find_by(code: "PAL"), "sanity: this set was never imported"
+
+    assert_equal [ cards(:trainer_card) ], Search::Global.call(user: @user, query: "PAL 172").cards
+  end
+
+  # card_set_code?'s /\A[a-zA-Z]{2,5}\z/ survived being narrowed to exactly {3,3} with the whole
+  # suite green: every set code any parser test names — POR, ASC, TWM, MEW — happens to be three
+  # letters, so both edges of the bound were unexercised. Real codes sit at both (SVE, SVP are
+  # three; the two-letter and five-letter shapes are what a Japanese-set import, issue #111, will
+  # bring). The upper edge matters in the other direction too: a sixth letter must stay a name,
+  # or a six-letter card name followed by a number stops being findable.
+  test "a set code is read at both edges of the length bound, and not past them" do
+    # The names deliberately do not contain their own set code: the six-letter row has to be
+    # unreachable *as a name*, or the assertion below passes for the wrong reason.
+    { "SV" => "Edge Two", "SVPRO" => "Edge Five", "SIXCHR" => "Edge Six" }.each do |code, name|
+      Card.create!(name: name, card_type: "Trainer", set_name: code, set_number: "10", rarity: "Common")
+    end
+
+    assert_equal [ "Edge Two" ], Search::Global.call(user: @user, query: "SV 10").cards.map(&:name),
+      "two letters is a set code"
+    assert_equal [ "Edge Five" ], Search::Global.call(user: @user, query: "SVPRO 10").cards.map(&:name),
+      "five letters is a set code"
+    assert_empty Search::Global.call(user: @user, query: "SIXCHR 10").cards,
+      "six letters is a name, and nothing is named SIXCHR"
+  end
+
+  # The other half of the code guard: a lone token is a name, whatever the set table holds.
+  # Read as a code it would list all of ASC instead.
+  test "a bare set code stays a name and lists no set" do
+    assert_empty Search::Global.call(user: @user, query: "asc").cards
+  end
+
+  # The mirror rule on the number guard: a lone number is a name too, or "56" answers with
+  # every card numbered 56 in every set.
+  test "a bare number stays a name and lists no printing" do
+    assert_empty Search::Global.call(user: @user, query: "56").cards
+  end
+
+  test "a name, a set code and a number still parse together" do
+    assert_equal [ cards(:honedge) ], Search::Global.call(user: @user, query: "Honedge POR 56").cards
+  end
+
+  # Where the two readings collide the set wins, and this is the query that loses its old
+  # answer. Asserted in both directions on purpose: the trade is deliberate (11 of the 28 set
+  # codes are also substrings of card names), so reverting it must turn a test red rather than
+  # merely widen a result.
+  test "a short name that is also a set code reads as the set" do
+    CardSet.create!(code: "MEW", name: "151", release_date: Date.new(2023, 6, 16))
+    Card.create!(name: "Mew ex", card_type: "Pokémon", set_name: "PAF", set_number: "25",
+      rarity: "Double Rare", hp: 180, stage: "Basic", type_symbol: "Psychic", retreat_cost: 0)
+    Card.create!(name: "Pikachu", card_type: "Pokémon", set_name: "MEW", set_number: "25",
+      rarity: "Common", hp: 60, stage: "Basic", type_symbol: "Lightning", retreat_cost: 1)
+
+    names = Search::Global.call(user: @user, query: "Mew 25").cards.map(&:name)
+
+    assert_equal [ "Pikachu" ], names
+  end
+
   test "a visitor searches cards and shared decks, and nothing personal" do
     decks(:two).update!(user: users(:two), shared: true, name: "Zoroark Box")
 
