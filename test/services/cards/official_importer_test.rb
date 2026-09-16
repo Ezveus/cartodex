@@ -222,13 +222,24 @@ class Cards::OfficialImporterTest < ActiveSupport::TestCase
   test "a directory holding no fragment of this slug is a typo, not a finished import" do
     Dir.mktmpdir do |dir|
       FileUtils.cp(FIXTURES.join("30th_21.html"), File.join(dir, "30th_21.html"))
+      FileUtils.cp(FIXTURES.join("30th-c_1.html"), File.join(dir, "30th-c_1.html"))
 
       # Reported success and exit 0 before, having created the set row — indistinguishable from
       # importing a set whose cards were all already held.
-      assert_raises(ArgumentError) { import(dir, slug: "30TH") }
+      error = assert_raises(ArgumentError) { import(dir, slug: "30TH") }
+
+      # …and it says what the directory does hold, because a wrong slug and a wrong path used to
+      # produce the same sentence.
+      assert_match(/30th, 30th-c/, error.message)
     end
 
     assert_not CardSet.exists?(code: "30C")
+  end
+
+  test "a directory that does not exist says so, rather than blaming the slug" do
+    error = assert_raises(ArgumentError) { import("/nowhere/at/all") }
+
+    assert_match(/no such directory/, error.message)
   end
 
   test "a fragment from the other set is refused rather than filed under this code" do

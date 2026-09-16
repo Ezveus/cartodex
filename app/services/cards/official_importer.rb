@@ -20,10 +20,17 @@ class Cards::OfficialImporter < ApplicationService
   end
 
   def call
-    # A run that matched nothing is a typo in the slug, not a finished import — and without this
-    # it reported success, exited 0, and created the card_sets row anyway, which is
-    # indistinguishable from a complete import of a set whose cards are all already held.
-    raise ArgumentError, "no #{@slug}_*.html fragments in #{@dir}" if fragments.empty?
+    # A run that matched nothing is a typo, not a finished import — without this it reported
+    # success, exited 0, and created the card_sets row anyway, which is indistinguishable from a
+    # complete import of a set whose cards are all already held.
+    #
+    # It names *which* typo, because the two are confusable and the first message did not: a wrong
+    # directory and a wrong slug both produced "no 30th-c_*.html fragments in <dir>", which reads
+    # as though the slug were at fault even when the path does not exist.
+    raise ArgumentError, "no such directory: #{@dir}" unless Dir.exist?(@dir)
+    if fragments.empty?
+      raise ArgumentError, "no #{@slug}_*.html fragments in #{@dir}#{available_slugs_hint}"
+    end
 
     card_set = find_or_create_set
     imported = 0
@@ -49,6 +56,13 @@ class Cards::OfficialImporter < ApplicationService
 
   def fragments
     Dir[File.join(@dir, "#{@slug}_*.html")].sort
+  end
+
+  # What the directory does hold, so a mistyped slug is one line away from being corrected rather
+  # than a hunt through a directory of 184 files.
+  def available_slugs_hint
+    slugs = Dir[File.join(@dir, "*.html")].map { File.basename(_1)[/\A(.+)_[^_]*\.html\z/, 1] }.compact.uniq.sort
+    slugs.empty? ? " (it holds no .html fragment at all)" : " — it holds: #{slugs.join(', ')}"
   end
 
   # The name falls back to what the *pages* print rather than to the code, because the argument
