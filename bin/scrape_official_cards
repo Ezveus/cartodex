@@ -23,6 +23,9 @@
 //     --gallery https://tcg.pokemon.com/assets/img/me-expansions/30th-celebration/cards/cards.json \
 //     --set 30th:seeall --set 30th-c:classic-collection
 //
+// `--gallery` also takes a local path. Prefer it: the enumeration never changes, and its host is
+// refused on its own schedule, independently of the one holding the pages.
+//
 // Re-running skips whatever is already on disk, so an abort costs only what it had not reached.
 
 import fs from 'node:fs';
@@ -50,7 +53,7 @@ function parseArgs(argv) {
     else { console.error(`unknown argument: ${k}`); process.exit(2); }
   }
   if (!opts.out || !opts.gallery || opts.sets.length === 0) {
-    console.error('usage: bin/scrape_official_cards --out DIR --gallery URL --set SLUG:BUCKET [--set …]');
+    console.error('usage: bin/scrape_official_cards --out DIR --gallery URL|PATH --set SLUG:BUCKET [--set …]');
     process.exit(2);
   }
   return opts;
@@ -121,19 +124,33 @@ async function capture(send, url) {
 const opts = parseArgs(process.argv.slice(2));
 fs.mkdirSync(opts.out, { recursive: true });
 
-// Not `.json()` straight off the response: the gallery host is behind the same WAF as the card
-// database, and a refusal arrives as an HTML block page with HTTP 200 — which `.json()` reports
-// as an unhandled SyntaxError and a stack trace, twenty lines deep in undici, saying nothing
-// about what actually happened.
+// `--gallery` takes a URL or a local path, and the local form is not a convenience: the
+// enumeration is a static list of collector numbers, while the pages are what actually have to be
+// fetched. Requiring it over HTTP made the run depend on two independent refusals — the gallery
+// host sits behind the same WAF as the card database and is refused on its own schedule, so a
+// capture could be blocked by a file whose contents had not changed in weeks.
+//
+// Not `.json()` straight off the response either: a refusal arrives as an HTML block page with
+// HTTP 200, which `.json()` reports as an unhandled SyntaxError twenty lines deep in undici,
+// saying nothing about what happened.
 const gallery = await (async () => {
-  const response = await fetch(opts.gallery);
-  const body = await response.text();
+  let body, origin;
+  if (fs.existsSync(opts.gallery)) {
+    body = fs.readFileSync(opts.gallery, 'utf8');
+    origin = `file ${opts.gallery}`;
+  } else {
+    const response = await fetch(opts.gallery);
+    body = await response.text();
+    origin = `HTTP ${response.status}`;
+  }
   try {
     return JSON.parse(body);
   } catch {
-    console.error(`the gallery did not answer with JSON (HTTP ${response.status}, ${body.length} bytes).`);
+    console.error(`the gallery did not answer with JSON (${origin}, ${body.length} bytes).`);
     console.error(body.includes('Incapsula') || body.includes('_Incapsula_Resource')
-      ? 'It served a WAF block page. The address is refused for now; wait and re-run.'
+      ? 'It served a WAF block page. Pass a saved copy of cards.json to --gallery instead:\n' +
+        '  the enumeration is static, so a copy taken any time works and the run then depends\n' +
+        '  only on the card database being reachable.'
       : `First bytes: ${body.slice(0, 200)}`);
     process.exit(1);
   }
