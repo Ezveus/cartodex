@@ -274,11 +274,13 @@ class Search::GlobalTest < ActiveSupport::TestCase
       "a 8-character token must not reach in_set_code"
   end
 
-  # The price of the widening, recorded rather than discovered: a numeric penultimate token now
-  # passes the shape test and reaches the database, where a letters-only one stopped at the regex.
-  # It buys "30C 1" answering while the reader is still typing "30C 128"; it costs one covering
-  # index scan on "pikachu 25 10", a shape nobody types on purpose.
-  test "a digit-bearing token reaches the database exactly once" do
+  # The price of the widening, recorded rather than discovered: a digit-bearing token now passes
+  # the shape test and reaches the database, where a letters-only one stopped at the regex. The
+  # probe follows `tokens.last` and not a position, so "charizard v2" pays it too. One statement is
+  # the *refused* case measured here — a token that does name a set pays a second for the filter
+  # itself, and three in all once the page renders the row. It buys "30C 1" answering while the
+  # reader is still typing "30C 128"; it costs this scan on "pikachu 25 10", which nobody types.
+  test "a digit-bearing token that names no set reaches the database exactly once" do
     probes = ActiveRecord::Base.uncached do
       capture_queries { Search::Global.call(user: @user, query: "pikachu 25 10").cards.to_a }
     end

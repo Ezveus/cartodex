@@ -51,6 +51,20 @@ a no-op — no set answers to a numeric token, so `.exists?` refuses and the que
 repository has the precedent. Issue #111 (Japanese sets) is what would make it live: SV2a is
 literally named "151".
 
+## What actually changes answer
+
+Enumerated rather than argued, over every (set code x set number) pair the catalogue holds: **368
+query shapes**, every one of them empty before and answering now, none of them answering a
+*different* card than before.
+
+| Shape | Gained | Lost |
+|---|---|---|
+| `CODE NUMBER` — "30C 128" | 184 | 0 |
+| `<name> CODE` — "Exeggcute 30C" | 184 | 0 |
+
+The second class is the one the change reaches without being written for it, and it is the same
+behaviour "Exeggcute ASC" already had.
+
 ## Why the collision argument does not get worse
 
 `CLAUDE.md` records the trade this predicate makes: where a token reads both as a set code and as a
@@ -62,19 +76,29 @@ what carries the safety, which is the argument the file's own comment already ma
 
 ## Tests
 
-`test/services/search/global_test.rb` is where this predicate is pinned; the existing test at
-line 195 quotes the regex literally in its comment and has to move with it.
+`test/services/search/global_test.rb` is where this predicate is pinned; the comment above its
+length-bound test quotes the regex literally and has to move with it. Attacking the plan replaced
+three of the four cases first written here, each because the assertion as drafted could not
+discriminate:
 
-1. **A code carrying digits is read as a code.** Query `"30C 128"` finds the printing. The fixture
-   card's name must not contain its own code, or the assertion passes as a name match.
-2. **A purely numeric token is a name until a set answers to it.** Two halves, because the guard
-   being asserted is `.exists?` and not the regex: with no set named `151`, `"151 10"` does not
-   reach the card numbered 10 in some other set; with a card filed under `set_name = "151"`, the
-   same query reaches it.
-3. **The length bound still holds at both edges with digits present** — extend the existing
-   edge test rather than duplicating it.
+1. **A digit code is read as a code** — asserted as *which* card, against a decoy named
+   "Bonus 30c Promo" filed under another set at the same number. Found-versus-empty passes under
+   the name reading.
+2. **A numeric token no set answers to falls back to being a name** — asserted so the *name* is
+   the observable winner, because both readings of such a token answer nothing and an
+   `assert_empty` stays green with the database probe deleted outright.
+3. **A numeric token a set does answer to is read as a code** — the only case separating this
+   charset from one demanding at least one letter.
+4. **The lower edge of the length bound** — the drafted "both edges with digits" added nothing the
+   existing six-character row already caught; narrowing to `{1,5}` changed no result in the file,
+   so a one-character code was free. A printing filed under `X` is what pins it.
+5. **A token past the bound is refused before the database is asked** — the regex being the cheap
+   left operand of the `&&` was unpinned; swapping the operands changes no result anywhere.
+6. **A digit-bearing token that names no set costs exactly one probe** — the price, recorded.
+7. **The prose quotes the predicate that is compiled** — by equality against `SET_CODE_SHAPE`,
+   not by a list of forbidden spellings, so widening the bound reddens the quotation.
 
-Every one of these is sabotage-verified: restore `[a-zA-Z]`, watch it go red, restore.
+All seven mutation-verified: every mutation aimed at them went red, none survived.
 
 ## Files
 

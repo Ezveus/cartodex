@@ -74,13 +74,13 @@ Key services:
 resolves "POR" reads `cards.set_name` through that scope — `SearchCardsTool` as a *filter*
 ("what does this code answer with"), `CardSearchable#card_set_code?` as a *predicate* ("is this
 token a code at all") — and the two being one query is load-bearing rather than tidy. Both used to
-have their own spelling and they diverged: the tool filtered `cards.set_name` (54 codes in the
-catalogue) while the parser resolved through `card_sets` (28 imported rows), so `/cards?q=ROS 89`
+have their own spelling and they diverged: the tool filtered `cards.set_name` (56 codes in the
+catalogue) while the parser resolved through `card_sets` (30 imported rows), so `/cards?q=ROS 89`
 answered *Xerosic's Machinations* — SFA 89, whose **name** contains "ros" — while `search_cards`
 answered *Sky Field*, ROS 89. Measured, they disagreed on all **44** printings whose set was never
 imported. Keying the predicate on `card_sets` was also a slow time bomb: the meaning of a member's
 query changed the day an admin imported an unrelated set, silently. Nothing is lost by reading the
-wider column — every `card_sets` row has cards, so the 28 are a subset of the 54. The scope keeps
+wider column — every `card_sets` row has cards, so the 30 are a subset of the 56. The scope keeps
 `UPPER` on both sides rather than a bare equality on an already-uppercase column: nothing enforces
 the casing (`Cards::Fetcher` takes `set_name` from a URL path segment), and the covering-index scan
 it costs is 0.43 ms against a 0.0025 ms seek, next to the 0.79 ms LIKE count the spotlight already
@@ -94,7 +94,7 @@ code+number with an empty name — without it "POR 56" searched for a card *name
 because it lets the code guard reach `tokens.last` on an array the number pop may have emptied,
 `tokens.length > 1` on the number line is what keeps a token there: relaxed, "56" is a
 `NoMethodError` on nil and not a wider answer. The trade is deliberate and it **costs real
-queries**: 12 of the 28 imported set codes are also substrings of card names, so of the 439
+queries**: 12 of the 30 imported set codes are also substrings of card names, so of the 439
 two-token queries that answer something today, 224 go empty and 179 name a different card —
 "MEG 113" moves from *Mega Lucario ex* (ASC 113) to *Acerola's Mischief* (MEG 113), and "Mew 216"
 from two cards to none, MEW being a set with no 216. "MEG 113" is how a player writes a printing;
@@ -106,9 +106,15 @@ query while `search_cards` answered them, the same split `Card.in_set_code` exis
 purely numeric token is admitted too and costs nothing today, since no set answers to one and
 `.exists?` refuses it: the regex is a cheap reject and never the decision, which is why it is the
 *left* operand. The price is one covering-index scan on a query whose penultimate token carries a
-digit — which is what "30C 1" is while the reader is still typing "30C 128", and a shape nobody
-types otherwise. Widening to digits changed no existing answer: no card name in the catalogue
-contains "30c".
+digit — which is what "30C 1" is while the reader is still typing "30C 128". The probe follows
+`tokens.last` and not the position: a query ending in a digit-bearing token pays it too, whether or
+not a number was popped ("charizard v2" costs one where "greninja 10" costs none). Widening changed
+no existing answer and gained 368 query shapes, all of them empty before: 184 of the form
+`CODE NUMBER` and 184 of the form `<name> CODE`, none answering a *different* card, because no card
+name in the catalogue contains "30c" and no 2-5 character digit-bearing token appears inside any of
+the 4916 names at all. One consequence worth knowing before a numeric code exists: the number pop
+is greedy on the last token, so such a code is only ever readable in the penultimate position —
+once a set `151` exists, "Charizard 151" still means a card named Charizard numbered 151.
 The union of both readings was weighed and refused — it answers three cards where the reader asked
 for one. Nothing rendered says which reading was taken, which is issue territory, not a defect of
 the rule.
@@ -371,7 +377,7 @@ quietly, and nothing on the screen says so.
 - `bin/rails standard_pools:backfill_anchors` — anchor Standard decks and tournaments that predate the `standard_pool_id` column. Run **after** `db:seed`, which creates the pools it needs; idempotent.
 - `bin/scrape_official_cards --out tmp/official --gallery <cards.json URL> --set <slug>:<bucket>` — capture one HTML fragment per card from the official Pokémon card database, for a set Limitless does not have yet. **Node, not Ruby, and it needs a local Chrome**: the source is behind Imperva, which serves a refusal as a ~930-byte page with **HTTP 200**, allows a plain HTTP client two or three requests before flagging the address, and refuses a cookie exported out of the browser as well as a same-origin `fetch()` — so every card costs a full navigation and none of this can live in the Rails image. It holds no parsing rules on purpose; its one guard is that the card markup must be present, and three consecutive failures stop the run rather than filling a directory with block pages that fail only at import.
 - `bin/rails 'official_cards:import[dir,slug,CODE,Set Name]'` — write those fragments into the catalogue. Skips a printing already held (the #121 rule — and here the existing row is the *richer* one), and exits non-zero naming each file it could not write.
-- `bin/rails 'official_cards:rename_set[FROM,TO]'` — move a set's cards **and** its `card_sets` row onto another code, for the day Limitless publishes its own and the guess has to be corrected. It **bumps `updated_at`, and that is not bookkeeping**: `Og::CardPayload#subtitle` prints `set_name` while its `#digest` folds `updated_at`, and `OgImagesController` serves the banner `immutable` for a year — so a bare `update_all` changes every renamed card's link preview while leaving its address identical, permanently, on the one day this task is meant to run. It is the same failure this file writes out for `DeckCard`. Keyed on `cards.set_name`, never on `card_sets.code`: the catalogue holds 54 codes in the column against 28 rows in the table, the same asymmetry `Card.in_set_code` exists for, so a code-only check would let a target through and then collide with the unique index part-way, with the set row already moved.
+- `bin/rails 'official_cards:rename_set[FROM,TO]'` — move a set's cards **and** its `card_sets` row onto another code, for the day Limitless publishes its own and the guess has to be corrected. It **bumps `updated_at`, and that is not bookkeeping**: `Og::CardPayload#subtitle` prints `set_name` while its `#digest` folds `updated_at`, and `OgImagesController` serves the banner `immutable` for a year — so a bare `update_all` changes every renamed card's link preview while leaving its address identical, permanently, on the one day this task is meant to run. It is the same failure this file writes out for `DeckCard`. Keyed on `cards.set_name`, never on `card_sets.code`: the catalogue holds 56 codes in the column against 30 rows in the table, the same asymmetry `Card.in_set_code` exists for, so a code-only check would let a target through and then collide with the unique index part-way, with the set row already moved.
 - `bin/rails card_labels:resync_fingerprints` — move card label assignments onto their card's current fingerprint after a `force: true` rescrape moves it out from under them, reporting rather than writing whatever it cannot resolve safely.
 
 ## Test Setup
