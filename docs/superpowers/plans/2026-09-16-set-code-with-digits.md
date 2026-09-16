@@ -100,16 +100,42 @@ discriminate:
 
 All seven mutation-verified: every mutation aimed at them went red, none survived.
 
+## The other half, added after review
+
+Adversarial review found the same bug over the same 184 printings on the write path, and the owner
+chose to close it here rather than in a follow-up. `Decks::Fetcher::CARD_LINE_RE` wanted
+`[A-Z]{2,3}`, and `parse_card_lines` is a `filter_map` whose `next unless match` drops an
+unreadable line while `call` raises only when the list parses to *nothing* — so `4 Ultra Ball 30C
+128` did not fail an import, it shortened the deck silently.
+
+The shape is now spelled once, as `Decks::Fetcher::SET_CODE`. `Tournaments::LimitlessDecklist` and
+`Tournaments::OnlineDecklist` exist to say loudly what that drop hides and both restated the rule
+by hand; the three copies diverged, and the day `30C` arrived it was refused by the two guards and
+lost by the parser at once. Their `SET_CODE_RE` now reads the shared constant, and a test asserts
+the guards refuse exactly what a card line cannot carry — over both alphabets, not by constant
+identity, which a fresh literal equal to today's value would satisfy while staying free to drift.
+
+Measured over every printing in the catalogue written out as a card line: **4632 parse under both
+shapes with identical captures, 184 parse only under the new one, none stops parsing**. The
+remaining 100 are the `GG1`-style numbers, the other half of the same guard, untouched.
+
+`Tournaments::OnlineResults::SET_RE` carries the same shape and is deliberately not unified: it
+sanitises a URL segment before a fetch, a different question with the same answer.
+
 ## Files
 
-- `app/controllers/concerns/card_searchable.rb` — the regex and its comment
-- `test/services/search/global_test.rb` — the three cases above
-- `CLAUDE.md` — the sentence describing this rule says "2-5 **letter** fragment"
-- `docs/superpowers/plans/2026-09-16-set-code-with-digits.md` — this file
+- `app/controllers/concerns/card_searchable.rb` — the shape test and its prose
+- `app/services/decks/fetcher.rb` — `SET_CODE` / `SET_CODE_RE` / `CARD_LINE_RE`
+- `app/services/tournaments/limitless_decklist.rb`, `.../online_decklist.rb` — guards read the shared shape
+- `test/services/search/global_test.rb`, `test/services/decks/fetcher_test.rb` — nine tests
+- `CLAUDE.md` — the two paragraphs describing both rules, plus four stale catalogue counts
 
 ## Out of scope
 
-- A bare set code listing its whole set (refused above).
-- `SearchCardsTool`, which takes `set_code` explicitly and already resolves `30C` through
-  `Card.in_set_code`.
+- A bare set code listing its whole set (refused by the owner when asked).
+- **A genuinely unreadable line is still dropped without a word.** Widening the shape removes the
+  184 printings from that class; it does not close the class, and turning the drop into a refusal
+  changes the behaviour of every import that ever ran.
+- The `GG1`-style card numbers, which are the number half of the same guard.
+- `SearchCardsTool`, which takes `set_code` explicitly and already resolved `30C`.
 - The `/cards` set filter, which reads `card_sets` and already offers both rows.
