@@ -98,7 +98,17 @@ queries**: 12 of the 28 imported set codes are also substrings of card names, so
 two-token queries that answer something today, 224 go empty and 179 name a different card —
 "MEG 113" moves from *Mega Lucario ex* (ASC 113) to *Acerola's Mischief* (MEG 113), and "Mew 216"
 from two cards to none, MEW being a set with no 216. "MEG 113" is how a player writes a printing;
-"name contains this 2-5 letter fragment *and* carries this number" is a coincidence nobody types.
+"name contains this 2-5 character fragment *and* carries this number" is a coincidence nobody
+types. **The shape test admits digits** — `CardSearchable::SET_CODE_SHAPE`, `/\A[a-zA-Z0-9]{2,5}\z/`
+— because `30C` and `30CC` (30th Celebration and its Classic Collection) are the first codes in the
+catalogue to carry one, and letters-only left their 184 printings unreachable by a set-and-number
+query while `search_cards` answered them, the same split `Card.in_set_code` exists to close. A
+purely numeric token is admitted too and costs nothing today, since no set answers to one and
+`.exists?` refuses it: the regex is a cheap reject and never the decision, which is why it is the
+*left* operand. The price is one covering-index scan on a query whose penultimate token carries a
+digit — which is what "30C 1" is while the reader is still typing "30C 128", and a shape nobody
+types otherwise. Widening to digits changed no existing answer: no card name in the catalogue
+contains "30c".
 The union of both readings was weighed and refused — it answers three cards where the reader asked
 for one. Nothing rendered says which reading was taken, which is issue territory, not a defect of
 the rule.

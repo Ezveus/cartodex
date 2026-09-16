@@ -1,6 +1,19 @@
 module CardSearchable
   extend ActiveSupport::Concern
 
+  # The shape a token must have before the database is asked whether it names a set — the cheap
+  # left operand of the `&&` in `card_set_code?` below, and a constant because a test quotes it
+  # to keep the prose describing it from drifting away from what is compiled.
+  #
+  # Digits are admissible, and not merely tolerated: `30C` and `30CC` — 30th Celebration and its
+  # Classic Collection — are the first two codes in the catalogue to carry one, and under a
+  # letters-only shape their 184 printings could not be reached by a set-and-number query at all.
+  # A *purely* numeric token is admissible for the same reason and costs nothing today, since
+  # `Card.in_set_code(token).exists?` refuses every one of them; issue #111 is what makes it live,
+  # SV2a being called "151" in Japanese. `Tournaments::OnlineResults::SET_RE` is already spelled
+  # this way.
+  SET_CODE_SHAPE = /\A[a-zA-Z0-9]{2,5}\z/
+
   private
 
   def apply_card_name_filter(scope, query)
@@ -17,7 +30,7 @@ module CardSearchable
     # Where the two readings collide the set wins, and that is a deliberate loss: 12 of the 28
     # imported set codes are also substrings of card names, so "Mew 25" now answers with MEW 25
     # rather than with a card named Mew. "MEG 113" is how a player writes a printing; "name
-    # contains this 2-5 letter fragment *and* carries this number" is a coincidence filter nobody
+    # contains this 2-5 character fragment *and* carries this number" is a coincidence filter nobody
     # types on purpose. Returning the union of both readings was weighed and refused — it keeps a
     # query answering three cards where the reader asked for one. Measured on the production
     # catalogue: 439 two-token queries answer something today, 224 of them go empty and 179 name
@@ -45,6 +58,6 @@ module CardSearchable
   # 28 are a subset of the 54, and a code with no printing filed under it would answer with no
   # cards whichever way it were read.
   def card_set_code?(token)
-    token.match?(/\A[a-zA-Z]{2,5}\z/) && Card.in_set_code(token).exists?
+    token.match?(SET_CODE_SHAPE) && Card.in_set_code(token).exists?
   end
 end
