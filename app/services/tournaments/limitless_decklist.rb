@@ -21,13 +21,14 @@ class Tournaments::LimitlessDecklist < ApplicationService
 
   DECK_SIZE = 60
 
-  # Decks::Fetcher::CARD_LINE_RE demands two or three uppercase letters for the set code and digits
-  # for the number, and *silently drops* any line it cannot match — a dropped line is a deck four
-  # cards short with no error anywhere, which is exactly the failure these guards exist for. Both
+  # Decks::Fetcher::CARD_LINE_RE *silently drops* any line it cannot match — a dropped line is a
+  # deck four cards short with no error anywhere, which is exactly the failure these guards exist
+  # for. The set-code half therefore reads that regex's own shape rather than restating it: two
+  # spellings of one rule is how `30C` came to be refused here and lost there on the same day. Both
   # halves are checked here, by name, while there is still something to say about the card. No page
   # observed so far carries a non-numeric card number, which is precisely why a future one would
   # go unnoticed: nothing downstream would complain.
-  SET_CODE_RE = /\A[A-Z]{2,3}\z/
+  SET_CODE_RE = ::Decks::Fetcher::SET_CODE_RE
   NUMBER_RE = /\A\d+\z/
 
   def initialize(url)

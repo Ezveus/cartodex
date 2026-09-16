@@ -2,7 +2,22 @@
 class Decks::Fetcher < ApplicationService
   class ParseError < StandardError; end
 
-  CARD_LINE_RE = /\A(\d+)\s+(.+?)\s+([A-Z]{2,3})\s+(\d+)\z/
+  # The set code a decklist line may carry, and the one place it is spelled. `SET_CODE_RE` is the
+  # same shape asked of a code on its own, which `Tournaments::LimitlessDecklist` and
+  # `Tournaments::OnlineDecklist` read rather than writing again: their guards exist to say loudly
+  # what `parse_card_lines` drops silently, so a guard that disagreed with this regex would either
+  # refuse a list this can read or let through one it cannot. Written by hand three times, the
+  # copies did diverge — `30C` was refused by both guards and lost by this regex on the same day.
+  #
+  # Digits, and up to five characters: `30C` and `30CC` (30th Celebration and its Classic
+  # Collection) are the first codes in the catalogue to need either, 184 printings that `/cards`
+  # could find and no member could import. Measured over every printing in the catalogue, written
+  # out as a card line: 4632 parse under both the old shape and this one with **identical
+  # captures**, 184 parse only under this one, none stops parsing. Case stays significant — a
+  # Japanese `SV9a` is still refused, by this and by both guards, since nothing can address it.
+  SET_CODE = /[A-Z0-9]{2,5}/
+  SET_CODE_RE = /\A#{SET_CODE}\z/
+  CARD_LINE_RE = /\A(\d+)\s+(.+?)\s+(#{SET_CODE})\s+(\d+)\z/
   LIMITLESS_BASE_URL = "https://limitlesstcg.com/cards"
 
   # shared/format/standard_pool/other_format_name exist for the tournament field list, which is a
