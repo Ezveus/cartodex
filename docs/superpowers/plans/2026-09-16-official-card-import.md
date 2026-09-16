@@ -141,6 +141,33 @@ docker run --rm -v cartodex-bundle-406:/bundle \
 Then the five CI gates. System tests are unaffected (no view, no route) but run anyway, on the host,
 both viewports.
 
+## What attacking this plan found — every row gets a test
+
+The plan above was attacked before any code existed. Fourteen decisions would have been made wrong
+without a single test going red. Two were factual errors in the spec, now corrected there.
+
+| # | Would have stayed green because | Test assigned |
+|---|---|---|
+| 1 | `belongs_to :card_set, optional: true`, and 44 catalogue printings legitimately carry a nil `card_set_id` — so a card with the right `set_name` and **no set link** passes every `set_name` assertion, while `CardSets::RescrapeJob` iterates `card_set.cards` and repairs nothing | `assert_equal result.imported, set.cards.count`, and a rescrape test stubbing `Cards::Fetcher` that asserts `…/cards/30C/21` was requested |
+| 2 | **Spec was wrong**: nothing on `Card` derives `pokemon_subtype`; the only writer is private to `Cards::Fetcher`. All 24 *ex* cards would score `POKEMON_WEIGHT` (2) instead of `RULE_BOX_WEIGHT` (3) in `Decks::ArchetypeDetector` | assert `pokemon_subtype.name == "Pokémon ex"` on `30th_53`, plus an `ArchetypeDetector` case where an imported *ex* wins on score |
+| 3 | `config/environments/test.rb:23` is `:null_store`, so `count_queries { Card.filter_values } > 0` passes whether or not the cache was forgotten | copy `with_real_cache` from `CardSets::ImporterTest`, and assert 0 queries before the import as the sanity half |
+| 4 | Every attack effect sits in a `<pre>` inside `.ability` — the same selector `effect` uses. A parser dropping the card-type guard writes attack text into `cards.effect` on all 154 Pokémon | `assert_nil` effect on `30th_21`/`30th_66`; assert `30th_128`'s by **equality** with Ultra Ball's printed sentence |
+| 5 | The plan claimed weakness/resistance had no fixture. Wrong — `30th_53` carries the empty-resistance block, `30th_66`/`30th_100` a populated one | `30th_66` → weakness/resistance both asserted; `30th_53` → `assert_nil resistance`; assert the `×2` suffix stays out |
+| 6 | The three damage fixtures each have exactly **one** damage span, so a parser zipping spans against attacks positionally is invisible | `assert_equal [nil, "160"]` on `30th_21`, `[nil, "200"]` on `30th_53`, `["30+", "90"]` on `30th_5`; `assert_nil` the empty `<pre>` effect |
+| 7 | "Imports once, reports skipped" is satisfied by an in-place `update!` of the same row | pre-create the printing with `regulation_mark: "J"` and `price_eur: 1.5`; assert both survive and it is counted `skipped` |
+| 8 | A `ParseError` is raised **before any write**, so the test passes whether the run is transactional or not. The realistic failure is a parseable card `Card` refuses — `RecordInvalid` | a fragment with its rarity span stripped: assert it lands in `failed`, that later files imported, and that earlier files are still in the database |
+| 9 | `rename_set`'s refusal keyed on `card_sets.code` is **the wrong key** — `cards.set_name` holds 54 codes against `card_sets`' 28 | a `Card` at the target `set_name` with no `card_sets` row must make the rename refuse; and a card with `card_set_id: nil` must still be renamed |
+| 10 | Two energy letters of eleven are exercised; a Fairy↔Psychic swap stores a valid, wrong, fingerprint-bearing value | `assert_equal Cards::Fetcher::ENERGY_SYMBOLS.invert, SYMBOL_BY_TYPE`; every `icon-*` class in the 17 fragments is a key |
+| 11 | None of the three rarity cases is the collision the decision is *about* | assert `30th_129` → `"Illustration"` **and** `assert_not_equal "Art"`, with the refusal named in a comment |
+| 12 | The only fixture with no retreat block is `30th_128`, a **Trainer** — which plan §3 requires to save with `retreat_cost` nil. The two prescribed tests contradict each other | a hand-edited `30th_53` copy, labelled as such: `assert_equal 0` and `card.valid?`; keep `30th_128` at nil |
+| 13 | **Measured**: a two-attack card with `position: nil, nil` and one with `0, 1` produce the identical fingerprint `da0c4d0b5a19577a`, because `sort_by` on an all-equal key is stable. `position` is absent from the frozen contract | `assert_equal [0, 1], card.attacks.map(&:position)` and assert the attack order by name |
+| 14 | `name_normalized` is only asserted by tests that read fixtures or their own transaction. An `insert_all` anywhere on the create path leaves it nil and the card invisible to `/cards` and the spotlight | `assert_includes Card.name_matching("greninja").pluck(:set_number), "21"` after a run |
+
+Plus: `set_full_name`/`artist`/`image_url` get assertions (none were prescribed, and `set_full_name`
+has two unarbitrated sources — the parser and the importer's argument); and the rake task gets
+`assert_raises(SystemExit)` on a failing run, since `exit` otherwise kills the whole minitest run
+instead of failing one test.
+
 ## Open, and blocking the run but not the build
 
 The capture stopped at 17 of 184 pages: the address is currently refused by Imperva, including in a

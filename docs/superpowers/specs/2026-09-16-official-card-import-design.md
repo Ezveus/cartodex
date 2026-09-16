@@ -98,19 +98,24 @@ Three pieces, and the boundary between them is a file on disk.
 bin/scrape_official_cards        Node, no dependencies, never loaded by Rails
         │  drives a local Chrome over raw CDP, one navigation per card
         ▼
-tmp/30c.json                     184 records, raw strings, gitignored
+tmp/official/<slug>_<n>.html     184 verbatim `section.card-detail` fragments, gitignored
         │
         ▼
-Cards::OfficialImporter          app/services/ — the only piece with tests
+Cards::OfficialParser            app/services/ — HTML → Hash, every rule, all tested
+        ▼
+Cards::OfficialImporter          app/services/ — Hash → Card + Attacks + Abilities
         │
         ▼
 lib/tasks/official_cards.rake    thin wrapper, matching archetypes.rake
 ```
 
-The split is not decoration. The importer is a pure function of a parsed JSON record, so its whole
-surface is testable from fixtures with no HTTP and no browser — which is what lets the rules below
-be pinned by tests. The scraper holds everything untestable in this repository (there is no JS test
-infrastructure) and holds no rules.
+The split is not decoration, and the boundary deliberately sits at raw HTML rather than at parsed
+JSON. Emitting JSON from the scraper would put every HTML→field rule inside the one piece this
+repository cannot test — there is no JS test infrastructure here. Measured on the 17 pages
+captured, the `section.card-detail` fragment that every selector lives inside is **106 KiB across
+all 17** against 2732 KiB for the whole pages, so committing those fragments as fixtures costs
+almost nothing and buys a parser whose whole surface is exercised on the real bytes. The scraper
+navigates, slices and writes; it holds no rules at all.
 
 `bin/scrape_official_cards` is Node rather than Ruby for one measured reason: `selenium-webdriver`
 is `group :test` only (`Gemfile:120-123`), and more importantly Selenium's automation flags are
@@ -158,9 +163,24 @@ others and every reader is shared.
 | `artist` | `.illustrator a` | |
 | `image_url` | `.card-image img` | the official asset URL |
 | `effect` | `.ability pre` | Trainer/Energy only — nil on Pokémon, as Limitless writes it |
-| `pokemon_subtype` | — | not written; `Card` derives it from the name, unchanged |
+| `pokemon_subtype` | the name | **written by the importer** — nothing on `Card` derives it (see below) |
 
-Four rules are load-bearing and each has a measurement behind it.
+Six rules are load-bearing and each has a measurement behind it.
+
+**`pokemon_subtype` has to be written here, because nothing on `Card` writes it.** An earlier draft
+of this table said the model derives it from the name; that is false. The only assignment in the
+app is `Cards::Fetcher#detect_pokemon_subtype` (`fetcher.rb:97` calling `fetcher.rb:275`), which is
+below that class's `private` at `fetcher.rb:49` — a card saved by any other path comes out nil. The
+set holds 24 *ex* cards, and `Decks::ArchetypeDetector` reads `pokemon_subtype.rule_box` to score a
+member at `RULE_BOX_WEIGHT` instead of `POKEMON_WEIGHT`, so leaving the column nil would quietly
+mis-rank every archetype built on one of them. The importer therefore applies the same
+name-derived rule, and a test asserts the weight difference rather than the column alone.
+
+**Imported cards must be reachable as `card_set.cards`, not merely carry the right `set_name`.**
+`belongs_to :card_set, optional: true` (`card.rb:5`), and 44 printings in the catalogue legitimately
+carry no `card_set_id` — so a nil is invisible to every assertion about `set_name`, and
+`CardSets::RescrapeJob` iterates `card_set.cards` (`rescrape_job.rb:8`). Getting this wrong makes
+the documented repair path visit zero rows while every other test passes.
 
 **Attacks and abilities are `build`, and the card is saved once.** `compute_fingerprint` is a
 `before_save` that reads `[name, hp, type_symbol, attacks[name, cost, damage], abilities[name]]`
