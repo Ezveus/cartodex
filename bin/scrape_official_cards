@@ -1,0 +1,226 @@
+#!/usr/bin/env node
+// Capture card pages from the official Pokémon card database, one HTML fragment per card.
+//
+// This is a one-off tool, run by hand, and it is deliberately the dumbest piece of the import:
+// it navigates, slices out `section.card-detail`, and writes it. Every rule about what those
+// bytes *mean* lives in Cards::OfficialParser, where it is covered by fixtures. Nothing here is
+// unit-tested — this repository has no JS test infrastructure — so nothing here decides anything.
+//
+// Why a browser at all: www.pokemon.com sits behind Imperva. A plain HTTP client gets two or three
+// requests and is then served a ~930-byte block page *with HTTP 200*, and the block sticks to the
+// address for a while. A browser passes because it runs the challenge script, but its cookie does
+// not transfer to another client — the token is bound to the TLS fingerprint too — and a fetch()
+// from inside an already-validated page is refused as well, since Imperva separates
+// `Sec-Fetch-Dest: document` from `empty` and that header cannot be set from script. Full
+// navigation is the only thing that works, which is why this costs one page load per card.
+//
+// Why Node and raw CDP: selenium-webdriver is `group :test` in the Gemfile, and more to the point
+// its automation flags are exactly what a WAF fingerprints. The Chrome that gets through is
+// launched bare. Node ships a WebSocket, so CDP costs no dependency.
+//
+// Usage:
+//   bin/scrape_official_cards --out tmp/official \
+//     --gallery https://tcg.pokemon.com/assets/img/me-expansions/30th-celebration/cards/cards.json \
+//     --set 30th:seeall --set 30th-c:classic-collection
+//
+// `--gallery` also takes a local path. Prefer it: the enumeration never changes, and its host is
+// refused on its own schedule, independently of the one holding the pages.
+//
+// `--headful` opens a visible browser window rather than running headless.
+//
+// Re-running skips whatever is already on disk, so an abort costs only what it had not reached.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+
+const BASE = 'https://www.pokemon.com/us/pokemon-tcg/pokemon-cards/series';
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+].filter(Boolean);
+
+function parseArgs(argv) {
+  const opts = { out: null, gallery: null, sets: [], throttle: 1000, port: 9339, headful: false };
+  for (let i = 0; i < argv.length; i++) {
+    const [k, v] = [argv[i], argv[i + 1]];
+    if (k === '--out') { opts.out = v; i++; }
+    else if (k === '--gallery') { opts.gallery = v; i++; }
+    else if (k === '--set') { const [slug, bucket] = v.split(':'); opts.sets.push({ slug, bucket }); i++; }
+    else if (k === '--throttle') { opts.throttle = Number(v); i++; }
+    else if (k === '--port') { opts.port = Number(v); i++; }
+    else if (k === '--headful') { opts.headful = true; }
+    else { console.error(`unknown argument: ${k}`); process.exit(2); }
+  }
+  if (!opts.out || !opts.gallery || opts.sets.length === 0) {
+    console.error('usage: bin/scrape_official_cards --out DIR --gallery URL|PATH --set SLUG:BUCKET [--set …]');
+    process.exit(2);
+  }
+  return opts;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// `--headful` opens a real window instead of running headless. It exists because the two are
+// fingerprinted differently and the source refuses the headless one while still answering an
+// ordinary browser; whether reaching for it is appropriate is the operator's call, not this
+// script's, which is why it is a flag and not a fallback. It needs a display, and it takes over
+// the screen for as long as the run lasts.
+function launchChrome(port, headful) {
+  const bin = CHROME_CANDIDATES.find(p => fs.existsSync(p));
+  if (!bin) { console.error('no Chrome found; set CHROME_PATH'); process.exit(2); }
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'scrape-official-'));
+  const child = spawn(bin, [
+    ...(headful ? [] : [ '--headless=new', '--disable-gpu' ]),
+    '--no-first-run', '--no-default-browser-check',
+    `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, 'about:blank',
+  ], { stdio: 'ignore' });
+  return { child, profile };
+}
+
+async function connect(port) {
+  for (let i = 0; i < 30; i++) {
+    try {
+      const t = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
+      const ws = new WebSocket(t.webSocketDebuggerUrl);
+      await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+      let id = 0;
+      const pending = new Map();
+      ws.onmessage = e => {
+        const m = JSON.parse(e.data);
+        if (!m.id || !pending.has(m.id)) return;
+        const { res, rej } = pending.get(m.id);
+        pending.delete(m.id);
+        m.error ? rej(new Error(m.error.message)) : res(m.result);
+      };
+      const send = (method, params = {}) => new Promise((res, rej) => {
+        const i = ++id;
+        pending.set(i, { res, rej });
+        ws.send(JSON.stringify({ id: i, method, params }));
+      });
+      await send('Page.enable');
+      return send;
+    } catch { await sleep(500); }
+  }
+  console.error('could not attach to Chrome');
+  process.exit(1);
+}
+
+// Returns the fragment, or null with a reason. The guard is the presence of the card markup and
+// not the HTTP status: the block page is served as 200, so a status check would accept it.
+async function capture(send, url) {
+  const evaluate = async expression => {
+    try {
+      const r = await send('Runtime.evaluate', { expression, returnByValue: true });
+      return r.result?.value;
+    } catch { return undefined; } // the execution context is destroyed mid-navigation
+  };
+  await send('Page.navigate', { url });
+  for (let i = 0; i < 40; i++) {
+    await sleep(500);
+    // Readiness is "complete", not "present". Measured on a 184-card run: two pages were
+    // captured with `.card-description` in place and `.stats-footer` still empty, losing the
+    // collector number and the rarity — the card would have been refused at import with a
+    // message about a missing number rather than about a half-rendered page. The footer is the
+    // last thing to fill, so waiting on it waits on all of it.
+    const html = await evaluate(
+      'document.querySelector(".card-detail") && document.querySelector(".card-description")' +
+      ' && document.querySelector(".stats-footer span")?.textContent.trim()' +
+      ' ? document.querySelector(".card-detail").outerHTML : ""'
+    );
+    if (html) return { html };
+  }
+  return { html: null, title: await evaluate('document.title'), size: await evaluate('document.documentElement.outerHTML.length') };
+}
+
+const opts = parseArgs(process.argv.slice(2));
+fs.mkdirSync(opts.out, { recursive: true });
+
+// `--gallery` takes a URL or a local path, and the local form is not a convenience: the
+// enumeration is a static list of collector numbers, while the pages are what actually have to be
+// fetched. Requiring it over HTTP made the run depend on two independent refusals — the gallery
+// host sits behind the same WAF as the card database and is refused on its own schedule, so a
+// capture could be blocked by a file whose contents had not changed in weeks.
+//
+// Not `.json()` straight off the response either: a refusal arrives as an HTML block page with
+// HTTP 200, which `.json()` reports as an unhandled SyntaxError twenty lines deep in undici,
+// saying nothing about what happened.
+const gallery = await (async () => {
+  let body, origin;
+  if (fs.existsSync(opts.gallery)) {
+    body = fs.readFileSync(opts.gallery, 'utf8');
+    origin = `file ${opts.gallery}`;
+  } else {
+    const response = await fetch(opts.gallery);
+    body = await response.text();
+    origin = `HTTP ${response.status}`;
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    console.error(`the gallery did not answer with JSON (${origin}, ${body.length} bytes).`);
+    console.error(body.includes('Incapsula') || body.includes('_Incapsula_Resource')
+      ? 'It served a WAF block page. Pass a saved copy of cards.json to --gallery instead:\n' +
+        '  the enumeration is static, so a copy taken any time works and the run then depends\n' +
+        '  only on the card database being reachable.'
+      : `First bytes: ${body.slice(0, 200)}`);
+    process.exit(1);
+  }
+})();
+const jobs = opts.sets.flatMap(({ slug, bucket }) => {
+  const numbers = gallery[bucket];
+  if (!Array.isArray(numbers)) { console.error(`gallery has no bucket "${bucket}"`); process.exit(2); }
+  return numbers.map(n => ({ slug, n }));
+});
+console.log(`${jobs.length} card(s) to capture into ${opts.out}`);
+
+const { child, profile } = launchChrome(opts.port, opts.headful);
+const cleanup = () => {
+  try { child.kill(); } catch {}
+  try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
+};
+process.on('exit', cleanup);
+process.on('SIGINT', () => { cleanup(); process.exit(130); });
+
+const send = await connect(opts.port);
+
+let written = 0, skipped = 0, consecutiveFailures = 0;
+const failures = [];
+
+for (const { slug, n } of jobs) {
+  const target = path.join(opts.out, `${slug}_${n}.html`);
+  if (fs.existsSync(target) && fs.statSync(target).size > 512) { skipped++; continue; }
+
+  const url = `${BASE}/${slug}/${n}/`;
+  let result = await capture(send, url);
+  if (!result.html) {
+    await sleep(3000);
+    result = await capture(send, url);
+  }
+
+  if (!result.html) {
+    failures.push(`${slug}/${n} (title=${JSON.stringify(result.title)} size=${result.size})`);
+    console.error(`FAILED ${slug}/${n} — title=${JSON.stringify(result.title)} size=${result.size}`);
+    // Three in a row is the source refusing us, not three odd cards. Stopping is the point:
+    // the block page is a 200, so carrying on would fill the directory with pages that look
+    // like successes and fail only at import, 180 requests later.
+    if (++consecutiveFailures >= 3) { console.error('three consecutive failures — stopping'); break; }
+    continue;
+  }
+
+  consecutiveFailures = 0;
+  fs.writeFileSync(target, result.html + '\n');
+  written++;
+  if (written % 20 === 0) console.log(`  … ${written} written, ${skipped} already present`);
+  await sleep(opts.throttle);
+}
+
+console.log(`\nwritten=${written} skipped=${skipped} failed=${failures.length} of ${jobs.length}`);
+if (failures.length) {
+  console.log('failed:');
+  for (const f of failures) console.log(`  ${f}`);
+}
+process.exit(failures.length ? 1 : 0);

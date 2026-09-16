@@ -272,23 +272,10 @@ class Cards::Fetcher < ApplicationService
     effect_section.text.strip.presence
   end
 
+  # The rule the name declares. Kept on PokemonSubtype because Cards::OfficialImporter needs the
+  # same answer, and two copies of a classification rule drift apart.
   def detect_pokemon_subtype(card)
-    name = card.name
-    if name.include?("Mega ") && name.end_with?(" ex")
-      PokemonSubtype.find_by(name: "Mega Evolution ex")
-    elsif name.end_with?(" ex")
-      PokemonSubtype.find_by(name: "Pokémon ex")
-    elsif name.end_with?(" EX")
-      PokemonSubtype.find_by(name: "Pokémon EX")
-    elsif name.include?("VMAX")
-      PokemonSubtype.find_by(name: "Pokémon VMAX")
-    elsif name.include?("VSTAR")
-      PokemonSubtype.find_by(name: "Pokémon VSTAR")
-    elsif name.include?("V-UNION")
-      PokemonSubtype.find_by(name: "Pokémon V-UNION")
-    elsif name =~ / V$/
-      PokemonSubtype.find_by(name: "Pokémon V")
-    end
+    PokemonSubtype.for_card_name(card.name)
   end
 
   def parse_wrr_field(wrr, field)
