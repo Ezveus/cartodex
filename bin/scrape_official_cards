@@ -121,7 +121,23 @@ async function capture(send, url) {
 const opts = parseArgs(process.argv.slice(2));
 fs.mkdirSync(opts.out, { recursive: true });
 
-const gallery = await (await fetch(opts.gallery)).json();
+// Not `.json()` straight off the response: the gallery host is behind the same WAF as the card
+// database, and a refusal arrives as an HTML block page with HTTP 200 — which `.json()` reports
+// as an unhandled SyntaxError and a stack trace, twenty lines deep in undici, saying nothing
+// about what actually happened.
+const gallery = await (async () => {
+  const response = await fetch(opts.gallery);
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    console.error(`the gallery did not answer with JSON (HTTP ${response.status}, ${body.length} bytes).`);
+    console.error(body.includes('Incapsula') || body.includes('_Incapsula_Resource')
+      ? 'It served a WAF block page. The address is refused for now; wait and re-run.'
+      : `First bytes: ${body.slice(0, 200)}`);
+    process.exit(1);
+  }
+})();
 const jobs = opts.sets.flatMap(({ slug, bucket }) => {
   const numbers = gallery[bucket];
   if (!Array.isArray(numbers)) { console.error(`gallery has no bucket "${bucket}"`); process.exit(2); }
