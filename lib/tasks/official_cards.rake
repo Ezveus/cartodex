@@ -36,8 +36,14 @@ namespace :official_cards do
 
     moved = 0
     ActiveRecord::Base.transaction do
-      moved = Card.where(set_name: from).update_all(set_name: to)
-      CardSet.where(code: from).update_all(code: to)
+      # `updated_at` is bumped deliberately, and it is not bookkeeping. Og::CardPayload#subtitle
+      # prints `set_name` while its #digest folds `updated_at`, and OgImagesController serves the
+      # result `immutable` for a year — so a bare update_all would change every one of these
+      # cards' link previews while leaving their addresses identical, permanently. That is the
+      # same failure CLAUDE.md writes out for DeckCard, and it would fire on the whole set on the
+      # one day this task is meant to be run.
+      moved = Card.where(set_name: from).update_all(set_name: to, updated_at: Time.current)
+      CardSet.where(code: from).update_all(code: to, updated_at: Time.current)
     end
 
     puts "Moved #{moved} card(s) from #{from} to #{to}."

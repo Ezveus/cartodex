@@ -147,6 +147,32 @@ class Cards::OfficialImporterTest < ActiveSupport::TestCase
     assert_not Card.exists?(set_name: "30C", set_number: "53")
   end
 
+  test "an error nobody rescues stops the run and keeps what was already written" do
+    # The run is deliberately not wrapped in one transaction: a capture of 184 cards that dies
+    # part-way should leave the cards it managed, and re-running skips them. Nothing else would
+    # notice an enclosing transaction being added — the per-card rescue swallows the only failure
+    # the other tests produce, so that transaction would never see anything to roll back.
+    # Keyed on the card, not on a call count: the importer also parses one fragment up front to
+    # learn the set's printed name, so a counter would silently target a different file.
+    original = Cards::OfficialParser.method(:call)
+    Cards::OfficialParser.define_singleton_method(:call) do |html|
+      raise "the disk went away" if html.include?("Greninja")
+      original.call(html)
+    end
+
+    with_fragments("30th_21", "30th_53", "30th_128", "30th_130") do |dir|
+      assert_raises(RuntimeError) { import(dir) }
+    end
+
+    # Sorted order is 128, 130, 21, 53 — so the first two are committed and the fourth is
+    # never reached.
+    assert Card.exists?(set_name: "30C", set_number: "128")
+    assert Card.exists?(set_name: "30C", set_number: "130")
+    assert_not Card.exists?(set_name: "30C", set_number: "53")
+  ensure
+    Cards::OfficialParser.define_singleton_method(:call, original) if original
+  end
+
   test "the set name given to the importer wins over the one printed on the card" do
     with_fragments("30th_21") do |dir|
       import(dir, set_full_name: "30th Anniversary Celebration")
@@ -155,6 +181,50 @@ class Cards::OfficialImporterTest < ActiveSupport::TestCase
     assert_equal "30th Anniversary Celebration", CardSet.find_by(code: "30C").name
     # The card keeps what the source printed; only the set row takes the override.
     assert_equal "30th Celebration", Card.find_by(set_name: "30C", set_number: "21").set_full_name
+  end
+
+  test "with no name given, the set takes the one its own cards print" do
+    # The argument and the fragments are two sources for one fact. Importing the Classic
+    # Collection under the parent set's name would leave the /cards sidebar disagreeing with
+    # every card listed under it.
+    with_fragments("30th-c_1", slug: "30th-c") do |dir, slug|
+      Cards::OfficialImporter.call(dir: dir, slug: slug, set_code: "30CC")
+    end
+
+    assert_equal "30th Classic Collection", CardSet.find_by(code: "30CC").name
+  end
+
+  test "never renames a set somebody already named" do
+    # The `||=` is the CardSets::Importer rule: a re-run must not revert an admin's correction.
+    CardSet.create!(code: "30C", name: "Thirtieth Anniversary")
+
+    with_fragments("30th_21") { |dir| import(dir, set_full_name: "30th Celebration") }
+
+    assert_equal "Thirtieth Anniversary", CardSet.find_by(code: "30C").name
+  end
+
+  test "a directory holding no fragment of this slug is a typo, not a finished import" do
+    Dir.mktmpdir do |dir|
+      FileUtils.cp(FIXTURES.join("30th_21.html"), File.join(dir, "30th_21.html"))
+
+      # Reported success and exit 0 before, having created the set row — indistinguishable from
+      # importing a set whose cards were all already held.
+      assert_raises(ArgumentError) { import(dir, slug: "30TH") }
+    end
+
+    assert_not CardSet.exists?(code: "30C")
+  end
+
+  test "a fragment from the other set is refused rather than filed under this code" do
+    Dir.mktmpdir do |dir|
+      # Renamed on disk to look like this set; the page still says which set it is.
+      FileUtils.cp(FIXTURES.join("30th-c_1.html"), File.join(dir, "30th_1.html"))
+
+      result = import(dir)
+
+      assert_equal 0, result.imported
+      assert_match(/30th-c/, result.failed.first.last)
+    end
   end
 
   test "reads only the slug it was asked for" do

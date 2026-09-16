@@ -94,6 +94,52 @@ class OfficialCardsRakeTest < ActiveSupport::TestCase
     assert CardSet.exists?(code: "30C"), "the set row must not move when the cards cannot"
   end
 
+  test "rename_set moves each card's link preview along with its code" do
+    # Og::CardPayload#subtitle prints set_name and its #digest folds updated_at, and the endpoint
+    # serves the result immutable for a year — so a rename that left updated_at alone would
+    # change every banner's content and none of their addresses, permanently, on the one day this
+    # task is meant to run. The same failure CLAUDE.md writes out for DeckCard.
+    with_fragments("30th_21") do |dir|
+      run_task("official_cards:import", dir, "30th", "30C", "30th Celebration")
+    end
+    card = Card.find_by(set_name: "30C", set_number: "21")
+    # Backdated because the digest folds `updated_at.to_i`, at one-second resolution, and this
+    # test imports and renames inside the same second. The real gap is days: Limitless publishes
+    # the set well after the stopgap filled it.
+    card.update_column(:updated_at, 3.days.ago)
+    before = Og::CardPayload.call(card.reload)
+
+    run_task("official_cards:rename_set", "30C", "CEL30")
+    after = Og::CardPayload.call(card.reload)
+
+    assert_equal "30C · 21", before.subtitle
+    assert_equal "CEL30 · 21", after.subtitle
+    assert_not_equal before.digest, after.digest,
+      "the banner's content moved and its address did not — permanently, under immutable"
+  end
+
+  test "rename_set rolls the cards back when the set row cannot follow them" do
+    # The two writes are atomic, and nothing else exercises that half: the guard already refuses
+    # the collision a reader would think of, so the transaction is there for a failure the guard
+    # cannot see — a busy database, a constraint reached from elsewhere. Without it the cards
+    # would sit under a code whose card_sets row still carries the old one, and
+    # CardSets::RescrapeJob would look every one of them up at the wrong URL.
+    Card.create!(
+      name: "Mover", card_type: "Trainer", set_name: "30C", set_number: "21", rarity: "Common"
+    )
+    CardSet.create!(code: "30C", name: "30th Celebration")
+
+    original = CardSet.method(:where)
+    CardSet.define_singleton_method(:where) { |*| raise ActiveRecord::StatementInvalid, "busy" }
+
+    assert_raises(ActiveRecord::StatementInvalid) { run_task("official_cards:rename_set", "30C", "CEL30") }
+
+    CardSet.define_singleton_method(:where, original)
+    assert_equal "30C", Card.find_by(name: "Mover").set_name
+  ensure
+    CardSet.define_singleton_method(:where, original) if original
+  end
+
   # Redirects $stdout by hand rather than using capture_io: capture_io's return value depends on
   # its block returning normally, and `exit` raises SystemExit straight past it, taking the
   # captured string with it.

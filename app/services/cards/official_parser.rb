@@ -14,12 +14,16 @@ class Cards::OfficialParser < ApplicationService
   class ParseError < StandardError; end
 
   # The icon class is the canonical name, not the `title` attribute: the class is what the page's
-  # own stylesheet keys on, and it is lowercase ASCII where the tooltip is display text.
-  ENERGY_BY_SLUG = {
-    "grass" => "Grass", "fire" => "Fire", "water" => "Water", "lightning" => "Lightning",
-    "fighting" => "Fighting", "psychic" => "Psychic", "darkness" => "Darkness",
-    "metal" => "Metal", "fairy" => "Fairy", "dragon" => "Dragon", "colorless" => "Colorless"
-  }.freeze
+  # own stylesheet keys on, and the weakness, resistance and attack-cost icons carry no `title` at
+  # all — only the type icon does. Reading the tooltip therefore loses three fields out of four.
+  #
+  # **Derived, never typed out.** Every one of `Card::ENERGY_TYPES` downcases to exactly the slug
+  # the page uses, so the mapping is a fact about the model rather than a second list beside it.
+  # A hand-written table here passed every test in this file with Fairy and Psychic swapped —
+  # both are valid members, so `Card`'s inclusion validation cannot see the swap, no fixture in
+  # this set plays either type, and the wrong letter would have gone into `attacks.cost` and from
+  # there into the fingerprint.
+  ENERGY_BY_SLUG = Card::ENERGY_TYPES.index_by(&:downcase).freeze
 
   # An attack costing nothing renders as one `li` carrying this and no `data-energy-type`.
   FREE_SLUG = "free".freeze
@@ -65,6 +69,7 @@ class Cards::OfficialParser < ApplicationService
       retreat_cost: retreat_cost,
       rarity: rarity,
       set_number: set_number,
+      source_id: @root.at_css("[data-card-id]")&.attr("data-card-id"),
       set_full_name: text(@root.at_css(".stats-footer h3")),
       artist: text(@root.at_css(".illustrator a")),
       image_url: @root.at_css(".card-image img")&.attr("src"),
@@ -79,9 +84,14 @@ class Cards::OfficialParser < ApplicationService
   end
 
   def card_type
+    # `\ATrainer` is tested FIRST, and the order is the whole rule: a Pokémon Tool's type line
+    # reads "Trainer-Pokémon Tool", so a `/Pokémon/` test that ran first claimed it — and the card
+    # then went on to be given stage "Basic" and retreat 0 before the model refused it with an
+    # error about missing HP. `Cards::Fetcher` has the opposite order and is safe only because
+    # Limitless writes "Trainer - Tool" without the word.
     case type_line
-    when /Pokémon/ then "Pokémon"
     when /\ATrainer/ then "Trainer"
+    when /Pokémon/ then "Pokémon"
     when /Energy/ then "Energy"
     else raise ParseError, "unknown card type: #{type_line.inspect}"
     end
@@ -110,7 +120,15 @@ class Cards::OfficialParser < ApplicationService
   def subtype
     return nil if card_type == "Pokémon"
 
-    type_line.split("-", 2).last&.strip.presence
+    value = type_line.split("-", 2).last&.strip.presence
+    return value unless card_type == "Energy" && value
+
+    # The catalogue's energy vocabulary is "Basic Energy" (50 rows) and "Special Energy" (31),
+    # written by Limitless, and four readers test those exact strings — `Card` exempts only
+    # "Basic Energy" from the rarity-presence validation, and the JSON, Cardmarket and PDF
+    # exporters each compare against it. No captured page is an Energy card, so the official
+    # spelling is unknown; appending the word when it is missing answers both possibilities.
+    value.end_with?("Energy") ? value : "#{value} Energy"
   end
 
   def hp
@@ -205,7 +223,13 @@ class Cards::OfficialParser < ApplicationService
 
   def attack_cost(block)
     types = block.css("ul.left [data-energy-type]").map { _1.attr("data-energy-type") }
-    return FREE_COST if types.empty?
+    if types.empty?
+      # An attack with no typed energy must be the free icon, and saying so is what stops an
+      # icon class nobody has mapped from silently becoming a zero-cost attack.
+      return FREE_COST if block.at_css("ul.left i.energy.icon-#{FREE_SLUG}")
+
+      raise ParseError, "attack #{text(block.at_css('h4.label')).inspect} has an unreadable cost"
+    end
 
     types.map do |type|
       SYMBOL_BY_TYPE.fetch(type) { raise ParseError, "unknown energy: #{type.inspect}" }
@@ -215,14 +239,35 @@ class Cards::OfficialParser < ApplicationService
   def abilities
     ability_blocks.select { _1.at_css(".poke-ability") }.each_with_index.map do |block, index|
       {
-        name: text(block.css("h3 div").reject { _1.matches?(".poke-ability") }.first),
+        name: ability_name(block),
         effect: paragraphs(block),
         position: index
       }
     end
   end
 
+  # The source writes U+2019 where this catalogue is written with U+0027, throughout: measured,
+  # 421 card names carry the plain apostrophe and none carries the typographic one, and 1626
+  # attack effects say "opponent's" against 9 that do not. Leaving it costs more than tidiness —
+  # CardLabels::RoleSuggester's gust and disruption rules spell it plainly, so these cards would
+  # silently fall out of the role vocabulary, and a Trainer's fingerprint is SHA256 of its name
+  # alone, so one apostrophe would make a reprint its own island, unreachable from
+  # Cards::Printings and from any search typed on an ordinary keyboard.
+  #
+  # Only that one character. It is the sole codepoint above U+2000 in all 17 captured fragments,
+  # and `×` (U+00D7) is deliberately left alone — 395 attacks in the catalogue already spell
+  # their damage with it.
+  # "[Pokémon Power] Energy Burn" -> "Energy Burn". The page prints the card's era in front of an
+  # old rule box; no ability in the catalogue carries a bracket, because Limitless writes
+  # "Ability: Energy Burn" and Cards::Fetcher strips that prefix. Same normalisation, other
+  # source. It is not cosmetic: ability names feed compute_fingerprint, and
+  # Decks::CardmarketExporter joins them into the wishlist line it sends to Cardmarket.
+  def ability_name(block)
+    name = text(block.css("h3 div").reject { _1.matches?(".poke-ability") }.first)
+    name&.sub(/\A\[[^\]]*\]\s*/, "").presence
+  end
+
   def text(node)
-    node&.text&.squish.presence
+    node&.text&.squish&.tr("\u2019", "'").presence
   end
 end

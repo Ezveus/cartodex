@@ -5,6 +5,8 @@ require "test_helper"
 # without a browser and so carries none of the `data-gtm-vis-*` attributes the other sixteen do;
 # it is kept for exactly that reason.
 class Cards::OfficialParserTest < ActiveSupport::TestCase
+  FIXTURE_DIR = Rails.root.join("test/fixtures/files/official_cards")
+
   def parse(name)
     Cards::OfficialParser.call(file_fixture("official_cards/#{name}.html").read)
   end
@@ -49,20 +51,29 @@ class Cards::OfficialParserTest < ActiveSupport::TestCase
 
   # --- energy -------------------------------------------------------------------------------
 
-  test "the type symbol comes from the icon class, not the tooltip" do
+  test "the type symbol is read off the card's own type icon" do
+    # Deliberately *not* named for the class-over-tooltip rule any more: on this node the two
+    # agree, so the assertion passes either way and proved nothing about the distinction.
+    # What holds that rule is the weakness/resistance pair below — those icons carry no `title`
+    # at all, so a parser reading the tooltip returns nil for them.
     assert_equal "Darkness", parse("30th_100")[:type_symbol]
     assert_equal "Dragon", parse("30th_110")[:type_symbol]
   end
 
   test "SYMBOL_BY_TYPE is exactly the inverse of the alphabet Cards::Fetcher reads" do
-    # Two energies of eleven are reached by any fixture, so a swap of two valid members —
-    # Fairy for Psychic, say — would store a valid, wrong, fingerprint-bearing letter that no
-    # card in this set could reveal.
     assert_equal Cards::Fetcher::ENERGY_SYMBOLS.invert, Cards::OfficialParser::SYMBOL_BY_TYPE
   end
 
-  test "ENERGY_BY_SLUG covers every energy the model allows, and nothing else" do
-    assert_equal Card::ENERGY_TYPES.sort, Cards::OfficialParser::ENERGY_BY_SLUG.values.sort
+  test "ENERGY_BY_SLUG maps each slug to its own energy, not merely to some valid one" do
+    # Asserting the value *set* is what let a Fairy/Psychic swap survive: both are members of
+    # Card::ENERGY_TYPES, so the inclusion validation cannot see it and no card in this set plays
+    # either type. Pinning the pairs is what makes the swap unrepresentable.
+    assert_equal(
+      { "grass" => "Grass", "fire" => "Fire", "water" => "Water", "lightning" => "Lightning",
+        "fighting" => "Fighting", "psychic" => "Psychic", "darkness" => "Darkness",
+        "metal" => "Metal", "fairy" => "Fairy", "dragon" => "Dragon", "colorless" => "Colorless" },
+      Cards::OfficialParser::ENERGY_BY_SLUG
+    )
   end
 
   test "every energy icon appearing in the fixtures is a slug the parser knows" do
@@ -104,7 +115,43 @@ class Cards::OfficialParserTest < ActiveSupport::TestCase
     assert_equal "Discard all Energy from this Pokémon.", parse("30th_53")[:attacks].second[:effect]
   end
 
+  # --- punctuation --------------------------------------------------------------------------
+
+  test "the typographic apostrophe is folded, because the catalogue is written with the plain one" do
+    # Measured: 421 card names in the catalogue carry U+0027 and none carries U+2019, and 1626
+    # attack effects say "opponent's" against 9 that do not. The source uses U+2019 throughout —
+    # it is the only character above U+2000 in all 17 fixtures.
+    effect = parse("30th_1")[:attacks].first[:effect]
+
+    assert_equal "Your opponent's Active Pokémon is now Asleep.", effect
+    assert_not_includes effect, "’"
+  end
+
+  test "folding it is what keeps these cards inside the role vocabulary" do
+    # CardLabels::RoleSuggester's gust and disruption rules spell "opponent's" with the plain
+    # apostrophe, so unfolded text silently matches neither — and `/cards?role=gust` would print a
+    # list these cards are missing from, while the odds page counted them as roleless.
+    volbeat = parse("30th_3")[:attacks].find { _1[:name] == "Luring Glow" }
+
+    assert_match CardLabels::RoleSuggester::RULES["gust"], volbeat[:effect]
+  end
+
+  test "the multiplication sign is left alone, being the catalogue's own spelling" do
+    # 395 attacks already carry U+00D7 in `damage`; folding it to "x" would be the same mistake
+    # in the other direction.
+    assert_equal "30×", parse("30th_120")[:attacks].first[:damage]
+  end
+
   # --- abilities ----------------------------------------------------------------------------
+
+  test "an ability keeps its name and not the era label the page prints in front of it" do
+    # The Classic Collection reprints a Base Set card, and the page renders its rule box as
+    # "[Pokémon Power] Energy Burn". No ability in the catalogue carries a bracket — Limitless
+    # prefixes "Ability:" and Cards::Fetcher strips it, which is the same normalisation.
+    # It matters twice: ability names enter compute_fingerprint, and Decks::CardmarketExporter
+    # joins them into the wishlist line, where the brackets resolve to nothing.
+    assert_equal [ "Energy Burn" ], parse("30th-c_1")[:abilities].map { _1[:name] }
+  end
 
   test "the Pokémon ex rule is neither an attack nor an ability" do
     # It shares the .ability div with both. 30th_53 renders three of them and exactly two are
@@ -163,6 +210,33 @@ class Cards::OfficialParserTest < ActiveSupport::TestCase
       "Search your deck for a Pokémon, reveal it, and put it into your hand. Then, shuffle your deck.",
       ultra_ball[:effect]
     )
+  end
+
+  test "a Pokémon Tool is a Trainer, despite the word in its type line" do
+    # Hand-edited: the real Ultra Ball fragment with only its <h2> swapped, because no captured
+    # page is a Tool. Testing `/Pokémon/` before `/\ATrainer/` claimed this card, gave it stage
+    # "Basic" and retreat 0, and the model then refused it complaining about missing HP.
+    tool = File.read(FIXTURE_DIR.join("30th_128.html"))
+      .sub("<h2>Trainer-Item</h2>", "<h2>Trainer-Pokémon Tool</h2>")
+    parsed = Cards::OfficialParser.call(tool)
+
+    assert_equal "Trainer", parsed[:card_type]
+    assert_equal "Pokémon Tool", parsed[:subtype]
+    assert_nil parsed[:stage]
+    assert_nil parsed[:retreat_cost]
+  end
+
+  test "a Trainer's printed text is not read as a nameless attack" do
+    # Its block carries an empty energy list and no name, which is what tells it apart from an
+    # attack; without the name half of that test it became a zero-cost attack called nothing.
+    assert_empty parse("30th_128")[:attacks]
+    assert_empty parse("30th_128")[:abilities]
+  end
+
+  test "an attack whose cost cannot be read is refused, not silently made free" do
+    unmapped = File.read(FIXTURE_DIR.join("30th_120.html")).sub("icon-free", "icon-sparkle")
+
+    assert_raises(Cards::OfficialParser::ParseError) { Cards::OfficialParser.call(unmapped) }
   end
 
   test "a Pokémon has no effect, because its text lives on its attacks" do

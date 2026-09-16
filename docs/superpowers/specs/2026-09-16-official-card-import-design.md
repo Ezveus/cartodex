@@ -51,8 +51,19 @@ column is therefore left nil, and that is a **degradation, not a break**: nothin
 legality from it. `cards.regulation_mark` is read by the `/cards` filter
 (`cards_controller.rb:144`), the card show page (`cards/show_view.rb:98`) and one column of the
 tournament PDF (`decks/tournament_pdf_exporter.rb:82`). `StandardPool#regulation_marks` is a
-separate attribute on the pool and is never joined against cards. 748 cards in the catalogue
-already carry a nil `stage`, and 32 a blank rarity, so neither state is new.
+separate attribute on the pool and is never joined against cards. 32 cards already carry a blank
+rarity, so that state is not new.
+
+**A nil `stage` on a Pokémon, however, *is* new, and an earlier draft of this paragraph got that
+wrong.** The catalogue's 748 nil-stage rows are 717 Trainers and 31 Energy; every one of its 3934
+Pokémon carries a stage, including all 746 named `% ex`. The evolving *ex* cards imported here are
+therefore the first. The consequence is contained today and was traced: `Decks::Odds::Groups#basic?`
+is `card_type == "Pokémon" && stage == "Basic"`, an evolving *ex* is non-Basic under a nil as much
+as under `"Stage 2"`, and a Basic *ex* parses as `"Basic"` — so the mulligan rate the odds page
+prints stays true. What stops holding is `Groups`' own stated invariant that a fingerprint group is
+homogeneous in `stage`, and it stops holding the day a Limitless printing of one of these lands
+beside it, because `entry_for` picks the group's representative by `min_by [set_name, set_number]`.
+A rescrape closes it; until then this paragraph is the warning.
 
 **The repair path already exists and is the reason the set code matters.**
 `CardSets::RescrapeJob` builds `https://limitlesstcg.com/cards/#{card.set_name}/#{card.set_number}`
@@ -202,6 +213,54 @@ other set's, and it also feeds the fingerprint.
 **The "Pokémon ex rule" block is ignored.** It shares `.ability` with attacks and abilities and is
 neither; it is identified by carrying no `ul.left` and no `.poke-ability`. Storing it would put
 rules text into `abilities` on every *ex* card in the set and change their fingerprints.
+
+### What the reviews changed
+
+Three passes over the branch — neutral, adversarial and a data-truthfulness pass — found six things
+this design had wrong, and each is now a rule with a test that goes red without it.
+
+**`card_type` must test `Trainer` before `Pokémon`.** A Pokémon Tool's type line reads
+`Trainer-Pokémon Tool`. The obvious ordering claimed it as a Pokémon, gave it stage `Basic` and
+retreat `0`, and the model then refused it with *"Hp can't be blank"* — every Tool in the set
+dropping out of the import under an error naming the wrong thing.
+
+**The typographic apostrophe is folded to the plain one.** The source writes U+2019 throughout; the
+catalogue is written with U+0027 (421 card names carry it, none carries the other; 1626 attack
+effects say "opponent's" against 9 that do not). `CardLabels::RoleSuggester`'s `gust` and
+`disruption` rules spell it plainly, so unfolded text takes these cards out of the role vocabulary
+without a word — and a Trainer's fingerprint is `SHA256(name)`, so one apostrophe in a name makes a
+reprint its own island, unreachable from `Cards::Printings` and from any search typed on an ordinary
+keyboard. **Only that character**: it is the sole codepoint above U+2000 in all 17 fragments, and
+`×` is left alone because 395 attacks already spell their damage with it.
+
+**`rename_set` bumps `updated_at`.** `Og::CardPayload#subtitle` prints `set_name` while its
+`#digest` folds `updated_at`, and the banner is served `immutable` for a year — so a bare
+`update_all` would change every renamed card's link preview while leaving its address identical,
+permanently, on the one day the task is meant to run. Measured before the fix: same digest, same
+path, new content. It is the failure `CLAUDE.md` already writes out for `DeckCard`.
+
+**An ability drops the era label the page prints in front of it.** The Classic Collection reprints
+Base Set cards, rendered as `[Pokémon Power] Energy Burn`. No ability in the catalogue carries a
+bracket — Limitless writes `Ability: Energy Burn` and `Cards::Fetcher` strips that prefix, which is
+the same normalisation. Ability names enter the fingerprint and are joined into the Cardmarket
+wishlist line, where brackets resolve to nothing.
+
+**A run that matched no fragment is refused.** It used to report success, exit 0 and create the
+`card_sets` row — indistinguishable from importing a set whose cards were all already held. A
+mistyped slug is the likely cause, since the operator retypes what the scraper wrote.
+
+**A fragment is checked against the set it says it belongs to.** The markup carries
+`data-card-id="30th/128"`, and the filename is only what the scraper called it; `30th/1` and
+`30th-c/1` are different cards. A fragment from the other set is now refused rather than filed
+under this code.
+
+Two more were left as they are, with reasons. **An Energy card's `subtype` gains the word
+`Energy`** when the page omits it, because the catalogue's vocabulary is `Basic Energy` (50 rows)
+and `Special Energy` (31), `Card` exempts only the first from the rarity validation, and three
+exporters compare against those exact strings — no captured page is an Energy card, so appending
+the word answers both possible spellings. And **`resistance` stays nil where Limitless writes the
+literal `"none"`** (3080 rows against 798 nils): both spellings already exist in the column, nil is
+the more honest of the two, and no filter reads it.
 
 ### Rarity is the first token, deliberately
 
