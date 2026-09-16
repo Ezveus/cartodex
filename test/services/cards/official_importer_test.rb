@@ -173,6 +173,22 @@ class Cards::OfficialImporterTest < ActiveSupport::TestCase
     Cards::OfficialParser.define_singleton_method(:call, original) if original
   end
 
+  test "a page captured before its footer filled is reported, not half-imported" do
+    # Measured on the real 184-card run: two pages came back with .card-description in place and
+    # .stats-footer still empty, which loses the collector number and the rarity. The scraper now
+    # waits for the footer, and this is the fail-safe behind that — a half-rendered page is a
+    # named failure rather than a card with no number.
+    with_fragments("30th_21") do |dir|
+      f = File.join(dir, "30th_21.html")
+      File.write(f, File.read(f).sub(%r{<div class="stats-footer">.*?</div>}m, '<div class="stats-footer"></div>'))
+
+      result = import(dir)
+
+      assert_equal 0, result.imported
+      assert_match(/collector number/, result.failed.first.last)
+    end
+  end
+
   test "the set name given to the importer wins over the one printed on the card" do
     with_fragments("30th_21") do |dir|
       import(dir, set_full_name: "30th Anniversary Celebration")
