@@ -147,7 +147,11 @@ module Cards
     # 10. quantity refuses every non-Integer, not only 0 — an in-process call bypasses the tools'
     # JSON schema minimum entirely.
     test "refuses a quantity that is not a positive Integer" do
-      [ 0, -1, "3", 2.9, true ].each do |quantity|
+      # `false` is the one value that separates reading the key for nil from reading it for
+      # truthiness — a truthiness read treats it as absent and silently defaults it to 1, which is
+      # exactly what #read's own comment says the nil test exists to prevent. Measured: without it
+      # here, mutating that line left all 16 cases green.
+      [ 0, -1, "3", 2.9, true, false ].each do |quantity|
         result = Cards::ReferenceResolver.call(entries: [
           { set_code: "POR", set_number: "56", quantity: quantity }
         ])

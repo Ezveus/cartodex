@@ -147,6 +147,50 @@ class BulkAddToolsTest < ActiveSupport::TestCase
     assert_equal "Deck “#{@deck.name}” — 2 copies over 1 printing", Import.last.label
   end
 
+  # Both tools claim in a comment that the cards and the Import commit together — "an Import that
+  # named copies nobody has, or copies with no Import naming them, are both worse than neither".
+  # Measured: moving record_import outside the transaction left every other test in this file, in
+  # import_test.rb, in the collection adder's tests and in mcp_server_test.rb green. The claim
+  # needed a case where the two halves can diverge, which is a failing Import over cards that have
+  # already been written.
+  #
+  # define_singleton_method rather than a stub: minitest 6 dropped minitest/mock out of the gem and
+  # it is not in this bundle, so Object#stub does not exist here.
+  def with_failing_import(tool)
+    tool.define_singleton_method(:record_import) { |**| raise ActiveRecord::RecordInvalid, Import.new }
+    yield
+  ensure
+    tool.singleton_class.send(:remove_method, :record_import)
+  end
+
+  test "a failing Import write takes the collection rows with it" do
+    before = collections(:one).quantity
+
+    response = assert_no_difference "Import.count" do
+      with_failing_import(AddCardsToCollectionTool) do
+        AddCardsToCollectionTool.call(entries: [ entry("POR", "56", 2) ], server_context: @context)
+      end
+    end
+
+    assert refused?(response)
+    assert_equal before, collections(:one).reload.quantity,
+      "the cards were committed without the Import that records them"
+  end
+
+  test "a failing Import write takes the deck rows with it" do
+    @deck.update!(physical: true)
+    deck_cards(:one).update!(quantity: 1, owned_copies: 1)
+
+    response = assert_no_difference "Import.count" do
+      with_failing_import(AddCardsToDeckTool) do
+        AddCardsToDeckTool.call(deck_key: @deck.key, entries: [ entry("POR", "57", 2) ], server_context: @context)
+      end
+    end
+
+    assert refused?(response)
+    assert_equal 1, @deck.deck_cards.count, "a deck row was committed without the Import that records it"
+  end
+
   test "the deck tool refuses another member's deck without writing" do
     other = decks(:two) # user two
 
