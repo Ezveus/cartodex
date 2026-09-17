@@ -2244,6 +2244,28 @@ textarea.form-input {
   overflow-wrap: anywhere;
 }
 
+/* A bulk card add discloses its receipt inside the Label cell, the same shape .import-error uses
+   one cell further along — and deliberately not the same class, since the pre-existing test
+   selects `details.import-error > summary` with `.first` and a second carrier of that class,
+   rendered earlier in the row, would silently answer for it. `min-width: 0` is what keeps a long
+   card name inside the card's edge below 768px, where Ui::DataTable stacks into a grid. */
+.import-receipt {
+  min-width: 0;
+}
+
+.import-receipt > summary {
+  cursor: pointer;
+}
+
+.import-receipt-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--ink-700);
+  overflow-wrap: anywhere;
+}
+
 /* Detail table (key/value pairs in admin show views) */
 .detail-table {
   width: 100%;

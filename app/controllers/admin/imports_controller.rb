@@ -17,7 +17,12 @@ module Admin
       "limitless_standings" => "A bulk standings import cannot be retried: the run's filters are not stored. " \
                                "Run it again from the import form.",
       "card_labels" => "A card-label import cannot be retried: run it again from the label, which " \
-                       "is where the search token lives."
+                       "is where the search token lives.",
+      # The only kind whose payload *is* stored, and the one refusal the fallback sentence would
+      # get backwards: the receipt holds every printing and every before/after. What is refused is
+      # replaying a *relative* add, which is the thing the feature exists to make impossible.
+      "bulk_cards" => "A bulk card add cannot be retried: it adds copies rather than setting " \
+                      "them, so replaying it would add them a second time."
     }.freeze
 
     def index

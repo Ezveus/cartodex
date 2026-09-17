@@ -18,7 +18,7 @@ module Admin
               t.row do
                 t.cell { imp.id.to_s }
                 t.cell { imp.kind }
-                t.cell { imp.label }
+                t.cell { label_cell(imp) }
                 t.cell { imp.user.email }
                 t.cell { status_badge(imp) }
                 t.cell { error_cell(imp) }
@@ -63,6 +63,41 @@ module Admin
           summary { imp.error_message.truncate(TRUNCATE_AT) }
           p(class: "import-error-full") { imp.error_message }
         end
+      end
+
+      # A bulk card add is relative — it adds copies rather than setting them — so once a second
+      # run has happened neither the label nor the collection's current quantity says what *this*
+      # run did. The receipt does, printing by printing, and it is disclosed here in the Label
+      # cell for the reason error_cell discloses its message rather than parking it in a title=:
+      # below the 768 px breakpoint Ui::DataTable stacks into a data-label card grid, where there
+      # is no hover to reveal a tooltip. An eighth column would have been a layout change this
+      # feature has no reason to make. Every other kind of import writes no receipt and keeps the
+      # plain label it has always had — a <details> with an empty body invites a click that
+      # changes nothing.
+      def label_cell(imp)
+        return plain imp.label if imp.receipt.blank?
+
+        details(class: "import-receipt") do
+          summary { imp.label }
+          ul(class: "import-receipt-list") do
+            imp.receipt.each { |entry| li { receipt_line(entry) } }
+          end
+        end
+      end
+
+      # String keys, never Symbols. `receipt` is a json column, so a row re-read from the database
+      # hands its keys back as Strings whatever the writer built: entry[:name] would render an
+      # empty line per printing while the <details> node itself stayed perfectly present, which is
+      # a failure no "the disclosure exists" assertion can see.
+      def receipt_line(entry)
+        line = "#{entry["name"]} (#{entry["set_name"]} #{entry["set_number"]}) \u2014 " \
+               "#{entry["quantity"]} #{'copy'.pluralize(entry["quantity"].to_i)}, " \
+               "#{entry["before"]} \u2192 #{entry["after"]}"
+        # Only a deck receipt carries the backing pair; both shapes share one column, so the
+        # difference is read off the entry rather than off the import.
+        return line unless entry.key?("owned_before")
+
+        "#{line} (real #{entry["owned_before"]} \u2192 #{entry["owned_after"]})"
       end
 
       def actions_cell(imp)
