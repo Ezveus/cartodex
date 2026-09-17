@@ -2244,6 +2244,30 @@ textarea.form-input {
   overflow-wrap: anywhere;
 }
 
+/* A bulk card add discloses its receipt inside the Label cell, the same shape .import-error uses
+   one cell further along — and deliberately not the same class, since the pre-existing test
+   selects `details.import-error > summary` with `.first` and a second carrier of that class,
+   rendered earlier in the row, would silently answer for it.
+
+   It also deliberately does *not* copy .import-error's `min-width: 0` and `overflow-wrap:
+   anywhere`, which look like they belong here and are measurably dead. Measured at 344px with a
+   60-character card name: with both rules and with neither, the line's scrollWidth, its
+   clientWidth and the document's are identical (206 / 206 / 344) — the cell already constrains the
+   box, and the longest single word in any of the 4916 card names is 14 characters, so there is no
+   unbreakable run for `overflow-wrap` to break. .import-error needs them because its content is a
+   bulk-import failure list that really can carry a URL. */
+.import-receipt > summary {
+  cursor: pointer;
+}
+
+.import-receipt-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--ink-700);
+}
+
 /* Detail table (key/value pairs in admin show views) */
 .detail-table {
   width: 100%;

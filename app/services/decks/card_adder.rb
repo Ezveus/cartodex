@@ -1,9 +1,15 @@
 module Decks
   class CardAdder < ApplicationService
-    def initialize(deck:, card:, quantity: 1)
+    # `available` is the pool this deck may claim for this card, when the caller has already read
+    # it. Decks::BulkCardAdder passes it because it reads the whole batch's availability in one
+    # grouped query; every other caller leaves it nil and this service reads its own. Passing it
+    # does not change the rule — Allocations::Backing.greedy is still what decides — only who paid
+    # for the number.
+    def initialize(deck:, card:, quantity: 1, available: nil)
       @deck = deck
       @card = card
       @quantity = quantity
+      @available = available
     end
 
     def call
@@ -20,7 +26,8 @@ module Decks
 
     # Greedy backing, the rule in Allocations::Backing: an add never demotes existing reals.
     def target_owned_copies(deck_card)
-      free_for_deck = Allocations::Availability.call(user: @deck.user, card: @card, excluding_deck: @deck).available
+      free_for_deck =
+        @available || Allocations::Availability.call(user: @deck.user, card: @card, excluding_deck: @deck).available
 
       Allocations::Backing.greedy(
         quantity: deck_card.quantity, current_owned: deck_card.owned_copies.to_i, available: free_for_deck

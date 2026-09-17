@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_08_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_17_090000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -193,6 +193,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_08_090000) do
     t.text "error_message"
     t.string "kind", null: false
     t.string "label", null: false
+    t.json "receipt", default: [], null: false
     t.string "status", default: "pending", null: false
     t.integer "tournament_id"
     t.datetime "updated_at", null: false

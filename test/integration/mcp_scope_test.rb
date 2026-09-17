@@ -35,7 +35,7 @@ class McpScopeTest < ActionDispatch::IntegrationTest
   WRITE_TOOLS = %w[
     add_card_to_collection set_collection_quantity add_card_to_deck
     set_deck_card_owned_copies reallocate_owned_copies set_deck_card_quantity
-    set_deck_card_printing
+    set_deck_card_printing add_cards_to_collection add_cards_to_deck
   ].freeze
 
   test "a read-only token sees no write tools" do

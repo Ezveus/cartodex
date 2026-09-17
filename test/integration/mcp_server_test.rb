@@ -310,4 +310,24 @@ class McpServerTest < ActionDispatch::IntegrationTest
   ensure
     Rails.cache = original_cache
   end
+
+  # In-process calls bypass schema validation entirely — `mcp` validates only inside
+  # Server#call_tool, and `validate_tool_call_arguments` defaults to true — so a unit test cannot
+  # see whether the declared schema accepts what a client actually sends. This is the app's first
+  # array-of-objects input_schema, and the first entry deliberately carries the Integer 56 while
+  # the second carries the String "56": both spellings have to pass the same declaration.
+  test "the bulk collection tool accepts an array of entries over the wire" do
+    assert_equal 1, @user.collections.find_by(card: cards(:honedge)).quantity
+
+    post "/mcp",
+      params: rpc("add_cards_to_collection",
+                  { entries: [ { set_code: "POR", set_number: 56 }, { set_code: "POR", set_number: "56" } ] }),
+      headers: auth_headers
+
+    assert_response :success
+    result = JSON.parse(response.body).dig("result", "content", 0, "text")
+    assert_no_match(/Invalid arguments|Missing required arguments/, result.to_s)
+    assert_equal 3, @user.collections.find_by(card: cards(:honedge)).quantity
+    assert_equal "Collection — 2 copies over 1 printing", Import.last.label
+  end
 end

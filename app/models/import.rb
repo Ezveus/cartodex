@@ -13,7 +13,12 @@ class Import < ApplicationRecord
   # "card_labels" is a run of Limitless's card search for one label's `is:` token. Like
   # "limitless_standings" it points at no tournament; unlike it, it leaves no receipt to undo,
   # because a re-run writes exactly the same rows and deletes nothing.
-  KINDS = %w[deck card_set standing_list limitless_standings card_labels].freeze
+  # "bulk_cards" is one call of add_cards_to_collection or add_cards_to_deck. It is the only kind
+  # whose payload really is stored — `receipt` holds every printing it touched with the before and
+  # after it moved through — and it is still neither retryable nor undoable: the add is relative,
+  # so replaying it adds the copies a second time (Admin::ImportsController::UNRETRYABLE_REASONS
+  # is where the admin reads that), and an undo has not been asked for.
+  KINDS = %w[deck card_set standing_list limitless_standings card_labels bulk_cards].freeze
   STATUSES = %w[pending completed failed].freeze
 
   validates :kind, inclusion: { in: KINDS }

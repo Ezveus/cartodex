@@ -59,6 +59,31 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     assert Import.exists?(import.id)
   end
 
+  # A bulk card add is the one kind whose payload *is* stored — the receipt holds every printing
+  # and every before/after — so the generic fallback sentence ("what it was run from is not
+  # stored") tells the admin the opposite of the truth while still matching /cannot be retried/.
+  # What is refused here is replaying a *relative* add: run twice, it adds the copies twice. The
+  # row is built failed on purpose, since a real one is completed and the status guard above would
+  # answer first with a different message.
+  test "a bulk card add cannot be retried, and says why in its own words" do
+    import = users(:one).imports.create!(
+      kind: "bulk_cards",
+      label: "Collection — 5 copies over 3 printings",
+      status: "failed"
+    )
+
+    assert_no_difference -> { Import.count } do
+      assert_no_enqueued_jobs do
+        post retry_admin_import_path(import)
+      end
+    end
+
+    assert_redirected_to admin_imports_path
+    assert_match(/adds copies rather than setting them/, flash[:alert])
+    assert_no_match(/what it was run from is not stored/, flash[:alert])
+    assert Import.exists?(import.id)
+  end
+
   # The allowlist has to keep saying yes to the two kinds that were always retryable. Inverting a
   # refusal chain is exactly the change that silently takes a working button away, so both live
   # branches are pinned rather than assumed.
@@ -107,6 +132,85 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     assert_includes summary.text, "Row 1:"
     assert_not_includes summary.text, "Row 6:", "the collapsed row still shows only the truncation"
     assert_includes full.text, "Row 6:", "the last failure is in the document, not in a title="
+  end
+
+  # The receipt is the whole point of the row: it names every printing the run touched and what it
+  # did to each. It is disclosed in the Label cell rather than in an eighth column, because
+  # Ui::DataTable stacks into a data-label card grid below 768px and a new column is a layout
+  # change this feature has no reason to make. Asserted on its *content* and not merely on the
+  # presence of a <details>: `receipt` is a json column, so a view reading entry[:name] renders an
+  # empty line per entry while every node-is-present assertion stays green — hence a persisted row,
+  # re-read the way the view reads it.
+  test "the imports table discloses what a bulk card add wrote" do
+    users(:one).imports.create!(
+      kind: "bulk_cards",
+      label: "Collection — 2 copies over 1 printing",
+      status: "completed",
+      receipt: [ { card_id: cards(:honedge).id, set_name: "POR", set_number: "56",
+                   name: "Honedge", quantity: 2, before: 1, after: 3 } ]
+    )
+
+    get admin_imports_path
+
+    assert_response :success
+
+    summary = css_select("details.import-receipt > summary").first
+    body = css_select("details.import-receipt .import-receipt-list").first
+
+    assert_not_nil summary, "the label is the summary of the disclosure"
+    assert_not_nil body
+    assert_includes summary.text, "Collection — 2 copies over 1 printing"
+    assert_includes body.text, "Honedge"
+    assert_includes body.text, "POR 56"
+    assert_includes body.text, "1 \u2192 3"
+  end
+
+  # A deck receipt names the deck by key, because `decks.name` carries no uniqueness: two decks of
+  # one member produced two rows whose labels were byte-identical and which pointed at neither.
+  test "a deck receipt names the deck it wrote to, and a collection receipt names none" do
+    deck = users(:one).decks.create!(name: "Rival", standard_pool: standard_pools(:twm_por))
+    users(:one).imports.create!(
+      kind: "bulk_cards", label: "Deck “Rival” — 1 copy over 1 printing", status: "completed",
+      receipt: [ { card_id: cards(:honedge).id, set_name: "POR", set_number: "56", name: "Honedge",
+                   quantity: 1, deck_key: deck.key, before: 0, after: 1,
+                   owned_before: 0, owned_after: 0 } ]
+    )
+
+    get admin_imports_path
+
+    assert_includes css_select("details.import-receipt .import-receipt-list").first.text, "Deck #{deck.key}"
+  end
+
+  # /admin/imports is unpaginated, which is pre-existing; a row rendering one <li> per printing is
+  # not — measured, 52 rows of 58 printings took the page from 46 KB to 265 KB.
+  test "a long receipt names the first twenty printings and counts the rest" do
+    users(:one).imports.create!(
+      kind: "bulk_cards", label: "Collection — 25 copies over 25 printings", status: "completed",
+      receipt: Array.new(25) { |n|
+        { card_id: cards(:honedge).id, set_name: "ZZY", set_number: n.to_s,
+          name: "Probe #{n}", quantity: 1, before: 0, after: 1 }
+      }
+    )
+
+    get admin_imports_path
+
+    body = css_select("details.import-receipt .import-receipt-list").first
+    assert_equal 21, body.css("li").size, "twenty printings plus the line that counts the rest"
+    assert_includes body.text, "Probe 19"
+    assert_not_includes body.text, "Probe 20"
+    assert_includes body.text, "… and 5 more"
+  end
+
+  # Every other kind of import writes an empty receipt, which is most of the table. A <details>
+  # whose body is empty invites a click that changes nothing, so the label stays plain text.
+  test "an import with no receipt renders its label as plain text" do
+    users(:one).imports.create!(kind: "card_set", label: "MEG", status: "completed")
+
+    get admin_imports_path
+
+    assert_response :success
+    assert_empty css_select("details.import-receipt")
+    assert_includes css_select(".data-table-cell[data-label='Label']").map(&:text), "MEG"
   end
 
   # Undo is the only way back out of a bad run (D12), and its flash is the only report the admin
