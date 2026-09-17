@@ -102,9 +102,10 @@ class Tournaments::OnlineDecklistTest < ActiveSupport::TestCase
     assert_match(/Crispin/, error.message)
   end
 
-  # Decks::Fetcher::CARD_LINE_RE wants [A-Z]{2,3} and silently drops a line it cannot match, so a
-  # Japanese set code would land as a deck quietly missing four cards. It has to be refused here,
-  # while there is still a card name to put in the message.
+  # Decks::Fetcher::CARD_LINE_RE silently drops a line it cannot match, so a Japanese set code
+  # would land as a deck quietly missing four cards. It has to be refused here, while there is
+  # still a card name to put in the message. SV9a is refused on its *case*, which is why widening
+  # the shared shape to [A-Z0-9]{2,5} left this test alone.
   test "refuses a set code cartodex cannot address, and names the card" do
     stub_http(DECKLIST_HTML.sub("/cards/MEG/104", "/cards/SV9a/104"))
 

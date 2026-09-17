@@ -227,6 +227,41 @@ class Decks::FetcherTest < ActiveSupport::TestCase
     }
   end
 
+  # --- The set code a card line may carry ---
+
+  # `parse_card_lines` is a filter_map with `next unless match`, and `call` raises only when the
+  # list parses to *nothing*, so a line whose set code the regex cannot read does not fail an
+  # import — it silently shortens the deck, the Import records success, and nothing anywhere says
+  # a card is missing. The catalogue grew two such codes with the 30th Celebration import: 184
+  # printings /cards could find and no member could put in a deck.
+  test "imports a line whose set code carries a digit, rather than dropping it" do
+    deck = Decks::Fetcher.call(<<~LIST, @user, "Celebration")
+      4 Ultra Ball 30C 128
+      2 Charizard 30CC 1
+      1 Honedge POR 56
+    LIST
+
+    assert_equal 3, deck.deck_cards.count, "a line was dropped without a word"
+    assert_equal 7, deck.deck_cards.sum(:quantity)
+  end
+
+  # The two Limitless parsers exist to say loudly what this regex drops silently, so their guard
+  # has to refuse exactly what a card line cannot carry — no more, or a readable list is rejected;
+  # no less, and the silent drop is back. They used to spell the shape again by hand and the
+  # copies diverged: 30C was refused by them and lost by this one on the same day. Asserted as
+  # agreement over both alphabets rather than as constant identity, which a fresh literal equal to
+  # today's value would satisfy while staying free to drift tomorrow.
+  test "the Limitless guards refuse exactly the set codes a card line cannot carry" do
+    %w[MEG 30C 30CC SVI AB ABCDE SV9a sv9a ABCDEF A 1 151 30-C].each do |code|
+      readable = "1 Card #{code} 7".match?(Decks::Fetcher::CARD_LINE_RE)
+
+      assert_equal readable, Tournaments::LimitlessDecklist::SET_CODE_RE.match?(code),
+        "LimitlessDecklist disagrees with CARD_LINE_RE about #{code.inspect}"
+      assert_equal readable, Tournaments::OnlineDecklist::SET_CODE_RE.match?(code),
+        "OnlineDecklist disagrees with CARD_LINE_RE about #{code.inspect}"
+    end
+  end
+
   # --- Ownerless import (tournament field lists) ---
 
   test "imports a deck owned by nobody, shared and anchored where it is told" do

@@ -49,9 +49,10 @@ class Tournaments::LimitlessDecklistTest < ActiveSupport::TestCase
     assert_match(/parsed to 59 cards, not 60/, error.message)
   end
 
-  # Decks::Fetcher::CARD_LINE_RE wants [A-Z]{2,3} and silently drops a line it cannot match, so a
-  # four-character set code would land as a deck quietly missing four cards. It has to be refused
-  # here, while there is still a card name to put in the message.
+  # Decks::Fetcher::CARD_LINE_RE silently drops a line it cannot match, so a set code cartodex
+  # cannot address would land as a deck quietly missing four cards. It has to be refused here,
+  # while there is still a card name to put in the message. SV9a is a Japanese code and refused on
+  # its *case*, which is why widening the shared shape to [A-Z0-9]{2,5} left this test alone.
   test "refuses a set code cartodex cannot address, and names the card" do
     stub_http(File.read(Rails.root.join("test/fixtures/files/limitless_decklist_unsupported_set.html")))
 

@@ -192,18 +192,25 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ cards(:trainer_card) ], Search::Global.call(user: @user, query: "PAL 172").cards
   end
 
-  # card_set_code?'s /\A[a-zA-Z]{2,5}\z/ survived being narrowed to exactly {3,3} with the whole
-  # suite green: every set code any parser test names — POR, ASC, TWM, MEW — happens to be three
-  # letters, so both edges of the bound were unexercised. Real codes sit at both (SVE, SVP are
-  # three; the two-letter and five-letter shapes are what a Japanese-set import, issue #111, will
-  # bring). The upper edge matters in the other direction too: a sixth letter must stay a name,
-  # or a six-letter card name followed by a number stops being findable.
+  # card_set_code?'s /\A[a-zA-Z0-9]{2,5}\z/ survived being narrowed to exactly {3,3} with the
+  # whole suite green: every set code any parser test names — POR, ASC, TWM, MEW — happens to be
+  # three letters, so both edges of the bound were unexercised. Real codes sit at both (SVE, SVP
+  # are three; the two-letter and five-letter shapes are what a Japanese-set import, issue #111,
+  # will bring). The upper edge matters in the other direction too: a sixth letter must stay a
+  # name, or a six-letter card name followed by a number stops being findable. And the *lower*
+  # edge was the one still unpinned after the bound had been written down twice: narrowing the
+  # regex to {1,5} changed no result in this file, so a single character reading as a set code
+  # was free.
   test "a set code is read at both edges of the length bound, and not past them" do
     # The names deliberately do not contain their own set code: the six-letter row has to be
     # unreachable *as a name*, or the assertion below passes for the wrong reason.
     { "SV" => "Edge Two", "SVPRO" => "Edge Five", "SIXCHR" => "Edge Six" }.each do |code, name|
       Card.create!(name: name, card_type: "Trainer", set_name: code, set_number: "10", rarity: "Common")
     end
+    # Its own number, not 10: "Edge Six" carries an x and would answer the name reading of "X 10",
+    # passing the assertion below for the wrong reason.
+    Card.create!(name: "Wigglytuff", card_type: "Trainer", set_name: "X", set_number: "7",
+      rarity: "Common")
 
     assert_equal [ "Edge Two" ], Search::Global.call(user: @user, query: "SV 10").cards.map(&:name),
       "two letters is a set code"
@@ -211,6 +218,84 @@ class Search::GlobalTest < ActiveSupport::TestCase
       "five letters is a set code"
     assert_empty Search::Global.call(user: @user, query: "SIXCHR 10").cards,
       "six letters is a name, and nothing is named SIXCHR"
+    assert_empty Search::Global.call(user: @user, query: "X 7").cards,
+      "one character is a name, and nothing is named X"
+  end
+
+  # `30C` and `30CC` — 30th Celebration and its Classic Collection — are the first set codes in
+  # the catalogue to carry a digit, and a letters-only shape test could not read either as a code
+  # at all: 184 printings answered nothing. Asserted as *which* card comes back rather than as
+  # found-versus-empty, because a query naming a digit code is exactly where the set-wins-over-name
+  # trade has to hold too, and a bare `assert_equal 1, ….size` passes under the name reading.
+  test "a set code carrying a digit is read as a code, and still beats a name that contains it" do
+    Card.create!(name: "Celebration Ultra Ball", card_type: "Trainer",
+      set_name: "30C", set_number: "702", rarity: "Common")
+    Card.create!(name: "Bonus 30c Promo", card_type: "Trainer",
+      set_name: "PAF", set_number: "702", rarity: "Common")
+
+    assert_equal [ "Celebration Ultra Ball" ],
+      Search::Global.call(user: @user, query: "30C 702").cards.map(&:name)
+  end
+
+  # The shape test admits a purely numeric token, and `.exists?` is the whole of what keeps that
+  # from meaning anything today. Written so the *name* reading is the observable winner: both
+  # readings of a token no set answers to return nothing, so an `assert_empty` here would stay
+  # green with the database probe deleted outright.
+  test "a numeric token no set answers to falls back to being a name" do
+    Card.create!(name: "Mystery 151", card_type: "Trainer",
+      set_name: "PAF", set_number: "701", rarity: "Common")
+
+    assert_nil Card.in_set_code("151").first, "sanity: no printing is filed under 151"
+    assert_equal [ "Mystery 151" ],
+      Search::Global.call(user: @user, query: "151 701").cards.map(&:name)
+  end
+
+  # The other half, and the only thing separating `[a-zA-Z0-9]` from a shape demanding at least
+  # one letter: once a printing really is filed under a numeric code, the token names it. Issue
+  # #111 is what makes this live — SV2a is called "151" in Japanese.
+  test "a numeric token a set does answer to is read as a set code" do
+    Card.create!(name: "Alakazam", card_type: "Trainer",
+      set_name: "151", set_number: "10", rarity: "Common")
+
+    assert_equal [ "Alakazam" ],
+      Search::Global.call(user: @user, query: "151 10").cards.map(&:name)
+  end
+
+  # The shape test is the cheap left operand of an `&&` whose right operand is a query, and the
+  # spotlight runs this per keystroke on a public, rate-limited path. Swapping the two changes no
+  # result anywhere, so nothing but this notices. Grepping the statements rather than counting
+  # them is what names the probe instead of the total.
+  test "a token past the length bound is refused before the database is asked" do
+    probes = ActiveRecord::Base.uncached do
+      capture_queries { Search::Global.call(user: @user, query: "greninja 10").cards.to_a }
+    end
+
+    assert_empty probes.grep(/UPPER\(cards\.set_name\)/),
+      "a 8-character token must not reach in_set_code"
+  end
+
+  # The price of the widening, recorded rather than discovered: a digit-bearing token now passes
+  # the shape test and reaches the database, where a letters-only one stopped at the regex. The
+  # probe follows `tokens.last` and not a position, so "charizard v2" pays it too. One statement is
+  # the *refused* case measured here — a token that does name a set pays a second for the filter
+  # itself, and three in all once the page renders the row. It buys "30C 1" answering while the
+  # reader is still typing "30C 128"; it costs this scan on "pikachu 25 10", which nobody types.
+  test "a digit-bearing token that names no set reaches the database exactly once" do
+    probes = ActiveRecord::Base.uncached do
+      capture_queries { Search::Global.call(user: @user, query: "pikachu 25 10").cards.to_a }
+    end
+
+    assert_equal 1, probes.grep(/UPPER\(cards\.set_name\)/).size
+  end
+
+  # Three copies of this rule are prose — CLAUDE.md, the concern's own comment, and the comment
+  # above the length-bound test — and prose is invisible to every other test in the suite. This
+  # binds the one a reader consults while editing these tests to the regex actually compiled, by
+  # equality rather than by a list of forbidden spellings: widen the bound to {2,6} and it is the
+  # quotation that goes red, not a string search that was never told about the new shape.
+  test "the prose above the length-bound test quotes the predicate that is compiled" do
+    assert_includes File.read(Rails.root.join(__FILE__)), CardSearchable::SET_CODE_SHAPE.inspect,
+      "the comment describing the length bound no longer quotes the live shape test"
   end
 
   # The other half of the code guard: a lone token is a name, whatever the set table holds.
