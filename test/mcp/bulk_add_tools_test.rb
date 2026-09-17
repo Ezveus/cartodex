@@ -191,6 +191,58 @@ class BulkAddToolsTest < ActiveSupport::TestCase
     assert_equal 1, @deck.deck_cards.count, "a deck row was committed without the Import that records it"
   end
 
+  # SQLite has one write lock and `database.yml` gives it a 5 s timeout; four concurrent max-size
+  # calls exhaust it, measured. Unrescued this reaches the client as a JSON-RPC internal error —
+  # and it is the one failure where "nothing was written" is provable rather than merely likely,
+  # since the lock is taken by BEGIN IMMEDIATE before the first row, so it is also the one the
+  # caller most needs told.
+  test "a lock-wait timeout is refused, and says that resending is safe" do
+    before = collections(:one).quantity
+
+    Collections::BulkCardAdder.define_singleton_method(:call) do |**|
+      raise ActiveRecord::StatementTimeout, "SQLite3::BusyException: database is locked"
+    end
+    begin
+      response = AddCardsToCollectionTool.call(entries: [ entry("POR", "56", 2) ], server_context: @context)
+    ensure
+      Collections::BulkCardAdder.singleton_class.send(:remove_method, :call)
+    end
+
+    assert refused?(response), "a busy database was not reported with isError"
+    assert_match(/nothing was written/, response_text(response))
+    assert_match(/again is safe/, response_text(response))
+    assert_equal before, collections(:one).reload.quantity
+  end
+
+  # The rule CLAUDE.md states for Decks::Fetcher, applied here: every printing is resolved *before*
+  # the write transaction opens, because SQLite has one write lock and Cards::Fetcher costs ~0.7 s
+  # per unknown printing. StandingsImporterTest pins the same promise by recording transaction depth,
+  # and this does too — it is the only thing that would notice the day somebody moves the resolve
+  # inside `transaction do`, or gives the resolver a fetch fallback.
+  #
+  # Depth rather than "BEGIN IMMEDIATE was issued": fixtures pin the connection with a non-joinable
+  # transaction, which the adapter begins *deferred*, so under test the tools' own transaction is a
+  # savepoint and the immediate BEGIN is never observable at all.
+  test "the references are resolved before the write transaction opens" do
+    baseline = ActiveRecord::Base.connection.open_transactions
+    depths = []
+    original = Cards::ReferenceResolver.method(:call)
+    Cards::ReferenceResolver.define_singleton_method(:call) do |**kwargs|
+      depths << ActiveRecord::Base.connection.open_transactions
+      original.call(**kwargs)
+    end
+
+    begin
+      AddCardsToCollectionTool.call(entries: [ entry("POR", "56") ], server_context: @context)
+      AddCardsToDeckTool.call(deck_key: @deck.key, entries: [ entry("POR", "57") ], server_context: @context)
+    ensure
+      Cards::ReferenceResolver.singleton_class.send(:remove_method, :call)
+    end
+
+    assert_equal [ baseline, baseline ], depths,
+      "a printing was resolved with the write transaction already open"
+  end
+
   test "the deck tool refuses another member's deck without writing" do
     other = decks(:two) # user two
 

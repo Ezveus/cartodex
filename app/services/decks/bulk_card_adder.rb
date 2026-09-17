@@ -27,6 +27,13 @@ module Decks
 
     def call
       serialized_transaction do
+        # Under the lock, and only here. `physical?` and `user` were read off an object loaded
+        # before Cards::ReferenceResolver ran, and that gap is now seconds rather than the two
+        # statements it was on the per-card path: a deck turned virtual in between —
+        # Deck#release_owned_copies_if_not_physical zeroes its rows — would otherwise be handed
+        # real copies by an adder still holding the old flag. Measured: without this the batch
+        # leaves a virtual deck holding 2 real copies.
+        @deck.reload
         cards = @resolved.map { |row| row[:card] }
         before = rows_before(cards)
         availability = availability_for(cards)

@@ -125,6 +125,23 @@ class Decks::BulkCardAdderTest < ActiveSupport::TestCase
     assert_nil @deck.deck_cards.find_by(card: @doublade), "the first row survived the rollback"
   end
 
+  # `physical?` and `user` are read off an object the caller loaded *before* Cards::ReferenceResolver
+  # ran, and on this path that gap is seconds — the resolve, plus any wait for SQLite's single write
+  # lock — where the per-card path had two statements. A deck turned virtual in between has had its
+  # rows zeroed by Deck#release_owned_copies_if_not_physical, and an adder still holding the old flag
+  # would hand it real copies again.
+  test "a deck turned virtual while the references were resolving is backed by nothing" do
+    collections(:one).update!(quantity: 3)
+    physical!
+    stale = Deck.find(@deck.id)              # what the tool is holding
+    Deck.find(@deck.id).update!(physical: false)   # somebody else flips it underneath
+
+    Decks::BulkCardAdder.call(deck: stale, resolved: resolved([ @honedge, 2 ]))
+
+    assert_equal 0, stale.deck_cards.find_by(card: @honedge).reload.owned_copies,
+      "a virtual deck came out of the batch holding real copies"
+  end
+
   # The literal, not "the two counts agree": the per-row write is legitimately not flat, so a
   # comparison of totals is satisfied by a per-row Availability.call as readily as by one batched
   # read. Three is what Availability.for_cards costs with excluding_deck: — one grouped SUM over

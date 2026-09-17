@@ -34,6 +34,12 @@ class AddCardsToCollectionTool < McpTool
     end
 
     success_text(label, receipt)
+  rescue ActiveRecord::StatementTimeout, ActiveRecord::LockWaitTimeout
+    error_text(
+      "Error: the database was busy and nothing was written. SQLite has a single write lock and " \
+      "another write held it for longer than the 5 s timeout. Sending the same list again is safe " \
+      "\u2014 the lock is taken before the first row, so a call that waited it out wrote nothing."
+    )
   rescue ActiveRecord::RecordInvalid => e
     error_text("Error: #{e.message}")
   end
