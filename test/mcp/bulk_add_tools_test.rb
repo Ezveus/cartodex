@@ -20,8 +20,12 @@ class BulkAddToolsTest < ActiveSupport::TestCase
   # and error_text("Error: …") are byte-identical in the text block. Asserting the flag is what
   # separates them.
 
-  test "an empty or non-array entries list is refused on both tools" do
-    [ [], nil, "POR 56" ].each do |bad|
+  # "POR 56" and [ "POR 56" ] both answer `[]` with an Integer index, so an entry of either shape
+  # made ReferenceResolver#read raise an unrescued TypeError instead of refusing. Unreachable over
+  # the wire, where the schema requires objects — reachable in process, which is the door
+  # McpTool#positive_quantity? already exists for.
+  test "an empty, non-array or non-object entries list is refused on both tools" do
+    [ [], nil, "POR 56", [ "POR 56" ], [ [ "POR", "56" ] ], [ { set_code: "POR", set_number: "56" }, 7 ] ].each do |bad|
       collection = AddCardsToCollectionTool.call(entries: bad, server_context: @context)
       assert refused?(collection), "entries #{bad.inspect} was not refused with isError"
       assert_match(/non-empty array/, response_text(collection))

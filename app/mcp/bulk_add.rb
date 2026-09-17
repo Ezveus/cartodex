@@ -29,7 +29,11 @@ module BulkAdd
   # rejects these on a real MCP call; an in-process call bypasses it entirely, which is what
   # McpTool#positive_quantity? exists for and the same reason these are checked again here.
   def entries_refusal(entries)
-    unless entries.is_a?(Array) && entries.any?
+    # `all?(Hash)` and not merely "is an Array": an item that is a String or an Array answers `[]`
+    # with an Integer index, so ReferenceResolver#read raises an unrescued TypeError rather than
+    # refusing. The wire schema already requires objects here; this is the in-process door, the
+    # same one McpTool#positive_quantity? exists to cover.
+    unless entries.is_a?(Array) && entries.any? && entries.all?(Hash)
       return error_text("Error: entries must be a non-empty array of { set_code, set_number, quantity? } objects.")
     end
     return unless entries.size > MAX_ENTRIES
