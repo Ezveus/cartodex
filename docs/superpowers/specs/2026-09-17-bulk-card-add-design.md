@@ -60,7 +60,7 @@ price of nothing at all.
 
 A text parser would have cost a grammar. The repository already owns one decklist parser
 (`Decks::Fetcher`, the PTCG `QUANTITY NAME SET NUMBER` format) and has already arbitrated, at length,
-what "MEG 113" means when a set code collides with a card name — 12 of the 28 imported set codes are
+what "MEG 113" means when a set code collides with a card name — 12 of the 30 imported set codes are
 substrings of card names, and 224 two-token queries were deliberately sent to empty so that the
 printing reading wins (see **`CardSearchable` reads "POR 56" as a printing** in `CLAUDE.md`). The
 paste format above is one person's shorthand, not a standard. A third reader of those same tokens

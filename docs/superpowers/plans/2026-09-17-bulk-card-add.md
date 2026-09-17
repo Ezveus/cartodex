@@ -10,7 +10,7 @@ Everything below is fixed before any lane starts. A lane consumes it; no lane re
 ### Constants
 
 ```ruby
-AddCardsToCollectionTool::MAX_ENTRIES = 500   # and AddCardsToDeckTool::MAX_ENTRIES
+BulkAdd::MAX_ENTRIES = 500                   # the module both tools extend
 Import::KINDS                                  # gains "bulk_cards"
 ```
 
@@ -85,8 +85,16 @@ Success, through `text`: a summary line plus one line per printing carrying name
 
 ### `Import`
 
-New column `receipt`, `json`, `null: false`, `default: []`. New kind `"bulk_cards"`, new scope
-`bulk_card_imports`. `Admin::ImportsController::UNRETRYABLE_REASONS` gains
+New column `receipt`, `json`, `null: false`, `default: []`. New kind `"bulk_cards"`. **No new
+scope**: the four that exist each have a caller, and one nothing reads is asserted about by nothing.
+
+**Receipt keys are Strings, everywhere.** `receipt` is a `json` column, so a row re-read from the
+database hands its keys back as Strings whatever was written. A view or a response reading
+`entry[:name]` renders empty against a persisted row while every "the node is present" and
+"length == N" assertion stays true. Writers build String keys; readers use String keys; the tests
+assert against a **reloaded** row.
+
+`Admin::ImportsController::UNRETRYABLE_REASONS` gains
 `"bulk_cards" => "A bulk card add cannot be retried: it adds copies rather than setting them, so replaying it would add them a second time."`
 
 Label: `"Collection — 58 copies over 52 printings"` / `"Deck \"NAME\" — 60 copies over 24 printings"`,
@@ -114,53 +122,109 @@ two tools, `Mcp::ServerController::TOOLS`, `test/integration/mcp_scope_test.rb`'
 
 ## Tests
 
+Corrected against `ship-plan-adversary`, which found ten decisions the suite as first planned would
+not have noticed. Each correction is marked **[adv]** and says what it separates.
+
 Resolution (`test/services/cards/reference_resolver_test.rb`):
 
-1. 52 real references from the spec resolve to 52 cards, 58 copies — the measurement, as a test.
-2. Repeated pairs are summed: `MEE 6, 7, 8, 8, 2, 6` → four rows, quantities 2/1/2/1.
-3. Repetition and an explicit `quantity` combine: `{PBL 56}, {PBL 56, quantity: 3}` → 4.
-4. `set_code` is matched case-insensitively — lowercase `pbl` resolves.
-5. A card whose stored `set_name` is lowercase still resolves (second pass). Requires a fixture
-   written that way, since 0 of 4916 production rows are.
-6. `set_number` accepts the Integer 56 and the String `"56"` identically.
-7. `"GG1"`-style alphanumeric numbers resolve; `" 56 "` and a U+00A0-padded `"56"` resolve.
+1. A batch of the spec's shape resolves: several sets, several numbers, sums correct. Fixtures hold
+   13 cards, so this is the spec's measurement in miniature, not its 52 references.
+2. Repeated pairs are summed and **`resolved` is asserted as an ordered array**: `MEE 6, 7, 8, 8, 2,
+   6`-shaped input over fixture cards gives quantities `[2, 1, 2, 1]` in source order. **[adv]** Pass
+   1 returns rows lexicographically by `(set_name, set_number)`, which is neither source nor numeric
+   order, so an ordered assertion is what separates them.
+3. Repetition and an explicit `quantity` combine: `{POR 56}, {POR 56, quantity: 3}` → 4.
+4. **[adv] Summing is keyed on the *normalised* pair, not the raw one.** One call mixing three
+   spellings of one printing — `{set_code: "POR", set_number: 56}`, `{set_code: " por ",
+   set_number: "56"}`, `{set_code: "POR", set_number: " 56"}` — gives `resolved.size == 1`,
+   `quantity == 3`.
+5. **[adv] The second pass exists.** Create a `Card` with `set_name: "por"` lowercase (nothing
+   upcases it — `Card` carries only `compute_fingerprint` and `normalize_name`), resolve
+   `set_code: "POR"` against it, assert it lands in `resolved` and `unresolved` is empty. `set_name`
+   is BINARY-collated, confirmed, so pass 1 genuinely cannot answer it. **Sabotage gate: deleting
+   pass 2 must turn this red** — the "lowercase `pbl` resolves" test cannot, since normalisation
+   upcases the input before pass 1 ever runs.
+6. **[adv] The cross-product over-fetch is re-paired, not guessed.** Fixtures already hold `POR 56`
+   and `TWM 56`: ask for `POR 56` and `TWM 57` in one call and assert `TWM 57` is unresolved while
+   `POR 56` resolved — a naive `index_by(:set_number)` answers both.
+7. `set_number` accepts the Integer `56` and the String `"56"` identically; `"GG1"`-style numbers
+   resolve; `" 56 "` and a **literal U+00A0**-padded `"56"` resolve.
 8. An unknown number in a known set is `"no printing in the catalogue"`, not an exception.
-9. A blank `set_code`, a blank `set_number`, and `quantity: 0` each produce their exact reason.
-10. **Nothing is fetched**: stub `Cards::Fetcher` to raise, resolve a miss, assert no call.
-11. Flat query cost: resolving 2 references and 52 references costs the same number of statements,
-    measured inside `ActiveRecord::Base.uncached` (the query cache hides repeats, and has fooled a
-    measurement in this repository three times).
+9. A blank `set_code` and a blank `set_number` each produce their exact reason.
+10. **[adv] `quantity` refuses non-Integers, not only 0.** A case each for `0`, `-1`, `"3"`, `2.9`
+    and `true`, each asserting the exact reason on that entry and that nothing resolved; plus
+    `quantity` absent and `quantity: nil` both defaulting to 1 rather than being refused. This is
+    what `McpTool#positive_quantity?` exists for — an in-process call bypasses the schema minimum.
+11. **Nothing is fetched**: stub `Cards::Fetcher` to raise, resolve a miss, assert no call.
+12. Flat query cost: 2 references and 52 references cost the same statements, inside
+    `ActiveRecord::Base.uncached`.
 
 Write services:
 
-12. `Collections::BulkCardAdder` sums onto an existing row and creates a missing one in one call.
-13. It writes `language`/`finish` `"unknown"` and never a second row for the same card.
-14. Receipt `before`/`after` match the database after the call.
-15. `Decks::BulkCardAdder` on a physical deck backs greedily and agrees, row for row, with what
-    looping `Decks::CardAdder` would have produced — asserted against the loop, not against a
-    transcribed constant.
-16. On a non-physical deck `owned_copies` stays 0.
-17. Flat query cost on the deck side: 10 printings and 40 printings cost the same availability
-    statements, inside `uncached`.
-18. A raise mid-batch rolls the whole batch back (sabotage-shaped: force the last row invalid).
+13. `Collections::BulkCardAdder` sums onto an existing row and creates a missing one in one call.
+14. It writes `language`/`finish` `"unknown"` and never a second row for the same printing.
+15. Receipt `before`/`after` match the database after the call, read off a **reloaded** row with
+    String keys. **[adv]**
+16. **[adv] `Decks::BulkCardAdder` really passes `excluding_deck:` and the row's `current_owned`.**
+    A physical deck already holding the printing at `quantity 1, owned_copies 1`, user owning 3: add
+    2 and assert `owned_copies == 3`. Omitting `excluding_deck:` gives 2; hard-coding
+    `current_owned: 0` also gives 2. Include a second row where owned < quantity so the greedy cap
+    is exercised. The comparison against a `Decks::CardAdder` loop runs from the **same** starting
+    state on the **same** deck, rolled back between arms — a loop arm on a second deck legitimately
+    disagrees, because the first arm has already consumed the collection.
+17. On a non-physical deck `owned_copies` stays 0.
+18. **[adv] Flat availability cost, pinned to the literal.** Inside `uncached`, exactly 3 statements
+    matching the grouped `SUM` on `collections`/`deck_cards` — that is what `for_cards` costs with
+    `excluding_deck:` — at 10 printings and again at 40. Asserting the two counts merely agree is
+    satisfied by a per-row `Availability.call` once the filter matches nothing.
+19. A raise mid-batch rolls the whole batch back.
 
 Tools:
 
-19. Both tools refuse an empty `entries`, a non-array, and 501 entries, each with `isError: true`.
-20. One unresolved entry → **nothing written** (collection and deck row counts unchanged), `isError:
-    true`, and the text names that entry and no other.
-21. Success writes exactly one `Import`, `kind: "bulk_cards"`, `status: "completed"`, receipt length
-    equal to the distinct printing count, label carrying both counts.
-22. A refusal writes **no** `Import`.
-23. `add_cards_to_deck` refuses another user's deck key and writes nothing.
-24. `mcp_scope_test.rb`: a read-only token sees neither tool; a read-write token sees both.
+20. Both tools refuse an empty `entries`, a non-array and 501 entries. **[adv] Each refusal asserts
+    `response.to_h[:isError]`**, the way `read_tools_test.rb` does — `text("Error: …")` and
+    `error_text("Error: …")` are byte-identical in the text block and only that flag separates them.
+21. **[adv] All-or-nothing asserts quantities, not row counts.** A batch mixing one resolvable entry
+    with one unresolved one, against fixtures that already hold the target rows: after the refusal
+    `collections(:one).reload.quantity` is still 1, and on a physical deck holding the printing,
+    `quantity` and `owned_copies` are both unchanged. Row counts alone are satisfied by a
+    resolve-write-then-refuse implementation, because `CardAdder` sums onto an existing row.
+22. Success writes exactly one `Import`, `kind: "bulk_cards"`, `status: "completed"`, receipt length
+    equal to the distinct printing count.
+23. **[adv] The label's two counts are two different numbers.** A batch of 3 printings and 5 copies
+    (one repeat plus one explicit `quantity: 3`) asserts the literal
+    `"Collection — 5 copies over 3 printings"`; a 1/1 batch asserts `"1 copy over 1 printing"`.
+    Equal counts cannot separate a label built from `entries.size` twice, or with the two swapped.
+24. A refusal writes **no** `Import`.
+25. `add_cards_to_deck` refuses another user's deck key, writes nothing, and **[adv]** that refusal
+    also asserts `isError` — every pre-existing deck tool answers this case with plain `text`.
+26. `mcp_scope_test.rb`: a read-only token sees neither tool; a read-write token sees both.
+27. **[adv] Over the wire, not only in process.** A `tools/call` case in
+    `test/integration/mcp_server_test.rb` posting `add_cards_to_collection` with
+    `entries: [{set_code: "POR", set_number: 56}, {set_code: "POR", set_number: "56"}]`, asserting
+    the collection moved to 3 **and** `assert_no_match(/Invalid arguments|Missing required
+    arguments/, result_text)`. In-process calls bypass schema validation entirely — `mcp` validates
+    only inside `Server#call_tool` — and this is the app's first array-of-objects `input_schema`.
+28. **[adv] Registration is structural, not a hand-maintained literal.** Assert
+    `McpTool.descendants - Mcp::ServerController::TOOLS` is empty. `TOOLS` is named by no test today
+    except `mcp_scope_test`'s own `WRITE_TOOLS` array, so a tool missing from both is asserted about
+    by nothing.
 
 Admin:
 
-25. `"bulk_cards"` is not in `RETRYABLE_KINDS`; Retry on one redirects with the exact sentence.
-26. Undo on one is refused.
-27. The index renders the receipt disclosure for a `bulk_cards` row and renders nothing extra for a
-    kind whose receipt is `[]`.
+29. **[adv] The refusal sentence is the new one.** Retry a `bulk_cards` row — created with
+    `status: "failed"`, since a real one is `completed` and the earlier guard would refuse it first —
+    and assert `/adds copies rather than setting them/` **and**
+    `assert_no_match(/what it was run from is not stored/)`. The generic fallback already matches
+    `/cannot be retried/` and tells the admin the opposite of the truth, the receipt being stored.
+30. **[adv] The index renders the receipt's content.** `assert_includes` the disclosure body with the
+    card name, `"POR 56"` and the `1 → 3` of a **persisted** row — not merely that a `<details>` node
+    exists, which is true of a view reading Symbol keys off a JSON column and rendering nothing.
+31. A kind whose receipt is `[]` renders no disclosure.
+
+Dropped as already covered, per the adversary: a separate "bulk_cards cannot be undone" test
+(`imports_controller_test.rb:131` already exercises that branch for every other kind) and a
+standalone case for the `bulk_card_imports` scope, the scope itself having been removed.
 
 ## Verification
 
