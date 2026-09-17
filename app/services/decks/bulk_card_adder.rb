@@ -73,6 +73,10 @@ module Decks
       {
         "card_id" => card.id, "set_name" => card.set_name, "set_number" => card.set_number,
         "name" => card.name, "quantity" => quantity,
+        # The deck, by key rather than by name: `decks.name` carries no uniqueness, so two decks of
+        # one member produced byte-identical Import rows that pointed at neither. `Deck#to_param` is
+        # the key, so this is also the address of the page.
+        "deck_key" => @deck.key,
         "before" => quantity_before, "after" => deck_card.quantity.to_i,
         "owned_before" => owned_before, "owned_after" => deck_card.owned_copies.to_i
       }

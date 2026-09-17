@@ -46,9 +46,18 @@ module Cards
     def normalize(raw)
       Entry.new(
         set_code: read(raw, :set_code).to_s.squish.upcase,
-        set_number: read(raw, :set_number).to_s.squish,
+        set_number: number_text(read(raw, :set_number)),
         quantity: read(raw, :quantity)
       )
+    end
+
+    # JSON Schema reads 56.0 as an integer, so the wire lets a float through where the caller meant
+    # 56 — and `56.0.to_s` is "56.0", which then refuses "POR 56.0" by naming a printing that
+    # exists. A fractional number is left alone and refused honestly.
+    def number_text(value)
+      return value.to_i.to_s if value.is_a?(Float) && value.finite? && value.to_i == value
+
+      value.to_s.squish
     end
 
     # Entries arrive from an MCP payload as well as from Ruby, so a key may be either shape.

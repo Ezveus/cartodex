@@ -5,6 +5,9 @@ module Admin
       # there is nothing worth disclosing — see error_cell.
       TRUNCATE_AT = 60
 
+      # How many receipt lines a row discloses before it starts counting instead.
+      RECEIPT_LINES = 20
+
       def initialize(imports:)
         @imports = imports
       end
@@ -80,7 +83,16 @@ module Admin
         details(class: "import-receipt") do
           summary { imp.label }
           ul(class: "import-receipt-list") do
-            imp.receipt.each { |entry| li { receipt_line(entry) } }
+            # The deck a run wrote to, named once and by key: `decks.name` carries no uniqueness, so
+            # two decks of one member give two Import rows whose labels are byte-identical. A
+            # collection receipt carries no such key and prints no such line.
+            li { "Deck #{imp.receipt.first["deck_key"]}" } if imp.receipt.first&.key?("deck_key")
+            imp.receipt.first(RECEIPT_LINES).each { |entry| li { receipt_line(entry) } }
+            # /admin/imports is unpaginated, which is pre-existing; a row rendering one <li> per
+            # printing is not. Measured before this cap: 52 rows of 58 printings took the page from
+            # 46 KB to 265 KB. Twenty is the number Tournaments::LimitlessImportJob already uses for
+            # the same "name a few, count the rest" shape.
+            li { "… and #{imp.receipt.size - RECEIPT_LINES} more" } if imp.receipt.size > RECEIPT_LINES
           end
         end
       end

@@ -6,7 +6,18 @@
 # descendant nothing registers, and the test would have to grow an exception exactly where it is
 # supposed to be exhaustive.
 module BulkAdd
-  MAX_ENTRIES = 500
+  # Sized on how long the write transaction holds SQLite's single write lock, not on how many bind
+  # variables fit. Measured on the real catalogue: 50 entries hold it 0.21 s, 100 hold it 0.31 s,
+  # 250 hold it 0.80 s and 500 hold it 1.2-4.0 s — and four concurrent 500-entry calls exhaust
+  # database.yml's `timeout: 5000`, while a member clicking `+` on a card page waited 2.98 s behind
+  # six of them. 120 is ~0.35 s and still twice the largest real payload (a booster box measured 58
+  # distinct printings; a Commander deck is 100). Beyond it the caller sends two calls, each atomic
+  # on its own.
+  #
+  # No cap makes the lock un-monopolisable: the per-user MCP quota is 300 calls/min, so even at 120
+  # a member who wants to can ask for more lock time than a minute contains. What the cap buys is
+  # that an *ordinary* run cannot do it by accident.
+  MAX_ENTRIES = 120
 
   ENTRY = {
     type: "object",
@@ -71,6 +82,13 @@ module BulkAdd
       line
     end
     text("#{label}.\n#{lines.join("\n")}")
+  end
+
+  # 9223372036854775807 passes the schema's `type: "integer"` and then overflows the column, which
+  # ActiveModel raises as a RangeError that no rescue caught — the client got a bare JSON-RPC
+  # internal error with no isError. (The pre-existing per-card tools still do; that is theirs.)
+  def out_of_range_refusal
+    error_text("Error: a quantity is larger than the database can hold. Nothing was written.")
   end
 
   def record_import(user:, label:, receipt:)

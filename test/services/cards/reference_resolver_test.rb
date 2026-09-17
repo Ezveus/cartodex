@@ -162,6 +162,22 @@ module Cards
       end
     end
 
+    # JSON Schema reads 56.0 as an integer, so the wire really does deliver a float here — and
+    # `56.0.to_s` is "56.0", which refused "POR 56.0" by naming a printing that exists.
+    test "a zero-fraction float set_number is the integer the caller meant" do
+      result = Cards::ReferenceResolver.call(entries: [ { set_code: "POR", set_number: 56.0 } ])
+
+      assert_empty result.unresolved
+      assert_equal [ cards(:honedge) ], result.resolved.map { |row| row[:card] }
+    end
+
+    test "a genuinely fractional set_number is refused, naming what was asked for" do
+      result = Cards::ReferenceResolver.call(entries: [ { set_code: "POR", set_number: 56.5 } ])
+
+      assert_equal [ { set_code: "POR", set_number: "56.5", reason: "no printing in the catalogue" } ],
+                   result.unresolved
+    end
+
     test "defaults an absent or nil quantity to 1" do
       absent = Cards::ReferenceResolver.call(entries: [ { set_code: "POR", set_number: "56" } ])
       explicit_nil = Cards::ReferenceResolver.call(entries: [

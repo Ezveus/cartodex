@@ -165,6 +165,42 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     assert_includes body.text, "1 \u2192 3"
   end
 
+  # A deck receipt names the deck by key, because `decks.name` carries no uniqueness: two decks of
+  # one member produced two rows whose labels were byte-identical and which pointed at neither.
+  test "a deck receipt names the deck it wrote to, and a collection receipt names none" do
+    deck = users(:one).decks.create!(name: "Rival", standard_pool: standard_pools(:twm_por))
+    users(:one).imports.create!(
+      kind: "bulk_cards", label: "Deck “Rival” — 1 copy over 1 printing", status: "completed",
+      receipt: [ { card_id: cards(:honedge).id, set_name: "POR", set_number: "56", name: "Honedge",
+                   quantity: 1, deck_key: deck.key, before: 0, after: 1,
+                   owned_before: 0, owned_after: 0 } ]
+    )
+
+    get admin_imports_path
+
+    assert_includes css_select("details.import-receipt .import-receipt-list").first.text, "Deck #{deck.key}"
+  end
+
+  # /admin/imports is unpaginated, which is pre-existing; a row rendering one <li> per printing is
+  # not — measured, 52 rows of 58 printings took the page from 46 KB to 265 KB.
+  test "a long receipt names the first twenty printings and counts the rest" do
+    users(:one).imports.create!(
+      kind: "bulk_cards", label: "Collection — 25 copies over 25 printings", status: "completed",
+      receipt: Array.new(25) { |n|
+        { card_id: cards(:honedge).id, set_name: "ZZY", set_number: n.to_s,
+          name: "Probe #{n}", quantity: 1, before: 0, after: 1 }
+      }
+    )
+
+    get admin_imports_path
+
+    body = css_select("details.import-receipt .import-receipt-list").first
+    assert_equal 21, body.css("li").size, "twenty printings plus the line that counts the rest"
+    assert_includes body.text, "Probe 19"
+    assert_not_includes body.text, "Probe 20"
+    assert_includes body.text, "… and 5 more"
+  end
+
   # Every other kind of import writes an empty receipt, which is most of the table. A <details>
   # whose body is empty invites a click that changes nothing, so the label stays plain text.
   test "an import with no receipt renders its label as plain text" do

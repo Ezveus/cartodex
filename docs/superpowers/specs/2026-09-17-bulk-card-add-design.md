@@ -184,9 +184,19 @@ printing:
   "quantity": 2, "before": 1, "after": 3 }
 ```
 
-The deck shape adds `owned_before` / `owned_after`. JSON rather than a join table for the reason
-`created_standing_ids` gives: it is read whole by a human and never joined, aggregated or indexed.
-Default `[]` rather than nil so a reader never nil-checks first.
+The deck shape adds `owned_before`, `owned_after` and **`deck_key`**. That last one is not
+decoration: `decks.name` carries no uniqueness validation, so two decks of one member produced two
+`Import` rows whose labels were byte-identical and which pointed at neither of them — under a
+heading that says "Traceability", and against both precedents this design cites, since
+`imports.tournament_id` exists precisely so an import points at its target. `Deck#to_param` is the
+key, so the receipt also carries the address of the page. JSON rather than a join table for the
+reason `created_standing_ids` gives: it is read whole by a human and never joined, aggregated or
+indexed. Default `[]` rather than nil so a reader never nil-checks first.
+
+`/admin/imports` is unpaginated, which is pre-existing, but a row rendering one `<li>` per printing
+is not: measured, 52 rows of 58 printings took the page from 46 KB to 265 KB. The disclosure names
+the first **20** printings and counts the rest, the shape
+`Tournaments::LimitlessImportJob::FAILURES_LISTED` already uses.
 
 The receipt is what makes the row genuinely traceable rather than merely present, and it is what the
 response is built from — which closes the last of the reported problems: the summary handed back to
@@ -203,14 +213,48 @@ It is not undoable either. An undo is buildable from the receipt and is delibera
 nobody has asked for one, and `Tournaments::StandingsImportUndo` is the precedent for how much
 surface one costs.
 
-## Bounds
+## Bounds, and what the write lock actually costs
 
-`MAX_ENTRIES = 500` per call, refused through `error_text` above it. The largest real payload
-measured is 58; a Commander-sized deck is 100. The bound exists so that the one-query resolution and
-the in-memory aggregation stay bounded by something other than the caller's imagination, and 500
-entries is 556 bind variables against SQLite 3.51's 32766 limit.
+`MAX_ENTRIES = 120`, refused through `error_text` above it. The first draft said 500 and argued it
+from bind variables — 556 against SQLite 3.51's 32766 limit — which is the wrong quantity to have
+been measuring. What bounds a batch here is how long its transaction holds **SQLite's single write
+lock**, during which no other write in the application can proceed. Measured on the real catalogue,
+bracketing `BEGIN immediate` and `COMMIT`:
 
-The MCP per-user quota (300 calls/min) needs no change: this feature removes calls.
+| entries | lock held |
+|---|---|
+| 50 | 0.21 s |
+| 100 | 0.31 s |
+| 250 | 0.80 s |
+| 500 | 1.2–4.0 s |
+
+It is linear at ~4–5 statements per row and ~0.6–1.1 ms per statement, so the figure is Ruby and
+Active Record overhead plus one commit fsync, not an artefact of the test machine. At 500, four
+concurrent calls exhaust `database.yml`'s `timeout: 5000` and one of them fails; a member clicking
+`+` on a card page waited **2.98 s** behind six of them. 120 is ~0.35 s, and still twice the largest
+real payload — a booster box measured 58 distinct printings, a Commander deck is 100. Past it the
+caller sends two calls, each atomic on its own.
+
+**No cap makes the lock un-monopolisable**, and it is worth writing down rather than implying.
+`Mcp::ServerController::USER_RATE_LIMIT_TO` is 300 calls per minute, sized in its own comment
+against the per-card path; even at 120 entries a member who wants to can ask for more lock time than
+a minute contains. What the cap buys is that an *ordinary* run cannot do it by accident. A dedicated
+per-user limit on these two tools is the thing that would actually bound it, and was deliberately
+not built for an app with one member.
+
+**The lock-wait failure is refused, not raised.** `ActiveRecord::StatementTimeout` is the one
+failure where "nothing was written" is provable rather than merely likely — the lock is taken by
+`BEGIN IMMEDIATE` before the first row — so it is also the one the caller most needs told. Both
+tools answer it with `isError` and say that resending the same list is safe. The other half of that
+race is **not** addressed and is pre-existing: nothing in the app rescues a busy timeout on an
+ordinary web write, so a member who loses the same race on `/cards` still gets a 500.
+
+**The deck is re-read under the lock.** `Decks::BulkCardAdder` calls `@deck.reload` as the first
+statement inside its transaction, because `physical?` and `user` were read off an object loaded
+*before* the resolver ran — a gap of seconds here against two statements on the per-card path. A
+deck turned virtual in between has had its rows zeroed by
+`Deck#release_owned_copies_if_not_physical`, and measured, an adder still holding the old flag gave
+it 2 real copies back.
 
 ## What is deliberately not here
 

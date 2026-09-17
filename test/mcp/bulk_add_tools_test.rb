@@ -35,6 +35,14 @@ class BulkAddToolsTest < ActiveSupport::TestCase
     end
   end
 
+  # The literal, because the constant is the policy and every other assertion in this file reads it
+  # back. It was 500 until the write lock was measured: 500 entries hold SQLite's single write lock
+  # 1.2-4.0 s, four concurrent calls exhaust database.yml's 5 s timeout, and a member clicking + on
+  # a card page waited 2.98 s behind six of them. 120 is ~0.35 s and twice the largest real payload.
+  test "the cap is 120 entries" do
+    assert_equal 120, BulkAdd::MAX_ENTRIES
+  end
+
   test "more entries than the cap are refused before anything is resolved" do
     too_many = Array.new(BulkAdd::MAX_ENTRIES + 1) { entry("POR", "56") }
 
@@ -189,6 +197,20 @@ class BulkAddToolsTest < ActiveSupport::TestCase
 
     assert refused?(response)
     assert_equal 1, @deck.deck_cards.count, "a deck row was committed without the Import that records it"
+  end
+
+  # 9223372036854775807 passes the schema's `type: "integer"` and then overflows the column. It used
+  # to reach the client as a bare JSON-RPC internal error carrying no isError at all.
+  test "a quantity too large for the column is refused rather than raised" do
+    before = collections(:one).quantity
+
+    response = AddCardsToCollectionTool.call(
+      entries: [ entry("POR", "56", 9_223_372_036_854_775_807) ], server_context: @context
+    )
+
+    assert refused?(response)
+    assert_match(/larger than the database can hold/, response_text(response))
+    assert_equal before, collections(:one).reload.quantity
   end
 
   # SQLite has one write lock and `database.yml` gives it a 5 s timeout; four concurrent max-size

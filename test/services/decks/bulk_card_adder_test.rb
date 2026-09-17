@@ -106,7 +106,10 @@ class Decks::BulkCardAdderTest < ActiveSupport::TestCase
     round_tripped = JSON.parse(receipt.to_json)
 
     assert_equal receipt, round_tripped, "receipt keys did not survive the JSON round trip"
+    # deck_key and not the name: `decks.name` carries no uniqueness, so two decks of one member
+    # wrote two receipts that named neither of them.
     assert_equal({ "set_name" => "POR", "set_number" => "56", "name" => "Honedge", "quantity" => 2,
+                   "deck_key" => @deck.key,
                    "before" => 1, "after" => 3, "owned_before" => 1, "owned_after" => 3 },
                  round_tripped.first.except("card_id"))
   end

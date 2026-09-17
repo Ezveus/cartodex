@@ -34,6 +34,8 @@ class AddCardsToCollectionTool < McpTool
     end
 
     success_text(label, receipt)
+  rescue ActiveModel::RangeError
+    out_of_range_refusal
   rescue ActiveRecord::StatementTimeout, ActiveRecord::LockWaitTimeout
     error_text(
       "Error: the database was busy and nothing was written. SQLite has a single write lock and " \
