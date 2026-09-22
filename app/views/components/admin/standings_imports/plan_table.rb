@@ -26,8 +26,12 @@ module Admin
         blocked: "blocked"
       }.freeze
 
-      def initialize(plan:, archetype:, source:, deck_id:, slug:, rotation:, set:, event_filters:,
-                     limit_per_event:)
+      # The four id-ish values are only ever the confirm form's hidden fields, so they default to
+      # nil for a caller that owns that form itself: the whole-event source wraps this table and
+      # its mapping selects in one POST of its own (Admin::StandingsImports::EventConfirmForm),
+      # and nested forms are not a thing HTML has.
+      def initialize(plan:, archetype:, source:, event_filters:, limit_per_event:,
+                     deck_id: nil, slug: nil, rotation: nil, set: nil, confirm: true)
         @plan = plan
         @archetype = archetype
         @source = source
@@ -37,6 +41,7 @@ module Admin
         @set = set
         @event_filters = event_filters
         @limit_per_event = limit_per_event
+        @confirm = confirm
       end
 
       def view_template
@@ -54,11 +59,13 @@ module Admin
 
       private
 
-      def confirmable? = !@plan.over_limit? && @plan.importable_rows.any?
+      def confirmable? = @confirm && !@plan.over_limit? && @plan.importable_rows.any?
 
+      # No archetype for a whole-event run: its rows carry 45 of them, one per Limitless deck, so
+      # naming one here would be naming the wrong thing rather than merely naming nothing.
       def totals
         p(class: "standings-import-totals") do
-          plain "#{@plan.total_rows} rows in scope for #{@archetype.name}: "
+          plain "#{@plan.total_rows} rows in scope#{" for #{@archetype.name}" if @archetype}: "
           count_badge(:create)
           count_badge(:enrich)
           count_badge(:skip)

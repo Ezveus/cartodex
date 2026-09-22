@@ -28,6 +28,7 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   teardown do
     HttpFetcher.define_singleton_method(:call, @original_http_fetcher_call)
     Cards::Fetcher.define_singleton_method(:call, @cards_fetcher_restore) if @cards_fetcher_restore
+    Tournaments::EventDecklists.define_method(:call, @decklists_restore) if @decklists_restore
   end
 
   # This screen writes into the public catalog with no member-facing confirmation anywhere, so the
@@ -370,7 +371,339 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ standard_pools(:twm_por) ], events.map(&:standard_pool).uniq
   end
 
+  # --- one whole event ----------------------------------------------------------------------
+  #
+  # limitlesstcg.com/tournaments/<id>: three division pages of one real event. Its rows do not
+  # share an archetype — 15 distinct decks over the 24 fixture rows, 45 over 575 on the measured
+  # event — so the screen gains a line per distinct deck reference, and the run carries no
+  # archetype of its own at all.
+
+  test "a tournament id that is not a number is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: event_params(tournament_id: "577/../../evil")
+
+    assert_response :success
+    assert_empty @http_calls, "no fetch may happen for a tournament id the guard refuses"
+    assert_match "must be a number", response.body
+  end
+
+  # The claim this whole source rests on. The event's lists come off one bulk page per division,
+  # and the preview asks for one list per *unmapped reference* — 13 here, where the rows are 24
+  # and the references 15. Counting the calls rather than their `uniq` is the point: an
+  # implementation that fetched one per row and grouped afterwards satisfies `uniq.size` exactly
+  # as well, and on the real event that is 575 fetches instead of 45.
+  test "the preview asks for one list per distinct unmapped deck reference, never one per row" do
+    stub_event_pages
+    keys = record_decklist_keys
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_response :success
+    assert_equal EVENT_UNMAPPED_REFERENCES, keys.size
+    assert_equal keys.uniq, keys
+  end
+
+  # A deck an admin has already arbitrated is never proposed for again, which is what makes the
+  # second event cheap: only the decks nobody has seen cost a list.
+  test "a reference already in the store is shown as confirmed and costs no list" do
+    stub_event_pages
+    keys = record_decklist_keys
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    # The representative rows of the two mapped references: 284 (Dragapult) and 284/3.
+    assert_not_includes keys, "577/senior/1"
+    assert_not_includes keys, "577/masters/127"
+    assert_select "[data-label=Proposal]", text: /confirmed/i, count: 2
+    assert_select "select[name=?] option[selected][value=?]",
+      "mappings[284][archetype_id]", archetypes(:ogerpon).id.to_s
+  end
+
+  test "the preview renders one line per distinct deck reference, carrying the label Limitless published" do
+    stub_event_pages
+    record_decklist_keys
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_select ".standings-import-mappings select", EVENT_REFERENCES
+    assert_select "[data-label=Deck]", text: /Basic Box/
+    assert_select "select[name=?]", "mappings[339][archetype_id]"
+    # The label travels with the selection: limitless_archetype_mappings.label is NOT NULL and
+    # #create never fetches, so nothing else could tell it what deck 339 is called.
+    assert_select "input[name=?][value=?]", "mappings[339][label]", "Basic Box"
+    # Nothing is decided here: the archetype the list resolves to is a proposal with a reason.
+    assert_select "[data-label=Proposal]", text: /name says nothing/, minimum: 1
+  end
+
+  test "a decided proposal arrives pre-selected in its own line" do
+    stub_event_pages
+    record_decklist_keys
+    proposed = archetypes(:standings_marker)
+
+    with_proposal(archetype: proposed, verdict: :decided) do
+      get preview_admin_standings_imports_path, params: event_params
+    end
+
+    assert_select "select[name=?]", "mappings[339][archetype_id]" do
+      assert_select "option[selected][value=?]", proposed.id.to_s
+    end
+  end
+
+  # One event, its own key, the pool its page publishes, and a ceiling of its own: DEFAULT_MAX_ROWS
+  # is 300 to stop an archetype-history run walking 176 events, and one event is a bounded thing
+  # the admin has just seen the size of.
+  test "the plan is built for one event, anchored to the pool the page publishes, at the 1000-row ceiling" do
+    pool = tef_pbl_pool
+    stub_event_pages
+    record_decklist_keys
+
+    options = capture_plan_options do
+      get preview_admin_standings_imports_path, params: event_params
+    end
+
+    assert_response :success
+    assert_equal "limitless-event:#{EVENT_ID}", options[:event_key]
+    assert_equal 1000, options[:max_rows]
+    assert_equal pool, options[:standard_pool]
+    assert_not options[:online], "an event sheet is paper, and partitions with the paper half"
+  end
+
+  # Tournaments::LimitlessEventResults::ParseError is a *third* constant beside the two the rescue
+  # already names, and an id nobody has published reaches it. Unrescued that is a 500 on the one
+  # screen whose whole job is to be looked at before anything is written.
+  test "an event page with no standings table re-renders the form with the reason rather than 500ing" do
+    stub_http("<html><body><p>Nothing here.</p></body></html>")
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_response :success
+    assert_match "Could not read Limitless tournament #{EVENT_ID}", response.body
+    assert_match "no standings table", response.body
+    assert_select "input#tournament_id"
+  end
+
+  # The bulk pages publish a list for some rows and not others — 4 of 8 Masters here, 6 of 10 on
+  # the measured Cape Town event — so a reference whose representative published nothing is
+  # ordinary. It costs its own line and not the other 14 proposals.
+  test "a list that cannot be read costs its own line and not the preview" do
+    stub_event_pages
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_response :success
+    assert_select ".standings-import-mappings select", EVENT_REFERENCES
+    assert_match "publishes no list ranked", response.body
+  end
+
+  # The two sources that declare one archetype for the whole run keep the guard; this one has no
+  # archetype at all, so relaxing it for everybody would take #create into import_label's
+  # @archetype.name and 500 there. Every older test in this file passes archetype_id, so nothing
+  # but these two would notice.
+  test "a paper preview with no archetype is still refused" do
+    get preview_admin_standings_imports_path, params: { deck_id: "280" }
+
+    assert_response :success
+    assert_empty @http_calls, "no fetch may happen for a run that has no archetype to write"
+    assert_match "Pick the archetype", response.body
+  end
+
+  test "a paper confirmation with no archetype enqueues nothing" do
+    assert_no_difference -> { Import.count } do
+      assert_no_enqueued_jobs do
+        post admin_standings_imports_path, params: { deck_id: "280", expected_row_count: "5" }
+      end
+    end
+
+    assert_redirected_to new_admin_standings_import_path
+    assert_match "archetype no longer exists", flash[:alert]
+  end
+
+  test "the confirm form carries the event and its mapping selections back" do
+    stub_event_pages
+    record_decklist_keys
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_select "form.standings-import-confirm" do
+      assert_select "input[name=source][value=event]"
+      assert_select "input[name=tournament_id][value=?]", EVENT_ID
+      assert_select "select[name=?]", "mappings[339][archetype_id]"
+    end
+    # A hidden field must not steal the id of the input the admin types into.
+    assert_select "input#tournament_id", 1
+  end
+
+  # What the admin confirmed is stored before the run is enqueued, because the plan reads the store
+  # and nothing about archetypes travels in the job's arguments.
+  test "confirming persists the confirmed mappings and enqueues the run" do
+    assert_difference -> { LimitlessArchetypeMapping.count }, 1 do
+      post admin_standings_imports_path, params: event_params(mappings: {
+        "339" => { "label" => "Basic Box", "archetype_id" => archetypes(:standings_marker).id.to_s },
+        "329" => { "label" => "Marnie's Grimmsnarl", "archetype_id" => "" },
+        "284" => { "label" => "Dragapult", "archetype_id" => archetypes(:budew_ogerpon).id.to_s }
+      })
+    end
+
+    mapping = LimitlessArchetypeMapping.find_by(limitless_deck_id: 339, limitless_variant: nil)
+    assert_equal archetypes(:standings_marker), mapping.archetype
+    assert_equal "Basic Box", mapping.label
+    # A reference left blank is a refusal, not a guess: nothing is stored, and the run blocks its
+    # rows naming the deck.
+    assert_nil LimitlessArchetypeMapping.find_by(limitless_deck_id: 329)
+    # A correction to a reference already confirmed is an update, never a second row — which is
+    # what the partial UNIQUE index on (deck_id) WHERE variant IS NULL is there to guarantee.
+    assert_equal archetypes(:budew_ogerpon), limitless_archetype_mappings(:dragapult).reload.archetype
+
+    import = Import.last
+    assert_equal "limitless_standings", import.kind
+    assert_equal "Limitless tournament #{EVENT_ID}", import.label
+    assert_enqueued_with(job: Tournaments::LimitlessImportJob, args: [
+      import.id, @admin.id,
+      { "source" => "event", "tournament_id" => EVENT_ID, "event_filters" => [], "limit_per_event" => nil }
+    ])
+    assert_redirected_to admin_imports_path
+  end
+
+  # The selections come back through the browser, which makes them ordinary user input again —
+  # and an archetype can be deleted between the preview and the click.
+  test "an archetype that no longer exists is dropped from the mappings rather than 500ing" do
+    vanished = Archetype.maximum(:id) + 1
+
+    assert_no_difference -> { LimitlessArchetypeMapping.count } do
+      post admin_standings_imports_path, params: event_params(mappings: {
+        "339" => { "label" => "Basic Box", "archetype_id" => vanished.to_s }
+      })
+    end
+
+    assert_redirected_to admin_imports_path
+    assert_enqueued_jobs 1
+  end
+
+  # The end-to-end twin of the two above it, and it exists for their reason: a Hash key spelled
+  # differently on either side of this screen would leave every real event import failing while
+  # every other test here stayed green.
+  test "the job an event confirmation enqueues imports the rows whose deck is mapped" do
+    pool = tef_pbl_pool
+    stub_event_pages
+    stub_cards_fetcher
+
+    with_no_pause do
+      perform_enqueued_jobs do
+        post admin_standings_imports_path, params: event_params
+      end
+    end
+
+    import = Import.limitless_standings_imports.sole
+    assert_equal "completed", import.status, import.error_message
+
+    event = Tournament.find_by(external_key: "limitless-event:#{EVENT_ID}")
+    assert_equal "Regional Baltimore, MD", event.name
+    assert_equal "regional", event.tier
+    assert_equal pool, event.standard_pool
+    # One field size per division, read off that division's own page.
+    assert_equal [ 3122, 364, 233 ],
+      [ event.masters_participant_count, event.senior_participant_count, event.junior_participant_count ]
+    # Only the rows whose Limitless deck the store already answers for: 284 (five rows) and 284/3
+    # (three). The other 16 are blocked by name rather than guessed at.
+    assert_equal 8, import.created_standing_ids.size
+    assert_equal [ archetypes(:budew_ogerpon), archetypes(:ogerpon) ].sort_by(&:name),
+      TournamentStanding.where(id: import.created_standing_ids).map(&:archetype).uniq.sort_by(&:name)
+  end
+
   private
+
+  EVENT_ID = "577".freeze
+  # 24 rows over three divisions carrying 15 distinct deck references, two of which
+  # (284 and 284/3) test/fixtures/limitless_archetype_mappings.yml already holds.
+  EVENT_REFERENCES = 15
+  EVENT_UNMAPPED_REFERENCES = 13
+
+  EVENT_PAGES = {
+    "https://limitlesstcg.com/tournaments/577" => "tournament_577_masters",
+    "https://limitlesstcg.com/tournaments/577/SR" => "tournament_577_senior",
+    "https://limitlesstcg.com/tournaments/577/JR" => "tournament_577_junior",
+    "https://limitlesstcg.com/tournaments/577/decklists" => "tournament_577_masters_decklists",
+    "https://limitlesstcg.com/tournaments/577/SR/decklists" => "tournament_577_senior_decklists"
+  }.freeze
+  # 577 publishes no Junior lists, which is ordinary: a division page with no block is an event
+  # whose rows simply carry no list.
+  EMPTY_PAGE = "<html><body></body></html>".freeze
+
+  # Resolves to one archetype through Decks::ArchetypeDetector's containment rule and to no
+  # overlap with any of the fixture's deck names, which is the :name_says_nothing case.
+  LIST_TEXT = <<~TEXT.freeze
+    Pokémon: 1
+    4 Teal Mask Ogerpon ex TWM 25
+
+    Trainer: 1
+    4 Boss's Orders PAL 172
+
+    Energy: 1
+    4 Psychic Energy SVE 5
+  TEXT
+
+  def event_params(**overrides)
+    { source: "event", tournament_id: EVENT_ID }.merge(overrides)
+  end
+
+  def stub_event_pages
+    calls = @http_calls
+    HttpFetcher.define_singleton_method(:call) { |url|
+      calls << url
+      page = EVENT_PAGES[url]
+      page ? File.read(Rails.root.join("test/fixtures/files/limitless/#{page}.html")) : EMPTY_PAGE
+    }
+  end
+
+  # The instance method and not a singleton: EventDecklists is constructed per run, and what has
+  # to be counted is the calls its instance takes.
+  def record_decklist_keys(text = LIST_TEXT)
+    keys = []
+    @decklists_restore = Tournaments::EventDecklists.instance_method(:call)
+    Tournaments::EventDecklists.define_method(:call) { |key| keys << key; text }
+    keys
+  end
+
+  def with_proposal(archetype:, verdict:)
+    proposer = Tournaments::ArchetypeProposer
+    original = proposer.method(:call)
+    proposer.define_singleton_method(:call) { |**_options|
+      proposer::Proposal.new(archetype: archetype, verdict: verdict, candidates: [ archetype ].compact)
+    }
+    yield
+  ensure
+    proposer.define_singleton_method(:call, original)
+  end
+
+  def capture_plan_options
+    plan = Tournaments::StandingsImportPlan
+    original = plan.method(:call)
+    captured = nil
+    plan.define_singleton_method(:call) { |**options| captured = options; original.call(**options) }
+    yield
+    captured
+  ensure
+    plan.define_singleton_method(:call, original)
+  end
+
+  # The fixtures' two pools are TWM-ASC and TWM-POR; this event publishes TEF-PBL, which is
+  # StandardPool#name byte for byte and is the only thing the pool is resolved by.
+  def tef_pbl_pool
+    StandardPool.create!(
+      first_card_set: CardSet.create!(code: "TEF", name: "Temporal Forces", release_date: Date.new(2024, 3, 22)),
+      last_card_set: CardSet.create!(code: "PBL", name: "Pitch Black", release_date: Date.new(2026, 8, 1)),
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 8, 1), legal_on: Date.new(2026, 8, 15)
+    )
+  end
+
+  # Eight rows at the importer's half-second courtesy pause is four seconds of sleeping against a
+  # remote that is a fixture on disk.
+  def with_no_pause
+    original = Tournaments::LimitlessImportJob.request_pause
+    Tournaments::LimitlessImportJob.request_pause = 0
+    yield
+  ensure
+    Tournaments::LimitlessImportJob.request_pause = original
+  end
 
   def online_params(**overrides)
     { source: "online", slug: "raging-bolt-ogerpon", rotation: "2026", set: ONLINE_SET,

@@ -11,12 +11,14 @@ module Admin
     class Form < ApplicationComponent
       SOURCES = [
         [ "paper", "Paper events — limitlesstcg.com/decks/<id>/results" ],
-        [ "online", "Online best finishes — play.limitlesstcg.com/decks/<slug>" ]
+        [ "online", "Online best finishes — play.limitlesstcg.com/decks/<slug>" ],
+        [ "event", "One whole event — limitlesstcg.com/tournaments/<id>" ]
       ].freeze
 
       def initialize(source:, deck_id:, slug:, rotation:, set:, archetype_id:, event_filters:,
-                     limit_per_event:, archetypes:)
+                     limit_per_event:, archetypes:, tournament_id: nil)
         @source = source
+        @tournament_id = tournament_id
         @deck_id = deck_id
         @slug = slug
         @rotation = rotation
@@ -30,6 +32,7 @@ module Admin
       def view_template
         form_with(url: preview_admin_standings_imports_path, method: :get, class: "deck-form") do
           source_field
+          tournament_id_field
           deck_id_field
           slug_field
           rotation_field
@@ -51,13 +54,25 @@ module Admin
       def source_field
         render Ui::FormGroup.new(
           label: "Source", field_name: "source",
-          hint: "Paper reads one archetype's tournament history. Online reads its best finishes in one card pool — a top-20 leaderboard, de-duplicated to one row per player and list."
+          hint: "Paper reads one archetype's tournament history. Online reads its best finishes in one card pool — a top-20 leaderboard, de-duplicated to one row per player and list. One whole event reads every division of one real-world tournament, whose rows carry a deck each rather than one archetype."
         ) do
           select(name: "source", id: "source", class: "form-input") do
             SOURCES.each do |value, label|
               option(value: value, selected: value == @source) { label }
             end
           end
+        end
+      end
+
+      # The one field of the third source, and the only input it takes: an event states its own
+      # date, tier, format, card pool and three field sizes, so there is nothing else to declare.
+      def tournament_id_field
+        render Ui::FormGroup.new(
+          label: "Limitless tournament id (event)", field_name: "tournament_id",
+          hint: "The number in limitlesstcg.com/tournaments/577. Digits only — it goes straight into the URL this fetches. Every division is read, and each row's archetype is arbitrated per deck below."
+        ) do
+          input(type: "text", name: "tournament_id", id: "tournament_id", value: @tournament_id,
+                class: "form-input", inputmode: "numeric", placeholder: "577")
         end
       end
 

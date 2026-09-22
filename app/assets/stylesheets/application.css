@@ -3092,6 +3092,22 @@ textarea.form-input {
   margin-top: 1.5rem;
 }
 
+/* One line per Limitless deck, above the plan those lines decide. */
+.standings-import-mappings {
+  margin-top: 2rem;
+}
+
+/* The deck's own reference — 284, 284/3 — printed beside its name because two decks of one base
+   id read alike and the reference is what the answer is stored under. */
+.standings-import-reference {
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
+.standings-import-confirm-actions {
+  margin-top: 1.5rem;
+}
+
 
 /* ============================================================
    Design System layer — overrides applied last (source order
