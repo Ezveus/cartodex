@@ -26,8 +26,12 @@ module Admin
         blocked: "blocked"
       }.freeze
 
-      def initialize(plan:, archetype:, source:, deck_id:, slug:, rotation:, set:, event_filters:,
-                     limit_per_event:)
+      # The four id-ish values are only ever the confirm form's hidden fields, so they default to
+      # nil for a caller that owns that form itself: the whole-event source wraps this table and
+      # its mapping selects in one POST of its own (Admin::StandingsImports::EventConfirmForm),
+      # and nested forms are not a thing HTML has.
+      def initialize(plan:, archetype:, source:, event_filters:, limit_per_event:,
+                     deck_id: nil, slug: nil, rotation: nil, set: nil, confirm: true)
         @plan = plan
         @archetype = archetype
         @source = source
@@ -37,6 +41,7 @@ module Admin
         @set = set
         @event_filters = event_filters
         @limit_per_event = limit_per_event
+        @confirm = confirm
       end
 
       def view_template
@@ -54,15 +59,32 @@ module Admin
 
       private
 
-      def confirmable? = !@plan.over_limit? && @plan.importable_rows.any?
+      def confirmable? = @confirm && !@plan.over_limit? && @plan.importable_rows.any?
 
+      # No archetype for a whole-event run: its rows carry 45 of them, one per Limitless deck, so
+      # naming one here would be naming the wrong thing rather than merely naming nothing.
       def totals
         p(class: "standings-import-totals") do
-          plain "#{@plan.total_rows} rows in scope for #{@archetype.name}: "
+          plain "#{@plan.total_rows} rows in scope#{" for #{@archetype.name}" if @archetype}: "
           count_badge(:create)
           count_badge(:enrich)
           count_badge(:skip)
           count_badge(:blocked)
+        end
+        pre_mapping_note
+      end
+
+      # For an event run these four numbers describe the plan *as it stands*, and confirming the
+      # mappings above is itself what moves rows out of `blocked` — so on a first preview the line
+      # reads "0 create, 575 blocked" directly above a button that will write 575. The button
+      # deliberately names no count for the same reason; this says why in words rather than leaving
+      # an admin to reconcile the two.
+      def pre_mapping_note
+        return unless @source == Tournaments::LimitlessImportJob::EVENT_SOURCE
+
+        p(class: "settings-section-lead") do
+          plain "Counted before the decks above are confirmed: every row of an unmapped deck is "
+          plain "blocked here and will be written once you confirm it."
         end
       end
 

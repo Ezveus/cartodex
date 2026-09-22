@@ -88,6 +88,47 @@ class Tournaments::LimitlessDecklistTest < ActiveSupport::TestCase
     assert_raises(Tournaments::LimitlessDecklist::ParseError) { Tournaments::LimitlessDecklist.call(URL) }
   end
 
+  # The bulk decklists page carries 559 lists in one document, so the rule that turns markup into
+  # PTCG text is applied to a node set there and to a fetched page here. Two spellings of it is
+  # exactly the failure Decks::Fetcher::SET_CODE_RE exists to prevent — and a divergence would be
+  # invisible, since each path has its own tests. Byte-identical, not merely equivalent.
+  test "from_nodes and call are one rule" do
+    nodes = Nokogiri::HTML(DECKLIST_HTML).css("[data-text-decklist] .decklist-card")
+
+    assert_equal Tournaments::LimitlessDecklist.call(URL),
+      Tournaments::LimitlessDecklist.from_nodes(nodes, source: URL)
+  end
+
+  # The guards are half the class, so sharing the happy path and keeping two copies of the
+  # refusals would leave the bulk path free to import a list four cards short in silence.
+  test "both paths refuse the same bad printing with the same message" do
+    html = File.read(Rails.root.join("test/fixtures/files/limitless_decklist_unsupported_set.html"))
+    stub_http(html)
+    nodes = Nokogiri::HTML(html).css("[data-text-decklist] .decklist-card")
+
+    from_url = assert_raises(Tournaments::LimitlessDecklist::ParseError) { Tournaments::LimitlessDecklist.call(URL) }
+    from_nodes = assert_raises(Tournaments::LimitlessDecklist::ParseError) do
+      Tournaments::LimitlessDecklist.from_nodes(nodes, source: URL)
+    end
+
+    assert_equal from_url.message, from_nodes.message
+    assert_match(/SV9a/, from_nodes.message)
+  end
+
+  # `source:` replaces @url in every message, and a node set has no URL of its own to fall back
+  # on: on the bulk path it names the decklists page and the rank, which is the only thing that
+  # says which of 559 lists was refused.
+  test "from_nodes names its own source in a refusal" do
+    nodes = Nokogiri::HTML(DECKLIST_HTML.sub('data-number="104"', 'data-number="TG05"'))
+      .css("[data-text-decklist] .decklist-card")
+
+    error = assert_raises(Tournaments::LimitlessDecklist::ParseError) do
+      Tournaments::LimitlessDecklist.from_nodes(nodes, source: "the 1st list on /tournaments/577/decklists")
+    end
+
+    assert_match(/the 1st list on \/tournaments\/577\/decklists/, error.message)
+  end
+
   private
 
   def stub_http(html)

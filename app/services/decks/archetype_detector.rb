@@ -62,6 +62,51 @@ class Decks::ArchetypeDetector < ApplicationService
         .uniq(&:name)
   end
 
+  # Every archetype the given fingerprints *contain*, with the score containment earns it —
+  # "which archetypes are entirely present in this card pool", ranked by nothing at all.
+  #
+  # Public, and extracted rather than left inline, because Tournaments::ArchetypeProposer asks this
+  # exact question and then ranks the answers differently (by how much of the deck name Limitless
+  # published each archetype's name accounts for). Containment has four clauses that can each be
+  # got subtly wrong — the `joins(:primary_card)` restriction, the `points.positive?` filter, the
+  # absent-secondary disqualification and the keying on Card#fingerprint rather than on name — and
+  # a second copy that diverged on any of them would still satisfy a test written against one of
+  # them. One spelling, the `Decks::Fetcher::SET_CODE_RE` rule.
+  #
+  # `archetypes:` must be a relation, not a loaded Array: it is joined and filtered in SQL, which
+  # is the whole reason there is nothing here to re-implement. The preview passes the one relation
+  # it proposes 45 references off.
+  #
+  # `preload` rather than `includes`: the WHERE clause already references `cards` through the join
+  # on the primary, and letting Rails pick eager_load would make it alias that same table twice for
+  # the two associations. preload always issues separate queries, so there is nothing to alias.
+  def self.candidates(fingerprints, archetypes: Archetype.all)
+    return [] if fingerprints.blank?
+
+    archetypes
+      .joins(:primary_card)
+      .where(cards: { fingerprint: fingerprints })
+      .preload(primary_card: :pokemon_subtype, secondary_card: :pokemon_subtype)
+      .map { |archetype| [ archetype, score(archetype, fingerprints) ] }
+      .select { |(_, points)| points.positive? }
+  end
+
+  # Zero disqualifies. A secondary absent from the deck rules the archetype out
+  # entirely rather than costing it points: it names a pairing the deck is not playing.
+  def self.score(archetype, fingerprints)
+    members = [ archetype.primary_card, archetype.secondary_card ].compact
+    return 0 unless members.all? { |card| fingerprints.include?(card.fingerprint) }
+
+    members.sum { |card| weight(card) }
+  end
+
+  def self.weight(card)
+    return OTHER_WEIGHT unless card.card_type == "Pokémon"
+
+    card.pokemon_subtype&.rule_box ? RULE_BOX_WEIGHT : POKEMON_WEIGHT
+  end
+  private_class_method :score, :weight
+
   private
 
   # Distinct Pokémon cards, most representative first. Suggestion only.
@@ -74,37 +119,11 @@ class Decks::ArchetypeDetector < ApplicationService
     @deck.deck_cards.filter_map { |dc| dc.card&.fingerprint }.uniq
   end
 
-  # `preload` rather than `includes`: the WHERE clause already references `cards`
-  # through the join on the primary, and letting Rails pick eager_load would make
-  # it alias that same table twice for the two associations. preload always issues
-  # separate queries, so there is nothing to alias.
+  # The best of what containment answers: highest score, ties broken by member count.
   def match_existing
-    fingerprints = deck_fingerprints
-    return nil if fingerprints.empty?
-
-    Archetype
-      .joins(:primary_card)
-      .where(cards: { fingerprint: fingerprints })
-      .preload(primary_card: :pokemon_subtype, secondary_card: :pokemon_subtype)
-      .map { |archetype| [ archetype, score(archetype, fingerprints) ] }
-      .select { |(_, points)| points.positive? }
-      .max_by { |(archetype, points)| [ points, member_count(archetype) ] }
-      &.first
-  end
-
-  # Zero disqualifies. A secondary absent from the deck rules the archetype out
-  # entirely rather than costing it points: it names a pairing the deck is not playing.
-  def score(archetype, fingerprints)
-    members = [ archetype.primary_card, archetype.secondary_card ].compact
-    return 0 unless members.all? { |card| fingerprints.include?(card.fingerprint) }
-
-    members.sum { |card| weight(card) }
-  end
-
-  def weight(card)
-    return OTHER_WEIGHT unless card.card_type == "Pokémon"
-
-    card.pokemon_subtype&.rule_box ? RULE_BOX_WEIGHT : POKEMON_WEIGHT
+    self.class.candidates(deck_fingerprints)
+        .max_by { |(archetype, points)| [ points, member_count(archetype) ] }
+        &.first
   end
 
   # Breaks a tie on the score — a Pokémon + Trainer pair and a lone rule-box

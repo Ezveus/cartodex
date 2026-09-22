@@ -1,9 +1,16 @@
 # Run one admin "import a tournament's field from Limitless" against an Import row.
 #
-# One job for both sources, and `options["source"]` is the whole of the difference: "online" reads
-# play.limitlesstcg.com's best-finishes leaderboard through Tournaments::OnlineResults and its
-# decklists through Tournaments::OnlineDecklist, anything else (including the absence of the key,
-# which is what a run enqueued before this existed carries) reads the paper results page.
+# One job for all three sources, and `options["source"]` is the whole of the difference: "online"
+# reads play.limitlesstcg.com's best-finishes leaderboard through Tournaments::OnlineResults and
+# its decklists through Tournaments::OnlineDecklist; "event" reads one whole real-world event —
+# every division — through Tournaments::LimitlessEventResults and its lists through
+# Tournaments::EventDecklists, which is one bulk page per division rather than one page per row;
+# anything else (including the absence of the key, which is what a run enqueued before this
+# existed carries) reads the paper results page.
+#
+# The event source is the only one whose rows do not share an archetype, so it carries none at
+# all: each row takes the archetype LimitlessArchetypeMapping answers for its Limitless deck, and
+# a deck nobody has confirmed blocks its rows by name rather than being guessed at.
 #
 # Import::KINDS gains nothing for it. An `online_standings` kind is the obvious move and a trap:
 # Tournaments::StandingsImportUndo raises unless the kind is "limitless_standings" and
@@ -27,6 +34,16 @@ class Tournaments::LimitlessImportJob < ApplicationJob
   # not a form field, so it is not user input and needs no guard beyond being this literal.
   ONLINE_FORMAT = "standard".freeze
   ONLINE_SOURCE = "online".freeze
+  # The third source: one whole real-world event, every division, off
+  # limitlesstcg.com/tournaments/<id>. Absence still reads as paper, so a run enqueued before this
+  # existed is still the run its admin approved.
+  EVENT_SOURCE = "event".freeze
+
+  # StandingsImportPlan::DEFAULT_MAX_ROWS is 300 to stop an archetype-history run walking 176
+  # events and 1569 rows. One event is a bounded thing whose size the admin has just read in the
+  # preview — and the largest Limitless lists is 3752 players — so the ceiling is raised for this
+  # source alone rather than for the plan.
+  EVENT_MAX_ROWS = 1000
 
   queue_as :default
 
@@ -73,6 +90,36 @@ class Tournaments::LimitlessImportJob < ApplicationJob
       "a pool is its pair of bounds, so the set alone cannot say which of them this leaderboard is."
   end
 
+  # An event page states its card pool as a *pair* of bounds — "TEF-PBL", which is
+  # StandardPool#name byte for byte — where the leaderboard states one set, so this is the other
+  # half of standard_pool_for and not a refinement of it. The pair is the pool's UNIQUE key, so
+  # the ambiguity that method has to refuse cannot arise here.
+  #
+  # Matched in Ruby over every pool rather than by joining card_sets twice: the table holds a
+  # handful of rows, `name` is already the thing published, and a hand-aliased double join is a
+  # query that breaks at runtime the day either association is renamed.
+  #
+  # nil rather than a raise, deliberately: the plan blocks the event and names the code it could
+  # not resolve, which is one sentence the screen and the run already share.
+  def self.standard_pool_named(name)
+    return if name.blank?
+
+    StandardPool.named.find { |pool| pool.name == name.to_s }
+  end
+
+  # The pool the event's own pages publish. Most common rather than first, the rule
+  # StandingsImportPlan#dominant_format follows: no event mixes two, and a stray icon must not
+  # decide an event's anchor on its own.
+  def self.published_pool_for(rows)
+    code = rows.filter_map { |row| row.format.presence }.tally.max_by { |_code, count| count }&.first
+
+    standard_pool_named(code)
+  end
+
+  # One run, one event, and this is the source's id for it. Spelled once because the screen writes
+  # it on a create and the run re-derives it to find that same event again after a rename.
+  def self.event_key_for(tournament_id) = "limitless-event:#{tournament_id}"
+
   def perform(import_id, user_id, options = {})
     options = options.with_indifferent_access
     import = Import.find_by(id: import_id)
@@ -80,7 +127,11 @@ class Tournaments::LimitlessImportJob < ApplicationJob
     return if import.nil? || user.nil?
 
     archetype = Archetype.find_by(id: options[:archetype_id])
-    raise ArchetypeMissing, "the archetype was deleted before the import ran" if archetype.nil?
+    # Source-conditional, because an event's sheet holds 45 distinct decks and no run archetype
+    # could be true of all of them: there each row carries its own, resolved through
+    # LimitlessArchetypeMapping, and a row nobody has mapped is blocked by name. The two older
+    # sources still declare one for the whole run and are still refused without it.
+    raise ArchetypeMissing, "the archetype was deleted before the import ran" if archetype.nil? && !event?(options)
 
     plan = build_plan(options)
     verify!(plan, options[:expected_row_count])
@@ -101,33 +152,60 @@ class Tournaments::LimitlessImportJob < ApplicationJob
   private
 
   def build_plan(options)
-    online = online?(options)
+    # Read before the plan is built rather than inline, because the event source states its card
+    # pool on its own pages: the anchor is a fact about the rows, not about the form.
+    rows = source_rows(options)
+
     Tournaments::StandingsImportPlan.call(
-      rows: source_rows(options),
+      rows: rows,
       event_filters: Array(options[:event_filters]),
       limit_per_event: options[:limit_per_event],
       # What the rows cannot say and the caller knows: an online run is anchored by its
       # leaderboard's `set`, and its arbitrary event names must never be read for a tier.
-      online: online,
-      standard_pool: (self.class.standard_pool_for(options[:set]) if online),
-      # Only ever passed by a test: the ceiling exists to stop an admin importing 1569 rows by
-      # accident, and proving it works should not need a 300-row HTML fixture.
-      **({ max_rows: options[:max_rows].to_i } if options[:max_rows].present?).to_h
+      online: online?(options),
+      standard_pool: standard_pool(options, rows),
+      # One run, one event. The plan reads this as "every row here belongs to one real-world
+      # event, and this is the source's id for it" — see StandingsImportPlan#initialize.
+      event_key: (self.class.event_key_for(options[:tournament_id]) if event?(options)),
+      **max_rows(options)
     )
   end
 
   # Absence is paper: a run enqueued before this job knew about a second source carries no key at
   # all, and must still be the run its admin approved.
   def online?(options) = options[:source].to_s == ONLINE_SOURCE
+  def event?(options) = options[:source].to_s == EVENT_SOURCE
+
+  def standard_pool(options, rows)
+    return self.class.standard_pool_for(options[:set]) if online?(options)
+    return self.class.published_pool_for(rows) if event?(options)
+
+    nil
+  end
+
+  def max_rows(options)
+    # Only ever passed by a test: the ceiling exists to stop an admin importing 1569 rows by
+    # accident, and proving it works should not need a 300-row HTML fixture.
+    return { max_rows: options[:max_rows].to_i } if options[:max_rows].present?
+    return { max_rows: EVENT_MAX_ROWS } if event?(options)
+
+    {}
+  end
 
   def source_rows(options)
+    return Tournaments::LimitlessEventResults.call(options[:tournament_id]) if event?(options)
     return Tournaments::LimitlessResults.call(options[:deck_id]) unless online?(options)
 
     Tournaments::OnlineResults.call(options[:slug], format: ONLINE_FORMAT,
       rotation: options[:rotation], set: options[:set])
   end
 
+  # An instance and not a class for the event source, and that is the whole of why a whole event
+  # costs six requests: EventDecklists holds one parsed bulk page per division and answers every
+  # row of it, where the two older services fetch one page per row.
   def decklist_service(options)
+    return Tournaments::EventDecklists.new(options[:tournament_id]) if event?(options)
+
     online?(options) ? Tournaments::OnlineDecklist : Tournaments::LimitlessDecklist
   end
 
@@ -169,7 +247,7 @@ class Tournaments::LimitlessImportJob < ApplicationJob
     # writes thirteen, and a report naming only the thirteen leaves the admin looking for the seven
     # it lost. It is always zero for a paper run, which does not de-duplicate at all.
     counts += ", #{result.duplicates} dropped as duplicates" if result.duplicates.positive?
-    counts += ", #{result.blocked} in events that cannot be imported" if result.blocked.positive?
+    counts += ", #{result.blocked} refused before writing" if result.blocked.positive?
     return %(Import of "#{import.label}" stopped: #{result.aborted_reason} (#{counts}).) if result.aborted?
 
     %(Import of "#{import.label}" finished: #{counts}#{", #{result.failed_count} refused" if result.failed_count.positive?}.)
@@ -182,6 +260,16 @@ class Tournaments::LimitlessImportJob < ApplicationJob
       lines << "#{result.failures.size} #{"row".pluralize(result.failures.size)} refused:"
       lines.concat(result.failures.first(FAILURES_LISTED).map { |label, message| "  #{label}: #{message}" })
       lines << "  … and #{result.failures.size - FAILURES_LISTED} more" if result.failures.size > FAILURES_LISTED
+    end
+    # The rows the run declined to write, by reason. The flash is transient and names a number; the
+    # Import row is the only permanent record of a run, and without this an event source refusing 48
+    # rows for one unconfirmed deck left nothing anywhere saying which deck — so the admin who came
+    # back to finish the job had only the preview to go back to. Grouped, because 48 rows of one
+    # event share one sentence.
+    if result.blocked_reasons.present?
+      lines << "#{result.blocked} #{"row".pluralize(result.blocked)} not written:"
+      lines.concat(result.blocked_reasons.sort_by { |_reason, count| -count }.first(FAILURES_LISTED)
+        .map { |reason, count| "  #{count} x #{reason}" })
     end
     lines.join("\n").presence
   end

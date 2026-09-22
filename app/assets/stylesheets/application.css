@@ -3092,6 +3092,33 @@ textarea.form-input {
   margin-top: 1.5rem;
 }
 
+/* One line per Limitless deck, above the plan those lines decide. */
+.standings-import-mappings {
+  margin-top: 2rem;
+}
+
+/* The deck's own reference — 284, 284/3 — printed beside its name because two decks of one base
+   id read alike and the reference is what the answer is stored under. */
+.standings-import-reference {
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
+/* A deck whose representative list could not be read says so with the page and the rank in the
+   message, and a URL is one unbreakable token. `.badge` is inline-block, so its min-content width
+   is that token's width: measured at 390px, nine of the fifteen lines the real event produces
+   pushed the document to 487px — the only elements on the page to overflow it at all, and clean at
+   768 and 1400. Scoped here rather than put on `.badge`, because everywhere else a badge is two
+   words and breaking inside one would be the wrong answer. */
+.standings-import-mappings .badge {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.standings-import-confirm-actions {
+  margin-top: 1.5rem;
+}
+
 
 /* ============================================================
    Design System layer — overrides applied last (source order

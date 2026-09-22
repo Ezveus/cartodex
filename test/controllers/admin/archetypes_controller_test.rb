@@ -123,6 +123,26 @@ class Admin::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "budew-teal-mask-ogerpon-ex", @archetype.slug
   end
 
+  # A mapping is a machine's note about how to read a source, and archetype_id is NOT NULL on it —
+  # so once the archetype is gone the answer it holds is unwritable and the next import simply asks
+  # again. With a bare foreign key this destroy is an unrescued ActiveRecord::InvalidForeignKey,
+  # which #destroy does not branch on: a 500 on the delete button.
+  #
+  # On budew_ogerpon and never on standings_marker: the latter carries two tournament standings, so
+  # restrict_with_error refuses its destroy long before the foreign key is reached and the test
+  # would pass whatever the cascade says.
+  test "deleting an archetype takes the Limitless mappings that point at it" do
+    mapping = limitless_archetype_mappings(:dragapult_dusknoir)
+    assert_equal @archetype, mapping.archetype
+    assert_predicate @archetype.tournament_standings, :empty?, "sanity: nothing restricts this destroy"
+
+    delete admin_archetype_path(@archetype)
+
+    assert_redirected_to admin_archetypes_path
+    assert_not Archetype.exists?(@archetype.id)
+    assert_not LimitlessArchetypeMapping.exists?(mapping.id)
+  end
+
   test "deletes an archetype no standing names" do
     assert_difference -> { Archetype.count }, -1 do
       delete admin_archetype_path(@archetype)

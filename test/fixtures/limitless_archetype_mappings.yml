@@ -1,0 +1,27 @@
+# "This Limitless deck is that cartodex archetype", as an admin confirmed it once on the import
+# screen. The three rows below are the two shapes the store has to tell apart — a base deck
+# (variant NULL) and a variant of that same deck id — plus a second deck id, so a query keyed on
+# one of them cannot answer with the other and pass.
+#
+# These point at ogerpon and budew_ogerpon deliberately, and the note in archetypes.yml does NOT
+# apply here: its warning is about tournament_standings, whose cascade off Archetype is
+# restrict_with_error. A mapping's cascade is dependent: :destroy — a machine's note about how to
+# read a source, unwritable once its archetype is gone — so a test that destroys either archetype
+# takes its mappings with it rather than being refused.
+
+dragapult:
+  limitless_deck_id: 284
+  label: Dragapult
+  archetype: ogerpon
+
+dragapult_dusknoir:
+  limitless_deck_id: 284
+  limitless_variant: 3
+  label: Dragapult Dusknoir
+  archetype: budew_ogerpon
+
+lost_box:
+  limitless_deck_id: 401
+  limitless_variant: 2
+  label: Lost Zone Box
+  archetype: ogerpon

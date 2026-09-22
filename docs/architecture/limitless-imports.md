@@ -1,6 +1,6 @@
 # Bulk standings import from Limitless TCG
 
-Turning one archetype's tournament history into `Tournament` and `TournamentStanding` rows, from two sources: the paper results pages and the online "best finishes" leaderboard.
+Turning Limitless TCG into `Tournament` and `TournamentStanding` rows, from three sources: one archetype's tournament history off the paper results pages, one player's online "best finishes" leaderboard, and one whole real-world event. The first two are written out below; the third has its own section at the end of this file.
 
 This file carries detail that used to sit inline in `CLAUDE.md`. Everything here is a decision with a measurement behind it — read it before changing the code it covers, because most entries record something that was already tried and rejected.
 
@@ -255,3 +255,213 @@ run, but it is keyed on the archetype and not on the pool, so one player's uncha
 appears once per pool page imported — correct as far as it goes (a TEF-CRI list is not a TEF-PBL
 list) and unmeasured either way. Also out: any win rate, and keeping online field lists out of
 `/decks/shared`, which now receives one authorless shared deck per imported row.
+
+---
+
+## The third source: one whole event
+
+`limitlesstcg.com/tournaments/<id>` — one real-world tournament, every age division, every
+published row. The design record is
+`docs/superpowers/specs/2026-09-22-tournament-standings-import-design.md`. Two services
+(`Tournaments::LimitlessEventResults`, `Tournaments::EventDecklists`), one resolver
+(`Tournaments::ArchetypeProposer`), one store (`LimitlessArchetypeMapping`), and a third branch on
+the screen and the job. The plan and the importer were widened rather than duplicated.
+
+**An event's rows do not share an archetype, and that is the whole difficulty.** Both older sources
+declare one for a whole run because a deck-results page *is* one archetype; an event's sheet holds
+**45 distinct decks over 575 rows** (measured on `/tournaments/577`, Regional Baltimore), while
+`tournament_standings.archetype_id` is `NOT NULL`. Three ways of deciding it were measured against
+real lists off that event:
+
+- **By the Limitless deck name, against `archetypes.name`.** 4 of 45 names match exactly, 5 have no
+  plausible candidate, and token matching is wrong more often than right — `Greninja` →
+  *Mega Greninja ex / Dragapult ex*, `Metagross` → *Steven's Metagross ex / Jellicent ex*.
+- **`Decks::ArchetypeDetector` alone.** It matched 55 of 56 sampled lists and **12 of those matches
+  are wrong**: a rule-box tech card outscores the deck's own name card (`Slowking` filed as
+  *Lillie's Clefairy ex*, twice), and three more are genuine score ties that `max_by` settles on
+  whichever row the database returned first — so one list can be filed under either of two
+  archetypes on two runs. Fine when a member imports their own deck and sees the answer; not fine
+  575 rows at a time in a sheet that says nothing about how the archetype got there.
+- **Containment selects the candidates, the published deck name discriminates among them.** This is
+  what ships, and it only ever *proposes*. Over 96 lists: 80 decided, 9 where the name says nothing
+  (`Basic Box`, `Tera Box`), 4 ambiguous (`Dhelmise` between Banette and Sinistcha), 3 with no
+  candidate — and **one of the 80 still wrong**. A good proposer and a bad decider.
+
+So the answer is **stored and confirmed by a human**, in `limitless_archetype_mappings`, and the
+preview renders one line per deck for the admin to arbitrate. On the live event: 36 of 45 references
+proposed, 9 left to the admin, and the 77 rows they cover blocked by name rather than guessed.
+
+**The key is the deck's own reference, `284` or `284/3`, never its display name.** Measured on that
+event the two are a bijection (45 names ↔ 45 references), so nothing is lost — but Limitless
+renames a deck as a metagame settles, and eight of these references are variants of a shared base
+id: `284`, `284/3`, `284/9` and `284/12` are Dragapult, Dragapult Dusknoir, Dragapult Blaziken and
+Dragapult Dudunsparce. Keyed on the base id, four decks become one. `label` is stored beside it for
+the screen to print and is never read as a key. The store is what makes the second event cheap: only
+decks nobody has confirmed are proposed for, and only those cost a list.
+
+**A deck nobody has mapped blocks its rows; it never falls back to a guess.** The reason names the
+deck and its reference, so the admin knows what to confirm and re-run.
+
+**"— Leave unmapped —" retracts a confirmation, and before it did, nothing in the app could.** The
+select offers that option on every line, the confirmed ones included, while `persist_mappings` only
+ever `find_or_initialize_by(...).update!` — so a blank selection on a line already in the store was
+a silent no-op, and the screen went on answering "confirmed earlier" to the click it had just
+invited. There is no admin CRUD for `LimitlessArchetypeMapping`, no rake task and no other caller
+that destroys one, so a confirmation could be corrected to a different archetype and never withdrawn.
+A blank selection now travels as an explicit nil and `retract` destroys the row, looked up through
+`LimitlessArchetypeMapping.by_reference` rather than with a `where` of its own, so the null-safe half
+of that key — SQLite spelling a NULL comparison `IS` — stays spelled once; a pair nobody mapped
+matches nothing and deletes nothing. The value guard is what keeps the door narrow: a non-scalar
+`archetype_id` (`mappings[284][archetype_id][]=1`) is still dropped whole rather than read as a
+retraction, because a hand-made request must not be able to undo an arbitration nobody made. This is
+also what makes the pre-selected proposal reversible — confirming an untouched line records the
+machine's guess as a human decision, and this is the door back out of it.
+
+**The confirm button withholds itself on a blocked event *and* on the row ceiling, and the second
+one had to be asked separately.** `Admin::StandingsImports::EventConfirmForm` wraps the mapping
+selects and the plan in one POST, so it renders `PlanTable` with `confirm: false` and
+`PlanTable#confirmable?` — which does test `over_limit?` — is never consulted for this source. The
+first preview cannot reach the ceiling, every row of an unmapped deck being blocked and
+`importable_rows` therefore 0; the *second* one, where confirming the decks is precisely what made
+the rows count, rendered "N rows is over the 1000-row ceiling" with a working button directly
+beneath it. The click enqueues a run that raises `PlanTooLarge` and writes nothing, and the next
+preview makes the same offer again. `EVENT_MAX_ROWS` is 1000 against a largest Limitless event of
+3752 players, so this is an ordinary major Regional rather than a corner. The refusal gets its own
+sentence rather than borrowing `PlanTable`'s, which names an event filter as a way out: true of the
+two sources whose run covers a page of events, false of one whose run is a single event by
+construction. The per-event cap is the only lever, so it is the only one named.
+
+**One page carries every decklist, and that is what makes the feature affordable.** The obvious
+shape is the older sources' — one request per row to `/decks/list/<id>` — which measures at 575
+requests, a median 0.82 s each, about **12.7 minutes**, with 45 of them (37 s) inside the preview's
+own web request. `/tournaments/577/decklists` carries all 559 Masters lists in one document, in the
+same `[data-text-decklist] .decklist-card` markup `Tournaments::LimitlessDecklist` already parses,
+and the division goes in the path before it (`/tournaments/577/SR/decklists`). Measured: 22.1 MB,
+`Nokogiri::HTML` 0.30 s, walking all 559 lists 0.28 s. **Six requests for a whole event**, and the
+preview's 45 proposals come back in 7.1 s. `Tournaments::LimitlessDecklist.from_nodes` is extracted
+so the per-URL path and the bulk path are one spelling of the markup rule; `Decks::ArchetypeDetector.candidates` likewise, so the proposer does not
+re-implement containment's four clauses.
+
+**A list block is keyed on the rank its toggle states, not on its `data-target`.** They look like
+the same number and are not: `data-target="decklist-N"` / `data-id="N"` is the block's index among
+the *published* lists. On 577 every row published, so the two agree everywhere and nothing can tell
+them apart. On `/tournaments/563`, which publishes 6 lists for 10 rows, the third block reads
+`data-target="decklist-3"` while its toggle reads `6th Kevin Krueger` — rank 3 registered nothing.
+Keyed on the attribute, one player's 60 is filed under another player's row, silently, in a public
+sheet.
+
+**The DOM is dropped at the end of the parse, and a failure is memoised beside the results.** Both
+were found by the adversarial review, both measured, and both matter more than they look.
+
+Holding the three divisions' parsed DOMs for a whole run measures **+355 MB RSS** on pages a third
+smaller than the real ones — in a Solid Queue worker that also holds the app, with a preview request
+holding a second such store concurrently. Each block is therefore converted to its PTCG text as the
+page is walked and the document is released with the method. The property that made nodes look
+necessary is kept: a list `LimitlessDecklist` refuses is stored *as its exception* and raised
+against the row that asks for it, so it still costs its own row and not the whole division.
+
+And `@divisions[division] ||= parse(division)` stores a result and never an exception, so a division
+whose ranks stopped being readable was re-fetched and re-parsed by **every row of it** — 559 rows
+against a 22.1 MB page is 12.4 GB off limitlesstcg.com in one run, 575 × 0.30 s of Nokogiri, and an
+`Import` still reporting "completed" with every list missing. `StandingsImporter`'s
+five-consecutive-failure abort cannot see it: it counts `HttpFetcher::FetchError` and this is a
+`ParseError`. The refusal is memoised too, and a test counts the fetches.
+
+**And the courtesy pause follows the fetch rather than the call.** `StandingsImporter#remote` paces
+everything that leaves the machine at half a second and counts consecutive failures around it, and
+both decklist call sites went through it — right for the two older services, which fetch one URL per
+row, and wrong here from the moment the memoisation above started working. After the first row of a
+division every call is a Hash lookup: **572 of 575 on the reference event**, each sleeping half a
+second for a request nobody was making, ≈ **4.8 minutes** of pure wall clock, spent against the
+six-requests-for-a-whole-event this class exists to buy. `EventDecklists#held?(key)` answers whether
+a key would leave the machine and `StandingsImporter#fetch_list` asks before pacing — the shape
+`#resolve_printing` already had for a printing the database already holds. `held?` is keyed on the
+division and not the rank, because a fetch is: a rank this page never published is refused without a
+request, and so is a memoised failure. Asked through `respond_to?` rather than through an interface
+every decklist service must declare, since for the other two every call is remote and the question
+has no answer.
+
+**Two blocks claiming one rank refuse the division rather than letting one win.** `acc[rank] = …`
+was last-wins, which is the very failure keying on the stated rank exists to prevent, arriving by
+the other door — and `RANK_RE` reads `9th-16th Alice` as rank 9, so a top-cut page writing a range
+on eight blocks makes all eight claim it. Seven lists become unreachable and the eighth is handed to
+whichever row asks. Nothing here can tell which of them a row meant.
+
+**A division page that 404s is an empty division; one that answers anything else is a refusal.**
+`HttpFetcher::FetchError` carries the `status` it was raised for — nil for whatever never reached one,
+a timeout, a refused connection, a URL that is not one — and `LimitlessEventResults#fetch` answers
+nil only for a 404. It used to flatten every failure onto that nil, and `#rows_for` reads a nil on a
+suffix page as an empty division: the right reading for 563's SR and JR, and the wrong one for
+exactly the failure this source's own pacing exists to avoid. Measured consequence: a 429 on
+`/tournaments/577/JR` took the 8 Junior rows out of the plan, raised nothing, showed a field the
+preview did not mark as amputated, and let the `Import` report `completed`. On the base page the same
+nil at least produced a message, but it read "the event may not exist, or the layout changed" about
+an id that was perfectly correct. Re-raised, it reaches the two rescues that already existed for it —
+the preview's flash refusal and the job's failed `Import`. A suffix page answering 200 with no table
+is still an empty division, which is what 563 actually does.
+
+**The three attendance figures are per division and land in their own columns.** Each division page
+states its own: 3122 / 364 / 233 on 577. That this is the division's field and not the event's total
+was measured on 563, whose empty SR and JR pages print `? Players` rather than repeating 88 — and
+`?` comes back nil, never 0, because a field of zero makes every placement in that division invalid
+under `TournamentStanding#placement_within_division_field`.
+
+**The format is stated, never inferred.** The page publishes `format=TEF-PBL`, which is
+`StandardPool#name` byte for byte, and the pool is looked up by that pair of bounds.
+`StandardPool.at(date)` is deliberately not used: it reads `legal_on`, so an event held in the
+fortnight after a set ships but before Play! Pokémon rules it legal would be anchored to the pool
+the source says it was not played under — which is exactly the event that prompted this feature. A
+code matching no pool blocks the event naming the code.
+
+**An event already in the catalogue whose pool disagrees with the published one is refused, not
+overruled.** This is the rule the whole "the format is stated" decision is worth nothing without,
+and it was missing from the first implementation. `build_event` takes an existing event's
+classification whole (`classification_of(tournament)`) and `blocked_reason` used to return early on
+any event it found — so a Regional a member had already catalogued kept *its* anchor and the
+published `TEF-PBL` was discarded in silence, for the whole 559-row field and all 559 field lists.
+That is not a hypothetical: `Tournaments::Form` pre-fills its anchor from `StandardPool.at(date)`,
+which reads `legal_on`, which is exactly the fortnight-window error this source reads the page to
+avoid — so the member who catalogues such an event first hands the import the wrong bucket, and
+`Archetypes::MetagameScope` then reports a whole Regional under a pool nobody played it in while
+the right bucket reads empty. A one-event run therefore compares the two and blocks the event
+naming both, leaving the correction on the event's own form: the same call every other refusal here
+makes, and the reason nothing wrong enters the catalogue quietly. Agreeing costs nothing, and an
+event a previous run created is importable into on the next one.
+
+**A published pool cartodex has never heard of is named before that disagreement is asked.**
+`blocked_reason` put the comparison in front of the branch that reports an unknown pool, and on an
+event a member catalogued by hand against a pool that does not exist yet, `derived[:standard_pool]`
+is nil, the comparison cannot hold, and `disagreement_reason` falls back to the bare format word:
+*"Limitless publishes this event as standard and cartodex has it catalogued as Standard (TEF-CRI) —
+correct the event and re-run"*. No edit of that event can satisfy that while the pool does not exist,
+and the sentence never names the pool to create nor the code that was published. The unknown-pool
+branch therefore sits above it and covers the catalogued and the uncatalogued case at once, which is
+what made the older copy below it redundant. Handing back nil from `disagreement_reason` is not the
+smaller fix it looks like: `return disagreement_reason(...) if …` returns that nil, `blocked_reason`
+answers nil, and the event becomes importable against the very anchor it disagrees with.
+
+**The event is found by its key first and its name second, and it writes both.** `(name_normalized,
+date)` is the catalogue's identity and is what finds an event a member catalogued by hand — measured,
+cartodex 294 is named `Regional Baltimore, MD` and dated 19 September 2026, byte-identical to the
+Limitless heading. But that key alone breaks on the second run: a member renaming the event to
+"Baltimore Regional 2026" makes the next run plan every row `:create` with an **empty**
+`similar_tournaments` (that check is substring-only and a reordered name is not a substring), and a
+second Tournament lands on the same date, which `name_and_date_are_unique` does not refuse because it
+only checks the pair. So the run writes `external_key: "limitless-event:<id>"` — namespaced, because
+the partial UNIQUE index on that column is global and the online source writes 24-character hex
+digests there — and `find_catalogued` tries it before the name and date.
+
+**On an event that was found, only nil columns are filled.** An event is wiki-governed: a member may
+have corrected its tier, format or a field size, and a re-import that reasserted Limitless's values
+would revert that with no trace. Two of those columns are worse than rude to overwrite — lowering a
+division's field below a recorded placement makes existing standings invalid. `tier` and `format`
+are in the list for the contract's sake and can never in fact be filled, being `NOT NULL` with
+schema defaults.
+
+**Still out:** W-L-T and per-row attendance (this page publishes neither), `data-country` (no
+column), Limitless's deck *variants* as a concept (issue #157 — the reference is recorded and mapped,
+not interpreted), and de-duplication, which stays off: that pre-pass exists because a leaderboard is
+one player's best finishes, while an event's sheet is a field and two rows sharing a 60 are two
+people who both played it. An imported sheet is complete for the divisions published and is still a
+day-2 cut of a 3122-player field — 559 rows — and nothing renders that, the same silence every
+imported sheet already carries.

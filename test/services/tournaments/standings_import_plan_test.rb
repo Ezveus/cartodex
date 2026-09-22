@@ -4,6 +4,8 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
   # tournaments(:one) is "Regional Championship" on 2026-03-14 with standings for Ash Ketchum
   # (masters, no field list) and Giovanni (masters, no field list).
   EXISTING = { event_name: "Regional Championship", event_date: Date.new(2026, 3, 14) }.freeze
+  # What Admin::StandingsImportsController writes for /tournaments/577 — one event, one key.
+  EVENT_KEY = "limitless-event:577".freeze
 
   test "groups rows into one event per name and date, newest first" do
     plan = plan_for([
@@ -196,11 +198,11 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     ]).events.first
 
     assert event.online
-    assert_equal 197, event.participant_count
+    assert_equal({ "open" => 197 }, event.participant_counts)
     # The paper source publishes no attendance at all, which is why every event imported from it
     # has nil participant counts — and why the field is asked for rather than assumed.
     assert_not plan_for([ row ]).events.first.online
-    assert_nil plan_for([ row ]).events.first.participant_count
+    assert_empty plan_for([ row ]).events.first.participant_counts
   end
 
   # Online event names are arbitrary and repeat weekly, so [name, date] — the paper source's
@@ -215,7 +217,8 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
 
     assert_equal 2, plan.events.size
     assert_equal [ "aaa", "bbb" ], plan.events.map(&:external_key).sort
-    assert_equal [ 10, 200 ], plan.events.map(&:participant_count).sort
+    assert_equal [ { "open" => 10 }, { "open" => 200 } ],
+      plan.events.map(&:participant_counts).sort_by { |counts| counts.values.first }
   end
 
   # The other half: two rows of one event stay one event however its name is spelled, because the
@@ -256,6 +259,167 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     assert_equal [ tournaments(:one) ], event.similar_tournaments
   end
 
+  # ---- one whole event, every division ---------------------------------------------------------
+
+  # This source publishes the *pool code* where the two older ones publish a format label, so its
+  # rows say "TWM-POR" and the caller — which is the only thing that can resolve that string to a
+  # StandardPool — states the pool. A run that states one is Standard by construction.
+  test "classifies a whole-event run as Standard anchored to the pool its caller stated" do
+    event = event_plan_for([ event_row ]).events.sole
+
+    assert_equal "standard", event.format
+    assert_equal standard_pools(:twm_por), event.standard_pool
+    assert_equal EVENT_KEY, event.external_key
+    assert_not event.blocked?
+  end
+
+  # The guard on #standard_pool_for moved off @online, which on its own leaves a whole-event run
+  # with no pool falling straight through to StandardPool.at(date) — and on this date that answers
+  # a pool, confidently and wrongly. The event page states its own card pool; a code that matches
+  # nothing is a refusal, never a date lookup.
+  test "refuses a whole-event run whose published pool code matched no pool" do
+    date = Date.new(2026, 2, 20)
+    # The premise: guessing from the date would have answered, which is what makes it dangerous.
+    assert_equal standard_pools(:twm_por), StandardPool.at(date)
+
+    event = event_plan_for([ event_row(event_date: date, format: "MEG-XYZ") ],
+      standard_pool: nil).events.sole
+
+    assert event.blocked?
+    assert_nil event.standard_pool
+    assert_match(/MEG-XYZ/, event.blocked_reason)
+    assert_equal [ :blocked ], event.rows.map(&:status).uniq
+  end
+
+  # The three division pages of one event state three different field sizes — measured on 563,
+  # Masters says 88 while Seniors and Juniors say "? Players" — and each one is the number
+  # TournamentStanding#placement_within_division_field measures that division's placements against.
+  test "reads one field size per division, not one for the event" do
+    event = event_plan_for([
+      event_row(division: "masters", attendance: 3122),
+      event_row(division: "senior", division_suffix: "SR", attendance: 364, player_name: "S"),
+      event_row(division: "junior", division_suffix: "JR", attendance: nil, player_name: "J")
+    ]).events.sole
+
+    assert_equal({ "masters" => 3122, "senior" => 364 }, event.participant_counts)
+  end
+
+  # A deck nobody has confirmed is a refusal that names the deck, never a guess: the same treatment
+  # a row whose division cannot be read already gets, and the reason nothing wrong enters a public
+  # wiki sheet silently.
+  test "blocks a row whose Limitless deck nobody has mapped, naming the deck" do
+    row_plan = event_plan_for([
+      event_row(archetype_key: "284/9", archetype_label: "Dragapult Blaziken")
+    ]).events.sole.rows.sole
+
+    assert_equal :blocked, row_plan.status
+    assert_match(/Dragapult Blaziken/, row_plan.reason)
+    assert_nil row_plan.archetype
+  end
+
+  # The other half of the same rule, and the one that used to fall through. A deck cell Limitless
+  # published in a shape LimitlessEventResults could not read yields no archetype_key at all, so a
+  # guard written as "there is a key and nothing is mapped to it" never fires — and the row
+  # previewed as an ordinary :create that then failed at import against the NOT NULL column.
+  # Nothing wrong was written either way; what was wrong was the preview, which is the only thing
+  # an admin reads before agreeing to publish 575 rows.
+  test "blocks a row whose deck Limitless published in a shape the parser could not read" do
+    row_plan = event_plan_for([ event_row(archetype_key: nil, archetype_label: nil) ])
+      .events.sole.rows.sole
+
+    assert_equal :blocked, row_plan.status
+    assert_match(/no readable deck/, row_plan.reason)
+    assert_nil row_plan.archetype
+  end
+
+  # The whole reason this source reads the pool off the page rather than off the date. The
+  # hand-catalogue form pre-fills its anchor from StandardPool.at(date), which reads `legal_on` —
+  # so a member who catalogues an event held in the fortnight after a set ships hands it the
+  # previous pool, and an import that adopted that would file the whole field, and every field
+  # list, in a bucket nobody played it in. Refused and named, never overruled.
+  test "refuses an event whose catalogued pool disagrees with the one Limitless publishes" do
+    tournament = Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_asc)
+    )
+    event = event_plan_for([ event_row ], standard_pool: standard_pools(:twm_por)).events.sole
+
+    assert event.blocked?
+    assert_match(/#{standard_pools(:twm_por).name}/, event.blocked_reason)
+    assert_match(/#{standard_pools(:twm_asc).name}/, event.blocked_reason)
+    assert_equal tournament, event.tournament
+    assert_equal [ :blocked ], event.rows.map(&:status).uniq
+  end
+
+  # The disagreement above can only be asked once both pools exist. A published pool cartodex has
+  # never heard of, on an event a member catalogued by hand, used to reach it anyway — and it
+  # answered "correct the event and re-run", which no edit of that event can satisfy while the pool
+  # does not exist, while never naming the pool to create. The branch that knows what is missing
+  # sits above it now.
+  test "names the pool to create on a catalogued event whose published pool matches none" do
+    Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_asc)
+    )
+    event = event_plan_for([ event_row(format: "MEG-XYZ") ], standard_pool: nil).events.sole
+
+    assert event.blocked?
+    assert_match(/MEG-XYZ/, event.blocked_reason)
+    assert_match(/Standard pools/, event.blocked_reason)
+    assert_no_match(/correct the event/, event.blocked_reason)
+    assert_equal [ :blocked ], event.rows.map(&:status).uniq
+  end
+
+  # And the ordinary case stays cheap: agreeing is not a disagreement, and an event a previous run
+  # created must still be importable into on the next one.
+  test "imports into a catalogued event whose pool is the one Limitless publishes" do
+    Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_por)
+    )
+    event = event_plan_for([ event_row ], standard_pool: standard_pools(:twm_por)).events.sole
+
+    assert_not event.blocked?
+    assert_nil event.blocked_reason
+    assert_equal [ :create ], event.rows.map(&:status)
+  end
+
+  # The confirmed answer travels on the row, because an event's sheet holds 45 distinct decks over
+  # 575 rows and there is no single archetype for the run to carry.
+  test "carries the confirmed archetype of each row's own deck" do
+    rows = event_plan_for([
+      event_row(archetype_key: "284", archetype_label: "Dragapult", placement: 1),
+      event_row(archetype_key: "284/3", archetype_label: "Dragapult Dusknoir",
+        player_name: "Andrew Hedrick", placement: 2)
+    ]).events.sole.rows
+
+    assert_equal [ archetypes(:ogerpon), archetypes(:budew_ogerpon) ], rows.map(&:archetype)
+    assert_equal [ :create, :create ], rows.map(&:status)
+  end
+
+  # The first run of an event somebody catalogued by hand has to find their row: it carries no key
+  # at all, so the key alone would plan a create that the (name, date) UNIQUE index then refuses.
+  test "falls back to the event's name and date when nothing carries the key yet" do
+    event = event_plan_for([
+      event_row(event_name: "Regional Championship", event_date: Date.new(2026, 3, 14))
+    ]).events.sole
+
+    assert_equal tournaments(:one), event.tournament
+  end
+
+  # And once a run has written that key, it is what finds the event again — a member renaming it in
+  # the meantime is an ordinary thing on a wiki-governed catalog, and the name lookup would then
+  # plan a second row for the same real event.
+  test "finds a renamed event by the key a run wrote onto it" do
+    tournaments(:one).update!(external_key: EVENT_KEY, name: "Regional Baltimore (renamed)")
+
+    event = event_plan_for([
+      event_row(event_name: "Regional Championship", event_date: Date.new(2026, 3, 14))
+    ]).events.sole
+
+    assert_equal tournaments(:one), event.tournament
+  end
+
   private
 
   def row(**overrides)
@@ -290,5 +454,27 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
 
   def online_plan_for(rows, standard_pool: standard_pools(:twm_por), **options)
     Tournaments::StandingsImportPlan.call(rows: rows, online: true, standard_pool: standard_pool, **options)
+  end
+
+  # The third source's own Row: the same eight fields the plan reads, plus the deck reference that
+  # decides the archetype per row, its label, and the division's own field size. `format` is the
+  # pool code as published — "TWM-POR", StandardPool#name byte for byte — and not a format label,
+  # and `list_url` is the synthetic key Tournaments::EventDecklists answers on.
+  def event_row(**overrides)
+    Tournaments::LimitlessEventResults::Row.new(
+      **{
+        event_name: "Regional Baltimore, MD", event_date: Date.new(2026, 2, 20),
+        division: "masters", division_suffix: nil, format: "TWM-POR",
+        player_name: "Dylan Kasturi", placement: 1, list_url: "577/masters/1",
+        archetype_key: "284", archetype_label: "Dragapult", attendance: 3122
+      }.merge(overrides)
+    )
+  end
+
+  # A whole event is one event, and the caller states both the things its rows cannot: the source's
+  # own id for it, and the StandardPool its published pool code resolved to.
+  def event_plan_for(rows, standard_pool: standard_pools(:twm_por), **options)
+    Tournaments::StandingsImportPlan.call(rows: rows, event_key: EVENT_KEY,
+      standard_pool: standard_pool, **options)
   end
 end

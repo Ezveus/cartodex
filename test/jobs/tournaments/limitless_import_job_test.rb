@@ -53,7 +53,7 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     message = broadcast_flash { perform }
 
     assert_match(/#{IMPORTABLE} created/, message)
-    assert_match(/1 in events that cannot be imported/, message)
+    assert_match(/1 refused before writing/, message)
     assert_match(/Raging Bolt/, message)
   end
 
@@ -195,7 +195,154 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     assert_match(/No Standard pool ends at PBL/, @import.error_message)
   end
 
+  # --- one whole event ---------------------------------------------------------------------
+  #
+  # Three division pages of one real event. Its rows carry 15 distinct decks, so the run carries
+  # no archetype at all and each row takes the one limitless_archetype_mappings answers with.
+
+  test "an event run writes each row's own archetype and needs none of its own" do
+    tef_pbl_pool
+    stub_event_http
+
+    assert_difference -> { TournamentStanding.count }, EVENT_MAPPED_ROWS do
+      perform_event
+    end
+
+    @import.reload
+    assert_equal "completed", @import.status
+    standings = TournamentStanding.where(id: @import.created_standing_ids)
+    # Never @archetype, which this run was not given: the row's own is the whole rule.
+    assert_equal [ archetypes(:budew_ogerpon), archetypes(:ogerpon) ].sort_by(&:name),
+      standings.map(&:archetype).uniq.sort_by(&:name)
+    # The 16 rows whose deck nobody has mapped are refused by name rather than guessed at.
+    assert_equal 1, Tournament.where(external_key: EVENT_KEY).count
+  end
+
+  # "Most common rather than first" is the rule StandingsImportPlan#dominant_format already follows,
+  # and nothing pinned it here: replacing the tally with `.first` left the whole suite green. One
+  # stray format icon on one row of 575 must not decide a whole event's anchor.
+  test "the published pool is the one most of the event's rows state, not the first" do
+    pool = tef_pbl_pool
+    rows = [
+      Tournaments::LimitlessEventResults::Row.new(format: "TWM-POR"),
+      Tournaments::LimitlessEventResults::Row.new(format: pool.name),
+      Tournaments::LimitlessEventResults::Row.new(format: pool.name)
+    ]
+
+    assert_equal pool, Tournaments::LimitlessImportJob.published_pool_for(rows)
+  end
+
+  # And a code no pool answers to resolves to nil rather than to something near it: the plan then
+  # blocks the event naming the code, which is one sentence the screen and the run share.
+  test "a published pool code that names no pool resolves to nothing" do
+    assert_nil Tournaments::LimitlessImportJob.standard_pool_named("MEG-XYZ")
+    assert_nil Tournaments::LimitlessImportJob.standard_pool_named(nil)
+    assert_nil Tournaments::LimitlessImportJob.published_pool_for([])
+  end
+
+  # The Import row is a run's only permanent record — the flash is transient and names a number.
+  # Without this the 16 rows an event run declines for one unconfirmed deck left nothing anywhere
+  # saying *which* deck, so the admin who came back to finish the job had only the preview to go
+  # back to. Grouped, because those 16 rows share one sentence and a 559-row field would otherwise
+  # repeat it 48 times.
+  test "an event run records which decks it refused rows for, not just how many" do
+    tef_pbl_pool
+    stub_event_http
+    perform_event
+
+    message = @import.reload.error_message
+    assert_match(/#{EVENT_BLOCKED_ROWS} rows not written/, message)
+    assert_match(/no archetype is mapped for the Limitless deck/, message)
+    # The count rides with the reason, so one line stands for many rows.
+    assert_match(/^  \d+ x /, message)
+  end
+
+  # DEFAULT_MAX_ROWS is 300 because an archetype-history page is 176 events and 1569 rows; one
+  # event is a bounded thing whose size the admin has just read in the preview, and a 400-row
+  # Regional must not be refused as an accident.
+  test "an event run plans one event at its own ceiling while a paper run keeps the default" do
+    tef_pbl_pool
+    stub_event_http
+    event_options = capture_plan_options { perform_event }
+
+    assert_equal EVENT_KEY, event_options[:event_key]
+    assert_equal 1000, event_options[:max_rows]
+    assert_not event_options[:online]
+
+    stub_http
+    paper_options = capture_plan_options { perform }
+
+    assert_nil paper_options[:event_key]
+    assert_nil paper_options[:max_rows], "the paper source keeps StandingsImportPlan's own ceiling"
+  end
+
+  # The id is interpolated into three URLs. The screen refuses a bad one while there is still a
+  # form to go back to; here there is not, so it has to fail the Import rather than the process.
+  test "fails the import when the tournament id is not a tournament id" do
+    perform_event(tournament_id: "577/../../evil")
+
+    assert_equal "failed", @import.reload.status
+    assert_match(/is not a tournament id/, @import.error_message)
+  end
+
   private
+
+  EVENT_ID = "577".freeze
+  EVENT_KEY = "limitless-event:577".freeze
+  # 284 (five rows) and 284/3 (three) are the two references the fixtures already map; the other
+  # 13 block their rows by name.
+  EVENT_MAPPED_ROWS = 8
+  # 24 rows over the three division fixtures, less the 8 above.
+  EVENT_BLOCKED_ROWS = 16
+
+  EVENT_PAGES = {
+    "https://limitlesstcg.com/tournaments/577" => "tournament_577_masters",
+    "https://limitlesstcg.com/tournaments/577/SR" => "tournament_577_senior",
+    "https://limitlesstcg.com/tournaments/577/JR" => "tournament_577_junior",
+    "https://limitlesstcg.com/tournaments/577/decklists" => "tournament_577_masters_decklists",
+    "https://limitlesstcg.com/tournaments/577/SR/decklists" => "tournament_577_senior_decklists"
+  }.freeze
+  # 577 publishes no Junior lists, which is ordinary rather than an error.
+  EMPTY_PAGE = "<html><body></body></html>".freeze
+
+  def perform_event(**overrides)
+    Tournaments::LimitlessImportJob.perform_now(@import.id, @admin.id, event_options(**overrides))
+  end
+
+  # No archetype_id at all: an event's sheet holds 15 decks, and the run is refused nothing for
+  # carrying none.
+  def event_options(**overrides)
+    { "source" => "event", "tournament_id" => EVENT_ID, "event_filters" => [], "limit_per_event" => nil }
+      .merge(overrides.transform_keys(&:to_s))
+  end
+
+  def stub_event_http
+    HttpFetcher.define_singleton_method(:call) { |url|
+      page = EVENT_PAGES[url]
+      page ? File.read(Rails.root.join("test/fixtures/files/limitless/#{page}.html")) : EMPTY_PAGE
+    }
+  end
+
+  # The fixtures' pools are TWM-ASC and TWM-POR; this event publishes TEF-PBL, which is
+  # StandardPool#name byte for byte.
+  def tef_pbl_pool
+    StandardPool.create!(
+      first_card_set: CardSet.create!(code: "TEF", name: "Temporal Forces", release_date: Date.new(2024, 3, 22)),
+      last_card_set: CardSet.create!(code: "PBL", name: "Pitch Black", release_date: Date.new(2026, 8, 1)),
+      regulation_marks: %w[H I J], released_on: Date.new(2026, 8, 1), legal_on: Date.new(2026, 8, 15)
+    )
+  end
+
+  def capture_plan_options
+    plan = Tournaments::StandingsImportPlan
+    original = plan.method(:call)
+    captured = nil
+    plan.define_singleton_method(:call) { |**options| captured = options; original.call(**options) }
+    yield
+    captured
+  ensure
+    plan.define_singleton_method(:call, original)
+  end
 
   # The job's own report, as the admin receives it: appended to their notifications stream, never
   # returned. Asserting on the Import row alone would miss the sentence entirely.

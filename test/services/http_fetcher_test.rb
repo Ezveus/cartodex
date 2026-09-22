@@ -24,6 +24,30 @@ class HttpFetcherTest < ActiveSupport::TestCase
     assert_match(/is not a URL/, error.message)
   end
 
+  # The status is what lets a caller tell "there is no such page" from "the far side is not
+  # answering right now". Tournaments::LimitlessEventResults reads a 404 on a division page as an
+  # empty division — the ordinary shape of a small event — and any other failure as a refusal, and
+  # the message is not something it can ask that question of.
+  test "a refusal carries the status the far side answered with" do
+    fetcher = HttpFetcher.new("https://limitlesstcg.com/tournaments/577/SR")
+    fetcher.define_singleton_method(:perform_request) do
+      Net::HTTPTooManyRequests.new("1.1", "429", "Too Many Requests")
+    end
+
+    error = assert_raises(HttpFetcher::FetchError) { fetcher.call }
+
+    assert_equal 429, error.status
+    assert_match(/429/, error.message)
+  end
+
+  # And nil for everything that never reached a status — a timeout, a refused connection, a URL that
+  # is not one. A reader testing `status == 404` treats those as the refusals they are.
+  test "a failure that never reached a status carries none" do
+    error = assert_raises(HttpFetcher::FetchError) { HttpFetcher.call("http://[") }
+
+    assert_nil error.status
+  end
+
   # Scraping thousands of pages anonymously is how a block arrives with no way to ask about it.
   test "identifies itself" do
     assert_match(%r{\ACartodex/\d}, HttpFetcher::USER_AGENT)

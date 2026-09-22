@@ -51,7 +51,7 @@ class Tournaments::StandingsImporter < ApplicationService
   # reading the receipt: skipped is "already there", duplicate is "deliberately not imported".
   Result = Struct.new(
     :created, :enriched, :skipped, :blocked, :duplicates, :standing_ids, :enriched_standing_ids,
-    :failures, :aborted_reason, keyword_init: true
+    :failures, :blocked_reasons, :aborted_reason, keyword_init: true
   ) do
     def aborted? = aborted_reason.present?
     def failed_count = failures.size
@@ -69,8 +69,20 @@ class Tournaments::StandingsImporter < ApplicationService
   # `pause` is injectable and zero by default so tests do not sleep, but the job passes a real one:
   # a run is hundreds of requests to somebody else's site in a tight loop, and nothing else in this
   # app asks Limitless for that much at once.
-  def initialize(plan:, archetype:, user:, decklist_service: Tournaments::LimitlessDecklist,
+  # `archetype` is the run's, and it is optional because the third source has none to give: an
+  # event's standings sheet holds 45 distinct decks over 575 rows, so the archetype is decided per
+  # row by StandingsImportPlan and arrives on the RowPlan. A row with neither is refused by name
+  # rather than written — see #archetype_for.
+  #
+  # It is required beside `deduplicate` and refused here rather than per row: #recorded_dedup_keys
+  # reads @archetype.id, so a de-duplicating run with no archetype is a NoMethodError on nil
+  # halfway through a public catalog, discovered after the first rows are already written.
+  def initialize(plan:, user:, archetype: nil, decklist_service: Tournaments::LimitlessDecklist,
     deduplicate: false, pause: 0.0, failure_limit: CONSECUTIVE_FAILURE_LIMIT)
+    if archetype.nil? && deduplicate
+      raise ArgumentError, "de-duplication is keyed on the run's archetype, so it needs one"
+    end
+
     @plan = plan
     @archetype = archetype
     @user = user
@@ -82,6 +94,7 @@ class Tournaments::StandingsImporter < ApplicationService
     @enriched_standing_ids = []
     @failures = []
     @counts = Hash.new(0)
+    @blocked_reasons = Hash.new(0)
     @consecutive_failures = 0
     # Keyed by identity, never by value: RowPlan is a Struct, so two rows carrying the same player
     # and status are `eql?` and would share one cache entry and one dedup slot.
@@ -104,6 +117,7 @@ class Tournaments::StandingsImporter < ApplicationService
     Result.new(
       created: @counts[:create], enriched: @counts[:enrich],
       skipped: @counts[:skip], blocked: @counts[:blocked], duplicates: @counts[:duplicate],
+      blocked_reasons: @blocked_reasons,
       standing_ids: @standing_ids, enriched_standing_ids: @enriched_standing_ids,
       failures: @failures, aborted_reason: aborted_reason
     )
@@ -224,7 +238,7 @@ class Tournaments::StandingsImporter < ApplicationService
   def prefetch(event, row_plan)
     return if row_plan.row.list_url.blank?
 
-    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
+    @lists[row_plan] = fetch_list(row_plan)
     # A decklist that arrived is a unit of remote work that completed, so it clears the count for
     # the same reason a finished row does — otherwise four scattered pre-pass failures plus one
     # later row would "give up after five consecutive fetch failures" that were never consecutive.
@@ -306,9 +320,13 @@ class Tournaments::StandingsImporter < ApplicationService
 
     tournament = find_or_create_tournament(event)
     event.rows.each { |row_plan| import_row(tournament, event, row_plan) }
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ActiveRecord::RecordNotUnique => e
     # The event could not be created, so none of its rows can be: one failure, named once, rather
-    # than the same message repeated per row.
+    # than the same message repeated per row. RecordNotUnique is here because #fill_nil_columns
+    # writes external_key, whose UNIQUE index a run can lose to an event outside the plan's date
+    # window — and because find_or_create_tournament's own re-raise, when the row it lost to cannot
+    # be re-found, is the one refusal in this service that used to escape `call` and take the whole
+    # run with it.
     @failures << [ "#{event.name} (#{event.date})", e.message ]
     @counts[:blocked] += event.rows.size
   end
@@ -325,7 +343,7 @@ class Tournaments::StandingsImporter < ApplicationService
   # made. The re-find is guarded: a RecordInvalid that was *not* the uniqueness clash (a tier the
   # enum refuses, say) must still be reported rather than turned into a lookup miss.
   def find_or_create_tournament(event)
-    return event.tournament if event.tournament
+    return fill_nil_columns(event.tournament, event) if event.tournament
 
     Tournament.create!(
       name: event.name, date: event.date, tier: event.tier, format: event.format,
@@ -335,7 +353,7 @@ class Tournaments::StandingsImporter < ApplicationService
       # listing surface. The attendance beside it is the first participant count anything in this
       # app has ever written: the online source prints it on every row, the paper one publishes
       # none, and TournamentStanding#placement_within_division_field is what reads it back.
-      online: event.online, open_participant_count: event.participant_count,
+      online: event.online, **participant_count_columns(event),
       # The source's own id for the event, and for an online run it *is* the event's identity:
       # online names are arbitrary and repeat weekly, so two different tournaments on one day are
       # two rows here and the partial UNIQUE index on external_key is what keeps them from being
@@ -345,7 +363,40 @@ class Tournaments::StandingsImporter < ApplicationService
       created_by: @user
     )
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-    catalogued_meanwhile(event) || raise
+    fill_nil_columns(catalogued_meanwhile(event) || raise, event)
+  end
+
+  # An event is wiki-governed: its creator or any member may have corrected the tier, the format or
+  # a field size, and a re-import that reasserted Limitless's values would revert that with no
+  # trace. Two of these columns are worse than merely rude to overwrite — lowering a division's
+  # field below a placement already recorded makes every standing above it invalid, which
+  # Tournaments::StandingsController#unclaim already has to work around. So a column that holds
+  # something keeps it, and only a nil one is filled.
+  #
+  # external_key is the one that matters on the first run of an event somebody catalogued by hand:
+  # it has none, and writing it is what lets the next run find this event by key after a rename
+  # rather than planning a second row for it. `format` and `tier` are NOT NULL with defaults, so
+  # they are here for the contract's sake and can never in fact be filled.
+  def fill_nil_columns(tournament, event)
+    values = {
+      tier: event.tier, format: event.format, other_format_name: event.other_format_name,
+      standard_pool_id: event.standard_pool&.id, external_key: event.external_key,
+      **participant_count_columns(event)
+    }.select { |column, value| value.present? && tournament.public_send(column).nil? }
+
+    tournament.update!(values) if values.any?
+    tournament
+  end
+
+  # The three division pages of one event state three different field sizes, and each is what
+  # TournamentStanding#placement_within_division_field measures that division's placements against.
+  # Keyed through Tournament::DIVISION_COUNT_COLUMNS so a division that has no column — there is
+  # none today — is dropped rather than raising on an unknown attribute.
+  def participant_count_columns(event)
+    event.participant_counts.filter_map { |division, count|
+      column = Tournament::DIVISION_COUNT_COLUMNS[division.to_s]
+      [ column, count ] if column
+    }.to_h
   end
 
   # Scoped by venue, exactly as StandingsImportPlan#load_catalogued is, and for a sharper reason
@@ -370,7 +421,14 @@ class Tournaments::StandingsImporter < ApplicationService
     case row_plan.status
     when :create then create_standing(tournament, event, row_plan)
     when :enrich then enrich_standing(event, row_plan)
-    else @counts[row_plan.status] += 1
+    else
+      @counts[row_plan.status] += 1
+      # Why, and not only how many. A blocked count alone reads as "rows in an event that could not
+      # be imported", which is what the report used to say and is false the moment a row is refused
+      # on its own account — an event source blocks a row whose deck nobody has mapped while
+      # importing every other row of the same event. Kept as reason => count so a 559-row field
+      # refusing 48 rows for one unconfirmed deck says that, once, rather than 48 times.
+      @blocked_reasons[row_plan.reason] += 1 if row_plan.status == :blocked && row_plan.reason.present?
     end
     @consecutive_failures = 0
   rescue StandardError => e
@@ -396,13 +454,30 @@ class Tournaments::StandingsImporter < ApplicationService
     tournament.standings.create!(
       player_name: row.player_name, division: row.division, placement: row.placement,
       **record_of(row), **dedup_key_of(row_plan),
-      archetype: @archetype, created_by: @user
+      archetype: archetype_for(row_plan), created_by: @user
     )
   rescue ActiveRecord::RecordNotUnique
     # Lost the race against a member typing this very row. Their version is the one that stands —
     # this is a wiki — so the run reports it rather than trying to win.
     raise ActiveRecord::RecordInvalid.new(tournament.standings.new),
       "a standing for this player was created while the import was running"
+  end
+
+  # The row's own archetype wins, and the order is the whole rule. A run archetype is one admin's
+  # answer for a whole page — which is what a deck-results page or a leaderboard is — while a row's
+  # is the mapping confirmed for the Limitless deck that row actually played, and an event's sheet
+  # holds 45 of those. Inverted, every row of an event would be filed under whatever single
+  # archetype the run happened to carry.
+  #
+  # A row with neither is refused by name and writes nothing: import_row records it in `failures`.
+  # tournament_standings.archetype_id is NOT NULL, so the alternative is a constraint violation
+  # that says nothing about which row it was.
+  def archetype_for(row_plan)
+    archetype = row_plan.archetype || @archetype
+    return archetype if archetype
+
+    raise ArgumentError,
+      "this row's Limitless deck is mapped to no archetype and the run carries none"
   end
 
   def record_of(row)
@@ -508,7 +583,24 @@ class Tournaments::StandingsImporter < ApplicationService
   def list_text(row_plan)
     return @lists[row_plan] if @lists.key?(row_plan)
 
-    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
+    @lists[row_plan] = fetch_list(row_plan)
+  end
+
+  # The pause and the failure counter apply to a list this run will actually go and get — the same
+  # rule #resolve_printing follows for a printing already held, and it is asked here for the same
+  # reason. The whole-event service answers one page per division and memoises it, so after the
+  # first row of a division every call is a Hash lookup: 572 of 575 on the reference event, each of
+  # which was sleeping the half-second courtesy pause for a request nobody was making, ~4.8 minutes
+  # of it, and #remote's own comment — "everything that leaves this machine goes through here" —
+  # was true only in that direction.
+  #
+  # `respond_to?` rather than an interface every decklist service has to declare: the two older
+  # sources fetch one URL per row, where the question has no answer and every call is remote.
+  def fetch_list(row_plan)
+    key = row_plan.row.list_url
+    return @decklist_service.call(key) if @decklist_service.try(:held?, key)
+
+    remote { @decklist_service.call(key) }
   end
 
   # Every printing is resolved *before* Decks::Fetcher opens its transaction. That transaction is a
