@@ -49,13 +49,17 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # moment somebody records a participation at it.
   SIMILAR_DATE_WINDOW = 3
 
-  RowPlan = Struct.new(:row, :status, :reason, :standing, :other_division, keyword_init: true) do
+  # `archetype` is the row's *own*, resolved from the Limitless deck its cell names through
+  # LimitlessArchetypeMapping. nil for the two sources whose rows all share one archetype the
+  # caller declares for the whole run — an event's sheet is the first that holds 45 of them.
+  RowPlan = Struct.new(:row, :status, :reason, :standing, :other_division, :archetype,
+    keyword_init: true) do
     def importable? = status == :create || status == :enrich
   end
 
   EventPlan = Struct.new(
     :name, :date, :external_key, :tier, :format, :other_format_name, :standard_pool, :online,
-    :participant_count, :tournament, :blocked_reason, :similar_tournaments, :rows,
+    :participant_counts, :tournament, :blocked_reason, :similar_tournaments, :rows,
     keyword_init: true
   ) do
     def blocked? = blocked_reason.present?
@@ -70,24 +74,35 @@ class Tournaments::StandingsImportPlan < ApplicationService
     def over_limit? = importable_rows.size > max_rows
   end
 
-  # `online` and `standard_pool` travel together and only the online source passes either. They are
-  # a classification the *caller* knows and the rows cannot say: play.limitlesstcg.com's leaderboard
-  # names its card pool in the URL's `set` parameter, and its event names are arbitrary strings that
-  # must never be read for a tier. Their defaults are exactly what the paper source has always done.
+  # `online`, `standard_pool` and `event_key` are the classification the *caller* knows and the
+  # rows cannot say, and their defaults are exactly what the paper source has always done.
+  # play.limitlesstcg.com's leaderboard names its card pool in the URL's `set` parameter, and its
+  # event names are arbitrary strings that must never be read for a tier.
+  #
+  # `event_key` is the third source's whole declaration, and it says one thing: **every row of this
+  # run belongs to one real-world event, and this is the source's id for it**. Three behaviours
+  # follow from that one sentence rather than from a source name — the rows group into a single
+  # event whatever their three division pages spell its name; the key is what identifies that event
+  # in the catalog, written on create and filled in on an event somebody catalogued by hand; and
+  # the run is *anchored by its caller*, so a pool code that resolved to nothing is a refusal
+  # instead of a date lookup (see #standard_pool_for). A three-valued source string was refused:
+  # @online's other three jobs would then read as tests for a name rather than for a venue.
   def initialize(rows:, event_filters: [], limit_per_event: nil, max_rows: DEFAULT_MAX_ROWS,
-    online: false, standard_pool: nil)
+    online: false, standard_pool: nil, event_key: nil)
     @rows = rows
     @event_filters = Array(event_filters).map { |filter| filter.to_s.strip.downcase }.reject(&:empty?)
     @limit_per_event = limit_per_event.presence&.to_i
     @max_rows = max_rows
     @online = online
     @standard_pool = standard_pool
+    @event_key = event_key.presence
   end
 
   def call
     groups = grouped_rows.values
     @catalogued = load_catalogued(groups.flatten)
     @standings = load_standings
+    @archetypes = load_archetypes(groups.flatten)
 
     events = groups.map { |rows| build_event(rows) }
     Plan.new(events: events.sort_by { |event| event.date }.reverse, max_rows: @max_rows)
@@ -124,6 +139,28 @@ class Tournaments::StandingsImportPlan < ApplicationService
     TournamentStanding.where(tournament_id: ids).group_by(&:tournament_id)
   end
 
+  # { "284/3" => Archetype } for the deck references this run actually saw — 45 of them over 575
+  # rows on the measured event, so this is asked once for the run and never per row.
+  #
+  # Two statements rather than one `includes`: LimitlessArchetypeMapping.by_reference builds its
+  # relation out of `none.or(...)`, and an `includes` threaded through that is a preload nothing
+  # here would notice the loss of. Resolving the archetypes in a second `where(id:)` is the same
+  # two queries with the coupling written down.
+  #
+  # A reference nobody has confirmed is simply absent, which is what #build_row turns into a
+  # refusal naming the deck. Nothing here guesses: see LimitlessArchetypeMapping.
+  def load_archetypes(rows)
+    references = rows.filter_map { |row| row.archetype_key if row.respond_to?(:archetype_key) }.uniq
+    return {} if references.empty?
+
+    mappings = LimitlessArchetypeMapping.by_reference(references)
+    archetypes = Archetype.where(id: mappings.values.map(&:archetype_id)).index_by(&:id)
+    mappings.transform_values { |mapping| archetypes[mapping.archetype_id] }.compact
+  end
+
+  # The run is one real-world event, read off its own pages. See #initialize.
+  def one_event? = @event_key.present?
+
   # An event is a name and a date for the paper source, and its own Limitless id for the online
   # one. Grouping an online run on the name and date is what merged two genuinely different
   # tournaments into a single event: online names are arbitrary and repeat weekly
@@ -143,10 +180,13 @@ class Tournaments::StandingsImportPlan < ApplicationService
     filtered.group_by { |row| external_key_of(row) || [ row.event_name, row.event_date ] }
   end
 
-  # Only an online run has one. Asking the row rather than branching on @online for the same
-  # reason #participant_count does: the two sources share a contract of eight fields and the
-  # online one adds to it.
+  # Two sources have one and they carry it in opposite places. An online run's key is *per row* —
+  # its leaderboard is twenty events at once — while a whole-event run's key is the run's, because
+  # its three division pages are one event. Asking the row rather than branching on @online for the
+  # same reason #participant_counts does: the sources share a contract of eight fields and each
+  # adds to it.
   def external_key_of(row)
+    return @event_key if one_event?
     return unless @online
 
     row.event_key.presence if row.respond_to?(:event_key)
@@ -170,7 +210,7 @@ class Tournaments::StandingsImportPlan < ApplicationService
     event = EventPlan.new(
       name: name, date: date, external_key: external_key, tournament: tournament,
       tier: tournament&.tier || tier_for(name),
-      online: @online, participant_count: participant_count(rows),
+      online: @online, participant_counts: participant_counts(rows),
       **settled,
       blocked_reason: blocked_reason(rows: rows, derived: derived, tournament: tournament, date: date),
       similar_tournaments: tournament ? [] : similar_tournaments(normalized, date),
@@ -186,13 +226,32 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
   # half.
   def find_catalogued(normalized, date, external_key)
-    return @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
+    found = @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
+    return found if found
+    # An online run stops at its key and never asks the name: its event names are arbitrary and
+    # repeat weekly, so a name and a date name two different tournaments as readily as one.
+    #
+    # A whole-event run falls through on purpose, and both halves of that are load-bearing. The
+    # first run of an event a member catalogued by hand months ago meets a row carrying no key at
+    # all, and a key-only lookup would plan a create that the (name, date) UNIQUE index then
+    # refuses; once the run has filled that key in (StandingsImporter fills the nil columns of an
+    # event it found), the key is what finds it again after somebody renames it.
+    return if @online
 
     @catalogued.find { |candidate| candidate.name_normalized == normalized && candidate.date == date }
   end
 
+  # The whole-event source publishes its **card pool code** where the other two publish a format
+  # label — "TEF-PBL" is StandardPool#name byte for byte — so a format this table has no value for
+  # is, for that source and only for it, a pool name. Which pool it names is the caller's to
+  # resolve (only the caller has the set codes), and a run that resolved nothing is refused by
+  # #blocked_reason rather than anchored by its date. A Limitless format label this source *does*
+  # publish ("expanded") still reads through FORMATS as it does everywhere else, which is what
+  # keeps a non-Standard event of this source from being called Standard.
   def classification(rows, date)
     format, other_format_name = FORMATS.fetch(dominant_format(rows), [ nil, nil ])
+    format = "standard" if format.nil? && one_event?
+
     { format: format, other_format_name: other_format_name,
       standard_pool: (standard_pool_for(date) if format == "standard") }
   end
@@ -204,15 +263,32 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # by date files them under TEF-CRI, in a sample whose other lists could not legally hold their
   # cards.
   def standard_pool_for(date)
-    @online ? @standard_pool : StandardPool.at(date)
+    return @standard_pool if @standard_pool
+    # Both sources that *state* a pool state it here, and a stated nil is a refusal rather than an
+    # invitation to guess. Falling through would answer a pool for an event page whose published
+    # code matched none — confidently, from a date the source never claimed anything about.
+    return if @online || one_event?
+
+    StandardPool.at(date)
   end
 
-  # The leaderboard prints the field size on every row ("1st of 259"), and the rows of one event
-  # agree on it because it is the event's own attendance — so the first that carries one answers
-  # for the event. The paper source publishes none, which is why every event imported from it has
-  # nil participant counts, and why this asks the row rather than assuming the field exists.
-  def participant_count(rows)
-    rows.filter_map { |row| row.attendance if row.respond_to?(:attendance) }.first
+  # One field size **per division**, because that is what a placement is measured against:
+  # TournamentStanding#placement_within_division_field reads
+  # Tournament::DIVISION_COUNT_COLUMNS, and Play! Pokémon ranks a player inside their own age
+  # division. Measured on /tournaments/563, the Masters page states 88 Players while Seniors and
+  # Juniors state "? Players" — an event-wide figure would have been repeated on all three, and one
+  # number spread over three columns would cap two divisions against a field that was never theirs.
+  #
+  # The online source's rows are all "open", so it supplies { "open" => n } and its attendance
+  # still lands in open_participant_count. The paper source publishes none at all and supplies {},
+  # which is why this asks the row rather than assuming the field exists.
+  def participant_counts(rows)
+    rows.group_by(&:division).filter_map { |division, group|
+      next if division.nil?
+
+      count = group.filter_map { |row| row.attendance if row.respond_to?(:attendance) }.first
+      [ division, count ] if count
+    }.to_h
   end
 
   def classification_of(tournament)
@@ -251,6 +327,9 @@ class Tournaments::StandingsImportPlan < ApplicationService
     # would send the admin to look for a pool that covers it — which is not the thing that is
     # missing and may well already exist.
     return "no Standard pool matches this leaderboard's set — pick a set that names one, or add the pool from Admin → Standard pools, and re-run" if @online
+    # The event page states its own card pool, so naming the date would send the admin looking for
+    # a pool that covers it — which is neither what is missing nor anything this run reads.
+    return "Limitless reports this event's card pool as #{dominant_format(rows).inspect}, which matches no Standard pool — add it from Admin → Standard pools and re-run" if one_event?
 
     "no Standard pool covers #{date} — add one from Admin → Standard pools and re-run"
   end
@@ -283,6 +362,15 @@ class Tournaments::StandingsImportPlan < ApplicationService
         reason: "Limitless labels this event #{row.division_suffix.inspect}, which is not an age division cartodex knows")
     end
 
+    archetype = @archetypes[row.archetype_key] if row.respond_to?(:archetype_key)
+    # A deck nobody has confirmed is a refusal that names it, never a guess. Measured, detection
+    # alone gets one row in five wrong here — and unlike a member importing their own deck, nothing
+    # on a public wiki sheet says an archetype was guessed at. See LimitlessArchetypeMapping.
+    if archetype.nil? && row.respond_to?(:archetype_key) && row.archetype_key.present?
+      return RowPlan.new(row: row, status: :blocked,
+        reason: "no archetype is mapped for the Limitless deck #{row.archetype_label.to_s.presence&.inspect || row.archetype_key} (#{row.archetype_key}) — confirm it and re-run")
+    end
+
     for_player = existing[row.player_name.to_s.squish.downcase] || []
     standing = for_player.find { |candidate| candidate.division == row.division }
     # The same human, filed twice: the UNIQUE key is (event, player, division), so a row a member
@@ -291,7 +379,8 @@ class Tournaments::StandingsImportPlan < ApplicationService
     # right is a fact about a person — so it is flagged for the admin instead.
     other_division = for_player.find { |candidate| candidate.division != row.division }
 
-    RowPlan.new(row: row, standing: standing, other_division: other_division, **status_for(row, standing))
+    RowPlan.new(row: row, standing: standing, other_division: other_division, archetype: archetype,
+      **status_for(row, standing))
   end
 
   def status_for(row, standing)

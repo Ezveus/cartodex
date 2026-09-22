@@ -173,7 +173,7 @@ standing in for.
 |---|---|---|
 | `StandingsImportPlan::EventPlan#participant_count` | one Integer | `#participant_counts`, a Hash `{division => count}`; the online source supplies `{"open" => n}` |
 | `StandingsImportPlan::RowPlan` | no archetype | gains `archetype` (an `Archetype` or nil) |
-| `StandingsImportPlan#standard_pool_for` | `return @standard_pool if @online` | `return @standard_pool if @standard_pool` |
+| `StandingsImportPlan#standard_pool_for` | `return @standard_pool if @online` | `return @standard_pool if @standard_pool`, **plus** `return if @online \|\| one_event?` — lane B measured that the first line alone is not enough: a non-online run with no pool still falls through to `StandardPool.at(date)`, which answers confidently and wrongly. A source that *states* its pool has stated nil, and a stated nil is a refusal |
 | `StandingsImporter#initialize` | `archetype:` required | `archetype: nil`; a standing is written with `row_plan.archetype || @archetype`, and a row with neither is planned `:blocked` |
 | `StandingsImportPlan::DEFAULT_MAX_ROWS` | 300 | unchanged; the new source passes `max_rows: 1000` |
 
@@ -312,7 +312,11 @@ Written before the code, one per claim, each sabotage-verified afterwards.
 15a. An `:enrich` row carrying a *different* archetype leaves the existing standing's archetype
     alone and counts as `enriched` — pinning the discard as a decision rather than an omission.
 16. The three divisions' counts land in their three columns.
-17. **Fill-only-nil, over a fixture that has something to overwrite.** `tournaments(:one)` carries
+17. **Fill-only-nil, over a fixture that has something to overwrite.** (Lane B's correction:
+    `tier` and `format` are `NOT NULL` with schema defaults, so a found event never has them nil
+    and they can never in fact be filled. The columns the pass really works on are
+    `other_format_name`, `standard_pool_id`, `external_key` and the four counts — and claim 17's
+    `tier` assertion is true by two independent routes, so it is not the guard for the fill.) `tournaments(:one)` carries
     all four counts nil, so a test built on it cannot tell "fills nil columns" from "overwrites
     everything". Pre-set `masters_participant_count: 999` and `tier: "league_cup"`, import counts
     `{"masters" => 3122, "senior" => 364}`, and assert 999 and `league_cup` survive while

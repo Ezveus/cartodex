@@ -3,6 +3,10 @@ require "test_helper"
 class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
   DECKLIST_HTML = File.read(Rails.root.join("test/fixtures/files/limitless_decklist.html")).freeze
   LIST_URL = "https://limitlesstcg.com/decks/list/28788".freeze
+  # What Admin::StandingsImportsController writes for /tournaments/577 — one event, one key.
+  EVENT_KEY = "limitless-event:577".freeze
+  # tournaments(:one), which an admin catalogued by hand and which carries no external key.
+  EXISTING_EVENT = { event_name: "Regional Championship", event_date: Date.new(2026, 3, 14) }.freeze
 
   # The online source hands the importer a decklist *service* rather than a page, so these are the
   # texts that service returns. LIST_A_SHUFFLED is the same cards in a different column order — the
@@ -625,11 +629,146 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
       events.map { |event| event.standings.sole.slice(:player_name, :placement).values }
   end
 
+  # ---- one whole event, whose rows do not share an archetype -----------------------------------
+
+  # The order in `row_plan.archetype || @archetype` is the rule and nothing else distinguishes it
+  # from its inverse: every other test in this file leaves RowPlan#archetype nil, so the inverted
+  # spelling passes all of them. A run archetype is one admin's answer for a whole page; a row's is
+  # the mapping confirmed for the deck that row actually played, and at an event the two differ 44
+  # times in 45.
+  test "writes each row's own archetype over the run's" do
+    result = event_import([ event_row(list_url: nil) ], archetype: @archetype)
+
+    assert_equal 1, result.created
+    assert_equal archetypes(:ogerpon), TournamentStanding.find(result.standing_ids.sole).archetype
+  end
+
+  # Enrichment fills a NULL deck_id and nothing else, and that has to stay true now that a row
+  # carries an archetype of its own: the standing was typed by a member or written by an earlier
+  # run, and rewriting its archetype would make this a republish. The discard is a decision, so it
+  # is pinned rather than left to be noticed.
+  test "an enriched standing keeps its own archetype, not the row's" do
+    standing = tournament_standings(:ash_masters)
+
+    result = event_import([
+      event_row(event_name: "Regional Championship", event_date: Date.new(2026, 3, 14),
+        player_name: "Ash Ketchum", placement: 33)
+    ], archetype: nil)
+
+    assert_equal 1, result.enriched
+    assert_equal archetypes(:standings_marker), standing.reload.archetype
+    assert_not_nil standing.deck
+  end
+
+  # A row nothing can file is refused by name and writes nothing. It is reachable exactly when the
+  # run carries no archetype — which the whole-event source is the first to do — and a standing
+  # created without one would fail a NOT NULL constraint rather than say anything.
+  test "refuses a row with no archetype of its own and no run archetype" do
+    assert_no_difference -> { TournamentStanding.count } do
+      @result = event_import([ event_row(archetype_key: nil, archetype_label: nil, list_url: nil) ],
+        archetype: nil)
+    end
+
+    assert_equal 0, @result.created
+    assert_equal 1, @result.failed_count
+    assert_match(/Dylan Kasturi/, @result.failures.sole.first)
+    # The reason names what is missing. Left to the NOT NULL column the message is "Archetype must
+    # exist", which is true of every row and tells an admin nothing about which deck to map.
+    assert_match(/mapped to no archetype/, @result.failures.sole.last)
+  end
+
+  # De-duplication reads @archetype.id to find the keys already recorded, so a run with no
+  # archetype cannot de-duplicate at all — and finding that out per row, halfway through a write,
+  # is a NoMethodError on nil in the middle of a public catalog.
+  test "refuses to be built with no archetype and de-duplication at once" do
+    plan = Tournaments::StandingsImportPlan.call(rows: [ event_row ], event_key: EVENT_KEY,
+      standard_pool: standard_pools(:twm_por))
+
+    assert_raises(ArgumentError) do
+      Tournaments::StandingsImporter.new(plan: plan, archetype: nil, user: @admin, deduplicate: true)
+    end
+  end
+
+  # Three division pages state three different field sizes, and each is what
+  # TournamentStanding#placement_within_division_field measures that division's placements against.
+  # One number in one column would cap two divisions against a field that was never theirs.
+  test "writes each division's field size to its own column" do
+    event_import([
+      event_row(division: "masters", attendance: 3122, placement: 4, list_url: nil),
+      event_row(division: "senior", division_suffix: "SR", attendance: 364, placement: 2,
+        player_name: "Senior Player", list_url: nil),
+      event_row(division: "junior", division_suffix: "JR", attendance: 233, placement: 3,
+        player_name: "Junior Player", list_url: nil)
+    ], archetype: nil)
+
+    tournament = Tournament.find_by!(external_key: EVENT_KEY)
+    assert_equal [ 3122, 364, 233 ],
+      [ tournament.masters_participant_count, tournament.senior_participant_count,
+        tournament.junior_participant_count ]
+    assert_nil tournament.open_participant_count
+  end
+
+  # An event is wiki-governed: its creator or any member may have corrected the tier or a field
+  # size, and reasserting Limitless's values would revert that with no trace. Lowering a division's
+  # field below a placement already recorded is worse than rude — it makes existing standings
+  # invalid. So a found event has its nil columns filled and nothing else, and the fixture is
+  # pre-set with values Limitless disagrees with, because tournaments(:one) carries all four counts
+  # nil and a test built on it cannot tell filling from overwriting.
+  test "fills only the columns a found event left nil" do
+    tournaments(:one).update!(masters_participant_count: 999, tier: "league_cup")
+
+    event_import([
+      event_row(**EXISTING_EVENT, attendance: 3122, placement: 4, list_url: nil),
+      event_row(**EXISTING_EVENT, division: "senior", division_suffix: "SR", attendance: 364,
+        placement: 2, player_name: "Senior Player", list_url: nil)
+    ], archetype: nil)
+
+    tournament = tournaments(:one).reload
+    assert_equal 999, tournament.masters_participant_count
+    assert_equal "league_cup", tournament.tier
+    assert_equal 364, tournament.senior_participant_count
+    # The key an event catalogued by hand never had: writing it is what lets the next run find this
+    # event after somebody renames it.
+    assert_equal EVENT_KEY, tournament.external_key
+  end
+
+  test "a second run finds the event by the key it wrote, even after a rename" do
+    event_import([ event_row(list_url: nil) ], archetype: nil)
+    tournament = Tournament.find_by!(external_key: EVENT_KEY)
+    tournament.update!(name: "Baltimore Regionals 2026")
+
+    assert_no_difference -> { Tournament.count } do
+      event_import([ event_row(player_name: "Andrew Hedrick", placement: 2, list_url: nil) ],
+        archetype: nil)
+    end
+
+    assert_equal 2, tournament.standings.count
+  end
+
   private
 
   def import(rows)
     plan = Tournaments::StandingsImportPlan.call(rows: rows)
     Tournaments::StandingsImporter.call(plan: plan, archetype: @archetype, user: @admin)
+  end
+
+  # The whole-event source: one event, whose id and whose resolved card pool the caller states, and
+  # whose rows each name their own Limitless deck.
+  def event_import(rows, archetype:, standard_pool: standard_pools(:twm_por))
+    plan = Tournaments::StandingsImportPlan.call(rows: rows, event_key: EVENT_KEY,
+      standard_pool: standard_pool)
+    Tournaments::StandingsImporter.call(plan: plan, archetype: archetype, user: @admin)
+  end
+
+  def event_row(**overrides)
+    Tournaments::LimitlessEventResults::Row.new(
+      **{
+        event_name: "Regional Baltimore, MD", event_date: Date.new(2026, 2, 20),
+        division: "masters", division_suffix: nil, format: "TWM-POR",
+        player_name: "Dylan Kasturi", placement: 1, list_url: "577/masters/1",
+        archetype_key: "284", archetype_label: "Dragapult", attendance: 3122
+      }.merge(overrides)
+    )
   end
 
   def online_import(rows, lists: {}, deduplicate: true, event_filters: [],
