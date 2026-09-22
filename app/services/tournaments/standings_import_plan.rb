@@ -225,6 +225,32 @@ class Tournaments::StandingsImportPlan < ApplicationService
   # them instead of planning every row :create and losing to the UNIQUE key one at a time.
   # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
   # half.
+  # Why this row has no archetype, in the admin's terms. A deck cartodex has never been told about
+  # names itself and its reference, so the mapping line to fill in is findable; a deck cell that
+  # did not parse names nothing, because there is nothing to name — and that is a scrape failure
+  # to report, not a decision to make.
+  def unmapped_reason(row)
+    return "Limitless published no readable deck for this row, so it has no archetype to carry" if
+      row.archetype_key.blank?
+
+    label = row.archetype_label.to_s.presence&.inspect || row.archetype_key
+    "no archetype is mapped for the Limitless deck #{label} (#{row.archetype_key}) — confirm it and re-run"
+  end
+
+  # What the event page publishes against what the catalogue holds, for a one-event run. nil when
+  # they agree, which is the ordinary case and the one that must stay cheap.
+  #
+  # Compared on the pool and on the format, because a member may have catalogued a Standard event
+  # as "other" — and then the published code matches no pool the row could be anchored to at all.
+  def disagreement_reason(tournament, derived)
+    return if derived[:format] == tournament.format && derived[:standard_pool]&.id == tournament.standard_pool_id
+
+    published = derived[:standard_pool]&.name || derived[:format] || "nothing cartodex can read"
+    held = tournament.format_label
+    "Limitless publishes this event as #{published} and cartodex has it catalogued as #{held} — " \
+      "correct the event and re-run, rather than letting an import overrule it"
+  end
+
   def find_catalogued(normalized, date, external_key)
     found = @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
     return found if found
@@ -318,8 +344,16 @@ class Tournaments::StandingsImportPlan < ApplicationService
   def blocked_reason(rows:, derived:, tournament:, date:)
     return "Limitless reports the format as #{dominant_format(rows).inspect}, which cartodex has no value for" if
       derived[:format].nil?
-    # Only for an event this run would have to create: an existing Standard tournament already has
-    # a pool, and its own form is where that gets corrected.
+    # An event this run found already carries a classification a member chose, and this is not the
+    # place to overrule it — its own form is. But for a one-event run the *source states the pool*,
+    # and the two disagreeing is the one thing that must not pass in silence: the hand-catalogue
+    # form pre-fills its anchor from `StandardPool.at(date)` (Tournaments::Form), which reads
+    # `legal_on` and is exactly the fortnight-window error this source exists to avoid — so a
+    # member who catalogued the event first can hand a whole Regional the wrong bucket, and
+    # `Archetypes::MetagameScope` then reports 559 lists under a pool nobody played them in while
+    # the right bucket reads empty. Refused, named, and left for the event's own form: the same
+    # call every other refusal here makes.
+    return disagreement_reason(tournament, derived) if tournament && one_event?
     return if tournament
     return unless derived[:format] == "standard"
     return if derived[:standard_pool]
@@ -366,9 +400,17 @@ class Tournaments::StandingsImportPlan < ApplicationService
     # A deck nobody has confirmed is a refusal that names it, never a guess. Measured, detection
     # alone gets one row in five wrong here — and unlike a member importing their own deck, nothing
     # on a public wiki sheet says an archetype was guessed at. See LimitlessArchetypeMapping.
-    if archetype.nil? && row.respond_to?(:archetype_key) && row.archetype_key.present?
-      return RowPlan.new(row: row, status: :blocked,
-        reason: "no archetype is mapped for the Limitless deck #{row.archetype_label.to_s.presence&.inspect || row.archetype_key} (#{row.archetype_key}) — confirm it and re-run")
+    #
+    # Two reasons and one rule: a row of a source that carries its own archetype and has not got
+    # one is blocked here, whether that is because nobody mapped the deck or because the deck cell
+    # did not parse at all. The second case used to fall through — archetype_key nil, so the guard
+    # below did not fire — and the row previewed as an ordinary :create that then failed at import
+    # against the NOT NULL column. Nothing wrong was ever written, because #archetype_for refuses
+    # it and #import_row reports the row; but the preview said the run would write something it
+    # would not, and "what the preview shows is what the run writes" is the whole reason this
+    # screen is two requests.
+    if archetype.nil? && row.respond_to?(:archetype_key)
+      return RowPlan.new(row: row, status: :blocked, reason: unmapped_reason(row))
     end
 
     for_player = existing[row.player_name.to_s.squish.downcase] || []

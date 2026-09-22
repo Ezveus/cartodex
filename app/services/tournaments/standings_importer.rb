@@ -51,7 +51,7 @@ class Tournaments::StandingsImporter < ApplicationService
   # reading the receipt: skipped is "already there", duplicate is "deliberately not imported".
   Result = Struct.new(
     :created, :enriched, :skipped, :blocked, :duplicates, :standing_ids, :enriched_standing_ids,
-    :failures, :aborted_reason, keyword_init: true
+    :failures, :blocked_reasons, :aborted_reason, keyword_init: true
   ) do
     def aborted? = aborted_reason.present?
     def failed_count = failures.size
@@ -94,6 +94,7 @@ class Tournaments::StandingsImporter < ApplicationService
     @enriched_standing_ids = []
     @failures = []
     @counts = Hash.new(0)
+    @blocked_reasons = Hash.new(0)
     @consecutive_failures = 0
     # Keyed by identity, never by value: RowPlan is a Struct, so two rows carrying the same player
     # and status are `eql?` and would share one cache entry and one dedup slot.
@@ -116,6 +117,7 @@ class Tournaments::StandingsImporter < ApplicationService
     Result.new(
       created: @counts[:create], enriched: @counts[:enrich],
       skipped: @counts[:skip], blocked: @counts[:blocked], duplicates: @counts[:duplicate],
+      blocked_reasons: @blocked_reasons,
       standing_ids: @standing_ids, enriched_standing_ids: @enriched_standing_ids,
       failures: @failures, aborted_reason: aborted_reason
     )
@@ -419,7 +421,14 @@ class Tournaments::StandingsImporter < ApplicationService
     case row_plan.status
     when :create then create_standing(tournament, event, row_plan)
     when :enrich then enrich_standing(event, row_plan)
-    else @counts[row_plan.status] += 1
+    else
+      @counts[row_plan.status] += 1
+      # Why, and not only how many. A blocked count alone reads as "rows in an event that could not
+      # be imported", which is what the report used to say and is false the moment a row is refused
+      # on its own account — an event source blocks a row whose deck nobody has mapped while
+      # importing every other row of the same event. Kept as reason => count so a 559-row field
+      # refusing 48 rows for one unconfirmed deck says that, once, rather than 48 times.
+      @blocked_reasons[row_plan.reason] += 1 if row_plan.status == :blocked && row_plan.reason.present?
     end
     @consecutive_failures = 0
   rescue StandardError => e

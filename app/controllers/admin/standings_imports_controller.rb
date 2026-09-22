@@ -331,14 +331,25 @@ module Admin
 
       raw.to_unsafe_h.filter_map do |reference, attributes|
         parsed = LimitlessArchetypeMapping.parse_reference(reference)
-        next if parsed.nil? || !attributes.respond_to?(:[])
+        # The key *and* the value, because both are a form field name away from being anything at
+        # all. `respond_to?(:[])` was true of a String ("x"[:archetype_id] is a TypeError) and of an
+        # Array (Array#to_i does not exist), so `mappings[284]=x` and
+        # `mappings[284][archetype_id][]=1` were unrescued 500s on an admin screen.
+        next if parsed.nil? || !attributes.is_a?(Hash)
 
-        archetype_id = attributes[:archetype_id].presence&.to_i
+        archetype_id = scalar(attributes[:archetype_id])&.presence&.to_i
         next if archetype_id.nil?
 
         { deck_id: parsed.first, variant: parsed.last, archetype_id: archetype_id,
-          label: attributes[:label].presence || reference }
+          label: scalar(attributes[:label])&.presence || reference }
       end
+    end
+
+    # A submitted value the browser's own form could have produced, and nothing else: a nested Hash
+    # or an Array here is a hand-made request, and reading it as a label or an id is how a 500
+    # arrives on a screen whose every other refusal is a redirect.
+    def scalar(value)
+      value.to_s if value.is_a?(String) || value.is_a?(Numeric)
     end
 
     def job_options

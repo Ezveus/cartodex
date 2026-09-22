@@ -71,6 +71,21 @@ module Admin
           count_badge(:skip)
           count_badge(:blocked)
         end
+        pre_mapping_note
+      end
+
+      # For an event run these four numbers describe the plan *as it stands*, and confirming the
+      # mappings above is itself what moves rows out of `blocked` — so on a first preview the line
+      # reads "0 create, 575 blocked" directly above a button that will write 575. The button
+      # deliberately names no count for the same reason; this says why in words rather than leaving
+      # an admin to reconcile the two.
+      def pre_mapping_note
+        return unless @source == Tournaments::LimitlessImportJob::EVENT_SOURCE
+
+        p(class: "settings-section-lead") do
+          plain "Counted before the decks above are confirmed: every row of an unmapped deck is "
+          plain "blocked here and will be written once you confirm it."
+        end
       end
 
       def count_badge(status)

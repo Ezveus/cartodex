@@ -53,10 +53,14 @@ class Tournaments::EventDecklists
     raise ArgumentError, "#{key.inspect} is not a decklist key for tournament #{@tournament_id}" unless
       tournament_id == @tournament_id && Tournaments::LimitlessEventResults::DIVISION_PAGES.key?(division)
 
-    nodes = blocks_for(division)[rank.to_i]
-    raise ParseError, "#{url(division)} publishes no list ranked #{rank}" if nodes.nil?
+    list = blocks_for(division)[rank.to_i]
+    raise ParseError, "#{url(division)} publishes no list ranked #{rank}" if list.nil?
+    # A list this page published in a shape LimitlessDecklist refuses was converted with every
+    # other, so its refusal is raised here — against the row that asked for it — rather than having
+    # cost the whole division at parse time.
+    raise list if list.is_a?(StandardError)
 
-    Tournaments::LimitlessDecklist.from_nodes(nodes, source: "the list ranked #{rank} on #{url(division)}")
+    list
   end
 
   def url(division)
@@ -70,26 +74,65 @@ class Tournaments::EventDecklists
   # Fetched once per division, and only when a row of that division asks: an event whose rows are
   # all Masters must not pay for three pages, and 563 publishes no Junior lists at all.
   #
-  # The blocks are kept as nodes rather than converted up front. Walking all 559 costs 0.28 s, so
-  # this is not about time — it is that a list Tournaments::LimitlessDecklist refuses (a set code
-  # cartodex cannot address, a 59-card parse) must cost its own row and not the whole division.
+  # **A refusal is memoised too, and that is not tidiness.** `||=` stores a result and never an
+  # exception, so a division whose ranks stopped being readable was re-fetched and re-parsed by
+  # every row of it — 559 rows against a 22.1 MB page is 12.4 GB off limitlesstcg.com in one run,
+  # 575 × 0.30 s of Nokogiri, and an Import that still says "completed" with every list missing.
+  # `StandingsImporter`'s five-consecutive-failure abort cannot see it either, because it counts
+  # HttpFetcher::FetchError and this is a ParseError.
   def blocks_for(division)
-    @divisions[division] ||= parse(division)
+    unless @divisions.key?(division)
+      @divisions[division] = begin
+        parse(division)
+      rescue StandardError => e
+        e
+      end
+    end
+
+    parsed = @divisions[division]
+    raise parsed if parsed.is_a?(StandardError)
+
+    parsed
   end
 
+  # Converted to text here rather than kept as nodes, and the document is dropped with the method.
+  # Holding three parsed division DOMs for a whole run measures **+355 MB RSS** on pages a third
+  # smaller than the real ones, in a Solid Queue worker that also holds the app — and a preview
+  # request holds a second such store concurrently. Walking all 559 costs 0.28 s either way.
+  #
+  # The property that made nodes look necessary is kept: a list LimitlessDecklist refuses (a set
+  # code cartodex cannot address, a 59-card parse) is stored *as its exception* and raised against
+  # the row that asks for it, so it still costs its own row and not the whole division.
   def parse(division)
-    doc = Nokogiri::HTML(HttpFetcher.call(url(division)))
-    blocks = doc.css(BLOCK_SELECTOR)
-    by_rank = blocks.each_with_object({}) { |block, acc|
+    blocks = Nokogiri::HTML(HttpFetcher.call(url(division))).css(BLOCK_SELECTOR)
+    by_rank = {}
+    blocks.each do |block|
       rank = rank_of(block)
-      acc[rank] = block.css(Tournaments::LimitlessDecklist::CARD_SELECTOR) if rank
-    }
+      next if rank.nil?
+
+      # Last-wins here would hand one player's sixty cards to another player's row, which is the
+      # exact failure keying on the stated rank exists to prevent — and a top-cut page writing
+      # "9th-16th" on eight blocks makes all eight claim rank 9. Refused, loudly, for the whole
+      # division: nothing here can tell which of the two the row meant.
+      raise ParseError, "#{url(division)} publishes two lists ranked #{rank}" if by_rank.key?(rank)
+
+      by_rank[rank] = convert(block, rank, division)
+    end
     # No blocks at all is an event that published no list for this division, which is ordinary.
     # Blocks whose ranks are all unreadable is a layout change, and left silent it imports every
     # row of the division as a standing with no list and says nothing anywhere.
     raise ParseError, "no list on #{url(division)} names the row it belongs to" if by_rank.empty? && blocks.any?
 
     by_rank
+  end
+
+  def convert(block, rank, division)
+    Tournaments::LimitlessDecklist.from_nodes(
+      block.css(Tournaments::LimitlessDecklist::CARD_SELECTOR),
+      source: "the list ranked #{rank} on #{url(division)}"
+    )
+  rescue Tournaments::LimitlessDecklist::ParseError => e
+    e
   end
 
   def rank_of(block)

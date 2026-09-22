@@ -220,8 +220,11 @@ placement is a result whether or not anybody typed the decklist. `unlisted_count
 `standings_count`. Its placement bands are fixed
 (1st, 2-4, 5-8, …) and deliberately **not** `Tournament::TOP_CUT_BANDS`, which maps an *attendance*
 to a cut size for `TournamentEntry#top_cut_size`: telling whether a placement made the cut needs
-the event's field size, and the importer writes none — all three `*_participant_count` columns are
-nil on every imported event. `by_division` walks `TournamentStanding::DIVISIONS` because
+the event's field size, which the archetype-history importer writes none of — all three
+`*_participant_count` columns are nil on every event it creates. The **event** source now writes
+all three, off each division page's own header, so a cut-relative reading of those events became
+possible and is still deliberately not taken: `by_placement` must mean one thing across a sample
+that mixes both, and half of it can say nothing about a cut. `by_division` walks `TournamentStanding::DIVISIONS` because
 `group(:division)` comes back alphabetical (junior, masters, senior) while players read junior,
 senior, masters — the correction the standings sheet had to make in SQL for its page boundaries.
 

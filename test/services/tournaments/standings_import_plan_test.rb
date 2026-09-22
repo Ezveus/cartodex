@@ -317,6 +317,54 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     assert_nil row_plan.archetype
   end
 
+  # The other half of the same rule, and the one that used to fall through. A deck cell Limitless
+  # published in a shape LimitlessEventResults could not read yields no archetype_key at all, so a
+  # guard written as "there is a key and nothing is mapped to it" never fires — and the row
+  # previewed as an ordinary :create that then failed at import against the NOT NULL column.
+  # Nothing wrong was written either way; what was wrong was the preview, which is the only thing
+  # an admin reads before agreeing to publish 575 rows.
+  test "blocks a row whose deck Limitless published in a shape the parser could not read" do
+    row_plan = event_plan_for([ event_row(archetype_key: nil, archetype_label: nil) ])
+      .events.sole.rows.sole
+
+    assert_equal :blocked, row_plan.status
+    assert_match(/no readable deck/, row_plan.reason)
+    assert_nil row_plan.archetype
+  end
+
+  # The whole reason this source reads the pool off the page rather than off the date. The
+  # hand-catalogue form pre-fills its anchor from StandardPool.at(date), which reads `legal_on` —
+  # so a member who catalogues an event held in the fortnight after a set ships hands it the
+  # previous pool, and an import that adopted that would file the whole field, and every field
+  # list, in a bucket nobody played it in. Refused and named, never overruled.
+  test "refuses an event whose catalogued pool disagrees with the one Limitless publishes" do
+    tournament = Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_asc)
+    )
+    event = event_plan_for([ event_row ], standard_pool: standard_pools(:twm_por)).events.sole
+
+    assert event.blocked?
+    assert_match(/#{standard_pools(:twm_por).name}/, event.blocked_reason)
+    assert_match(/#{standard_pools(:twm_asc).name}/, event.blocked_reason)
+    assert_equal tournament, event.tournament
+    assert_equal [ :blocked ], event.rows.map(&:status).uniq
+  end
+
+  # And the ordinary case stays cheap: agreeing is not a disagreement, and an event a previous run
+  # created must still be importable into on the next one.
+  test "imports into a catalogued event whose pool is the one Limitless publishes" do
+    Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_por)
+    )
+    event = event_plan_for([ event_row ], standard_pool: standard_pools(:twm_por)).events.sole
+
+    assert_not event.blocked?
+    assert_nil event.blocked_reason
+    assert_equal [ :create ], event.rows.map(&:status)
+  end
+
   # The confirmed answer travels on the row, because an event's sheet holds 45 distinct decks over
   # 575 rows and there is no single archetype for the run to carry.
   test "carries the confirmed archetype of each row's own deck" do

@@ -53,7 +53,7 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     message = broadcast_flash { perform }
 
     assert_match(/#{IMPORTABLE} created/, message)
-    assert_match(/1 in events that cannot be imported/, message)
+    assert_match(/1 refused before writing/, message)
     assert_match(/Raging Bolt/, message)
   end
 
@@ -218,6 +218,45 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     assert_equal 1, Tournament.where(external_key: EVENT_KEY).count
   end
 
+  # "Most common rather than first" is the rule StandingsImportPlan#dominant_format already follows,
+  # and nothing pinned it here: replacing the tally with `.first` left the whole suite green. One
+  # stray format icon on one row of 575 must not decide a whole event's anchor.
+  test "the published pool is the one most of the event's rows state, not the first" do
+    pool = tef_pbl_pool
+    rows = [
+      Tournaments::LimitlessEventResults::Row.new(format: "TWM-POR"),
+      Tournaments::LimitlessEventResults::Row.new(format: pool.name),
+      Tournaments::LimitlessEventResults::Row.new(format: pool.name)
+    ]
+
+    assert_equal pool, Tournaments::LimitlessImportJob.published_pool_for(rows)
+  end
+
+  # And a code no pool answers to resolves to nil rather than to something near it: the plan then
+  # blocks the event naming the code, which is one sentence the screen and the run share.
+  test "a published pool code that names no pool resolves to nothing" do
+    assert_nil Tournaments::LimitlessImportJob.standard_pool_named("MEG-XYZ")
+    assert_nil Tournaments::LimitlessImportJob.standard_pool_named(nil)
+    assert_nil Tournaments::LimitlessImportJob.published_pool_for([])
+  end
+
+  # The Import row is a run's only permanent record — the flash is transient and names a number.
+  # Without this the 16 rows an event run declines for one unconfirmed deck left nothing anywhere
+  # saying *which* deck, so the admin who came back to finish the job had only the preview to go
+  # back to. Grouped, because those 16 rows share one sentence and a 559-row field would otherwise
+  # repeat it 48 times.
+  test "an event run records which decks it refused rows for, not just how many" do
+    tef_pbl_pool
+    stub_event_http
+    perform_event
+
+    message = @import.reload.error_message
+    assert_match(/#{EVENT_BLOCKED_ROWS} rows not written/, message)
+    assert_match(/no archetype is mapped for the Limitless deck/, message)
+    # The count rides with the reason, so one line stands for many rows.
+    assert_match(/^  \d+ x /, message)
+  end
+
   # DEFAULT_MAX_ROWS is 300 because an archetype-history page is 176 events and 1569 rows; one
   # event is a bounded thing whose size the admin has just read in the preview, and a 400-row
   # Regional must not be refused as an accident.
@@ -253,6 +292,8 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
   # 284 (five rows) and 284/3 (three) are the two references the fixtures already map; the other
   # 13 block their rows by name.
   EVENT_MAPPED_ROWS = 8
+  # 24 rows over the three division fixtures, less the 8 above.
+  EVENT_BLOCKED_ROWS = 16
 
   EVENT_PAGES = {
     "https://limitlesstcg.com/tournaments/577" => "tournament_577_masters",

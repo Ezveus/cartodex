@@ -247,7 +247,7 @@ class Tournaments::LimitlessImportJob < ApplicationJob
     # writes thirteen, and a report naming only the thirteen leaves the admin looking for the seven
     # it lost. It is always zero for a paper run, which does not de-duplicate at all.
     counts += ", #{result.duplicates} dropped as duplicates" if result.duplicates.positive?
-    counts += ", #{result.blocked} in events that cannot be imported" if result.blocked.positive?
+    counts += ", #{result.blocked} refused before writing" if result.blocked.positive?
     return %(Import of "#{import.label}" stopped: #{result.aborted_reason} (#{counts}).) if result.aborted?
 
     %(Import of "#{import.label}" finished: #{counts}#{", #{result.failed_count} refused" if result.failed_count.positive?}.)
@@ -260,6 +260,16 @@ class Tournaments::LimitlessImportJob < ApplicationJob
       lines << "#{result.failures.size} #{"row".pluralize(result.failures.size)} refused:"
       lines.concat(result.failures.first(FAILURES_LISTED).map { |label, message| "  #{label}: #{message}" })
       lines << "  … and #{result.failures.size - FAILURES_LISTED} more" if result.failures.size > FAILURES_LISTED
+    end
+    # The rows the run declined to write, by reason. The flash is transient and names a number; the
+    # Import row is the only permanent record of a run, and without this an event source refusing 48
+    # rows for one unconfirmed deck left nothing anywhere saying which deck — so the admin who came
+    # back to finish the job had only the preview to go back to. Grouped, because 48 rows of one
+    # event share one sentence.
+    if result.blocked_reasons.present?
+      lines << "#{result.blocked} #{"row".pluralize(result.blocked)} not written:"
+      lines.concat(result.blocked_reasons.sort_by { |_reason, count| -count }.first(FAILURES_LISTED)
+        .map { |reason, count| "  #{count} x #{reason}" })
     end
     lines.join("\n").presence
   end

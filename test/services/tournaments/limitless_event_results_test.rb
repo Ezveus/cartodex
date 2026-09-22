@@ -123,6 +123,21 @@ class Tournaments::LimitlessEventResultsTest < ActiveSupport::TestCase
     assert_nil row_at(Tournaments::LimitlessEventResults.call(577), "masters", 1).archetype_key
   end
 
+  # The case above proves the regex is consulted; it does not prove the regex is *anchored*, since
+  # "javascript:alert(1)" holds no /decks/<digits> anywhere and fails to match either way. These do
+  # hold one, wrapped in something else — which is what an anchor is for, and what a mutation
+  # dropping \A and \z from DECK_HREF_RE otherwise survives untouched.
+  test "reads no key out of an href that merely contains a deck reference" do
+    [ "/evil/decks/339", "/decks/339/extra", "/decks/339x", "/decks/339?variant=1&next=/evil" ].each do |href|
+      stub_pages(EVENT_577.merge(
+        "#{BASE}/tournaments/577" => MASTERS_577.sub('href="/decks/339"', %(href="#{href}"))
+      ))
+
+      assert_nil row_at(Tournaments::LimitlessEventResults.call(577), "masters", 1).archetype_key,
+        "#{href} is not a deck reference and must yield no key"
+    end
+  end
+
   # The synthetic key the bulk decklist store answers on. It stays in `list_url` so the importer's
   # existing `row.list_url.blank?` gate keeps working unchanged.
   test "addresses a row's list by its division and rank" do

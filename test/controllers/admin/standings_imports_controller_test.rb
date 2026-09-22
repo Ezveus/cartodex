@@ -418,6 +418,44 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       "mappings[284][archetype_id]", archetypes(:ogerpon).id.to_s
   end
 
+  # A form field *name* is user input and was already guarded; its value is too, and was not. Both
+  # of these reached String#[] and Array#to_i — unrescued 500s on the one screen in the panel that
+  # writes to a public catalogue, where every other refusal is a redirect.
+  test "a mapping value that no form could have produced is dropped, not 500ed" do
+    [ { mappings: { "284" => "x" } },
+      { mappings: { "284" => { archetype_id: [ "1" ] } } },
+      { mappings: { "284" => { archetype_id: "1", label: { "a" => "b" } } } },
+      { mappings: "x" },
+      { mappings: [ "x" ] } ].each do |malformed|
+      assert_nothing_raised do
+        post admin_standings_imports_path, params: event_params.merge(malformed)
+      end
+      assert_response :redirect, "#{malformed.inspect} should redirect, not raise"
+    end
+  end
+
+  # The four totals above the confirm button count the plan as it stands, and confirming the decks
+  # is itself what moves rows out of `blocked` — so on a first preview an event reads "0 create,
+  # N blocked" directly above a button that will then write N. The button names no count for the
+  # same reason; this says so in words, and only for the source it is true of.
+  test "an event preview says its totals are counted before the decks are confirmed" do
+    stub_event_pages
+    record_decklist_keys
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_select ".standings-import-totals + .settings-section-lead",
+      text: /Counted before the decks above are confirmed/
+
+    stub_http(RESULTS_HTML)
+    get preview_admin_standings_imports_path, params: {
+      source: "paper", deck_id: "280", archetype_id: @archetype.id
+    }
+
+    assert_select ".standings-import-totals + .settings-section-lead", false,
+      "a paper run's totals are final and must not be qualified"
+  end
+
   test "the preview renders one line per distinct deck reference, carrying the label Limitless published" do
     stub_event_pages
     record_decklist_keys

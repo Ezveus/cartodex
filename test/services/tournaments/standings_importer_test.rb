@@ -660,20 +660,30 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     assert_not_nil standing.deck
   end
 
-  # A row nothing can file is refused by name and writes nothing. It is reachable exactly when the
-  # run carries no archetype — which the whole-event source is the first to do — and a standing
-  # created without one would fail a NOT NULL constraint rather than say anything.
+  # A row nothing can file is refused by name and writes nothing. This is the **backstop**, not the
+  # ordinary path: StandingsImportPlan blocks such a row before the importer ever sees it, and a
+  # test that went through the plan would now be asserting the plan's refusal instead of this one.
+  # So the RowPlan is handed over as :create directly — the shape the importer would meet if the
+  # plan's guard were ever relaxed, which is exactly when this message has to be right. Left to the
+  # NOT NULL column the error reads "Archetype must exist", which is true of every row and tells an
+  # admin nothing about which deck to go and map.
   test "refuses a row with no archetype of its own and no run archetype" do
+    plan = Tournaments::StandingsImportPlan.call(
+      rows: [ event_row(archetype_key: nil, archetype_label: nil, list_url: nil) ],
+      event_key: EVENT_KEY, standard_pool: standard_pools(:twm_por)
+    )
+    row_plan = plan.events.sole.rows.sole
+    assert_equal :blocked, row_plan.status, "the plan is expected to refuse this row first"
+    row_plan.status = :create
+    row_plan.reason = nil
+
     assert_no_difference -> { TournamentStanding.count } do
-      @result = event_import([ event_row(archetype_key: nil, archetype_label: nil, list_url: nil) ],
-        archetype: nil)
+      @result = Tournaments::StandingsImporter.call(plan: plan, archetype: nil, user: @admin)
     end
 
     assert_equal 0, @result.created
     assert_equal 1, @result.failed_count
     assert_match(/Dylan Kasturi/, @result.failures.sole.first)
-    # The reason names what is missing. Left to the NOT NULL column the message is "Archetype must
-    # exist", which is true of every row and tells an admin nothing about which deck to map.
     assert_match(/mapped to no archetype/, @result.failures.sole.last)
   end
 

@@ -1,6 +1,6 @@
 # Bulk standings import from Limitless TCG
 
-Turning one archetype's tournament history into `Tournament` and `TournamentStanding` rows, from two sources: the paper results pages and the online "best finishes" leaderboard.
+Turning Limitless TCG into `Tournament` and `TournamentStanding` rows, from three sources: one archetype's tournament history off the paper results pages, one player's online "best finishes" leaderboard, and one whole real-world event. The first two are written out below; the third has its own section at the end of this file.
 
 This file carries detail that used to sit inline in `CLAUDE.md`. Everything here is a decision with a measurement behind it — read it before changing the code it covers, because most entries record something that was already tried and rejected.
 
@@ -321,9 +321,28 @@ them apart. On `/tournaments/563`, which publishes 6 lists for 10 rows, the thir
 Keyed on the attribute, one player's 60 is filed under another player's row, silently, in a public
 sheet.
 
-**Memory, not time, is this source's cost.** Holding that 22 MB page's DOM measures 50 → 246 MB RSS
-on its own and **390 MB with the Rails app loaded**, in a Solid Queue worker. It is bounded by one
-division page at a time, and the largest event Limitless lists is 3752 players.
+**The DOM is dropped at the end of the parse, and a failure is memoised beside the results.** Both
+were found by the adversarial review, both measured, and both matter more than they look.
+
+Holding the three divisions' parsed DOMs for a whole run measures **+355 MB RSS** on pages a third
+smaller than the real ones — in a Solid Queue worker that also holds the app, with a preview request
+holding a second such store concurrently. Each block is therefore converted to its PTCG text as the
+page is walked and the document is released with the method. The property that made nodes look
+necessary is kept: a list `LimitlessDecklist` refuses is stored *as its exception* and raised
+against the row that asks for it, so it still costs its own row and not the whole division.
+
+And `@divisions[division] ||= parse(division)` stores a result and never an exception, so a division
+whose ranks stopped being readable was re-fetched and re-parsed by **every row of it** — 559 rows
+against a 22.1 MB page is 12.4 GB off limitlesstcg.com in one run, 575 × 0.30 s of Nokogiri, and an
+`Import` still reporting "completed" with every list missing. `StandingsImporter`'s
+five-consecutive-failure abort cannot see it: it counts `HttpFetcher::FetchError` and this is a
+`ParseError`. The refusal is memoised too, and a test counts the fetches.
+
+**Two blocks claiming one rank refuse the division rather than letting one win.** `acc[rank] = …`
+was last-wins, which is the very failure keying on the stated rank exists to prevent, arriving by
+the other door — and `RANK_RE` reads `9th-16th Alice` as rank 9, so a top-cut page writing a range
+on eight blocks makes all eight claim it. Seven lists become unreachable and the eighth is handed to
+whichever row asks. Nothing here can tell which of them a row meant.
 
 **The three attendance figures are per division and land in their own columns.** Each division page
 states its own: 3122 / 364 / 233 on 577. That this is the division's field and not the event's total
@@ -337,6 +356,21 @@ under `TournamentStanding#placement_within_division_field`.
 fortnight after a set ships but before Play! Pokémon rules it legal would be anchored to the pool
 the source says it was not played under — which is exactly the event that prompted this feature. A
 code matching no pool blocks the event naming the code.
+
+**An event already in the catalogue whose pool disagrees with the published one is refused, not
+overruled.** This is the rule the whole "the format is stated" decision is worth nothing without,
+and it was missing from the first implementation. `build_event` takes an existing event's
+classification whole (`classification_of(tournament)`) and `blocked_reason` used to return early on
+any event it found — so a Regional a member had already catalogued kept *its* anchor and the
+published `TEF-PBL` was discarded in silence, for the whole 559-row field and all 559 field lists.
+That is not a hypothetical: `Tournaments::Form` pre-fills its anchor from `StandardPool.at(date)`,
+which reads `legal_on`, which is exactly the fortnight-window error this source reads the page to
+avoid — so the member who catalogues such an event first hands the import the wrong bucket, and
+`Archetypes::MetagameScope` then reports a whole Regional under a pool nobody played it in while
+the right bucket reads empty. A one-event run therefore compares the two and blocks the event
+naming both, leaving the correction on the event's own form: the same call every other refusal here
+makes, and the reason nothing wrong enters the catalogue quietly. Agreeing costs nothing, and an
+event a previous run created is importable into on the next one.
 
 **The event is found by its key first and its name second, and it writes both.** `(name_normalized,
 date)` is the catalogue's identity and is what finds an event a member catalogued by hand — measured,

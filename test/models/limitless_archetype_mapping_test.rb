@@ -56,4 +56,29 @@ class LimitlessArchetypeMappingTest < ActiveSupport::TestCase
     assert_nil LimitlessArchetypeMapping.parse_reference("284/3/9")
     assert_nil LimitlessArchetypeMapping.parse_reference(nil)
   end
+
+  # The two index tests deliberately use save!(validate: false), so they prove the database and say
+  # nothing about the model. Commenting out `validate :reference_is_unique` left the whole suite
+  # green — and the validation is what produces a readable error on the admin form instead of a
+  # RecordNotUnique 500, the same division of labour Card and Tournament keep.
+  test "the model refuses a duplicate before the database has to" do
+    LimitlessArchetypeMapping.create!(limitless_deck_id: 901, label: "Dragapult", archetype: archetypes(:ogerpon))
+
+    duplicate = LimitlessArchetypeMapping.new(limitless_deck_id: 901, label: "Dragapult again",
+      archetype: archetypes(:budew_ogerpon))
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:limitless_deck_id], "is already mapped"
+  end
+
+  test "the model refuses a duplicate variant before the database has to" do
+    LimitlessArchetypeMapping.create!(limitless_deck_id: 902, limitless_variant: 4, label: "A",
+      archetype: archetypes(:ogerpon))
+
+    duplicate = LimitlessArchetypeMapping.new(limitless_deck_id: 902, limitless_variant: 4, label: "B",
+      archetype: archetypes(:ogerpon))
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:limitless_deck_id], "is already mapped"
+  end
 end

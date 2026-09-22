@@ -3104,6 +3104,17 @@ textarea.form-input {
   font-size: 0.85rem;
 }
 
+/* A deck whose representative list could not be read says so with the page and the rank in the
+   message, and a URL is one unbreakable token. `.badge` is inline-block, so its min-content width
+   is that token's width: measured at 390px, nine of the fifteen lines the real event produces
+   pushed the document to 487px — the only elements on the page to overflow it at all, and clean at
+   768 and 1400. Scoped here rather than put on `.badge`, because everywhere else a badge is two
+   words and breaking inside one would be the wrong answer. */
+.standings-import-mappings .badge {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .standings-import-confirm-actions {
   margin-top: 1.5rem;
 }

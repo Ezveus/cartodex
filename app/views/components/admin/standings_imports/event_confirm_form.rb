@@ -35,9 +35,29 @@ module Admin
             limit_per_event: @limit_per_event, confirm: false
           )
 
-          div(class: "form-actions standings-import-confirm-actions") do
-            button(type: "submit", class: "btn btn-primary") { "Confirm mappings and import" }
+          confirm_action
+        end
+      end
+
+      private
+
+      # The button survives every row being blocked — that is the ordinary first preview, and
+      # confirming the decks above is exactly what unblocks them. It does **not** survive the
+      # *event* being blocked: nothing on this page can lift an event-level refusal (a pool that
+      # disagrees with the catalogue, a format cartodex cannot read), so the button would enqueue a
+      # run that writes nothing and reports it afterwards. The other two sources withhold theirs on
+      # `importable_rows.empty?`; this one has to ask the narrower question, or it would withhold it
+      # on the one screen where blocked rows are the point.
+      def confirm_action
+        if @plan.events.any?(&:blocked?)
+          return div(class: "flash flash-alert standings-import-refusal") do
+            plain "Nothing here can be imported until the event itself is corrected. "
+            plain "Confirming decks would not change that."
           end
+        end
+
+        div(class: "form-actions standings-import-confirm-actions") do
+          button(type: "submit", class: "btn btn-primary") { "Confirm mappings and import" }
         end
       end
     end

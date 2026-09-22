@@ -110,6 +110,47 @@ class Tournaments::EventDecklistsTest < ActiveSupport::TestCase
     assert_match(%r{/tournaments/577/decklists}, error.message)
   end
 
+  # And it refuses **once**. `||=` stores a result and never an exception, so before this every row
+  # of a division whose ranks stopped being readable re-fetched and re-parsed the whole bulk page:
+  # 559 rows against 22.1 MB is 12.4 GB off limitlesstcg.com in one run, with the Import still
+  # reporting "completed". The five-consecutive-failure abort cannot see it either — it counts
+  # HttpFetcher::FetchError, and this is a ParseError.
+  test "fetches a division whose ranks it cannot read once, not once per row" do
+    stub_pages(MASTERS_URL => MASTERS_577.gsub(/>\d+(?:st|nd|rd|th) /, ">"))
+    store = Tournaments::EventDecklists.new(577)
+
+    20.times do |i|
+      assert_raises(Tournaments::EventDecklists::ParseError) { store.call("577/masters/#{i + 1}") }
+    end
+
+    assert_equal [ MASTERS_URL ], @http_calls
+  end
+
+  # Two blocks claiming one rank is the same failure keying on the stated rank exists to prevent,
+  # arriving by the other door: a page that writes "9th-16th" on eight top-cut blocks makes all
+  # eight claim rank 9, seven lists become unreachable, and the eighth is handed to whichever
+  # player's row asks — in a public wiki sheet, with nothing saying so. Nothing here can tell which
+  # of them the row meant, so the division is refused rather than guessed at.
+  test "refuses a division that publishes two lists under one rank" do
+    stub_pages(MASTERS_URL => MASTERS_577.sub(">127th ", ">1st "))
+    store = Tournaments::EventDecklists.new(577)
+
+    error = assert_raises(Tournaments::EventDecklists::ParseError) { store.call("577/masters/1") }
+
+    assert_match(/two lists ranked 1/, error.message)
+  end
+
+  # The ordinal suffix is the whole of what tells a rank from any other number a toggle might
+  # carry, and nothing pinned it: `/\A(\d+)/` alone passed every other test in this file.
+  test "reads a rank only where the toggle states one as an ordinal" do
+    stub_pages(MASTERS_URL => MASTERS_577.sub(">1st Dylan Kasturi", ">2026 Dylan Kasturi"))
+    store = Tournaments::EventDecklists.new(577)
+
+    error = assert_raises(Tournaments::EventDecklists::ParseError) { store.call("577/masters/2026") }
+
+    assert_match(/publishes no list ranked 2026/, error.message)
+  end
+
   private
 
   def stub_pages(pages)
