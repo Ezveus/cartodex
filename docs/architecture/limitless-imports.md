@@ -302,6 +302,35 @@ decks nobody has confirmed are proposed for, and only those cost a list.
 **A deck nobody has mapped blocks its rows; it never falls back to a guess.** The reason names the
 deck and its reference, so the admin knows what to confirm and re-run.
 
+**"— Leave unmapped —" retracts a confirmation, and before it did, nothing in the app could.** The
+select offers that option on every line, the confirmed ones included, while `persist_mappings` only
+ever `find_or_initialize_by(...).update!` — so a blank selection on a line already in the store was
+a silent no-op, and the screen went on answering "confirmed earlier" to the click it had just
+invited. There is no admin CRUD for `LimitlessArchetypeMapping`, no rake task and no other caller
+that destroys one, so a confirmation could be corrected to a different archetype and never withdrawn.
+A blank selection now travels as an explicit nil and `retract` destroys the row, looked up through
+`LimitlessArchetypeMapping.by_reference` rather than with a `where` of its own, so the null-safe half
+of that key — SQLite spelling a NULL comparison `IS` — stays spelled once; a pair nobody mapped
+matches nothing and deletes nothing. The value guard is what keeps the door narrow: a non-scalar
+`archetype_id` (`mappings[284][archetype_id][]=1`) is still dropped whole rather than read as a
+retraction, because a hand-made request must not be able to undo an arbitration nobody made. This is
+also what makes the pre-selected proposal reversible — confirming an untouched line records the
+machine's guess as a human decision, and this is the door back out of it.
+
+**The confirm button withholds itself on a blocked event *and* on the row ceiling, and the second
+one had to be asked separately.** `Admin::StandingsImports::EventConfirmForm` wraps the mapping
+selects and the plan in one POST, so it renders `PlanTable` with `confirm: false` and
+`PlanTable#confirmable?` — which does test `over_limit?` — is never consulted for this source. The
+first preview cannot reach the ceiling, every row of an unmapped deck being blocked and
+`importable_rows` therefore 0; the *second* one, where confirming the decks is precisely what made
+the rows count, rendered "N rows is over the 1000-row ceiling" with a working button directly
+beneath it. The click enqueues a run that raises `PlanTooLarge` and writes nothing, and the next
+preview makes the same offer again. `EVENT_MAX_ROWS` is 1000 against a largest Limitless event of
+3752 players, so this is an ordinary major Regional rather than a corner. The refusal gets its own
+sentence rather than borrowing `PlanTable`'s, which names an event filter as a way out: true of the
+two sources whose run covers a page of events, false of one whose run is a single event by
+construction. The per-event cap is the only lever, so it is the only one named.
+
 **One page carries every decklist, and that is what makes the feature affordable.** The obvious
 shape is the older sources' — one request per row to `/decks/list/<id>` — which measures at 575
 requests, a median 0.82 s each, about **12.7 minutes**, with 45 of them (37 s) inside the preview's
@@ -338,11 +367,38 @@ against a 22.1 MB page is 12.4 GB off limitlesstcg.com in one run, 575 × 0.30 s
 five-consecutive-failure abort cannot see it: it counts `HttpFetcher::FetchError` and this is a
 `ParseError`. The refusal is memoised too, and a test counts the fetches.
 
+**And the courtesy pause follows the fetch rather than the call.** `StandingsImporter#remote` paces
+everything that leaves the machine at half a second and counts consecutive failures around it, and
+both decklist call sites went through it — right for the two older services, which fetch one URL per
+row, and wrong here from the moment the memoisation above started working. After the first row of a
+division every call is a Hash lookup: **572 of 575 on the reference event**, each sleeping half a
+second for a request nobody was making, ≈ **4.8 minutes** of pure wall clock, spent against the
+six-requests-for-a-whole-event this class exists to buy. `EventDecklists#held?(key)` answers whether
+a key would leave the machine and `StandingsImporter#fetch_list` asks before pacing — the shape
+`#resolve_printing` already had for a printing the database already holds. `held?` is keyed on the
+division and not the rank, because a fetch is: a rank this page never published is refused without a
+request, and so is a memoised failure. Asked through `respond_to?` rather than through an interface
+every decklist service must declare, since for the other two every call is remote and the question
+has no answer.
+
 **Two blocks claiming one rank refuse the division rather than letting one win.** `acc[rank] = …`
 was last-wins, which is the very failure keying on the stated rank exists to prevent, arriving by
 the other door — and `RANK_RE` reads `9th-16th Alice` as rank 9, so a top-cut page writing a range
 on eight blocks makes all eight claim it. Seven lists become unreachable and the eighth is handed to
 whichever row asks. Nothing here can tell which of them a row meant.
+
+**A division page that 404s is an empty division; one that answers anything else is a refusal.**
+`HttpFetcher::FetchError` carries the `status` it was raised for — nil for whatever never reached one,
+a timeout, a refused connection, a URL that is not one — and `LimitlessEventResults#fetch` answers
+nil only for a 404. It used to flatten every failure onto that nil, and `#rows_for` reads a nil on a
+suffix page as an empty division: the right reading for 563's SR and JR, and the wrong one for
+exactly the failure this source's own pacing exists to avoid. Measured consequence: a 429 on
+`/tournaments/577/JR` took the 8 Junior rows out of the plan, raised nothing, showed a field the
+preview did not mark as amputated, and let the `Import` report `completed`. On the base page the same
+nil at least produced a message, but it read "the event may not exist, or the layout changed" about
+an id that was perfectly correct. Re-raised, it reaches the two rescues that already existed for it —
+the preview's flash refusal and the job's failed `Import`. A suffix page answering 200 with no table
+is still an empty division, which is what 563 actually does.
 
 **The three attendance figures are per division and land in their own columns.** Each division page
 states its own: 3122 / 364 / 233 on 577. That this is the division's field and not the event's total
@@ -371,6 +427,18 @@ the right bucket reads empty. A one-event run therefore compares the two and blo
 naming both, leaving the correction on the event's own form: the same call every other refusal here
 makes, and the reason nothing wrong enters the catalogue quietly. Agreeing costs nothing, and an
 event a previous run created is importable into on the next one.
+
+**A published pool cartodex has never heard of is named before that disagreement is asked.**
+`blocked_reason` put the comparison in front of the branch that reports an unknown pool, and on an
+event a member catalogued by hand against a pool that does not exist yet, `derived[:standard_pool]`
+is nil, the comparison cannot hold, and `disagreement_reason` falls back to the bare format word:
+*"Limitless publishes this event as standard and cartodex has it catalogued as Standard (TEF-CRI) —
+correct the event and re-run"*. No edit of that event can satisfy that while the pool does not exist,
+and the sentence never names the pool to create nor the code that was published. The unknown-pool
+branch therefore sits above it and covers the catalogued and the uncatalogued case at once, which is
+what made the older copy below it redundant. Handing back nil from `disagreement_reason` is not the
+smaller fix it looks like: `return disagreement_reason(...) if …` returns that nil, `blocked_reason`
+answers nil, and the event becomes importable against the very anchor it disagrees with.
 
 **The event is found by its key first and its name second, and it writes both.** `(name_normalized,
 date)` is the catalogue's identity and is what finds an event a member catalogued by hand — measured,
