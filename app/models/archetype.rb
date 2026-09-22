@@ -16,6 +16,12 @@ class Archetype < ApplicationRecord
   # entirely is not the neutral option it looks like: the admin panel has a reachable destroy and
   # the FK carries no on_delete, so it would raise a bare ActiveRecord::InvalidForeignKey.
   has_many :tournament_standings, dependent: :restrict_with_error
+  # :destroy, unlike :tournament_standings' restrict_with_error, and the difference is what each
+  # row is. A standing is a record of something that happened and must not vanish with a catalogue
+  # edit; a Limitless mapping is bookkeeping about how an import should read a source, and once the
+  # archetype it points at is gone the answer it remembers is not merely stale but unwritable —
+  # archetype_id is NOT NULL. Destroyed, the next import simply asks the admin again.
+  has_many :limitless_archetype_mappings, dependent: :destroy
 
   # Slugs a route already claims. Derived, not guessed: `resources :archetypes` in the admin
   # namespace emits GET /admin/archetypes/**new** before GET /admin/archetypes/:id, so an

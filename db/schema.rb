@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_17_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -204,6 +204,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_090000) do
     t.index ["user_id"], name: "index_imports_on_user_id"
   end
 
+  create_table "limitless_archetype_mappings", force: :cascade do |t|
+    t.integer "archetype_id", null: false
+    t.datetime "created_at", null: false
+    t.string "label", null: false
+    t.integer "limitless_deck_id", null: false
+    t.integer "limitless_variant"
+    t.datetime "updated_at", null: false
+    t.index ["archetype_id"], name: "index_limitless_archetype_mappings_on_archetype_id"
+    t.index ["limitless_deck_id", "limitless_variant"], name: "index_limitless_mappings_on_deck_and_variant", unique: true, where: "limitless_variant IS NOT NULL"
+    t.index ["limitless_deck_id"], name: "index_limitless_mappings_on_base_deck", unique: true, where: "limitless_variant IS NULL"
+  end
+
   create_table "oauth_access_grants", force: :cascade do |t|
     t.integer "application_id", null: false
     t.string "code_challenge"
@@ -390,6 +402,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_17_090000) do
   add_foreign_key "decks", "users"
   add_foreign_key "imports", "tournaments"
   add_foreign_key "imports", "users"
+  add_foreign_key "limitless_archetype_mappings", "archetypes"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id"
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "standard_pools", "card_sets", column: "first_card_set_id"
