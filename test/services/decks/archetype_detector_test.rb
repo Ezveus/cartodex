@@ -152,4 +152,49 @@ class Decks::ArchetypeDetectorTest < ActiveSupport::TestCase
 
     assert_equal pair, result.archetype
   end
+
+  # --- Containment as a question of its own (.candidates) ---
+
+  # Tournaments::ArchetypeProposer asks the same question the matcher asks and then ranks the
+  # answers differently, so containment is extracted rather than re-implemented: four clauses (the
+  # joins(:primary_card) restriction, the points.positive? filter, the absent-secondary
+  # disqualification and the fingerprint keying) that a second copy could each get subtly wrong
+  # while still passing a test written against one of them.
+  test "candidates answers every archetype the fingerprints contain, with its score" do
+    boss_box = Archetype.create!(primary_card: cards(:bosss_orders_meg), name: "Boss Box")
+    fingerprints = [ cards(:teal_mask_ogerpon_ex).fingerprint, cards(:bosss_orders_meg).fingerprint ]
+
+    scored = Decks::ArchetypeDetector.candidates(fingerprints)
+
+    assert_equal({ archetypes(:ogerpon) => 2, boss_box => 1 }, scored.to_h)
+  end
+
+  # The same weights the matcher ranks on, read off the same call rather than restated by the
+  # caller — a second table of numbers is how the proposal and the match come to disagree.
+  test "candidates scores a rule-box Pokémon above a plain one, and a Trainer below both" do
+    cards(:teal_mask_ogerpon_ex).update!(pokemon_subtype: pokemon_subtypes(:pokemon_ex))
+
+    scored = Decks::ArchetypeDetector.candidates([ cards(:teal_mask_ogerpon_ex).fingerprint ]).to_h
+
+    assert_equal Decks::ArchetypeDetector::RULE_BOX_WEIGHT, scored[archetypes(:ogerpon)]
+  end
+
+  test "candidates leaves out an archetype whose secondary the fingerprints do not hold" do
+    scored = Decks::ArchetypeDetector.candidates([ cards(:budew_pre).fingerprint ])
+
+    assert_empty scored
+  end
+
+  test "candidates answers nothing at all for no fingerprints" do
+    assert_empty Decks::ArchetypeDetector.candidates([])
+  end
+
+  # The preview proposes for 45 deck references off one catalogue, so the archetypes are passed in.
+  test "candidates looks only at the archetypes it was handed" do
+    scoped = Decks::ArchetypeDetector.candidates(
+      [ cards(:teal_mask_ogerpon_ex).fingerprint ], archetypes: Archetype.where(id: archetypes(:standings_marker))
+    )
+
+    assert_empty scoped
+  end
 end

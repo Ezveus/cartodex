@@ -214,9 +214,13 @@ with its 8. So a whole event costs **six requests**, not 575:
 | Walking all 559 lists | **0.28 s** |
 | Peak RSS | 50 MB → 246 MB |
 
-Each list block names its row: `data-target="decklist-N"` / `data-id="N"` is the `data-rank` of the
-results page, and the toggle reads `1st Dylan Kasturi`. The join is on that rank, and it tolerates a
-missing block — Cape Town publishes 10 rows and 6 lists.
+Each list block names its row, **in its toggle text and not in its attributes**: the toggle reads
+`1st Dylan Kasturi`, and that ordinal is the results page's `data-rank`. `data-target="decklist-N"`
+and `data-id="N"` look like the same number and are not — they are the block's index among the
+*published* lists. On 577 the two agree everywhere, because all 559 rows published; on Cape Town,
+which publishes 6 lists for 10 rows, the third block is `decklist-3` and its toggle reads
+`6th Kevin Krueger`. Keyed on the attribute, one player's 60 is filed under another player's row.
+The join is therefore on the stated rank, and it tolerates a missing block.
 
 Three consequences, all of them the reason this is worth the 246 MB:
 

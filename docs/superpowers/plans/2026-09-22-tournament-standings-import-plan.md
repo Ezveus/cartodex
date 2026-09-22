@@ -74,8 +74,19 @@ Tournaments::EventDecklists.new(tournament_id)   # fetches lazily, once per divi
 #   .call(list_url)    -> PTCG text, or raises — the `decklist_service:` interface, unchanged
 ```
 
-It reads `/tournaments/<id>[/<SUFFIX>]/decklists` and keys each block on its `data-target`
-(`decklist-<rank>`), the `data-rank` of the results page. **Measured on 577**: 22.1 MB, 559 blocks,
+It reads `/tournaments/<id>[/<SUFFIX>]/decklists` and keys each block on **the rank its toggle
+states** (`6th Kevin Krueger` → 6), never on its `data-target`. An earlier draft of this plan said
+`data-target="decklist-N"` *was* the `data-rank` of the results page; **that is false and lane A
+measured it.** It holds on 577 only because all 559 rows published a list. On 563 six of ten did,
+and the third block reads `data-target="decklist-3"` while its toggle reads `6th Kevin Krueger` —
+the attribute is the block's index among the *published* lists. Keyed on it, Kevin Krueger's
+Crustle list is filed under Tiaan Schreuder, who registered nothing, in a public wiki sheet that
+says nothing about where the list came from.
+
+A key with no block **raises** a `ParseError` naming the rank and the page; it does not answer nil.
+`StandingsImporter#attach_field_list` calls `text.lines` straight after, so nil would be a
+`NoMethodError`, and `import_row` re-raises only `RunAborted` — so the raise fails that one row,
+names it in the receipt, and the run carries on, which is the substance claim 7b was after. **Measured on 577**: 22.1 MB, 559 blocks,
 `Nokogiri::HTML` 0.30 s, walking all of them 0.28 s, RSS 50 → 246 MB. This is what makes the whole
 feature six requests instead of 575 (12.7 min measured), and what makes the preview's proposal cost
 one request instead of 45 (37 s measured).
