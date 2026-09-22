@@ -351,6 +351,25 @@ class Tournaments::StandingsImportPlanTest < ActiveSupport::TestCase
     assert_equal [ :blocked ], event.rows.map(&:status).uniq
   end
 
+  # The disagreement above can only be asked once both pools exist. A published pool cartodex has
+  # never heard of, on an event a member catalogued by hand, used to reach it anyway — and it
+  # answered "correct the event and re-run", which no edit of that event can satisfy while the pool
+  # does not exist, while never naming the pool to create. The branch that knows what is missing
+  # sits above it now.
+  test "names the pool to create on a catalogued event whose published pool matches none" do
+    Tournament.create!(
+      name: "Regional Baltimore, MD", date: Date.new(2026, 2, 20), tier: "regional",
+      format: "standard", standard_pool: standard_pools(:twm_asc)
+    )
+    event = event_plan_for([ event_row(format: "MEG-XYZ") ], standard_pool: nil).events.sole
+
+    assert event.blocked?
+    assert_match(/MEG-XYZ/, event.blocked_reason)
+    assert_match(/Standard pools/, event.blocked_reason)
+    assert_no_match(/correct the event/, event.blocked_reason)
+    assert_equal [ :blocked ], event.rows.map(&:status).uniq
+  end
+
   # And the ordinary case stays cheap: agreeing is not a disagreement, and an event a previous run
   # created must still be importable into on the next one.
   test "imports into a catalogued event whose pool is the one Limitless publishes" do

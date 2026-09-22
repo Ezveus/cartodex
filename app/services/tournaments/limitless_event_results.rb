@@ -86,7 +86,8 @@ class Tournaments::LimitlessEventResults < ApplicationService
   # inconsistency. No table on /tournaments/<id> means the event does not exist or the layout
   # moved, which is the whole run's problem. A suffix page that 404s or answers 200 with no table
   # is an *empty division* — 563's SR and JR pages do exactly that, and making it fatal would put
-  # every small event permanently out of reach.
+  # every small event permanently out of reach. Which failures #fetch is even allowed to answer nil
+  # for is the other half of that rule, and it lives there.
   def rows_for(division, suffix)
     page = fetch(suffix)
     return [] if page.nil? && suffix.present?
@@ -95,8 +96,18 @@ class Tournaments::LimitlessEventResults < ApplicationService
     page[:table].css("tr[data-rank]").filter_map { |tr| build_row(page, division, suffix, tr) }
   end
 
-  # nil for "there is nothing readable here", whatever the reason: a 404, a page with no heading, a
-  # page with no date, a page with no table. The caller decides what that costs.
+  # nil for "there is nothing readable here": a 404, a page with no heading, a page with no date, a
+  # page with no table. The caller decides what that costs.
+  #
+  # **A failure that is not a 404 is not "nothing readable", and the difference is the whole point.**
+  # The absence of a *table* and the absence of a *response* fail differently, the same way the base
+  # page and a suffix page do: a 404 says the page does not exist, which on a division suffix is an
+  # empty division and the ordinary shape of a small event; a 429 — the one this source's own pacing
+  # exists to avoid — a 503 or a timeout says a page that does exist declined to answer. Flattened
+  # onto the same nil, the second one made #rows_for drop that division's rows from the plan with no
+  # refusal raised anywhere: the preview showed an amputated field that nothing marked as amputated,
+  # and the Import declared itself "completed". Re-raised, it reaches the two rescues that already
+  # exist for it — a flash refusal on the preview, a failed Import in the job.
   def fetch(suffix)
     doc = Nokogiri::HTML(HttpFetcher.call(url(suffix)))
     table = doc.at_css("table")
@@ -106,7 +117,9 @@ class Tournaments::LimitlessEventResults < ApplicationService
     return if table.nil? || name.blank? || date.nil?
 
     { table: table, name: name, date: date, attendance: parse_attendance(line), format: parse_format(doc) }
-  rescue HttpFetcher::FetchError
+  rescue HttpFetcher::FetchError => e
+    raise unless e.status == 404
+
     nil
   end
 

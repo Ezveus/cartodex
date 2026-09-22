@@ -299,17 +299,27 @@ module Admin
     #
     # An `update!` rather than a create: a reference already confirmed is corrected in place, which
     # is what the two partial UNIQUE indexes guarantee against a second row.
+    #
+    # And a blank selection **destroys** that row rather than doing nothing. "— Leave unmapped —" is
+    # offered on every line, the confirmed ones included, and this is the only door out: there is no
+    # admin CRUD for LimitlessArchetypeMapping, no task that deletes one, and no other caller that
+    # destroys. Before this, a confirmation could be corrected to another archetype but never
+    # retracted — the screen offered the option in so many words and then answered "confirmed
+    # earlier" to the click. It is also what makes confirming a proposal untouched a reversible
+    # decision rather than a permanent one, which is what a store of human arbitrations has to be.
     def persist_mappings
       selections = mapping_selections
       return if selections.empty?
 
+      confirmed, retracted = selections.partition { |selection| selection[:archetype_id] }
+      retract(retracted)
       # Re-resolved rather than trusted: these came back through the browser. A selection naming an
       # archetype deleted between the two clicks is dropped, which leaves that deck's rows blocked
       # by name — exactly what leaving it blank does, and a better answer than throwing away the
       # other 44 confirmations or 500ing on the click.
-      archetypes = Archetype.where(id: selections.map { |selection| selection[:archetype_id] }).index_by(&:id)
+      archetypes = Archetype.where(id: confirmed.map { |selection| selection[:archetype_id] }).index_by(&:id)
 
-      selections.each do |selection|
+      confirmed.each do |selection|
         archetype = archetypes[selection[:archetype_id]]
         next if archetype.nil?
 
@@ -317,6 +327,18 @@ module Admin
           .find_or_initialize_by(limitless_deck_id: selection[:deck_id], limitless_variant: selection[:variant])
           .update!(archetype: archetype, label: selection[:label])
       end
+    end
+
+    # Looked up through `by_reference` rather than with a `where` of its own, so the null-safe half
+    # of that key — SQLite spelling a NULL comparison `IS` — stays spelled once. A pair nobody had
+    # mapped matches nothing and deletes nothing, which is what "leave unmapped" means on a line
+    # that was already unmapped.
+    def retract(selections)
+      references = selections.map do |selection|
+        LimitlessArchetypeMapping.reference_for(selection[:deck_id], selection[:variant])
+      end
+
+      LimitlessArchetypeMapping.by_reference(references).each_value(&:destroy)
     end
 
     # The selects and their labels, as the form sends them: `mappings[284/3][archetype_id]` and
@@ -337,10 +359,16 @@ module Admin
         # `mappings[284][archetype_id][]=1` were unrescued 500s on an admin screen.
         next if parsed.nil? || !attributes.is_a?(Hash)
 
-        archetype_id = scalar(attributes[:archetype_id])&.presence&.to_i
-        next if archetype_id.nil?
+        # A blank selection is "— Leave unmapped —", which is a *decision* on a line already
+        # confirmed and nothing at all on one that never was. It therefore travels as an explicit
+        # nil instead of being dropped here, and #persist_mappings is what tells the two apart.
+        # `scalar` still guards the way in: an absent field, an Array or a nested Hash is a
+        # hand-made request rather than this form, and reading one as a retraction would undo a
+        # confirmation nobody arbitrated.
+        selected = scalar(attributes[:archetype_id])
+        next if selected.nil?
 
-        { deck_id: parsed.first, variant: parsed.last, archetype_id: archetype_id,
+        { deck_id: parsed.first, variant: parsed.last, archetype_id: selected.presence&.to_i,
           label: scalar(attributes[:label])&.presence || reference }
       end
     end

@@ -1,7 +1,21 @@
 require "net/http"
 
 class HttpFetcher < ApplicationService
-  class FetchError < StandardError; end
+  # The HTTP status when the far side answered with one, and nil for everything that never got that
+  # far — a timeout, a refused connection, a URL that is not one.
+  #
+  # Carried because one caller has to tell "there is no such page" apart from "the far side is not
+  # answering right now", and the message cannot be asked that: Tournaments::LimitlessEventResults
+  # reads a 404 on a division page as an *empty division*, which is the ordinary shape of a small
+  # event, and reading a 429 the same way drops that division out of an import in silence.
+  class FetchError < StandardError
+    attr_reader :status
+
+    def initialize(message = nil, status: nil)
+      super(message)
+      @status = status
+    end
+  end
 
   # Every fetch this app makes is a scrape of, or a proxy to, somebody else's site. Saying who we
   # are is the minimum courtesy that turns a block into a conversation, and it matters more now
@@ -38,7 +52,9 @@ class HttpFetcher < ApplicationService
     raise FetchError, "#{@url.inspect} is not an HTTP URL" unless @uri.is_a?(URI::HTTP)
 
     response = perform_request
-    raise FetchError, "HTTP #{response.code} for #{@uri}" unless response.is_a?(Net::HTTPSuccess)
+    unless response.is_a?(Net::HTTPSuccess)
+      raise FetchError.new("HTTP #{response.code} for #{@uri}", status: response.code.to_i)
+    end
 
     response.body
   end

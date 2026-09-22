@@ -421,6 +421,9 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   # A form field *name* is user input and was already guarded; its value is too, and was not. Both
   # of these reached String#[] and Array#to_i — unrescued 500s on the one screen in the panel that
   # writes to a public catalogue, where every other refusal is a redirect.
+  #
+  # Dropped whole, and the store is what proves it: a blank selection now *retracts* a confirmation,
+  # so reading one of these as a blank would let a hand-made request undo an arbitration nobody made.
   test "a mapping value that no form could have produced is dropped, not 500ed" do
     [ { mappings: { "284" => "x" } },
       { mappings: { "284" => { archetype_id: [ "1" ] } } },
@@ -428,10 +431,32 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       { mappings: "x" },
       { mappings: [ "x" ] } ].each do |malformed|
       assert_nothing_raised do
-        post admin_standings_imports_path, params: event_params.merge(malformed)
+        assert_no_difference -> { LimitlessArchetypeMapping.count }, malformed.inspect do
+          post admin_standings_imports_path, params: event_params.merge(malformed)
+        end
       end
       assert_response :redirect, "#{malformed.inspect} should redirect, not raise"
     end
+  end
+
+  # "— Leave unmapped —" is offered on every line, the confirmed ones included, and this POST is the
+  # only door out of the store: no admin CRUD, no rake task and no other caller destroys a mapping.
+  # Both shapes of the key in one run, because the variant half is where the NULL comparison hides —
+  # a retraction that only worked on "284/3" would leave every base deck confirmed for good.
+  test "a blank selection retracts a confirmation that was already stored" do
+    assert_difference -> { LimitlessArchetypeMapping.count }, -2 do
+      post admin_standings_imports_path, params: event_params(mappings: {
+        "284" => { "label" => "Dragapult", "archetype_id" => "" },
+        "284/3" => { "label" => "Dragapult Dusknoir", "archetype_id" => "" }
+      })
+    end
+
+    assert_nil LimitlessArchetypeMapping.find_by(limitless_deck_id: 284, limitless_variant: nil)
+    assert_nil LimitlessArchetypeMapping.find_by(limitless_deck_id: 284, limitless_variant: 3)
+    # A deck this POST said nothing about keeps its confirmation: the retraction follows the
+    # references the form actually carried, never everything the store holds.
+    assert LimitlessArchetypeMapping.exists?(limitless_deck_id: 401, limitless_variant: 2)
+    assert_redirected_to admin_imports_path
   end
 
   # The four totals above the confirm button count the plan as it stands, and confirming the decks
@@ -568,6 +593,26 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     end
     # A hidden field must not steal the id of the input the admin types into.
     assert_select "input#tournament_id", 1
+  end
+
+  # The event source renders PlanTable with `confirm: false`, so the ceiling test that withholds
+  # PlanTable's own button is never consulted for it — and the notice was rendered directly above a
+  # working one. Clicking it enqueues a run that raises PlanTooLarge and writes nothing, and the
+  # next preview repeats the offer; the per-event cap is the only way out, so the refusal names it.
+  test "over the row ceiling an event preview refuses instead of offering a button" do
+    tef_pbl_pool
+    stub_event_pages
+    record_decklist_keys
+
+    with_event_max_rows(1) do
+      get preview_admin_standings_imports_path, params: event_params
+    end
+
+    assert_response :success
+    assert_select ".standings-import-refusal"
+    assert_match "over the 1-row ceiling", response.body
+    assert_match "top-N-per-event cap", response.body
+    assert_select "form.standings-import-confirm button[type=submit]", false
   end
 
   # What the admin confirmed is stored before the run is enqueued, because the plan reads the store
@@ -760,6 +805,17 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   # The ceiling is a keyword with a constant default precisely so a test can prove the refusal
   # with two rows instead of a 300-row HTML fixture. Restored in an ensure: it is a real constant
   # and every later test in this process would otherwise inherit it.
+  def with_event_max_rows(limit)
+    job = Tournaments::LimitlessImportJob
+    original = job::EVENT_MAX_ROWS
+    job.send(:remove_const, :EVENT_MAX_ROWS)
+    job.const_set(:EVENT_MAX_ROWS, limit)
+    yield
+  ensure
+    job.send(:remove_const, :EVENT_MAX_ROWS)
+    job.const_set(:EVENT_MAX_ROWS, original)
+  end
+
   def with_max_rows(limit)
     plan = Tournaments::StandingsImportPlan
     original = plan::DEFAULT_MAX_ROWS

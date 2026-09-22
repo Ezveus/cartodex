@@ -33,6 +33,37 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     2 Raging Bolt ex TEF 123
   TEXT
 
+  # Two printings the fixtures already hold, so #resolve_printing fetches nothing and the only
+  # pauses a run over this list can pay are the decklist's own.
+  HELD_LIST = <<~TEXT.freeze
+    Pokémon: 2
+    2 Teal Mask Ogerpon ex TWM 25
+    1 Honedge POR 56
+  TEXT
+
+  # Stands in for Tournaments::EventDecklists: one page per division, memoised, and it says so.
+  class DivisionLists
+    attr_reader :fetches
+
+    def initialize(text)
+      @text = text
+      @fetches = []
+      @divisions = {}
+    end
+
+    def held?(key) = @divisions.key?(division_of(key))
+
+    def call(key)
+      @fetches << key unless held?(key)
+      @divisions[division_of(key)] = true
+      @text
+    end
+
+    private
+
+    def division_of(key) = key.to_s.split("/").second
+  end
+
   setup do
     @admin = users(:one)
     @archetype = archetypes(:standings_marker)
@@ -753,6 +784,29 @@ class Tournaments::StandingsImporterTest < ActiveSupport::TestCase
     end
 
     assert_equal 2, tournament.standings.count
+  end
+
+  # A service that answers one page per division and memoises it turns 575 calls into 3 requests —
+  # and the run was pacing the calls rather than the requests, half a second apiece for answers that
+  # never left the machine. The first request never sleeps (there is nothing to pace against yet),
+  # so a run whose three rows share one division must not sleep at all.
+  test "paces a list it goes and gets, never one the service already holds" do
+    service = DivisionLists.new(HELD_LIST)
+    rows = (1..3).map do |rank|
+      event_row(player_name: "Player #{rank}", placement: rank, list_url: "577/masters/#{rank}")
+    end
+    plan = Tournaments::StandingsImportPlan.call(rows: rows, event_key: EVENT_KEY,
+      standard_pool: standard_pools(:twm_por))
+    importer = Tournaments::StandingsImporter.new(plan: plan, archetype: nil, user: @admin,
+      decklist_service: service, pause: 0.5)
+    slept = []
+    importer.define_singleton_method(:sleep) { |seconds| slept << seconds }
+
+    result = importer.call
+
+    assert_equal 3, result.created, result.failures.inspect
+    assert_equal [ "577/masters/1" ], service.fetches
+    assert_empty slept
   end
 
   private

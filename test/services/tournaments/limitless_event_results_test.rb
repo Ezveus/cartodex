@@ -198,17 +198,62 @@ class Tournaments::LimitlessEventResultsTest < ActiveSupport::TestCase
     assert_empty @http_calls
   end
 
+  # The failure a run's own pacing exists to avoid must not be readable as an empty division. Left
+  # flattened onto the same nil as a 404, a throttled /JR took the eight Junior rows out of the plan
+  # with no refusal raised anywhere, the preview showed a field nothing marked as amputated, and the
+  # Import declared itself completed.
+  test "refuses a division page the far side declined to answer, rather than emptying it" do
+    stub_statuses("#{BASE}/tournaments/577/SR" => 429)
+
+    error = assert_raises(HttpFetcher::FetchError) { Tournaments::LimitlessEventResults.call(577) }
+
+    assert_match(/429/, error.message)
+    assert_match(%r{/tournaments/577/SR}, error.message)
+  end
+
+  # And the same on the base page, where the old flattening was merely misleading rather than
+  # silent: it answered "the event may not exist, or the layout changed" about an id that is
+  # perfectly correct, and sent the admin to check it.
+  test "refuses the base page the far side declined to answer, naming the failure" do
+    stub_statuses("#{BASE}/tournaments/577" => 503)
+
+    error = assert_raises(HttpFetcher::FetchError) { Tournaments::LimitlessEventResults.call(577) }
+
+    assert_match(/503/, error.message)
+  end
+
   private
 
   def row_at(rows, division, placement)
     rows.find { |row| row.division == division && row.placement == placement }
   end
 
+  # The pages of 577, with a status in the way of some of them. Not `stub_pages` minus a URL: that
+  # one raises a 404, which is exactly the failure this source is *allowed* to read as an empty
+  # division.
+  def stub_statuses(statuses)
+    pages = EVENT_577
+    calls = @http_calls
+    HttpFetcher.define_singleton_method(:call) { |url|
+      calls << url
+      status = statuses[url]
+      raise HttpFetcher::FetchError.new("HTTP #{status} for #{url}", status: status) if status
+
+      pages.fetch(url)
+    }
+  end
+
   def stub_pages(pages)
     calls = @http_calls
     HttpFetcher.define_singleton_method(:call) { |url|
       calls << url
-      raise HttpFetcher::FetchError, "HTTP 404 for #{url}" unless pages.key?(url)
+      # With the status, the way HttpFetcher raises it: a 404 is what this source is allowed to
+      # read as an empty division, and a stub that dropped the status would make every page a
+      # division nobody entered.
+      unless pages.key?(url)
+        raise HttpFetcher::FetchError.new("HTTP 404 for #{url}", status: 404)
+      end
+
 
       pages.fetch(url)
     }

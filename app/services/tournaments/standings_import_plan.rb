@@ -220,11 +220,6 @@ class Tournaments::StandingsImportPlan < ApplicationService
     event
   end
 
-  # An online event is looked up by the id the source gave it and never by its name — the run
-  # that created it wrote that id, so this is what makes a re-import find its own events and skip
-  # them instead of planning every row :create and losing to the UNIQUE key one at a time.
-  # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
-  # half.
   # Why this row has no archetype, in the admin's terms. A deck cartodex has never been told about
   # names itself and its reference, so the mapping line to fill in is findable; a deck cell that
   # did not parse names nothing, because there is nothing to name — and that is a scrape failure
@@ -251,6 +246,11 @@ class Tournaments::StandingsImportPlan < ApplicationService
       "correct the event and re-run, rather than letting an import overrule it"
   end
 
+  # An online event is looked up by the id the source gave it and never by its name — the run
+  # that created it wrote that id, so this is what makes a re-import find its own events and skip
+  # them instead of planning every row :create and losing to the UNIQUE key one at a time.
+  # @catalogued is already partitioned by venue, so neither lookup can ever reach the other's
+  # half.
   def find_catalogued(normalized, date, external_key)
     found = @catalogued.find { |candidate| candidate.external_key == external_key } if external_key
     return found if found
@@ -344,6 +344,18 @@ class Tournaments::StandingsImportPlan < ApplicationService
   def blocked_reason(rows:, derived:, tournament:, date:)
     return "Limitless reports the format as #{dominant_format(rows).inspect}, which cartodex has no value for" if
       derived[:format].nil?
+    # The event page states its own card pool, so naming the date would send the admin looking for
+    # a pool that covers it — which is neither what is missing nor anything this run reads.
+    #
+    # Asked **before** the disagreement below, and that order is the rule rather than a preference.
+    # On an event a member already catalogued, a published pool cartodex has never heard of cannot
+    # be compared with the one they chose: #disagreement_reason falls back to the bare format word
+    # and answers "Limitless publishes this event as standard and cartodex has it catalogued as
+    # Standard (TEF-CRI) — correct the event", which no edit of that event can satisfy while the
+    # pool does not exist, and which never names the pool to create. This branch is the one that
+    # knows what is missing, so it is the one that has to be reachable.
+    return "Limitless reports this event's card pool as #{dominant_format(rows).inspect}, which matches no Standard pool — add it from Admin → Standard pools and re-run" if
+      one_event? && derived[:format] == "standard" && derived[:standard_pool].nil?
     # An event this run found already carries a classification a member chose, and this is not the
     # place to overrule it — its own form is. But for a one-event run the *source states the pool*,
     # and the two disagreeing is the one thing that must not pass in silence: the hand-catalogue
@@ -361,9 +373,6 @@ class Tournaments::StandingsImportPlan < ApplicationService
     # would send the admin to look for a pool that covers it — which is not the thing that is
     # missing and may well already exist.
     return "no Standard pool matches this leaderboard's set — pick a set that names one, or add the pool from Admin → Standard pools, and re-run" if @online
-    # The event page states its own card pool, so naming the date would send the admin looking for
-    # a pool that covers it — which is neither what is missing nor anything this run reads.
-    return "Limitless reports this event's card pool as #{dominant_format(rows).inspect}, which matches no Standard pool — add it from Admin → Standard pools and re-run" if one_event?
 
     "no Standard pool covers #{date} — add one from Admin → Standard pools and re-run"
   end

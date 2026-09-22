@@ -63,6 +63,20 @@ class Tournaments::EventDecklists
     list
   end
 
+  # Whether answering this key would leave the machine. StandingsImporter paces everything that does
+  # — half a second between requests — and a division already parsed answers out of a Hash: on the
+  # reference event that is 572 of 575 calls, each of which was paying the pause for a request
+  # nobody was making, ~4.8 minutes of it, against the six-requests-for-a-whole-event this class
+  # exists to buy. The two older decklist services fetch one URL per row, so every call of theirs
+  # *is* remote and they answer this question by not having it.
+  #
+  # Keyed on the division and not on the rank, because a fetch is: a rank this page never published
+  # is answered — with a refusal — without a request, and a memoised failure is answered the same
+  # way.
+  def held?(key)
+    @divisions.key?(KEY_RE.match(key.to_s)&.captures&.second)
+  end
+
   def url(division)
     suffix = Tournaments::LimitlessEventResults::DIVISION_PAGES.fetch(division)
 

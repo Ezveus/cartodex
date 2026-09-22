@@ -49,15 +49,40 @@ module Admin
       # `importable_rows.empty?`; this one has to ask the narrower question, or it would withhold it
       # on the one screen where blocked rows are the point.
       def confirm_action
-        if @plan.events.any?(&:blocked?)
-          return div(class: "flash flash-alert standings-import-refusal") do
-            plain "Nothing here can be imported until the event itself is corrected. "
-            plain "Confirming decks would not change that."
-          end
-        end
+        return blocked_action if @plan.events.any?(&:blocked?)
+        return over_limit_action if @plan.over_limit?
 
         div(class: "form-actions standings-import-confirm-actions") do
           button(type: "submit", class: "btn btn-primary") { "Confirm mappings and import" }
+        end
+      end
+
+      def blocked_action
+        div(class: "flash flash-alert standings-import-refusal") do
+          plain "Nothing here can be imported until the event itself is corrected. "
+          plain "Confirming decks would not change that."
+        end
+      end
+
+      # Nor does it survive the *ceiling*, and that had to be asked here rather than inherited.
+      # PlanTable prints the notice whatever `confirm:` says, but the button it withholds alongside
+      # it is its own — and this source renders it with `confirm: false`, so `PlanTable#confirmable?`
+      # (which does test `over_limit?`) is never consulted for it. The first preview cannot reach
+      # the ceiling, because every row of an unmapped deck is blocked and `importable_rows` is 0;
+      # the *second* one — where confirming the decks has finally made the rows count — rendered
+      # "N rows is over the 1000-row ceiling" with a working button directly beneath it. The click
+      # enqueues a run that raises PlanTooLarge and writes nothing, and the next preview makes the
+      # same offer again. EVENT_MAX_ROWS is 1000 against a largest Limitless event of 3752 players,
+      # so this is an ordinary major Regional and not a corner.
+      #
+      # Its own sentence, because the notice above names an event filter as a way out: true of the
+      # two sources whose run covers a page of events, false of this one, which covers one event by
+      # construction. The per-event cap is the only lever, so it is the only one named.
+      def over_limit_action
+        div(class: "flash flash-alert standings-import-refusal") do
+          plain "#{@plan.importable_rows.size} rows is over the #{@plan.max_rows}-row ceiling for "
+          plain "one run. Set a top-N-per-event cap above and preview again — a whole-event run "
+          plain "covers one event, so no event filter can narrow it."
         end
       end
     end

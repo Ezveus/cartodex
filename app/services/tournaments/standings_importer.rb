@@ -238,7 +238,7 @@ class Tournaments::StandingsImporter < ApplicationService
   def prefetch(event, row_plan)
     return if row_plan.row.list_url.blank?
 
-    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
+    @lists[row_plan] = fetch_list(row_plan)
     # A decklist that arrived is a unit of remote work that completed, so it clears the count for
     # the same reason a finished row does — otherwise four scattered pre-pass failures plus one
     # later row would "give up after five consecutive fetch failures" that were never consecutive.
@@ -583,7 +583,24 @@ class Tournaments::StandingsImporter < ApplicationService
   def list_text(row_plan)
     return @lists[row_plan] if @lists.key?(row_plan)
 
-    @lists[row_plan] = remote { @decklist_service.call(row_plan.row.list_url) }
+    @lists[row_plan] = fetch_list(row_plan)
+  end
+
+  # The pause and the failure counter apply to a list this run will actually go and get — the same
+  # rule #resolve_printing follows for a printing already held, and it is asked here for the same
+  # reason. The whole-event service answers one page per division and memoises it, so after the
+  # first row of a division every call is a Hash lookup: 572 of 575 on the reference event, each of
+  # which was sleeping the half-second courtesy pause for a request nobody was making, ~4.8 minutes
+  # of it, and #remote's own comment — "everything that leaves this machine goes through here" —
+  # was true only in that direction.
+  #
+  # `respond_to?` rather than an interface every decklist service has to declare: the two older
+  # sources fetch one URL per row, where the question has no answer and every call is remote.
+  def fetch_list(row_plan)
+    key = row_plan.row.list_url
+    return @decklist_service.call(key) if @decklist_service.try(:held?, key)
+
+    remote { @decklist_service.call(key) }
   end
 
   # Every printing is resolved *before* Decks::Fetcher opens its transaction. That transaction is a
