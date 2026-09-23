@@ -74,6 +74,13 @@ class Deck < ApplicationRecord
   # deck groups and the list_decks MCP tool — and each used to spell it out and re-explain it.
   scope :with_standard_pool, -> { includes(standard_pool: [ :first_card_set, :last_card_set ]) }
 
+  # The two orders /decks offers. `updated_at` moves with the deck's list and its results too
+  # (DeckCard and DeckResult touch their deck), which is what makes "most recently updated"
+  # mean the deck a member last worked on. LOWER because SQLite's default BINARY collation puts
+  # "abc" after "Zoroark"; it folds ASCII only. `id` breaks ties, so the order is deterministic.
+  scope :recently_updated, -> { order(updated_at: :desc, id: :desc) }
+  scope :alphabetical, -> { order(arel_table[:name].lower.asc, arel_table[:id].asc) }
+
   # Written by hand, not generated: Active Record refuses to define a scope named `public`
   # or `private`, since both are Module methods. `shared`/`unshared` is also the vocabulary
   # the Share modal and the badge use, so the column, the scopes and the UI agree.

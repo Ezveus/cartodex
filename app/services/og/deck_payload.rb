@@ -64,13 +64,13 @@ module Og
     # loaded association and issues no query.
     def notable_pokemon = Decks::ArchetypeDetector.notable_pokemon(@deck)
 
-    # DeckCard belongs_to :deck carries no `touch: true` (deck_card.rb:2), so adding,
-    # requantifying or removing a card leaves decks.updated_at alone — measured: create, update
-    # and destroy all leave it untouched. The deck-cards' count and newest timestamp are
-    # therefore terms of their own; without them the decklist would change the banner's content
-    # and never its address, which under Cache-Control: immutable is permanent. `touch: true` was
-    # the tempting fix and is rejected: it would move updated_at on every allocation write
-    # app-wide to serve this one feature. Both terms read the loaded rows, so both are free.
+    # DeckCard now touches its deck, because /decks sorts on decks.updated_at, so adding,
+    # requantifying or removing a card through Active Record moves updated_at. (This digest once
+    # rejected `touch: true` as too much to spend on the banner alone. The sort is what decided it.)
+    # The deck-cards' count and newest timestamp stay terms of their own anyway: a write that skips
+    # callbacks (`update_all`, `insert_all`, a fixture) touches nothing, and without those terms the
+    # decklist would change the banner's content and never its address, which under
+    # Cache-Control: immutable is permanent. Both terms read the loaded rows, so both are free.
     def digest
       Payload.digest_of([
         LAYOUT_VERSION, "deck", @deck.key, @deck.updated_at.to_i,

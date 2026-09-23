@@ -6,6 +6,9 @@ module Decks
 
     SUPPORT_OPTIONS = [ [ "All supports", "" ], [ "Physical", "physical" ], [ "TCG Live", "tcg_live" ] ].freeze
     PROXY_OPTIONS = [ [ "Any proxies", "" ], [ "With proxies", "with" ], [ "Without proxies", "without" ] ].freeze
+    # "" is the default order, so the card-filter controller's "any field set?" test shows Clear
+    # only once the member moves off it, and Clear brings the sort back along with the filters.
+    SORT_OPTIONS = [ [ "Recently updated", "" ], [ "Name (A–Z)", "name" ] ].freeze
 
     def initialize(decks:, pending_deck_imports: [], filters: {}, primary_options: [], secondary_options: [], over_allocated_deck_ids: [], over_allocation_count: 0)
       @decks = decks
@@ -93,6 +96,7 @@ module Decks
         filter_select(:secondary, secondary_options) if @secondary_options.any?
         filter_select(:support, SUPPORT_OPTIONS)
         filter_select(:proxies, PROXY_OPTIONS)
+        filter_select(:sort, SORT_OPTIONS)
         clear_link
       end
     end

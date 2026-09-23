@@ -43,7 +43,10 @@ module Search
       # with_standard_pool because a result row renders the deck's format badge, which names
       # the pool from both of its bounds — three extra queries per Standard deck, on every
       # keystroke, without it.
-      decks = deck_scope.order(:name).limit(@limit).with_standard_pool.includes(:archetype).to_a
+      #
+      # recently_updated is /decks' default order, which is where "See all N decks" lands: the
+      # first rows there are the rows shown here.
+      decks = deck_scope.recently_updated.limit(@limit).with_standard_pool.includes(:archetype).to_a
       cards = card_scope.order(:name, :set_name).limit(@limit).to_a
       tournaments = tournament_scope.order(date: :desc).limit(@limit).to_a
       shared_decks = shared_deck_scope.order(:name).limit(@limit)

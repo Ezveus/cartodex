@@ -461,4 +461,21 @@ class Search::GlobalTest < ActiveSupport::TestCase
     assert_equal [ "Metal Toolbox" ], @result.archetypes.map(&:name)
     assert_equal 1, @result.archetype_total
   end
+
+  # Only the member's own group follows /decks' new order; the shared group keeps its name order.
+  test "shared decks stay in name order while the member's own come newest first" do
+    alpha = users(:two).decks.create!(name: "Zoroark Alpha", shared: true, standard_pool: standard_pools(:twm_por))
+    alpha.update_columns(updated_at: 3.days.ago)
+    beta = users(:two).decks.create!(name: "Zoroark Beta", shared: true, standard_pool: standard_pools(:twm_por))
+    beta.update_columns(updated_at: 1.hour.ago)
+    old_own = @user.decks.create!(name: "Zoroark Aaa", standard_pool: standard_pools(:twm_por))
+    old_own.update_columns(updated_at: 3.days.ago)
+    new_own = @user.decks.create!(name: "Zoroark Zzz", standard_pool: standard_pools(:twm_por))
+    new_own.update_columns(updated_at: 1.hour.ago)
+
+    result = Search::Global.call(user: @user, query: "zoroark")
+
+    assert_equal [ "Zoroark Alpha", "Zoroark Beta" ], result.shared_decks.map(&:name)
+    assert_equal [ new_own, old_own ], result.decks
+  end
 end
