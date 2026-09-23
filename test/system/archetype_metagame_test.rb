@@ -29,6 +29,13 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     click_on archetype.name
     assert_selector "h1", text: archetype.name
 
+    # The archetype opens on its decks; the report is one click below them.
+    assert_current_path archetype_path(archetype)
+    assert_selector ".archetype-public-decks .deck-item", minimum: 1
+    assert_no_text "Recorded in Cartodex"
+    click_on "Analysis"
+    assert_current_path analysis_archetype_path(archetype)
+
     # Defaults to the most recent pool, which here is deliberately the *smaller* sample — that is
     # the design decision, and it is also why the notice has to be here.
     assert_text "Small sample: every percentage below is computed over"
@@ -46,7 +53,9 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_no_text "Small sample: every percentage below is computed over"
 
     # The chosen sample has to survive a reload, or a copied link points at something else.
-    assert_current_path(/pool=#{standard_pools(:twm_asc).id}/)
+    # …on the analysis itself, not by way of the front page's legacy redirect, which would land
+    # on the same URL and hide a form still posting to the wrong page.
+    assert_current_path(%r{\A/archetypes/#{archetype.slug}/analysis\?.*pool=#{standard_pools(:twm_asc).id}})
   end
 
   # One list is not a sample of itself: every card in it is played by "every list" and always in
@@ -62,7 +71,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "an archetype with one recorded list says so instead of calling it a settled core" do
     archetype = single_list_archetype
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
     assert_selector "h1", text: archetype.name
 
     assert_text "Only one list is recorded for this sample, so there is nothing to compare it " \
@@ -146,7 +155,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "the label badge sits on its own line, below the card name" do
     archetype = labelled_archetype
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
     assert_selector "h1", text: archetype.name
 
     row = find(".archetype-card-row", text: "ACE SPEC")
@@ -183,7 +192,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "a member switches the card report between types and roles, keeping the sample" do
     archetype = roled_archetype
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
     assert_selector "h1", text: archetype.name
     assert_selector ".archetype-category-header h3", text: "Pokémon"
     assert_no_text "A card is listed under every role it plays"
@@ -194,7 +203,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     assert_selector ".archetype-category-header h3", text: "No role recorded"
     assert_no_selector ".archetype-category-header h3", text: "Pokémon"
     assert_text "A card is listed under every role it plays"
-    assert_current_path(/group=role/)
+    assert_current_path(%r{\A/archetypes/[^/]+/analysis\?.*group=role})
     assert_current_path(/pool=#{standard_pools(:twm_por).id}/)
 
     click_on "Type"
@@ -217,7 +226,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "a member narrows the sample to one venue and the report follows the select" do
     archetype = split_venue_archetype
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
     assert_selector "h1", text: archetype.name
     assert_text "of these 4 lists"
     blended = find(".archetype-card-row", text: "Boss's Orders")
@@ -232,7 +241,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     # already on the page and Capybara returns instantly — the assertions below then read the
     # blended page. Measured: green locally, red on CI's slower parallel runner, where the row
     # still read "50 % of lists (2)" over four lists.
-    assert_current_path(/venue=paper/)
+    assert_current_path(%r{\A/archetypes/[^/]+/analysis\?.*venue=paper})
     assert_no_text "of these 4 lists"
 
     assert_equal "paper", find("select[name='venue']").value,
@@ -247,14 +256,14 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "changing the venue keeps the pool and the grouping the reader chose" do
     archetype = split_venue_archetype
 
-    visit archetype_path(archetype, pool: Archetypes::MetagameScope::ALL, group: "role")
+    visit analysis_archetype_path(archetype, pool: Archetypes::MetagameScope::ALL, group: "role")
     assert_selector ".archetype-category-header h3", text: "No role recorded"
 
     select "Online — 2 lists", from: "Venue"
 
     assert_current_path(/venue=online/)
     assert_current_path(/pool=all/)
-    assert_current_path(/group=role/)
+    assert_current_path(%r{\A/archetypes/[^/]+/analysis\?.*group=role})
     assert_selector ".archetype-category-header h3", text: "No role recorded"
   end
 
@@ -274,7 +283,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "the sample and venue labels are flex siblings and sit together" do
     archetype = split_venue_archetype
 
-    visit archetype_path(archetype, pool: Archetypes::MetagameScope::ALL)
+    visit analysis_archetype_path(archetype, pool: Archetypes::MetagameScope::ALL)
 
     assert_selector ".deck-filters > .archetype-sample-label", count: 2,
       visible: :all
@@ -310,7 +319,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   test "the heading's card count and copies figure stay together rather than being spread apart" do
     archetype = single_list_archetype
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
 
     # The header the assertion above waited for, not whichever one comes first — those are the
     # same element today and the test should not be the thing that assumes it.
@@ -340,7 +349,7 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
     archetype = single_list_archetype
     card = cards(:teal_mask_ogerpon_ex)
 
-    visit archetype_path(archetype)
+    visit analysis_archetype_path(archetype)
     assert_selector "h1", text: archetype.name
 
     click_on card.printing_label
@@ -483,7 +492,7 @@ class ArchetypeReportModesNarrowTest < ApplicationSystemTestCase
   end
 
   test "the mode links never overlap the heading and never push the header past the panel" do
-    visit archetype_path(reported_archetype)
+    visit analysis_archetype_path(reported_archetype)
     assert_selector ".archetype-report-header"
 
     boxes = evaluate_script(<<~JS)
@@ -576,9 +585,11 @@ class ArchetypePublicMetagameTest < ApplicationSystemTestCase
     click_on archetype.name
 
     assert_selector "h1", text: archetype.name
-    assert_text "Recorded in Cartodex"
     # The address is the slug, and this is where a copied link is what a visitor is handed.
-    assert_current_path(/\A\/archetypes\/#{archetype.slug}/)
+    assert_current_path archetype_path(archetype)
+    click_on "Analysis"
+    assert_text "Recorded in Cartodex"
+    assert_current_path analysis_archetype_path(archetype)
   end
 
   private

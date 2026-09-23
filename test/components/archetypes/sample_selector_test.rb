@@ -4,7 +4,7 @@ require "test_helper"
 # file existed, only ever exercised in the one combination the production data happens to hold.
 # Every test below pins one of them against a scope built by hand.
 #
-# Rendered through ApplicationController.renderer: the form's action is `archetype_path`, which
+# Rendered through ApplicationController.renderer: the form's action is `analysis_archetype_path`, which
 # Phlex::Rails resolves through a view_context.
 class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
   ALL = Archetypes::MetagameScope::ALL
@@ -24,6 +24,15 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
 
     assert_includes html, %(<select name="pool")
     assert_includes html, %(<option value="9" selected>)
+  end
+
+  # The report lives one level below the archetype's front page, and a form posting to the front
+  # page would still *work* — its legacy redirect forwards the parameters — which is exactly why
+  # only the action itself can say which page the form belongs to.
+  test "the sample form submits to the analysis, not to the archetype's front page" do
+    html = selector(lists_count: 3, options: [ pool_option("9", 3), pool_option("8", 22), all_option(25) ])
+
+    assert_match %r{<form action="/archetypes/[^"/]+/analysis"}, html
   end
 
   # The note explains a distinction — a list counted under "All formats" and under no pool — that

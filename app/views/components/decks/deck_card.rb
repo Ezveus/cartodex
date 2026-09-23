@@ -5,11 +5,19 @@ module Decks
     # and the compare checkbox (whose controller a public page does not carry). One keyword
     # rather than three because they are one decision, and the next caller cannot get one of
     # them wrong.
-    def initialize(deck:, with_actions: true, over_allocated: false, public_listing: false)
+    #
+    # `caption` and `archetype_badge` are for a listing that is already *about* one archetype
+    # (Archetypes::ShowView): the caption says where a list was played, and the badge would repeat
+    # the page's own heading — or, on a field list, name the deck's own tag, the column that
+    # contradicts its standing (see Archetypes::DeckList). Both only reach the public badges.
+    def initialize(deck:, with_actions: true, over_allocated: false, public_listing: false,
+                   caption: nil, archetype_badge: true)
       @deck = deck
       @with_actions = with_actions
       @over_allocated = over_allocated
       @public_listing = public_listing
+      @caption = caption
+      @archetype_badge = archetype_badge
     end
 
     def view_template
@@ -30,11 +38,12 @@ module Decks
         # "Content missing" error. Break out to the top level instead.
         a(href: Rails.application.routes.url_helpers.deck_path(@deck), class: "deck-item-link", data: { turbo_frame: "_top" }) do
           h2 { @deck.name }
+          p(class: "deck-caption") { @caption } if @caption.present?
           # Physical, TCG Live, Proxies and Shared all describe how the owner keeps the deck;
           # the first three of those read the collection through it. A public listing gets the
           # format and the archetype only.
           if @public_listing
-            render Decks::PublicBadges.new(deck: @deck)
+            render Decks::PublicBadges.new(deck: @deck, archetype_badge: @archetype_badge)
           else
             render Decks::ClassificationBadges.new(deck: @deck, over_allocated: @over_allocated)
           end

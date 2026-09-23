@@ -1,22 +1,18 @@
 module Archetypes
-  # The metagame page of one archetype: who it is, which sample the reader is looking at, what it
-  # has been recorded doing, and what its recorded lists play.
+  # The front page of one archetype: its decks. The reader's own come first, then every public
+  # one, most recent event first. The metagame report is one click away, on
+  # Archetypes::AnalysisView — see Archetypes::DeckList for which decks belong and why.
   #
-  # Every number on this page is a count of what Cartodex holds, never a share of a field. A
-  # standings sheet imported from one archetype's Limitless page contains only that archetype's
-  # rows, so the database never sees the rest of the event and cannot produce a metagame share —
-  # which is why the performance panel's heading says "recorded in Cartodex" rather than naming
-  # the field, and why no component here divides by anything but the sample.
-  #
-  # The four collaborators are handed in whole rather than rebuilt: Archetypes::MetagameScope
-  # decides which standings count, and letting a view ask that question a second time is how the
-  # panel and the report end up describing two different populations.
+  # The pager makes full page visits and sits in no Turbo Frame, on purpose: the page has no live
+  # filter for a frame to serve, and a frame-navigated action under a `rate_limit` swallows its 429
+  # without a trace (the trap docs/architecture/deck-odds.md records for decks#odds).
   class ShowView < ApplicationComponent
-    def initialize(archetype:, scope:, stats:, performance:)
+    # `recorded` says whether the archetype has standings at all. It is only asked for when the
+    # public list is empty, where it decides whether the empty state points at the analysis.
+    def initialize(archetype:, list:, recorded: false)
       @archetype = archetype
-      @scope = scope
-      @stats = stats
-      @performance = performance
+      @list = list
+      @recorded = recorded
     end
 
     def view_template
@@ -24,15 +20,61 @@ module Archetypes
         render Ui::PageHeader.new(title: @archetype.name) do
           div(class: "decks-header-actions") do
             render Ui::ArchetypeBadge.new(archetype: @archetype)
+            link_to "Analysis", analysis_archetype_path(@archetype), class: "btn btn-primary"
             link_to "Back to Archetypes", archetypes_path, class: "btn btn-secondary"
           end
         end
 
-        render Archetypes::Identity.new(archetype: @archetype)
-        render Archetypes::SampleSelector.new(scope: @scope, grouping: @stats.grouping)
-        render Archetypes::PerformancePanel.new(performance: @performance)
-        render Archetypes::CardReport.new(stats: @stats, scope: @scope)
-        render Archetypes::MethodNote.new
+        own_decks if @list.own_decks.any?
+        public_decks
+      end
+    end
+
+    private
+
+    def own_decks
+      section(class: "archetype-decks archetype-own-decks") do
+        h2 { "Your decks" }
+        grid(@list.own_decks) { |deck| deck.shared? ? "Shared" : "Private" }
+      end
+    end
+
+    def public_decks
+      section(class: "archetype-decks archetype-public-decks") do
+        h2 { "Decks" }
+        if @list.decks.any?
+          p(class: "archetype-decks-count") { "#{@list.total} public #{'deck'.pluralize(@list.total)}" }
+          grid(@list.decks) { |deck| Archetypes::DeckList.caption_for(deck) }
+          render Ui::Pagination.new(
+            page: @list.page, pages: @list.pages,
+            href: ->(page) { archetype_path(@archetype, page: page) }
+          )
+        else
+          empty_state
+        end
+      end
+    end
+
+    # `public_listing: true` for the reader's own decks too: the owner's badges (Physical,
+    # Proxies…) read the collection and belong on /decks, and the compare checkbox needs the
+    # controller only that page carries.
+    def grid(decks, &caption)
+      div(class: "decks-grid") do
+        decks.each do |deck|
+          render Decks::DeckCard.new(deck: deck, with_actions: false, public_listing: true,
+                                     caption: caption.call(deck), archetype_badge: false)
+        end
+      end
+    end
+
+    def empty_state
+      p(class: "empty-state") do
+        plain "No public deck of this archetype yet."
+        if @recorded
+          plain " Its recorded results are in the "
+          link_to "analysis", analysis_archetype_path(@archetype)
+          plain "."
+        end
       end
     end
   end

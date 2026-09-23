@@ -43,7 +43,7 @@ class ArchetypesController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  publicly_reachable :index, :show
+  publicly_reachable :index, :show, :analysis
 
   PER_PAGE = 24
 
@@ -72,7 +72,19 @@ class ArchetypesController < ApplicationController
   # protection one. `/tournaments` amplifies identically (measured: six hovers, six loads) and
   # tournaments#show is still uncapped; that is its own decision and not this one.
   SHOW_RATE_LIMIT_TO = 120
+  # **60 for the analysis**, the number the app gives a page reached by deliberate navigation
+  # (tournaments#index, decks#shared). Since the report moved off the archetype's front page, the
+  # index's 24 hover-prefetched row links point at the deck list (#show) and not here: the report is
+  # reached by the list's one Analysis button and by its own controls, the sample select and the two
+  # mode links, each a full page visit and none of them a Turbo Frame — so a 429 here renders as a
+  # page rather than vanishing into a frame (docs/architecture/deck-odds.md).
+  ANALYSIS_RATE_LIMIT_TO = 60
   RATE_LIMIT_WITHIN = 1.minute
+
+  # The three parameters only the report ever read. A request to the front page carrying any of
+  # them is a link to the report from before it moved — shared since the report became public —
+  # and is sent on to it.
+  LEGACY_REPORT_PARAMS = %w[pool venue group].freeze
 
   rate_limit to: INDEX_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "archetypes-index", unless: -> { user_signed_in? },
@@ -81,6 +93,10 @@ class ArchetypesController < ApplicationController
   rate_limit to: SHOW_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "archetypes-show", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :show
+
+  rate_limit to: ANALYSIS_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "archetypes-analysis", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :analysis
 
   def index
     authorize Archetype, :index?
@@ -101,7 +117,36 @@ class ArchetypesController < ApplicationController
     @counts = Archetypes::IndexCounts.call(archetype_ids: @archetypes.map(&:id))
   end
 
+  # The archetype's front page: its decks — the reader's own, then every public one. Which decks
+  # belong is Archetypes::DeckList's question, and why it reads two columns is written there.
   def show
+    # The two member cards are what Og::ArchetypePayload and the header badge read, and nothing
+    # else here reads the archetype's associations.
+    @archetype = Archetype.preload(:primary_card, :secondary_card).find_by!(slug: params[:id])
+    authorize @archetype
+
+    # After `authorize`, which nothing in this controller precedes. Read off
+    # `request.query_parameters`, a plain Hash, and not `params.slice`: an
+    # ActionController::Parameters handed to a URL helper raises UnfilteredParameters — a 500 on
+    # `?pool[]=junk` — while the Hash re-emits whatever shape arrived and leaves the report's own
+    # clamps to deal with it, as they already do. Sliced to the three, never passed whole: a URL
+    # helper reads `host`, `only_path` and `id` out of the same Hash, so the whole query string
+    # would let `?only_path=false&host=…` build the redirect's target.
+    legacy = request.query_parameters.slice(*LEGACY_REPORT_PARAMS)
+    if legacy.any?
+      return redirect_to analysis_archetype_path(@archetype, legacy), status: :moved_permanently
+    end
+
+    @list = Archetypes::DeckList.call(archetype: @archetype, viewer: current_user, page: requested_page)
+    # Only asked when there is nothing to list, where it decides whether the empty state points at
+    # the analysis: one indexed EXISTS, and none on a page that has decks.
+    @recorded = @list.decks.empty? && @archetype.tournament_standings.exists?
+
+    @og_payload = Og::ArchetypePayload.call(@archetype)
+  end
+
+  # The metagame report, one level below the deck list.
+  def analysis
     # Preloaded because Archetypes::Identity reads all four: both member cards (their art, name
     # and printing_label), the parent this is a variant of, and the variants of it. Left lazy
     # that is four more queries on a page whose whole point is that its cost does not move with

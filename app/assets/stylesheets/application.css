@@ -1321,6 +1321,12 @@ textarea.form-input {
   color: var(--secondary-color);
 }
 
+/* Where a list was played, on an archetype's deck list (Archetypes::ShowView). */
+.deck-caption {
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
 .deck-item-actions {
   position: absolute;
   top: 0.75rem;

@@ -1185,6 +1185,11 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       "the description must sit inside the deck's link too"
     assert_empty link.css("a"),
       "the archetype badge must not be a link inside the deck card's link"
+    # …and the badge is there at all: an empty link passes the line above trivially, and the
+    # shared grid keeps Decks::DeckCard's `archetype_badge: true` default, which only the
+    # archetype's own page turns off.
+    assert link.at_css(".deck-badges", text: archetypes(:ogerpon).name),
+      "the shared grid names the deck's archetype"
   end
 
   test "the dashboard showcase's deck tiles carry no nested anchor either" do
