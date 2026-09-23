@@ -1353,15 +1353,17 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Three decks whose name, id and created_at orders all disagree with their updated_at order, so
-  # the default sort cannot pass by accident on any of the other three columns. "alpha" is
+  # the default sort cannot pass by accident on any of the other three columns, in either
+  # direction: expected [newest, middle, @deck]; created_at ASC is [middle, newest, @deck] and DESC
+  # [@deck, newest, middle]; id ASC is [@deck, newest, middle] (fixture ids sit below new rows'). "alpha" is
   # lowercase so that a case-sensitive name sort (BINARY puts it after "Zebra") is caught too.
   def decks_in_three_orders
     @deck.update!(name: "Middle")
     @deck.update_columns(created_at: 1.day.ago, updated_at: 5.days.ago)
     newest = @user.decks.create!(name: "Zebra", standard_pool: standard_pools(:twm_por))
-    newest.update_columns(created_at: 9.days.ago, updated_at: 1.hour.ago)
+    newest.update_columns(created_at: 3.days.ago, updated_at: 1.hour.ago)
     middle = @user.decks.create!(name: "alpha", standard_pool: standard_pools(:twm_por))
-    middle.update_columns(created_at: 3.days.ago, updated_at: 2.days.ago)
+    middle.update_columns(created_at: 9.days.ago, updated_at: 2.days.ago)
     [ newest, middle, @deck ]
   end
 
@@ -1446,12 +1448,18 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # The spotlight's "See all N decks" lands on /decks with only `q`: the rows it showed have to be
   # the first rows there.
   test "the spotlight's decks are the first rows of the page its See all link opens" do
-    decks_in_three_orders
-    @user.decks.each { |deck| deck.update_columns(name: "Ogerpon #{deck.name}") }
+    expected = decks_in_three_orders.first(2).map(&:id)
+    # update_columns keeps the three updated_at values; name_normalized is what Deck.search reads.
+    @user.decks.each do |deck|
+      name = "Ogerpon #{deck.name}"
+      deck.update_columns(name: name, name_normalized: name.downcase)
+    end
 
     spotlight = Search::Global.call(user: @user, query: "ogerpon", limit: 2).decks.map(&:id)
     get decks_path(q: "ogerpon")
 
+    # Pinned, not only paired: both sides agreeing on the wrong order would satisfy the pairing.
+    assert_equal expected, spotlight
     assert_equal spotlight, rendered_deck_ids.first(2)
   end
 end
