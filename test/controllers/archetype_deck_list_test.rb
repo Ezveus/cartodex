@@ -103,6 +103,27 @@ class ArchetypeDeckListTest < ActionDispatch::IntegrationTest
     assert_select ".empty-state a[href=?]", analysis_archetype_path(@archetype)
   end
 
+  test "an empty list says \"other\" to the owner of the archetype's only shared deck" do
+    member_deck(users(:one), @archetype, shared: true, name: "Only Shared")
+
+    sign_in users(:one)
+    get archetype_path(@archetype)
+    assert_select ".archetype-own-decks .deck-item h2", text: "Only Shared"
+    assert_select ".empty-state", text: "No other public deck of this archetype yet."
+
+    # Their private deck leaves nothing public out, so the plain sentence stays true.
+    @archetype.decks.update_all(shared: false)
+    get archetype_path(@archetype)
+    assert_select ".empty-state", text: "No public deck of this archetype yet."
+
+    # A visitor sees the shared deck in the list itself, and no empty state at all.
+    @archetype.decks.update_all(shared: true)
+    sign_out users(:one)
+    get archetype_path(@archetype)
+    assert_select ".archetype-public-decks .deck-item h2", text: "Only Shared"
+    assert_select ".empty-state", count: 0
+  end
+
   # Full visits, not a frame: a frame-navigated action under a rate_limit swallows its 429.
   test "the pager navigates the page, clamps its number, and survives a malformed one" do
     25.times { |i| record(@archetype, deck: field_list(name: "Paged #{i}")) }

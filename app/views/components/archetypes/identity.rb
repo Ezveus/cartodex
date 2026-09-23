@@ -62,6 +62,9 @@ module Archetypes
       end
     end
 
+    # `archetype_path` and not `analysis_archetype_path`, although Identity only renders on the
+    # analysis: a lineage link goes to another archetype, and an archetype's front page is its deck
+    # list. The reader's pool and venue would not carry over either way — they are this report's.
     def lineage
       return if lineage_parts.empty?
 

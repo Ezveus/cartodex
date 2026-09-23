@@ -75,9 +75,11 @@ module Archetypes
       @list.own_decks.any?(&:shared?) ? "#{count} besides yours" : count
     end
 
+    # The same correction as `decks_count`, on the branch it never reaches: when the reader's own
+    # shared deck is the archetype's only public one, "No public deck" would sit right under it.
     def empty_state
       p(class: "empty-state") do
-        plain "No public deck of this archetype yet."
+        plain @list.own_decks.any?(&:shared?) ? "No other public deck of this archetype yet." : "No public deck of this archetype yet."
         if @recorded
           plain " Its recorded results are in the "
           link_to "analysis", analysis_archetype_path(@archetype)
