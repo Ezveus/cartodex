@@ -34,7 +34,7 @@ skip callbacks (`update_all`, `insert_all`, fixtures).
 
 - `belongs_to … touch: true` goes through `touch_later`, which merges every touch in one
   transaction into a single `UPDATE decks`. A 60-card import therefore adds one statement inside
-  `Decks::Fetcher`'s `BEGIN IMMEDIATE`, not 60. A test pins this.
+  `Decks::Fetcher`'s `BEGIN IMMEDIATE`, not 60. When an archetype matches, `Fetcher`'s own `update!(archetype:)` is a second statement, as it was before. A test pins this for a bulk add.
 - A reallocation moves copies between two decks, so it bumps both.
 - Recording a result now changes the deck's banner digest, so the banner is rendered one more time
   per recorded result.

@@ -558,22 +558,6 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck_results #deck-#{other.id}", false
   end
 
-  # The spotlight orders its five decks by name, so the page behind "See all N decks" has to open
-  # with the same rows — creation order would show the user a different five.
-  test "index lists decks in the order the spotlight promised" do
-    @deck.update!(name: "Zoroark Toolbox")
-    @user.decks.create!(name: "Ancient Toolbox", standard_pool: standard_pools(:twm_por))
-    @user.decks.create!(name: "Miraidon Toolbox", standard_pool: standard_pools(:twm_por))
-
-    get decks_path(q: "toolbox")
-
-    assert_response :success
-    grid = css_select("#decks-grid .deck-item").map { |item| item["id"].delete_prefix("deck-").to_i }
-    spotlight = Search::Global.call(user: @user, query: "toolbox").decks.map(&:id)
-
-    assert_equal spotlight, grid.first(spotlight.size)
-  end
-
   # Turbo keeps #deck_results and discards the rest of the response, so the import banner and the
   # filter bar's two option lists must not be queried for a keystroke.
   test "a frame request skips the queries that only feed the page outside the frame" do
@@ -1392,7 +1376,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal expected.map(&:id), rendered_deck_ids
-    assert_select "select[name=sort] option[selected][value='']", text: "Recently updated"
+    assert_select "form.deck-filters[data-turbo-frame=deck_results] select[name=sort] option[selected][value='']",
+                  text: "Recently updated"
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]"
   end
 
   test "index sorts decks by name, ignoring case, when asked" do
@@ -1402,7 +1388,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
-    assert_select "select[name=sort] option[selected][value=name]"
+    assert_select "form.deck-filters[data-turbo-frame=deck_results] select[name=sort] option[selected][value=name]"
+    # Off the default order counts as a state Clear resets, the same test card-filter runs in JS.
+    assert_select "form.deck-filters a[data-card-filter-target=clear]:not([hidden])"
   end
 
   test "index falls back to the default order on an unknown sort" do
@@ -1428,6 +1416,31 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
+  end
+
+  # Out of scope for the new order: the public listing still puts the newest *shared* deck first,
+  # and updated_at — now the tempting column — must not leak into it.
+  test "the shared listing keeps its created_at order" do
+    older = users(:two).decks.create!(name: "Older share", shared: true, standard_pool: standard_pools(:twm_por))
+    older.update_columns(created_at: 1.day.ago, updated_at: 1.hour.ago)
+    newer = users(:two).decks.create!(name: "Newer share", shared: true, standard_pool: standard_pools(:twm_por))
+    newer.update_columns(created_at: 1.hour.ago, updated_at: 3.days.ago)
+
+    get shared_decks_path
+
+    ids = rendered_deck_ids
+    assert_operator ids.index(newer.id), :<, ids.index(older.id)
+  end
+
+  # Sharing changes who can see a deck, not what it is, so it must not float the deck to the top.
+  test "sharing a deck does not move its updated_at" do
+    @deck.update_columns(updated_at: 3.days.ago)
+    stamp = @deck.reload.updated_at
+
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert @deck.reload.shared
+    assert_equal stamp.to_i, @deck.updated_at.to_i
   end
 
   # The spotlight's "See all N decks" lands on /decks with only `q`: the rows it showed have to be
