@@ -1367,6 +1367,80 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
     )
   end
+
+  # Three decks whose name, id and created_at orders all disagree with their updated_at order, so
+  # the default sort cannot pass by accident on any of the other three columns. "alpha" is
+  # lowercase so that a case-sensitive name sort (BINARY puts it after "Zebra") is caught too.
+  def decks_in_three_orders
+    @deck.update!(name: "Middle")
+    @deck.update_columns(created_at: 1.day.ago, updated_at: 5.days.ago)
+    newest = @user.decks.create!(name: "Zebra", standard_pool: standard_pools(:twm_por))
+    newest.update_columns(created_at: 9.days.ago, updated_at: 1.hour.ago)
+    middle = @user.decks.create!(name: "alpha", standard_pool: standard_pools(:twm_por))
+    middle.update_columns(created_at: 3.days.ago, updated_at: 2.days.ago)
+    [ newest, middle, @deck ]
+  end
+
+  def rendered_deck_ids
+    response.body.scan(/id="deck-(\d+)"/).flatten.map(&:to_i)
+  end
+
+  test "index lists decks most recently updated first by default" do
+    expected = decks_in_three_orders
+
+    get decks_path
+
+    assert_response :success
+    assert_equal expected.map(&:id), rendered_deck_ids
+    assert_select "select[name=sort] option[selected][value='']", text: "Recently updated"
+  end
+
+  test "index sorts decks by name, ignoring case, when asked" do
+    newest, middle, original = decks_in_three_orders
+
+    get decks_path(sort: "name")
+
+    assert_response :success
+    assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
+    assert_select "select[name=sort] option[selected][value=name]"
+  end
+
+  test "index falls back to the default order on an unknown sort" do
+    expected = decks_in_three_orders
+
+    [ "created_at", "name; DROP TABLE decks", "" ].each do |sort|
+      get decks_path(sort: sort)
+
+      assert_response :success
+      assert_equal expected.map(&:id), rendered_deck_ids, "sort=#{sort.inspect}"
+    end
+    get decks_path(sort: [ "name" ])
+    assert_equal expected.map(&:id), rendered_deck_ids, "an array param must not sort"
+  end
+
+  # The filter bar submits into the results frame, so the sort has to hold there as well as on a
+  # full page, and alongside a filter rather than instead of one.
+  test "the name sort holds on a frame request alongside a filter" do
+    newest, middle, original = decks_in_three_orders
+    @user.decks.create!(name: "Expanded one", format: "expanded")
+
+    get decks_path(sort: "name", format: "standard"), headers: { "Turbo-Frame" => "deck_results" }
+
+    assert_response :success
+    assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
+  end
+
+  # The spotlight's "See all N decks" lands on /decks with only `q`: the rows it showed have to be
+  # the first rows there.
+  test "the spotlight's decks are the first rows of the page its See all link opens" do
+    decks_in_three_orders
+    @user.decks.each { |deck| deck.update_columns(name: "Ogerpon #{deck.name}") }
+
+    spotlight = Search::Global.call(user: @user, query: "ogerpon", limit: 2).decks.map(&:id)
+    get decks_path(q: "ogerpon")
+
+    assert_equal spotlight, rendered_deck_ids.first(2)
+  end
 end
 
 # The picker was soldered to a deck: it read @deck.key for the Suggest button and

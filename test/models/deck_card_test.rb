@@ -56,4 +56,41 @@ class DeckCardTest < ActiveSupport::TestCase
     assert_includes DeckCard.with_proxies, proxied
     assert_not_includes DeckCard.with_proxies, backed
   end
+
+  # /decks sorts on decks.updated_at, and editing the list is editing the deck. Each write is
+  # travelled a day ahead of the last so that a touch cannot hide inside the same second.
+  test "creating, requantifying and removing a card each move the deck's updated_at" do
+    deck = decks(:one)
+    deck.update_columns(updated_at: 3.days.ago)
+
+    travel_to(2.days.ago) { @row = deck.deck_cards.create!(card: cards(:doublade), quantity: 1) }
+    assert_in_delta 2.days.ago, deck.reload.updated_at, 1.minute
+
+    travel_to(1.day.ago) { @row.update!(quantity: 2) }
+    assert_in_delta 1.day.ago, deck.reload.updated_at, 1.minute
+
+    @row.destroy!
+    assert_in_delta Time.current, deck.reload.updated_at, 1.minute
+  end
+
+  # belongs_to's touch goes through touch_later, which folds every touch of one transaction into a
+  # single UPDATE. Without that, a 60-card import would add 60 statements inside Decks::Fetcher's
+  # BEGIN IMMEDIATE, the one write lock the whole app shares.
+  test "a bulk add touches its deck with a single UPDATE" do
+    deck = decks(:one)
+    updates = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      updates << payload[:sql] if payload[:sql].match?(/\AUPDATE "decks"/)
+    end
+
+    Decks::BulkCardAdder.call(deck: deck, resolved: [
+      { card: cards(:doublade), quantity: 2 },
+      { card: cards(:trainer_card), quantity: 3 },
+      { card: cards(:teal_mask_ogerpon_ex), quantity: 1 }
+    ])
+
+    assert_equal 1, updates.size, updates.join("\n")
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+  end
 end

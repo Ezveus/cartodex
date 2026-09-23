@@ -405,4 +405,27 @@ class DeckTest < ActiveSupport::TestCase
     assert_equal users(:one).email, decks(:one).owner_label
     assert_equal "Tournament field list", decks(:field_list).owner_label
   end
+
+  test "recently_updated puts the newest updated_at first and breaks ties on id" do
+    user = users(:one)
+    older = user.decks.create!(name: "A older", standard_pool: standard_pools(:twm_por))
+    tie_low = user.decks.create!(name: "B tie", standard_pool: standard_pools(:twm_por))
+    tie_high = user.decks.create!(name: "C tie", standard_pool: standard_pools(:twm_por))
+    stamp = 1.day.ago.change(usec: 0)
+    older.update_columns(updated_at: 2.days.ago)
+    tie_low.update_columns(updated_at: stamp)
+    tie_high.update_columns(updated_at: stamp)
+
+    assert_equal [ tie_high, tie_low, older ], Deck.where(id: [ older, tie_low, tie_high ]).recently_updated.to_a
+  end
+
+  # BINARY collation, SQLite's default, sorts every uppercase letter before every lowercase one.
+  test "alphabetical ignores case and breaks ties on id" do
+    user = users(:one)
+    zoroark = user.decks.create!(name: "Zoroark", standard_pool: standard_pools(:twm_por))
+    abc = user.decks.create!(name: "abc", standard_pool: standard_pools(:twm_por))
+    abc_upper = user.decks.create!(name: "ABC", standard_pool: standard_pools(:twm_por))
+
+    assert_equal [ abc, abc_upper, zoroark ], Deck.where(id: [ zoroark, abc, abc_upper ]).alphabetical.to_a
+  end
 end

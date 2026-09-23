@@ -1,5 +1,7 @@
 class DeckResult < ApplicationRecord
-  belongs_to :deck
+  # touch: recording a result counts as working on the deck for /decks' "most recently updated"
+  # order — see DeckCard.
+  belongs_to :deck, touch: true
   belongs_to :archetype, optional: true
   belongs_to :tournament_entry, optional: true
 
