@@ -64,6 +64,14 @@ class ArchetypeDeckListTest < ActionDispatch::IntegrationTest
     own = doc.css(".archetype-own-decks .deck-item").map { |n| [ n.at_css("h2").text, n.at_css(".deck-caption")&.text ] }
     assert_equal [ [ "Alpha", "Shared" ], [ "Zeta", "Private" ] ], own
     assert_equal [ "Public List" ], doc.css(".archetype-public-decks .deck-item h2").map(&:text)
+    # Alpha is public too, so the count under "Decks" says what it leaves out; a visitor, who sees
+    # Alpha in that list, reads the plain total.
+    assert_equal "1 public deck besides yours", doc.at_css(".archetype-decks-count").text
+    sign_out users(:one)
+    get archetype_path(@archetype)
+    assert_select ".archetype-decks-count", text: "2 public decks"
+    sign_in users(:one)
+    get archetype_path(@archetype)
 
     # public_listing: true for the reader's own decks too — no collection badges, no compare
     # checkbox whose controller this page does not carry.

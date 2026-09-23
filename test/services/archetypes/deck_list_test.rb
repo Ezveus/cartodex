@@ -111,20 +111,56 @@ class Archetypes::DeckListTest < ActiveSupport::TestCase
       deck = field_list
       record(named, archetype, deck: deck, placement: placement)
 
-      assert_equal "EUIC 2026 — #{ordinal} · Masters", Archetypes::DeckList.caption_for(deck.reload)
+      assert_equal "EUIC 2026 — #{ordinal} · Masters", caption(archetype, deck)
     end
 
     unplaced = field_list
     record(named, archetype, deck: unplaced, division: "open")
-    assert_equal "EUIC 2026 · Open", Archetypes::DeckList.caption_for(unplaced.reload)
+    assert_equal "EUIC 2026 · Open", caption(archetype, unplaced)
 
-    assert_nil Archetypes::DeckList.caption_for(member_deck(users(:two), archetype, shared: true))
+    assert_nil caption(archetype, member_deck(users(:two), archetype, shared: true))
+  end
+
+  # A deck two standings point at is listed for the ones filed under this archetype, so it is
+  # sorted and captioned by those alone — and by one row of them, never a date from one and a
+  # placement from another.
+  test "a deck in two standings is sorted and captioned by this archetype's one" do
+    listed_as, elsewhere = archetype_of_its_own, archetype_of_its_own
+    shared = field_list
+    record(event(name: "Older Event", date: Date.new(2026, 1, 1)), listed_as, deck: shared, placement: 40)
+    record(event(name: "Newer Event", date: Date.new(2026, 6, 1)), elsewhere, deck: shared, placement: 1)
+    between = field_list.tap { |d| record(event(date: Date.new(2026, 3, 1)), listed_as, deck: d, placement: 5) }
+
+    assert_equal [ between.id, shared.id ], ids(listed_as)
+    assert_equal "Older Event — 40th · Masters", caption(listed_as, shared)
+    assert_equal "Newer Event — 1st · Masters", caption(elsewhere, shared)
+  end
+
+  test "among one archetype's standings of a deck, the latest event wins, then the best placement" do
+    archetype = archetype_of_its_own
+    deck = field_list
+    record(event(name: "Early", date: Date.new(2026, 1, 1)), archetype, deck: deck, placement: 1)
+    late = event(name: "Late", date: Date.new(2026, 6, 1))
+    record(late, archetype, deck: deck, placement: 30)
+    record(late, archetype, deck: deck, placement: 7)
+    # The deck sorts as June, 7th — its latest event, and its best placement *there*. A June 3rd
+    # therefore goes ahead of it; MAX(date) beside MIN(placement) would read it as June, 1st (the
+    # 1st is January's) and put it first.
+    june_third = field_list.tap { |d| record(late, archetype, deck: d, placement: 3) }
+    march = field_list.tap { |d| record(event(date: Date.new(2026, 3, 1)), archetype, deck: d, placement: 2) }
+
+    assert_equal [ june_third.id, deck.id, march.id ], ids(archetype)
+    assert_equal "Late — 7th · Masters", caption(archetype, deck)
   end
 
   private
 
   def list(archetype, viewer: nil, page: 1)
     Archetypes::DeckList.call(archetype: archetype, viewer: viewer, page: page)
+  end
+
+  def caption(archetype, deck)
+    list(archetype).caption_for(deck)
   end
 
   def ids(archetype, viewer: nil)

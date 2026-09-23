@@ -43,8 +43,8 @@ module Archetypes
       section(class: "archetype-decks archetype-public-decks") do
         h2 { "Decks" }
         if @list.decks.any?
-          p(class: "archetype-decks-count") { "#{@list.total} public #{'deck'.pluralize(@list.total)}" }
-          grid(@list.decks) { |deck| Archetypes::DeckList.caption_for(deck) }
+          p(class: "archetype-decks-count") { decks_count }
+          grid(@list.decks) { |deck| @list.caption_for(deck) }
           render Ui::Pagination.new(
             page: @list.page, pages: @list.pages,
             href: ->(page) { archetype_path(@archetype, page: page) }
@@ -65,6 +65,14 @@ module Archetypes
                                      caption: caption.call(deck), archetype_badge: false)
         end
       end
+    end
+
+    # The reader's own shared decks are public too, but they sit in "Your decks" and not here, so
+    # the bare "N public decks" would print one short for their owner while a visitor reads the
+    # true number.
+    def decks_count
+      count = "#{@list.total} public #{'deck'.pluralize(@list.total)}"
+      @list.own_decks.any?(&:shared?) ? "#{count} besides yours" : count
     end
 
     def empty_state
