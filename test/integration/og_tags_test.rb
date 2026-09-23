@@ -51,6 +51,12 @@ class OgTagsTest < ActionDispatch::IntegrationTest
     assert_equal archetype.name, og("og:title")
     assert_equal archetype_url(archetype.slug), og("og:url")
 
+    # The analysis shares the banner, and names the front page as the canonical address: that is
+    # the page a shared link should open on.
+    get analysis_archetype_path(archetype)
+    assert_includes og("og:image"), "/og/archetypes/#{archetype.slug}"
+    assert_equal archetype_url(archetype.slug), og("og:url")
+
     card = cards(:doublade)
     get card_path(card)
     assert_includes og("og:image"), "/og/cards/#{card.id}"

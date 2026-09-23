@@ -88,6 +88,7 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
 
     assert_active_nav [ "Archetypes" ], archetypes_path
     assert_active_nav [ "Archetypes" ], archetype_path(archetypes(:ogerpon))
+    assert_active_nav [ "Archetypes" ], analysis_archetype_path(archetypes(:ogerpon))
   end
 
   # The hole this closes: `Ui::NavLinks.section_for` resolves both archetype pages to
@@ -98,6 +99,7 @@ class NavbarActiveSectionTest < ActionDispatch::IntegrationTest
   test "a visitor's archetype pages light the archetype entry alone" do
     assert_active_nav [ "Archetypes" ], archetypes_path
     assert_active_nav [ "Archetypes" ], archetype_path(archetypes(:ogerpon))
+    assert_active_nav [ "Archetypes" ], analysis_archetype_path(archetypes(:ogerpon))
   end
 
   test "a visitor's tournament pages light the catalog entry" do

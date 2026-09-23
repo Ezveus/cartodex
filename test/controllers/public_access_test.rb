@@ -341,7 +341,8 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       # is still covered; what is not is "a *missing* authorize would be caught here", and the
       # concern's own after_action is what answers that for a request that reaches the action.
       "archetypes index" => archetypes_path,
-      "archetype page" => archetype_path(archetypes(:standings_marker))
+      "archetype page" => archetype_path(archetypes(:standings_marker)),
+      "archetype analysis" => analysis_archetype_path(archetypes(:standings_marker))
     }
   end
 

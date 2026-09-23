@@ -284,8 +284,8 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 5, sql.size, "the visitor catalog cost #{sql.size} queries:\n#{sql.join("\n")}"
   end
 
-  test "show renders the archetype's report" do
-    get archetype_path(archetypes(:standings_marker))
+  test "the analysis renders the archetype's report" do
+    get analysis_archetype_path(archetypes(:standings_marker))
 
     assert_response :success
     assert_select "h1", text: /Standings Marker/
@@ -295,12 +295,12 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # Archetypes::NameGroupRowTest because the component test builds its own Cards and invents their
   # ids — this is the only thing that proves the id reaching the page is the id of the card the
   # report actually chose.
-  test "show names each card's printing and links it to that card" do
+  test "the analysis names each card's printing and links it to that card" do
     archetype = quiet_archetype(700, name: "Linked Archetype")
     standing = listed_standing_for(archetype, 700)
     card = standing.deck.deck_cards.first.card
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-card-row a.archetype-card-name-text[href=?]",
@@ -311,11 +311,11 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # (one *fingerprint*, two rows) leave a single row naming one of them while its share and its
   # copies count both. Only a rendered page proves the note and the row agree, since the count is
   # taken in the service and the sentence written three components away.
-  test "show says when a card below is played in more than one printing, and not otherwise" do
+  test "the analysis says when a card below is played in more than one printing, and not otherwise" do
     folded = quiet_archetype(720, name: "Reprinted Archetype")
     reprint_standing_for(folded, 720)
 
-    get archetype_path(folded)
+    get analysis_archetype_path(folded)
 
     assert_response :success
     assert_select ".archetype-reprint-note", text: /1 card below is played in more than one printing/
@@ -325,7 +325,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     settled = quiet_archetype(730, name: "Single Printing Archetype")
     listed_standing_for(settled, 730)
 
-    get archetype_path(settled)
+    get analysis_archetype_path(settled)
 
     assert_response :success
     assert_select ".archetype-reprint-note", count: 0
@@ -337,11 +337,11 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # test. Two printings of one *name* under two different fingerprints is the shape, and the
   # assertion is on two distinct hrefs: counting the anchors stays green with both pointing at the
   # first entry's card.
-  test "show links each printing of a split name to its own card" do
+  test "the analysis links each printing of a split name to its own card" do
     archetype = quiet_archetype(710, name: "Split Name Archetype")
     first, second = split_name_standing_for(archetype, 710)
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-printing-row a[href=?]", card_path(first), text: first.printing_label
@@ -366,17 +366,17 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # the first hit, which is what `count_queries`/`capture_queries` cannot see and what would hide
   # this join regressing into one query per card. Read the count straight off `capture_queries`
   # rather than trusting `small`/`large` to agree by coincidence.
-  test "show issues a constant number of queries regardless of how many lists" do
+  test "the analysis issues a constant number of queries regardless of how many lists" do
     archetype = quiet_archetype(200, name: "Reported Archetype")
     3.times { |i| label_card(listed_standing_for(archetype, i)) }
 
-    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+    get analysis_archetype_path(archetype) # warm the session: the first request also loads the Devise user
 
-    small = capture_queries { get archetype_path(archetype) }
+    small = capture_queries { get analysis_archetype_path(archetype) }
 
     (3..9).each { |i| label_card(listed_standing_for(archetype, i)) }
 
-    large = capture_queries { get archetype_path(archetype) }
+    large = capture_queries { get analysis_archetype_path(archetype) }
 
     assert_response :success
     assert_select ".archetype-card-row", minimum: 1
@@ -387,14 +387,14 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
       "the label join ran more than once against the large sample"
   end
 
-  test "show badges a card's type label on its row" do
+  test "the analysis badges a card's type label on its row" do
     archetype = quiet_archetype(400, name: "Labelled Archetype")
     standing = listed_standing_for(archetype, 400)
     card = standing.deck.deck_cards.first.card
     label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10)
     label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
@@ -405,7 +405,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # exercised a card carrying both families at once, so a role label would have silently badged
   # beside the type one the day the seed added roles. Delete that `.select(&:type?)` call to watch
   # this go red.
-  test "show does not badge a card's role label" do
+  test "the analysis does not badge a card's role label" do
     archetype = quiet_archetype(420, name: "Roled Archetype")
     standing = listed_standing_for(archetype, 420)
     card = standing.deck.deck_cards.first.card
@@ -414,7 +414,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     role_label = CardLabel.create!(slug: "attacker", name: "Attacker", family: "role", position: 10)
     role_label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-card-row .archetype-card-label", text: "ACE SPEC"
@@ -426,7 +426,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # And the type badge keeps its place on the name line while the sections are role sections: the
   # two families answer two different questions about one card, so a mode that hid the badge would
   # make "is this an ACE SPEC?" a question the reader can only answer by switching modes.
-  test "show groups the card report by role when asked" do
+  test "the analysis groups the card report by role when asked" do
     archetype = quiet_archetype(480, name: "Roled Report Archetype")
     standing = role_card(listed_standing_for(archetype, 480), "gust", "Gust", 30)
     card = standing.deck.deck_cards.first.card
@@ -434,7 +434,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     ace_spec.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
     listed_standing_for(archetype, 481)
 
-    get archetype_path(archetype, group: "role")
+    get analysis_archetype_path(archetype, group: "role")
 
     assert_response :success
     assert_select ".archetype-category-header h3", text: "Gust"
@@ -448,11 +448,11 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # parameter this page reads: `?group[]=role` hands over an Array, which is neither the string
   # "role" nor anything that could be compared to it without raising. The report falls back to the
   # grouping it has always had rather than 404ing or blowing up.
-  test "show survives a malformed group parameter and stays in type mode" do
+  test "the analysis survives a malformed group parameter and stays in type mode" do
     archetype = quiet_archetype(500, name: "Malformed Group Archetype")
     listed_standing_for(archetype, 500)
 
-    get archetype_path(archetype, group: [ "role" ])
+    get analysis_archetype_path(archetype, group: [ "role" ])
 
     assert_response :success
     assert_select ".archetype-category-header h3", text: "Pokémon"
@@ -468,7 +468,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     archetype = quiet_archetype(520, name: "Fallback Archetype")
     listed_standing_for(archetype, 520)
 
-    get archetype_path(archetype, pool: [ "junk" ])
+    get analysis_archetype_path(archetype, pool: [ "junk" ])
 
     assert_response :success
     hrefs = css_select("a.archetype-report-mode").map { |link| link["href"] }
@@ -496,10 +496,10 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     role_card(listed_standing_for(archetype, 541), "search", "Search", 20)
     listed_standing_for(archetype, 542)
 
-    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+    get analysis_archetype_path(archetype) # warm the session: the first request also loads the Devise user
 
-    type_mode = capture_queries { get archetype_path(archetype) }
-    role_mode = capture_queries { get archetype_path(archetype, group: "role") }
+    type_mode = capture_queries { get analysis_archetype_path(archetype) }
+    role_mode = capture_queries { get analysis_archetype_path(archetype, group: "role") }
 
     assert_response :success
     assert_select ".archetype-category-header h3", text: "Draw"
@@ -516,12 +516,12 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # pool axis puts an online weekly and a Regional anchored to the same pool in one bucket, and the
   # online import forces `tier: "other"`, so `by_tier` cannot tell them apart either. This is the
   # request that proves both sentences reach the rendered page rather than merely the two services.
-  test "show names how much of the sample comes from online play" do
+  test "the analysis names how much of the sample comes from online play" do
     archetype = quiet_archetype(300, name: "Blended Archetype")
     2.times { |i| listed_standing_for(archetype, 300 + i) }
     3.times { |i| listed_standing_for(archetype, 310 + i, online: true) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-sample-note",
@@ -532,11 +532,11 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
   # And says nothing at all about it on a sample of paper events — a "0 online" line reads as a
   # warning about nothing.
-  test "show says nothing about online play when the sample holds none" do
+  test "the analysis says nothing about online play when the sample holds none" do
     archetype = quiet_archetype(320, name: "Paper Archetype")
     3.times { |i| listed_standing_for(archetype, 320 + i) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     # Against the raw body rather than assert_select: `assert_select "body", text: …, count: 0`
@@ -559,7 +559,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     2.times { |i| listed_standing_for(archetype, 600 + i) }
     3.times { |i| listed_standing_for(archetype, 610 + i, online: true) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     # One pool and both venues: the Venue select alone, and no Sample select — a `<select>` of one
     # option is the non-choice `Result#selectable?` exists to drop. 15 of the 24 blended
@@ -569,7 +569,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name=pool]", count: 0
     blended = css_select(".archetype-card-row").size
 
-    get archetype_path(archetype, venue: "paper")
+    get analysis_archetype_path(archetype, venue: "paper")
 
     assert_response :success
     assert_select "select[name=venue] option[selected]", text: /\APaper/
@@ -592,7 +592,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
                             deck: Deck.create!(name: "Older List 690", shared: true,
                                                standard_pool: standard_pools(:twm_asc)))
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_select ".archetype-sample-label", count: 2
     assert_select "select[name=pool]", count: 1
@@ -608,7 +608,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     archetype = quiet_archetype(620, name: "Clamped Archetype")
     2.times { |i| listed_standing_for(archetype, 620 + i) }
 
-    get archetype_path(archetype, venue: "online")
+    get analysis_archetype_path(archetype, venue: "online")
 
     assert_response :success
     assert_select ".archetype-card-row", minimum: 1
@@ -620,12 +620,12 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   end
 
   # `?venue[]=junk` hands over an Array, which no comparison here may assume is a String.
-  test "show survives a malformed venue parameter" do
+  test "the analysis survives a malformed venue parameter" do
     archetype = quiet_archetype(630, name: "Malformed Venue Archetype")
     listed_standing_for(archetype, 630)
     listed_standing_for(archetype, 631, online: true)
 
-    get archetype_path(archetype, venue: [ "junk" ])
+    get analysis_archetype_path(archetype, venue: [ "junk" ])
 
     assert_response :success
     assert_select "select[name=venue] option[selected]", text: /\AAll/
@@ -641,10 +641,10 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     2.times { |i| listed_standing_for(archetype, 640 + i) }
     2.times { |i| listed_standing_for(archetype, 650 + i, online: true) }
 
-    get archetype_path(archetype) # warm the session: the first request also loads the Devise user
+    get analysis_archetype_path(archetype) # warm the session: the first request also loads the Devise user
 
     counts = [ nil, "paper", "online" ].to_h do |venue|
-      queries = capture_queries { get archetype_path(archetype, venue: venue) }
+      queries = capture_queries { get analysis_archetype_path(archetype, venue: venue) }
       assert_select ".archetype-card-row", minimum: 1
       [ venue, queries.size ]
     end
@@ -660,7 +660,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     archetype = quiet_archetype(660, name: "All Online Archetype")
     2.times { |i| listed_standing_for(archetype, 660 + i, online: true) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-fact-muted", text: /comes from an online tournament|come from online/
@@ -679,7 +679,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     archetype = quiet_archetype(700, name: "Leaderboard Archetype")
     2.times { |i| listed_standing_for(archetype, 700 + i, online: true) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-fact-muted", text: /leaderboard of best finishes/
@@ -690,7 +690,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     2.times { |i| listed_standing_for(archetype, 710 + i) }
     2.times { |i| listed_standing_for(archetype, 715 + i, online: true) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_select ".archetype-fact-muted", text: /leaderboard of best finishes/
@@ -702,7 +702,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     archetype = quiet_archetype(720, name: "Paper Only Archetype")
     2.times { |i| listed_standing_for(archetype, 720 + i) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_response :success
     assert_no_match(/leaderboard of best finishes/, response.body)
@@ -717,14 +717,14 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     2.times { |i| listed_standing_for(archetype, 670 + i) }
     3.times { |i| open_division_standing_for(archetype, 680 + i) }
 
-    get archetype_path(archetype)
+    get analysis_archetype_path(archetype)
 
     assert_select ".data-table-cell", text: "Open"
     # Ui::Stat prints the value and its label as two elements, so the section's text runs them
     # together — "5standings5events5lists".
     assert_select ".deck-show-stats", text: /\A5\s*standings/
 
-    get archetype_path(archetype, venue: "paper")
+    get analysis_archetype_path(archetype, venue: "paper")
 
     assert_response :success
     assert_select ".data-table-cell", text: "Open", count: 0
@@ -740,8 +740,8 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
   # An unknown or malformed ?pool= falls back to the default rather than 404ing — the fallback
   # lives in Archetypes::MetagameScope, and this is the request that proves the controller hands
   # the raw param straight to it instead of casting it first.
-  test "show survives a malformed pool parameter" do
-    get archetype_path(archetypes(:standings_marker), pool: [ "junk" ])
+  test "the analysis survives a malformed pool parameter" do
+    get analysis_archetype_path(archetypes(:standings_marker), pool: [ "junk" ])
 
     assert_response :success
   end

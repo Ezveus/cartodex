@@ -18,15 +18,19 @@ module Decks
     #
     # Decks::PublicShowView is the one caller that opts in. /archetypes is public, so a reader
     # who can see the tag can read the report behind it.
-    def initialize(deck:, linked: false)
+    #
+    # `archetype_badge: false` drops the archetype, for a listing already about one — see
+    # Decks::DeckCard.
+    def initialize(deck:, linked: false, archetype_badge: true)
       @deck = deck
       @linked = linked
+      @archetype_badge = archetype_badge
     end
 
     def view_template
       div(class: "deck-badges") do
         span(class: "badge badge-format") { @deck.format_label }
-        render Ui::ArchetypeBadge.new(archetype: @deck.archetype, href: archetype_href) if @deck.archetype
+        render Ui::ArchetypeBadge.new(archetype: @deck.archetype, href: archetype_href) if @archetype_badge && @deck.archetype
       end
     end
 

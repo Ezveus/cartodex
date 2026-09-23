@@ -83,7 +83,7 @@ module Archetypes
     def selector
       return unless @scope.selectable? || @scope.venue_selectable?
 
-      form(action: archetype_path(@scope.archetype), method: "get", class: "deck-filters",
+      form(action: analysis_archetype_path(@scope.archetype), method: "get", class: "deck-filters",
            data: { controller: "card-filter" }) do
         # The grouping rides along, because this form replaces the whole query string: without it
         # a reader in role mode who changes the sample is silently returned to type mode, which is

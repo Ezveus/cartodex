@@ -80,7 +80,7 @@ module Archetypes
     # the next request and into every copy of that link. The component is handed no parameters at
     # all, which makes that structural rather than a convention.
     def path_for(mode)
-      Rails.application.routes.url_helpers.archetype_path(
+      Rails.application.routes.url_helpers.analysis_archetype_path(
         @scope.archetype, pool: pool_param, group: mode, venue: venue_param
       )
     end
