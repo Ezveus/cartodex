@@ -558,22 +558,6 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck_results #deck-#{other.id}", false
   end
 
-  # The spotlight orders its five decks by name, so the page behind "See all N decks" has to open
-  # with the same rows — creation order would show the user a different five.
-  test "index lists decks in the order the spotlight promised" do
-    @deck.update!(name: "Zoroark Toolbox")
-    @user.decks.create!(name: "Ancient Toolbox", standard_pool: standard_pools(:twm_por))
-    @user.decks.create!(name: "Miraidon Toolbox", standard_pool: standard_pools(:twm_por))
-
-    get decks_path(q: "toolbox")
-
-    assert_response :success
-    grid = css_select("#decks-grid .deck-item").map { |item| item["id"].delete_prefix("deck-").to_i }
-    spotlight = Search::Global.call(user: @user, query: "toolbox").decks.map(&:id)
-
-    assert_equal spotlight, grid.first(spotlight.size)
-  end
-
   # Turbo keeps #deck_results and discards the rest of the response, so the import banner and the
   # filter bar's two option lists must not be queried for a keystroke.
   test "a frame request skips the queries that only feed the page outside the frame" do
@@ -1374,6 +1358,117 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
       first_card_set: card_sets(:twm), last_card_set: set, regulation_marks: %w[G H],
       released_on: Date.new(2025, 1, 1) + index, legal_on: Date.new(2025, 2, 1) + index
     )
+  end
+
+  # Three decks whose name, id and created_at orders all disagree with their updated_at order, so
+  # the default sort cannot pass by accident on any of the other three columns, in either
+  # direction: expected [newest, middle, @deck]; created_at ASC is [middle, newest, @deck] and DESC
+  # [@deck, newest, middle]; id ASC is [@deck, newest, middle] (fixture ids sit below new rows'). "alpha" is
+  # lowercase so that a case-sensitive name sort (BINARY puts it after "Zebra") is caught too.
+  def decks_in_three_orders
+    @deck.update!(name: "Middle")
+    @deck.update_columns(created_at: 1.day.ago, updated_at: 5.days.ago)
+    newest = @user.decks.create!(name: "Zebra", standard_pool: standard_pools(:twm_por))
+    newest.update_columns(created_at: 3.days.ago, updated_at: 1.hour.ago)
+    middle = @user.decks.create!(name: "alpha", standard_pool: standard_pools(:twm_por))
+    middle.update_columns(created_at: 9.days.ago, updated_at: 2.days.ago)
+    [ newest, middle, @deck ]
+  end
+
+  def rendered_deck_ids
+    response.body.scan(/id="deck-(\d+)"/).flatten.map(&:to_i)
+  end
+
+  test "index lists decks most recently updated first by default" do
+    expected = decks_in_three_orders
+
+    get decks_path
+
+    assert_response :success
+    assert_equal expected.map(&:id), rendered_deck_ids
+    assert_select "form.deck-filters[data-turbo-frame=deck_results] select[name=sort] option[selected][value='']",
+                  text: "Recently updated"
+    assert_select "form.deck-filters a[data-card-filter-target=clear][hidden]"
+  end
+
+  test "index sorts decks by name, ignoring case, when asked" do
+    newest, middle, original = decks_in_three_orders
+
+    get decks_path(sort: "name")
+
+    assert_response :success
+    assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
+    assert_select "form.deck-filters[data-turbo-frame=deck_results] select[name=sort] option[selected][value=name]"
+    # Off the default order counts as a state Clear resets, the same test card-filter runs in JS.
+    assert_select "form.deck-filters a[data-card-filter-target=clear]:not([hidden])"
+  end
+
+  test "index falls back to the default order on an unknown sort" do
+    expected = decks_in_three_orders
+
+    [ "created_at", "name; DROP TABLE decks", "" ].each do |sort|
+      get decks_path(sort: sort)
+
+      assert_response :success
+      assert_equal expected.map(&:id), rendered_deck_ids, "sort=#{sort.inspect}"
+    end
+    get decks_path(sort: [ "name" ])
+    assert_equal expected.map(&:id), rendered_deck_ids, "an array param must not sort"
+  end
+
+  # The filter bar submits into the results frame, so the sort has to hold there as well as on a
+  # full page, and alongside a filter rather than instead of one.
+  test "the name sort holds on a frame request alongside a filter" do
+    newest, middle, original = decks_in_three_orders
+    @user.decks.create!(name: "Expanded one", format: "expanded")
+
+    get decks_path(sort: "name", format: "standard"), headers: { "Turbo-Frame" => "deck_results" }
+
+    assert_response :success
+    assert_equal [ middle, original, newest ].map(&:id), rendered_deck_ids
+  end
+
+  # Out of scope for the new order: the public listing still puts the newest *shared* deck first,
+  # and updated_at — now the tempting column — must not leak into it.
+  test "the shared listing keeps its created_at order" do
+    older = users(:two).decks.create!(name: "Older share", shared: true, standard_pool: standard_pools(:twm_por))
+    older.update_columns(created_at: 1.day.ago, updated_at: 1.hour.ago)
+    newer = users(:two).decks.create!(name: "Newer share", shared: true, standard_pool: standard_pools(:twm_por))
+    newer.update_columns(created_at: 1.hour.ago, updated_at: 3.days.ago)
+
+    get shared_decks_path
+
+    ids = rendered_deck_ids
+    assert_operator ids.index(newer.id), :<, ids.index(older.id)
+  end
+
+  # Sharing changes who can see a deck, not what it is, so it must not float the deck to the top.
+  test "sharing a deck does not move its updated_at" do
+    @deck.update_columns(updated_at: 3.days.ago)
+    stamp = @deck.reload.updated_at
+
+    patch share_deck_path(@deck), params: { shared: "1" }, as: :turbo_stream
+
+    assert @deck.reload.shared
+    assert_equal stamp.to_i, @deck.updated_at.to_i
+  end
+
+  # The spotlight's "See all N decks" lands on /decks with only `q`: the rows it showed have to be
+  # the first rows there.
+  test "the spotlight's decks are the first rows of the page its See all link opens" do
+    expected = decks_in_three_orders.first(2).map(&:id)
+    # update_columns keeps the three updated_at values; name_normalized is what Deck.search reads.
+    @user.decks.each do |deck|
+      name = "Ogerpon #{deck.name}"
+      deck.update_columns(name: name, name_normalized: name.downcase)
+    end
+
+    spotlight = Search::Global.call(user: @user, query: "ogerpon", limit: 2).decks.map(&:id)
+    get decks_path(q: "ogerpon")
+
+    # Pinned, not only paired: both sides agreeing on the wrong order would satisfy the pairing.
+    assert_equal expected, spotlight
+    assert_equal spotlight, rendered_deck_ids.first(2)
   end
 end
 

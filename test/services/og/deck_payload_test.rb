@@ -180,40 +180,52 @@ class Og::DeckPayloadTest < ActiveSupport::TestCase
 
   # --- The digest ---
   #
-  # DeckCard belongs_to :deck carries no `touch: true` (deck_card.rb:2), so every write
-  # Api::DeckCardsController performs — add, remove, requantify, swap a printing — leaves
-  # decks.updated_at untouched. Measured. The three tests below are what make the deck-cards'
-  # count and newest timestamp load-bearing terms: without them the decklist would change the
-  # banner's content and never its address, permanently, under Cache-Control: immutable.
+  # DeckCard touches its deck now (/decks sorts on decks.updated_at), so an ordinary write moves
+  # the deck's own term anyway. The three tests below write *around* callbacks — the path a touch
+  # cannot see (`update_columns`, `insert_all`, `delete`) — and check that decks.updated_at really
+  # stayed put, so each passes only if the deck-cards' count or newest timestamp is a term of its
+  # own. Without them the decklist could change the banner's content and never its address,
+  # permanently, under Cache-Control: immutable.
 
-  test "the digest moves when a deck card is created" do
+  def assert_deck_untouched(stamp)
+    assert_equal stamp, @deck.reload.updated_at.to_i, "sanity: this write must not touch the deck"
+  end
+
+  test "the digest moves when a deck card is inserted without callbacks" do
     add(cards(:honedge), 1)
     before = payload.digest
+    stamp = @deck.updated_at.to_i
 
-    add(cards(:doublade), 1)
+    DeckCard.insert_all([ { deck_id: @deck.id, card_id: cards(:doublade).id, quantity: 1 } ])
 
+    assert_deck_untouched(stamp)
     assert_not_equal before, payload.digest
   end
 
-  test "the digest moves when a deck card is requantified" do
+  test "the digest moves when a deck card is requantified without callbacks" do
     deck_card = add(cards(:honedge), 1)
     before = payload.digest
+    stamp = @deck.updated_at.to_i
 
     # The row count does not change here and the quantity is not itself a digest term, so this
     # passes only if the newest deck-card updated_at is one. Second-resolution, hence travel.
     travel 2.seconds do
-      deck_card.update!(quantity: 3)
+      deck_card.update_columns(quantity: 3, updated_at: Time.current)
     end
 
+    assert_deck_untouched(stamp)
     assert_not_equal before, payload.digest
   end
 
-  test "the digest moves when a deck card is destroyed" do
-    deck_card = add(cards(:honedge), 1)
+  test "the digest moves when a deck card is deleted without callbacks" do
+    add(cards(:honedge), 1)
+    deck_card = add(cards(:doublade), 1)
     before = payload.digest
+    stamp = @deck.updated_at.to_i
 
-    deck_card.destroy!
+    deck_card.delete
 
+    assert_deck_untouched(stamp)
     assert_not_equal before, payload.digest
   end
 

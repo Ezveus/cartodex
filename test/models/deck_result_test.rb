@@ -53,4 +53,19 @@ class DeckResultTest < ActiveSupport::TestCase
     assert_equal "draw", result.result
     assert_nil result.score
   end
+
+  # Recording a result counts as working on the deck for /decks' "most recently updated" order.
+  test "recording, editing and deleting a result each move the deck's updated_at" do
+    deck = decks(:one)
+    deck.update_columns(updated_at: 3.days.ago)
+
+    travel_to(2.days.ago) { @result = deck.deck_results.create!(result: "win") }
+    assert_in_delta 2.days.ago, deck.reload.updated_at, 1.minute
+
+    travel_to(1.day.ago) { @result.update!(result: "loss") }
+    assert_in_delta 1.day.ago, deck.reload.updated_at, 1.minute
+
+    @result.destroy!
+    assert_in_delta Time.current, deck.reload.updated_at, 1.minute
+  end
 end

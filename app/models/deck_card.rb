@@ -1,5 +1,8 @@
 class DeckCard < ApplicationRecord
-  belongs_to :deck
+  # touch: editing a deck's list is editing the deck, and /decks sorts on decks.updated_at.
+  # belongs_to's touch goes through touch_later, so every row written in one transaction costs a
+  # single UPDATE on the deck — one statement for a whole import, not one per card.
+  belongs_to :deck, touch: true
   belongs_to :card
 
   validates :quantity, presence: true, numericality: { only_integer: true, greater_than: 0 }

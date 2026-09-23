@@ -45,11 +45,11 @@ class DecksController < ApplicationController
 
   def index
     authorize Deck, :index?
-    # Ordered by name so the spotlight's "See all N decks" lands on a page whose first rows are
-    # the ones it just showed — it orders by name too.
-    @decks = filter_decks(current_user.decks.order(:name).with_standard_pool.includes(
+    # The default order is the spotlight's too, so its "See all N decks" lands on a page whose
+    # first rows are the ones it just showed.
+    @decks = sort_decks(filter_decks(current_user.decks.with_standard_pool.includes(
       :deck_cards, :deck_results, archetype: [ :primary_card, :secondary_card ]
-    ))
+    )))
     @filters = filter_params
 
     # Needed even for a frame request: the deck cards inside the frame flag their own
@@ -401,8 +401,15 @@ class DecksController < ApplicationController
       support:   params[:support].presence,
       proxies:   params[:proxies].presence,
       primary:   params[:primary].presence,
-      secondary: params[:secondary].presence
+      secondary: params[:secondary].presence,
+      sort:      (params[:sort] if params[:sort] == "name")
     }
+  end
+
+  # Most recently updated first unless the member picked the name order. Anything else in the
+  # param falls back to the default rather than erroring.
+  def sort_decks(scope)
+    filter_params[:sort] == "name" ? scope.alphabetical : scope.recently_updated
   end
 
   # Primary card of the archetypes used by the current user's decks, for the filter bar.
