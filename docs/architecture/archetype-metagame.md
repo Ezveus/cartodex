@@ -1,14 +1,58 @@
-# The archetype catalog and one archetype's metagame report
+# The archetype catalog, one archetype's decks and its metagame report
 
-`/archetypes` and `/archetypes/:id` — which standings count, what the deck report says, and the three things the page deliberately refuses to say.
+`/archetypes`, `/archetypes/:id` (the archetype's decks) and `/archetypes/:id/analysis` (its report) — which decks and which standings count, what the deck report says, and the three things the report deliberately refuses to say.
 
 This file carries detail that used to sit inline in `CLAUDE.md`. Everything here is a decision with a measurement behind it — read it before changing the code it covers, because most entries record something that was already tried and rejected.
 
 Design records:
 
 - `docs/superpowers/specs/2026-09-05-archetype-metagame-stats-design.md`
+- `docs/superpowers/specs/2026-09-23-archetype-deck-list-design.md` — the front page became the deck list
 
 ---
+
+**The archetype's front page is its decks; the report sits one level down.** `#show` lists the
+signed-in reader's own decks of the archetype (private and shared, by name, unpaginated), then
+every public one, 24 a page, most recent event first. `#analysis` is the report this file
+describes below, moved verbatim with its 17-query budget. Five rules, each measured:
+
+- **A field list belongs to the archetype of its standing, never to its own `decks.archetype_id`.**
+  `Archetypes::DeckList` reads two columns: a member's deck by `decks.archetype_id`, which the
+  member chose, and a field list by `tournament_standings.archetype_id`, which an admin confirmed
+  and which `MetagameScope` counts. Measured on a production copy (2026-09-23), the deck's own
+  column contradicts its standing on **405 of 1223** field lists — it was written by
+  `Decks::ArchetypeDetector` at import, whose failure `docs/architecture/limitless-imports.md`
+  records (37 *Slowking* lists tagged *Lillie's Clefairy ex*). Listing by that column would put
+  most *Slowking* lists on the *Clefairy* page and make the list disagree with the analysis one
+  click away. #195 realigns the column and migrates it; #196 then moves this service onto it alone.
+  Variants are not folded into a parent's list, the way `MetagameScope` does not fold their
+  standings.
+- **One standing per deck, and it is this archetype's.** `index_tournament_standings_on_deck_id`
+  is not unique, so a deck may carry standings under two archetypes. It is sorted and captioned
+  by this archetype's alone, and by **one row** of them — latest event, then best placement, then
+  newest (`DeckList::STANDING_ORDER`), selected by the same `ORDER BY … LIMIT 1` for the date and
+  the placement and by the same rule in Ruby for the caption. The first version sorted on `MAX(date)`
+  and `MIN(placement)` over every standing and captioned from `has_one`'s arbitrary pick: a deck
+  listed for placing 40th here read "1st" at an event filed under another archetype. Correlated
+  subqueries rather than a JOIN, which would list and count such a deck twice; the `IN (subquery)`
+  membership is also the faster form (0.3 ms against 0.9 ms on the largest archetype, 174 decks).
+- **The reader's decks leave the public list through an explicit `user_id IS NULL` branch,
+  conjoined with `and` and not `merge`.** `where.not(user_id: viewer)` alone is `user_id != ?`,
+  NULL for every field list; `merge` replaces a condition on a column the receiver already
+  constrains. The count under "Decks" then says "besides yours" when the reader owns a shared deck
+  of the archetype, or it prints one short for them while a visitor reads the true total.
+- **Flat at 11 statements for a visitor**, pinned in `ArchetypeDeckListTest` outside the query
+  cache; a member's own-decks section adds one query plus preloads, and more own decks can only
+  lower it (the preloader reuses records the public list loaded — measured 18 → 16).
+- **Full page visits, no Turbo Frame, and a 301 for the report's old links.** The pager sits in no
+  frame, because the page has no live filter and a frame-navigated action under a `rate_limit`
+  swallows its 429 (`docs/architecture/deck-odds.md`). A front-page request carrying `pool`,
+  `venue` or `group` redirects to the analysis with those three and nothing else, read off
+  `request.query_parameters`: `params.slice` handed to a URL helper raises `UnfilteredParameters`
+  on `?pool[]=junk`, and the whole query string would let `?only_path=false&host=…` build the
+  target. Deck cards render with `public_listing: true` — the reader's own included — and
+  `archetype_badge: false`, since the badge repeats the heading and, on a field list, names the
+  very column that disagrees with the standing. The type stripe still reads that column.
 
 **The archetype catalog and one archetype's metagame report** (`/archetypes`, `/archetypes/:id`)
 are the aggregation the two import sections deferred
@@ -120,7 +164,7 @@ list plays together: measured, all-formats Pokémon reads 39-57 that way against
 floor above the true ceiling, and TEF-CRI Item reads 24-28 against 11-17. The honest figure sums a
 category **within each list first** and then takes the range across lists, which is a fold over
 `rows` — `(deck, card-key, copies)` — that `CardStats` already holds, so it costs no query and
-`/archetypes/:id` stays at seventeen. `Archetypes::CopiesText` is the module both grains print
+`/archetypes/:id/analysis` stays at seventeen. `Archetypes::CopiesText` is the module both grains print
 through (`Entry` and `CategoryGroup` carry `min_copies`/`max_copies`/`modes`/`single_quantity?`/
 `tied_mode?` under the same names for exactly that reason), and `CardStats.modes_of` is one
 definition of "every value that ties for most frequent" rather than two.
@@ -233,7 +277,7 @@ senior, masters — the correction the standings sheet had to make in SQL for it
 reading what broke *and what did not*, and it is kept there now as the record of what it cost.
 Three make the route reachable and are each covered by a test that goes red without them: the
 resource sits outside `authenticate :user`, `include PubliclyReachable` with
-`publicly_reachable :index, :show`, `ArchetypePolicy#index?`/`#show?` answer `true`.
+`publicly_reachable :index, :show` (`:analysis` joined when the report moved), `ArchetypePolicy#index?`/`#show?` (and `#analysis?`) answer `true`.
 **Four more decide what a visitor then sees, and no test would have reported any of them
 missing**: the per-IP `rate_limit … unless: -> { user_signed_in? }` at
 `tournaments#index`'s 60/min (absent before, because no anonymous request could reach the route,

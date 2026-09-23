@@ -1,7 +1,9 @@
-# The archetype catalog and one archetype's metagame report. Everything here reads; nothing
+# The archetype catalog, one archetype's decks (#show) and its metagame report (#analysis, which
+# was #show until the deck list took the front page — see
+# docs/superpowers/specs/2026-09-23-archetype-deck-list-design.md). Everything here reads; nothing
 # writes.
 #
-# **Public.** Both actions answer without a session, which took seven edits and not the obvious
+# **Public.** Every action answers without a session, which took seven edits and not the obvious
 # three — the list this comment used to carry as a to-do, kept here as the record of what it
 # cost, because four of the seven are things no test asks for and three of those are outright
 # silent:
@@ -71,6 +73,10 @@ class ArchetypesController < ApplicationController
   # is what makes the catalog feel instant, and dropping it is a UX decision rather than a
   # protection one. `/tournaments` amplifies identically (measured: six hovers, six loads) and
   # tournaments#show is still uncapped; that is its own decision and not this one.
+  #
+  # The measurements above were taken when #show *was* the report. It is now the deck list (11
+  # queries, 25 KB against the report's 85 KB) and kept the 120, because the amplifier — the
+  # catalog's hover-prefetched row links — still points here and not at #analysis.
   SHOW_RATE_LIMIT_TO = 120
   # **60 for the analysis**, the number the app gives a page reached by deliberate navigation
   # (tournaments#index, decks#shared). Since the report moved off the archetype's front page, the

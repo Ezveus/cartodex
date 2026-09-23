@@ -72,9 +72,10 @@ Rails.application.routes.draw do
     get :image, on: :member
   end
 
-  # The archetype catalog and one archetype's metagame report. Both read, both public: nothing
-  # on either page is anybody's private data, and every link they emit points at /archetypes,
-  # /cards/:id or the card image proxy — all three already reachable without a session. This is
+  # The archetype catalog, one archetype's decks and its metagame report. All read, all public:
+  # the deck list shows a reader only their own private decks, and nothing else on these pages is
+  # anybody's private data, and every link they emit points at /archetypes, /cards/:id, a shared
+  # deck or the card image proxy — all already reachable without a session. This is
   # the sixth route entry to leave the `authenticate :user` block below, and unlike decks and
   # tournaments it carries no nested resource out with it.
   #
