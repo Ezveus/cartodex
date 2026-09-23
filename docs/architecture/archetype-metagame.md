@@ -36,10 +36,10 @@ describes below, moved verbatim with its 17-query budget. Five rules, each measu
   listed for placing 40th here read "1st" at an event filed under another archetype. Correlated
   subqueries rather than a JOIN, which would list and count such a deck twice; the `IN (subquery)`
   membership is also the faster form (0.3 ms against 0.9 ms on the largest archetype, 174 decks).
-- **The reader's decks leave the public list through an explicit `user_id IS NULL` branch,
-  conjoined with `and` and not `merge`.** `where.not(user_id: viewer)` alone is `user_id != ?`,
-  NULL for every field list; `merge` replaces a condition on a column the receiver already
-  constrains. The count under "Decks" then says "besides yours" when the reader owns a shared deck
+- **The reader's decks leave the public list through an explicit `user_id IS NULL` branch.**
+  `where.not(user_id: viewer)` alone is `user_id != ?`, NULL for every field list. It is conjoined
+  with `and`: `merge` emits the identical SQL today only because both sides are OR groups, and
+  replaces rather than conjoins the moment either side becomes a plain predicate on `user_id`. The count under "Decks" then says "besides yours" when the reader owns a shared deck
   of the archetype, or it prints one short for them while a visitor reads the true total.
 - **Flat at 11 statements for a visitor**, pinned in `ArchetypeDeckListTest` outside the query
   cache; a member's own-decks section adds one query plus preloads, and more own decks can only

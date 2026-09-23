@@ -121,8 +121,12 @@ module Archetypes
       # empty the list for any signed-in reader: the trap Search::Global#shared_deck_scope fell
       # into once.
       #
-      # `and`, not `merge`: both sides constrain `user_id`, and `merge` replaces a condition on a
-      # column the receiver already constrains rather than conjoining it.
+      # `and` rather than `merge`, for what it promises rather than for what it does today: `merge`
+      # replaces a plain condition on a column the receiver already constrains
+      # (`where(user_id: 5).merge(where.not(user_id: 7))` keeps only the second). Both sides here
+      # are OR groups, which `merge` happens to conjoin — measured, the two emit identical SQL —
+      # so a later edit that simplified either side into a plain predicate would silently turn a
+      # `merge` into a replacement. `and` conjoins whatever the sides become.
       scope.and(Deck.where(user_id: nil).or(Deck.where.not(user_id: @viewer.id)))
     end
 

@@ -1188,7 +1188,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # …and the badge is there at all: an empty link passes the line above trivially, and the
     # shared grid keeps Decks::DeckCard's `archetype_badge: true` default, which only the
     # archetype's own page turns off.
-    assert link.at_css(".deck-badges", text: archetypes(:ogerpon).name),
+    # Read as text, not as `at_css(…, text:)`: Nokogiri takes a trailing Hash as a namespace map
+    # and ignores `text:` without a word, which made the first version of this line pass with the
+    # badge gone.
+    assert_includes link.at_css(".deck-badges").text, archetypes(:ogerpon).name,
       "the shared grid names the deck's archetype"
   end
 
