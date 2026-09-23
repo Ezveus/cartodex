@@ -64,8 +64,11 @@ jobs:
     #      - 6379:6379
     #    options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
+      # Chrome comes from the runner image, paired with the image's /usr/bin/chromedriver.
+      # Installing google-chrome-stable here upgrades the browser past that driver, which
+      # Selenium picks from PATH, and every system test then fails to start a session.
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libvips pkg-config google-chrome-stable
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libvips pkg-config
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -98,8 +101,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Chrome comes from the runner image, paired with the image's /usr/bin/chromedriver.
+      # Installing google-chrome-stable here upgrades the browser past that driver, which
+      # Selenium picks from PATH, and every system test then fails to start a session.
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libvips pkg-config google-chrome-stable
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libvips pkg-config
 
       - name: Checkout code
         uses: actions/checkout@v7
