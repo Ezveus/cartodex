@@ -42,9 +42,13 @@ module Tournaments
 
     def row(table, tournament)
       table.row do
+        # One wrapper, because below the breakpoint a cell is a flex row of label and value: the
+        # participations line would otherwise sit beside the link as a second value.
         table.cell do
-          link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" }
-          participations(@my_entries.fetch(tournament.id, []))
+          div(class: "tournament-name") do
+            link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" }
+            participations(@my_entries.fetch(tournament.id, []))
+          end
         end
         table.cell { localize(tournament.date, format: :long) }
         table.cell { tournament.tier_label }

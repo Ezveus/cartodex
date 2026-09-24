@@ -2933,6 +2933,12 @@ textarea.form-input {
     align-items: center;
   }
 
+  /* The catalog's name cell carries the link and the participations line as one value, so it
+     aligns right like every other value in the stacked card. */
+  .tournament-name {
+    text-align: right;
+  }
+
   .data-table-row .data-table-cell::before {
     content: attr(data-label);
     font-weight: 600;

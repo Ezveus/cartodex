@@ -34,6 +34,10 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".data-table-row", text: /Regional Championship/ do
       assert_select ".tournament-participations .badge", text: "Participations: 1"
       assert_select ".tournament-participations-players", text: "Ash Ketchum"
+      # The line must share one wrapper with the link: a mobile cell is a flex row, and a second
+      # direct child lands beside the name instead of under it.
+      assert_select ".data-table-cell > .tournament-name > .tournament-participations"
+      assert_select ".data-table-cell > .tournament-participations", count: 0
     end
     assert_select ".data-table-row", text: /Local League Cup/ do
       assert_select ".tournament-participations", count: 0
