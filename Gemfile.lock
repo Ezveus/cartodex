@@ -179,7 +179,7 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
-    mcp (1.5.1)
+    mcp (1.6.0)
       json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.6)
@@ -315,7 +315,7 @@ GEM
     refract (1.1.0)
       prism
       zeitwerk
-    regexp_parser (2.12.0)
+    regexp_parser (2.13.0)
     reline (0.7.0)
       io-console (~> 0.5)
     responders (3.2.0)
@@ -451,7 +451,7 @@ DEPENDENCIES
   importmap-rails
   jbuilder
   kamal
-  mcp (~> 1.5)
+  mcp (~> 1.6)
   minitest (~> 6.0)
   mission_control-jobs
   phlex-rails (~> 2.2)
