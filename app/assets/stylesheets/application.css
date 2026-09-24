@@ -1037,8 +1037,12 @@ textarea.form-input {
   margin: 0;
 }
 
+/* Every header action row wraps. Unwrapped, its min-content width is the sum of its buttons', so
+   below the breakpoint — where the header stacks and the row sizes to its content — it ran off the
+   screen while each button shrank to its longest word and grew three or four lines tall. */
 .decks-header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -1544,6 +1548,7 @@ textarea.form-input {
 
 .card-show-header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
@@ -2046,6 +2051,7 @@ textarea.form-input {
 
 .admin-header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -2875,6 +2881,13 @@ textarea.form-input {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  /* Page-header buttons take .btn-sm's size on a phone: an event page can carry six of them, and at
+     full size they wrapped into three rows of 48px buttons above the content they lead to. */
+  .admin-header .btn, .decks-header .btn, .card-show-header .btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
   }
 
   /* Table → card layout */
