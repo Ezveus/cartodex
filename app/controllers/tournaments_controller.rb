@@ -48,7 +48,7 @@ class TournamentsController < ApplicationController
     # relation is a SELECT 1 … LIMIT 1 beside the query it is about to run anyway.
     @tournaments = scope.offset((@page - 1) * CATALOG_PER_PAGE).limit(CATALOG_PER_PAGE)
                         .with_standard_pool.to_a
-    @my_entries = my_entries_by_tournament(@tournaments)
+    @my_entries_by_tournament = my_entries_by_tournament(@tournaments)
   end
 
   def show

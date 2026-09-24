@@ -42,8 +42,11 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".data-table-row", text: /Local League Cup/ do
       assert_select ".tournament-participations", count: 0
     end
-    assert_includes stylesheet, ".tournament-participations {"
-    assert_includes stylesheet, ".badge-neutral {"
+    # The rule bodies, not just the selectors: the line is its own block, and on a phone the
+    # wrapper right-aligns it with the link — a selector with an emptied body would still match.
+    assert stylesheet.match?(/^\.tournament-participations \{\s*display: block;/), ".tournament-participations must stay display: block"
+    assert stylesheet.match?(/^\.badge-neutral \{\s*background: var\(--line\);/), ".badge-neutral must keep its background"
+    assert stylesheet.match?(/@media \(max-width: 768px\) \{(?:(?!^\}).)*^  \.tournament-name \{\s*text-align: right;/m), ".tournament-name must right-align inside the mobile media query"
   end
 
   # Names sort case-insensitively, whatever order the rows were inserted in, and a profile-less
@@ -275,7 +278,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".tournament-participations", count: 0
   end
 
-  # The other half of that: attended_ids is commented "none at all for a visitor", and the
+  # The other half of that: my_entries_by_tournament is commented "none at all for a visitor", and the
   # markup assertion above cannot see the difference between returning early and querying
   # anyway. This is the one that can — a variant which runs the grouped query for a visitor
   # renders exactly the same page.
