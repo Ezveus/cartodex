@@ -1039,10 +1039,13 @@ textarea.form-input {
 
 /* Every header action row wraps. Unwrapped, its min-content width is the sum of its buttons', so
    below the breakpoint — where the header stacks and the row sizes to its content — it ran off the
-   screen while each button shrank to its longest word and grew three or four lines tall. */
+   screen while each button shrank to its longest word and grew three or four lines tall.
+   Wrapped lines are pushed right so the last button still meets the content's right edge on a
+   desktop, where the row sits at the end of the header; the stacked phone header resets that. */
 .decks-header-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -1549,6 +1552,7 @@ textarea.form-input {
 .card-show-header-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
   align-items: center;
 }
@@ -2052,6 +2056,7 @@ textarea.form-input {
 .admin-header-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -2888,6 +2893,10 @@ textarea.form-input {
   .admin-header .btn, .decks-header .btn, .card-show-header .btn {
     padding: 0.4rem 0.75rem;
     font-size: 0.85rem;
+  }
+
+  .decks-header-actions, .admin-header-actions, .card-show-header-actions {
+    justify-content: flex-start;
   }
 
   /* Table → card layout */

@@ -49,14 +49,14 @@ class PageHeaderNarrowTest < ApplicationSystemTestCase
     assert_header_fits
   end
 
-  test "an archetype's deck list keeps its badge and buttons on screen" do
+  test "an archetype's deck list keeps its header on screen" do
     visit archetype_path(archetypes(:standings_marker))
     assert_selector ".admin-header .btn", text: "Analysis"
 
     assert_header_fits
   end
 
-  test "an archetype's analysis keeps its badge and buttons on screen" do
+  test "an archetype's analysis keeps its header on screen" do
     visit analysis_archetype_path(archetypes(:standings_marker))
     assert_selector ".admin-header .btn", text: "Decks"
 
