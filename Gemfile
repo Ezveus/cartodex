@@ -21,7 +21,7 @@ gem "stimulus-rails"
 gem "jbuilder"
 
 # Model Context Protocol server (collection/deck tools)
-gem "mcp", "~> 1.5"
+gem "mcp", "~> 1.6"
 
 # OAuth 2.1 authorization server, so MCP clients that cannot send a static
 # bearer header (Claude web connectors) can authenticate.
