@@ -36,6 +36,14 @@ class TournamentEntry < ApplicationRecord
     "#{base} — #{tournament_profile.player_name}"
   end
 
+  # Who played this participation, as the catalog prints it beside the reader's badge. A
+  # profile-less entry is named rather than skipped, so the names always match the count.
+  NO_PROFILE_LABEL = "No profile".freeze
+
+  def player_label
+    tournament_profile&.player_name || NO_PROFILE_LABEL
+  end
+
   # Indicative CP for this placement at the event's tier, or nil if not computable. The grid
   # lives on Tournament, beside the tier that keys it; the placement that looks it up is here.
   def suggested_championship_points

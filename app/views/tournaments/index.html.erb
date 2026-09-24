@@ -1,3 +1,3 @@
 <%= render Tournaments::IndexView.new(tournaments: @tournaments, query: @query, page: @page, pages: @pages,
-                                     attended_ids: @attended_ids,
+                                     my_entries: @my_entries,
                                      can_create: policy(Tournament).create?) %>

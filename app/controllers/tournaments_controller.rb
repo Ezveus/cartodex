@@ -48,7 +48,7 @@ class TournamentsController < ApplicationController
     # relation is a SELECT 1 … LIMIT 1 beside the query it is about to run anyway.
     @tournaments = scope.offset((@page - 1) * CATALOG_PER_PAGE).limit(CATALOG_PER_PAGE)
                         .with_standard_pool.to_a
-    @attended_ids = attended_ids(@tournaments)
+    @my_entries = my_entries_by_tournament(@tournaments)
   end
 
   def show
@@ -212,12 +212,14 @@ class TournamentsController < ApplicationController
     @my_entries.reject(&:standing)
   end
 
-  # One grouped query for the whole page, and none at all for a visitor.
-  def attended_ids(tournaments)
-    return Set.new if current_user.nil? || tournaments.empty?
+  # The reader's participations on this page, keyed by event: one query plus the profile
+  # preload for the whole page, and none at all for a visitor. Scoped to the page's ids, not to
+  # every entry the reader has — the row only reads its own event.
+  def my_entries_by_tournament(tournaments)
+    return {} if current_user.nil? || tournaments.empty?
 
     current_user.tournament_entries.where(tournament_id: tournaments.map(&:id))
-      .pluck(:tournament_id).to_set
+      .includes(:tournament_profile).group_by(&:tournament_id)
   end
 
   # rescue_from covers every action, and four of them — index, mine, new, create — carry no :id,

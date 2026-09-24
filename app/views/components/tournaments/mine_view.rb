@@ -12,7 +12,7 @@ module Tournaments
         end
 
         if @entries.any?
-          render Ui::DataTable.new(columns: %w[Tournament Date Tier Deck Placement CP Actions]) do |t|
+          render Ui::DataTable.new(columns: %w[Tournament Date Tier Profile Deck Placement CP Actions]) do |t|
             @entries.each { |entry| row(t, entry) }
           end
         else
@@ -30,6 +30,7 @@ module Tournaments
         table.cell { link_to tournament.name, tournament_entry_path(tournament, entry) }
         table.cell { localize(tournament.date, format: :long) }
         table.cell { tournament.tier_label }
+        table.cell { entry.tournament_profile&.player_name || "—" }
         table.cell { entry.deck.name }
         table.cell { placement_label(entry) }
         table.cell { entry.championship_points || "—" }

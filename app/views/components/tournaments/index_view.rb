@@ -4,12 +4,12 @@ module Tournaments
 
     FRAME_ID = "tournament_results".freeze
 
-    def initialize(tournaments:, query: "", page: 1, pages: 1, attended_ids: Set.new, can_create: false)
+    def initialize(tournaments:, query: "", page: 1, pages: 1, my_entries: {}, can_create: false)
       @tournaments = tournaments
       @query = query
       @page = page
       @pages = pages
-      @attended_ids = attended_ids
+      @my_entries = my_entries
       @can_create = can_create
     end
 
@@ -44,11 +44,27 @@ module Tournaments
       table.row do
         table.cell do
           link_to tournament.name, tournament_path(tournament), data: { turbo_frame: "_top" }
-          span(class: "tournament-attended") { "You attended" } if @attended_ids.include?(tournament.id)
+          participations(@my_entries.fetch(tournament.id, []))
         end
         table.cell { localize(tournament.date, format: :long) }
         table.cell { tournament.tier_label }
         table.cell { tournament.format_label }
+      end
+    end
+
+    # The reader's own participations in this event, on a line of their own under its name: how
+    # many, and under which profiles. Counted in entries, and a profile-less entry is named rather
+    # than skipped. Names sort case-insensitively with "No profile" last, so the line reads the
+    # same on every request whatever order the rows came back in.
+    def participations(entries)
+      return if entries.empty?
+
+      names = entries.sort_by { |e| [ e.tournament_profile ? 0 : 1, e.player_label.downcase ] }
+                     .map(&:player_label)
+      div(class: "tournament-participations") do
+        span(class: "badge badge-neutral") { "Participations: #{entries.size}" }
+        whitespace
+        span(class: "tournament-participations-players") { names.join(", ") }
       end
     end
 

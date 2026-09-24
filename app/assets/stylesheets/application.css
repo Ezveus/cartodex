@@ -790,6 +790,11 @@ textarea.form-input {
   color: #3b3f6b;
 }
 
+.badge-neutral {
+  background: var(--line);
+  color: var(--ink-700);
+}
+
 .badge-archetype {
   background: var(--water-bg);
   color: var(--water-strong);
@@ -3436,6 +3441,18 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 
 .tournaments-search .form-input {
   max-width: 22rem;
+}
+
+/* The reader's participations under an event's name in the catalog: its own line, so the badge
+   never glues onto the link and wraps as a unit at phone width. */
+.tournament-participations {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.tournament-participations-players {
+  color: var(--ink-500);
 }
 
 /* The standings sheet sits under the event's own facts. One rule and nothing more: the table,
