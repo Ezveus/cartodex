@@ -26,15 +26,60 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".data-table-row", text: /Local League Cup/
   end
 
-  test "index marks the events the reader attended" do
+  # Scoped to the reader: tournament_entries(:shared_event) is another member's participation in
+  # the same event, so a count that forgot the user would say 2.
+  test "index counts the reader's participations in an event and names their profiles" do
     get tournaments_path
 
     assert_select ".data-table-row", text: /Regional Championship/ do
-      assert_select ".tournament-attended", text: "You attended"
+      assert_select ".tournament-participations .badge", text: "Participations: 1"
+      assert_select ".tournament-participations-players", text: "Ash Ketchum"
+      # The line must share one wrapper with the link: a mobile cell is a flex row, and a second
+      # direct child lands beside the name instead of under it.
+      assert_select ".data-table-cell > .tournament-name > .tournament-participations"
+      assert_select ".data-table-cell > .tournament-participations", count: 0
     end
     assert_select ".data-table-row", text: /Local League Cup/ do
-      assert_select ".tournament-attended", count: 0
+      assert_select ".tournament-participations", count: 0
     end
+    # The rule bodies, not just the selectors: the line is its own block, and on a phone the
+    # wrapper right-aligns it with the link — a selector with an emptied body would still match.
+    assert stylesheet.match?(/^\.tournament-participations \{\s*display: block;/), ".tournament-participations must stay display: block"
+    assert stylesheet.match?(/^\.badge-neutral \{\s*background: var\(--line\);/), ".badge-neutral must keep its background"
+    assert stylesheet.match?(/@media \(max-width: 768px\) \{(?:(?!^\}).)*^  \.tournament-name \{\s*text-align: right;/m), ".tournament-name must right-align inside the mobile media query"
+  end
+
+  # Names sort case-insensitively, whatever order the rows were inserted in, and a profile-less
+  # entry is counted and named last — "Oak" and "brock" are the names that tell those rules apart
+  # from insertion order, from a byte-wise sort and from sorting the printed labels.
+  test "index lists every profile the reader played an event under, profile-less last" do
+    %w[Oak brock Abra].each_with_index do |name, i|
+      record_entry(@tournament, TournamentProfile.create!(
+        user: @user, player_name: name, player_id: "300000#{i}", date_of_birth: Date.new(1990, 1, 1)
+      ))
+    end
+    record_entry(@other_tournament, nil)
+    record_entry(@tournament, nil)
+
+    get tournaments_path
+
+    assert_select ".data-table-row", text: /Regional Championship/ do
+      assert_select ".tournament-participations .badge", text: "Participations: 5"
+      assert_select ".tournament-participations-players", text: "Abra, Ash Ketchum, brock, Oak, No profile"
+    end
+    assert_select ".data-table-row", text: /Local League Cup/ do
+      assert_select ".tournament-participations .badge", text: "Participations: 1"
+      assert_select ".tournament-participations-players", text: TournamentEntry::NO_PROFILE_LABEL
+    end
+  end
+
+  # The lookup is scoped to the page's events: with none on the page it costs nothing, where an
+  # unscoped "every entry the reader has" would still run and render the same page.
+  test "index reads no participations when the page holds no event" do
+    sql = capture_queries { get tournaments_path(q: "no such event") }
+
+    assert_response :success
+    assert_empty sql.grep(/tournament_entries/i)
   end
 
   test "index filters by name" do
@@ -97,14 +142,16 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   # event. Each event gets a pool of its own on purpose: events sharing a pool id issue
   # identical SQL, which the per-request query cache serves and count_queries does not count,
   # hiding the very N+1 this guards. Modelled on the same test in DecksControllerTest.
+  # Every event also carries one of the reader's participations under a profile of its own, so
+  # a missing profile preload issues distinct SQL per row and cannot hide behind the query cache.
   test "index issues a constant number of queries regardless of how many events" do
-    2.times { |i| catalog_event(i) }
+    2.times { |i| record_entry(catalog_event(i), profile_of_its_own(i)) }
 
     get tournaments_path # warm the session: the first request of a test also loads the Devise user
 
     small = count_queries { get tournaments_path }
 
-    (2..7).each { |i| catalog_event(i) }
+    (2..7).each { |i| record_entry(catalog_event(i), profile_of_its_own(i)) }
 
     large = count_queries { get tournaments_path }
 
@@ -228,10 +275,10 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".data-table-row", count: 2
     assert_select "a[href=?]", new_tournament_path, count: 0
-    assert_select ".tournament-attended", count: 0
+    assert_select ".tournament-participations", count: 0
   end
 
-  # The other half of that: attended_ids is commented "none at all for a visitor", and the
+  # The other half of that: my_entries_by_tournament is commented "none at all for a visitor", and the
   # markup assertion above cannot see the difference between returning early and querying
   # anyway. This is the one that can — a variant which runs the grouped query for a visitor
   # renders exactly the same page.
@@ -250,6 +297,42 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".data-table-row", count: 1
     assert_select ".data-table-row", text: /Regional Championship/
+  end
+
+  # Asserted per cell through DataTable's data-label, not per row: a cell added at the wrong
+  # position still puts "Ash Ketchum" somewhere in the row.
+  test "mine prints each participation's profile in its own column" do
+    profileless_deck = Deck.create!(user: @user, name: "Profileless list", format: "expanded")
+    TournamentEntry.create!(user: @user, tournament: @other_tournament, deck: profileless_deck)
+
+    get mine_tournaments_path
+
+    assert_select ".data-table-header .data-table-cell", text: "Profile"
+    assert_select ".data-table-row", text: /#{decks(:one).name}/ do
+      assert_select ".data-table-cell[data-label=Profile]", text: "Ash Ketchum"
+      assert_select ".data-table-cell[data-label=Deck]", text: decks(:one).name
+    end
+    assert_select ".data-table-row", text: /Profileless list/ do
+      assert_select ".data-table-cell[data-label=Profile]", text: "—"
+      assert_select ".data-table-cell[data-label=Deck]", text: "Profileless list"
+    end
+  end
+
+  # Distinct events and distinct profiles per row, for the reason the catalog's flat-cost test
+  # has them: a repeated SELECT is served by the query cache and count_queries never sees it.
+  test "mine issues a constant number of queries regardless of how many participations" do
+    2.times { |i| record_entry(catalog_event(i), profile_of_its_own(i)) }
+    get mine_tournaments_path
+
+    small = count_queries { get mine_tournaments_path }
+
+    (2..7).each { |i| record_entry(catalog_event(i), profile_of_its_own(i)) }
+
+    large = count_queries { get mine_tournaments_path }
+
+    assert_response :success
+    assert_select ".data-table-row", count: 9
+    assert_equal small, large, "query count grew with the participations: #{small} -> #{large}"
   end
 
   test "new renders the event form and nothing about a deck" do
@@ -846,6 +929,20 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
       name: "Quiet Cup #{index}", date: Date.new(2026, 7, 1) + index, tier: "league_cup",
       format: "standard", standard_pool: pool_of_its_own(index), created_by: @user
     )
+  end
+
+  def record_entry(tournament, profile)
+    TournamentEntry.create!(user: @user, tournament: tournament, deck: decks(:one), tournament_profile: profile)
+  end
+
+  def profile_of_its_own(index)
+    TournamentProfile.create!(
+      user: @user, player_name: "Player #{index}", player_id: "200000#{index}", date_of_birth: Date.new(1990, 1, 1)
+    )
+  end
+
+  def stylesheet
+    File.read(Rails.root.join("app/assets/stylesheets/application.css"))
   end
 
   # Copied from DecksControllerTest, where the same flat-cost test needs the same thing.
