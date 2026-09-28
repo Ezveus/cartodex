@@ -110,5 +110,20 @@ module Decks
       assert_kind_of Card, row[:card]
       assert_equal "Budew", row[:card].name
     end
+
+    # Keyed on the fingerprint alone, every card with none collapsed into one row, so two decks
+    # playing two different unfingerprinted cards compared equal. Decks::VersionDrift calls that
+    # a change, and a diff that disagreed with it would show no difference under a drift notice.
+    test "keeps two unfingerprinted cards apart" do
+      @deck_a.deck_cards.create!(card: cards(:special_prism_energy_asc), quantity: 2)
+      @deck_b.deck_cards.create!(card: cards(:special_prism_energy_blk), quantity: 2)
+
+      result = Decks::Comparator.call([ @deck_a.reload, @deck_b.reload ])
+      energy = result[:groups].find { |g| g[:type] == "Energy" }
+
+      assert_equal 2, energy[:rows].size
+      assert energy[:rows].all? { |row| row[:differ] }
+      assert_equal [ 2, 2 ], result[:diff_totals]
+    end
   end
 end

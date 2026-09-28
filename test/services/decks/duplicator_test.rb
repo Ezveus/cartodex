@@ -55,4 +55,13 @@ class Decks::DuplicatorTest < ActiveSupport::TestCase
 
     assert_equal standard_pools(:twm_asc), copy.standard_pool
   end
+
+  # A version records a list that was played; the copy has played nothing yet.
+  test "the copy carries none of the source's versions" do
+    assert @deck.deck_versions.exists?, "sanity: the fixture deck has a version"
+
+    copy = Decks::Duplicator.call(@deck)
+
+    assert_empty copy.deck_versions
+  end
 end
