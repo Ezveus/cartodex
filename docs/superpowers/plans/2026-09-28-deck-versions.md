@@ -194,3 +194,42 @@ Lane 2 (views, system tests, both viewports):
   again.
 - Import an earlier version then move a result onto it via the edit form; stats table shows both.
 - Versions show page header links are not `/decks/<id>`, and a changed row is marked.
+
+## View contract (what lane 1 hands lane 2)
+
+Routes (names are the contract): `deck_versions_path(deck)`, `deck_version_path(deck, v)`,
+`new_deck_version_path(deck)`, `edit_deck_version_path(deck, v)`,
+`snapshot_deck_versions_path(deck)` (POST).
+
+Instance variables and component signatures:
+
+- `DecksController#stats` → `@deck`, `@versions` (numbered array, oldest first), `@all_results`
+  (every result, `:deck_version` and archetype preloaded), `@results` (scoped),
+  `@selected_version` (a DeckVersion or nil = all). ERB renders
+  `Decks::StatsView.new(deck:, versions:, all_results:, results:, selected_version:)`.
+- `DeckVersionsController#index` → `@deck`, `@versions`, `@drift` (`Decks::VersionDrift::Result`
+  with `drift?` and `latest`), `@result_counts` = `{ version_id => { "win" => n, … } }`,
+  `@entry_counts` = `{ version_id => n }`. ERB renders
+  `DeckVersions::IndexView.new(deck:, versions:, drift:, result_counts:, entry_counts:)`.
+- `#show` → `@deck`, `@version` (numbered), `@previous` (numbered or nil), `@comparison`
+  (Comparator hash over `[@previous, @version].compact`). `DeckVersions::ShowView.new(deck:,
+  version:, previous:, comparison:)`.
+- `#new`/`#create` failure → `@deck`, `@form` = `{ decklist:, effective_at:, format:,
+  standard_pool_id:, other_format_name: }` (strings), `@errors` (array of strings),
+  `@standard_pools` (all pools, newest first). `DeckVersions::NewView.new(deck:, form:, errors:,
+  standard_pools:)`. Field names: `deck_version[decklist]`, `deck_version[effective_at]`,
+  `deck_version[format]`, `deck_version[standard_pool_id]`, `deck_version[other_format_name]`.
+- `#edit`/`#update` failure → `@deck`, `@version` (numbered). `DeckVersions::EditView.new(deck:,
+  version:)`; field `deck_version[effective_at]`.
+- Entries: `@version_prompt` (nil or `{ current: N, next: N+1 }`) and `@entry_versions` (numbered
+  array of the entry's deck versions; `[]` on new). `Tournaments::Entries::Form` gains
+  `version_prompt: nil, versions: []`. Prompt radios: `name="version_choice"`, values `new` /
+  `current`, labels "Create version N+1 from the current list" / "Attach to version N".
+  Edit select: `tournament_entry[deck_version_id]`, options `"v#{n} — #{format_label}, from
+  #{date}"`.
+- `DeckResults::EditView.new(deck:, result:, versions:)` — `@versions` set by the controller on
+  edit/update; select `deck_result[deck_version_id]`, disabled with the hint "Follows its
+  participation's version." when `result.tournament_entry` is present.
+- API modal: POST body gains top-level `version_choice` (`"new"` / `"current"`, omitted first).
+  409 body `{ error: "version_choice_required", current_version: N, next_version: N+1 }`. Button
+  labels: "Create version N+1", "Attach to version N", "Cancel".
