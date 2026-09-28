@@ -32,7 +32,8 @@ class PageHeaderNarrowTest < ApplicationSystemTestCase
 
   test "an event with two of the reader's participations keeps its six buttons on screen" do
     tournament = tournaments(:one)
-    tournament.entries.create!(user: @user, deck: decks(:one), tournament_profile: tournament_profiles(:misty),
+    tournament.entries.create!(user: @user, deck: decks(:one), deck_version: deck_versions(:one),
+      tournament_profile: tournament_profiles(:misty),
       participant_count: 64, placement: 12)
 
     visit tournament_path(tournament)
