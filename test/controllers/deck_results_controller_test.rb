@@ -11,7 +11,7 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
     @user = users(:one)
     @deck = decks(:one)
     @deck.update!(user: @user)
-    @result = @deck.deck_results.create!(result: "win")
+    @result = @deck.deck_results.create!(result: "win", deck_version: deck_versions(:one))
   end
 
   test "signed out, every action redirects to sign in and changes nothing" do
@@ -54,7 +54,8 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
   test "the edit form tells two participations in one event apart" do
     sign_in @user
     second = @user.tournament_entries.create!(
-      tournament: tournaments(:one), deck: @deck, tournament_profile: tournament_profiles(:misty)
+      tournament: tournaments(:one), deck: @deck, deck_version: deck_versions(:one),
+      tournament_profile: tournament_profiles(:misty)
     )
 
     get edit_deck_deck_result_path(@deck, @result)
@@ -106,6 +107,52 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "win", @result.reload.result
     assert DeckResult.exists?(@result.id)
   end
+  test "update moves a result onto another version of its deck" do
+    sign_in @user
+    v2 = Decks::VersionSnapshot.call(@deck)
+
+    patch deck_deck_result_path(@deck, @result), params: { deck_result: { deck_version_id: v2.id } }
+
+    assert_redirected_to deck_deck_results_path(@deck)
+    assert_equal v2, @result.reload.deck_version
+  end
+
+  test "update refuses another deck's version and changes nothing" do
+    sign_in @user
+
+    patch deck_deck_result_path(@deck, @result),
+      params: { deck_result: { result: "loss", deck_version_id: deck_versions(:two).id } }
+
+    assert_response :unprocessable_entity
+    @result.reload
+    assert_equal deck_versions(:one), @result.deck_version
+    assert_equal "win", @result.result
+  end
+
+  # The participation says which list was played; the version select cannot overrule it.
+  test "a result attached to a participation keeps the participation's version" do
+    sign_in @user
+    @result.update!(tournament_entry: tournament_entries(:one))
+    v2 = Decks::VersionSnapshot.call(@deck)
+
+    patch deck_deck_result_path(@deck, @result), params: { deck_result: { deck_version_id: v2.id } }
+
+    assert_redirected_to deck_deck_results_path(@deck)
+    assert_equal deck_versions(:one), @result.reload.deck_version
+  end
+
+  test "edit costs the same with one version as with four" do
+    sign_in @user
+    get edit_deck_deck_result_path(@deck, @result) # warm the session
+
+    small = ActiveRecord::Base.uncached { count_queries { get edit_deck_deck_result_path(@deck, @result) } }
+    3.times { |i| Decks::VersionSnapshot.call(@deck, effective_at: (i + 1).days.ago) }
+    large = ActiveRecord::Base.uncached { count_queries { get edit_deck_deck_result_path(@deck, @result) } }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the version count: #{small} -> #{large}"
+  end
+
   private
 
   def participation_of_its_own(index)
@@ -116,6 +163,7 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
     profile = @user.tournament_profiles.create!(
       player_name: "Player #{index}", player_id: "200000#{index}", date_of_birth: Date.new(2000, 1, 1)
     )
-    @user.tournament_entries.create!(tournament: event, deck: @deck, tournament_profile: profile)
+    @user.tournament_entries.create!(tournament: event, deck: @deck, deck_version: deck_versions(:one),
+      tournament_profile: profile)
   end
 end

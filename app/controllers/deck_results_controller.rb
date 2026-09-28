@@ -2,6 +2,7 @@ class DeckResultsController < ApplicationController
   before_action :set_deck
   before_action :preload_tournament_entries, only: [ :edit, :update ]
   before_action :set_result, only: [ :edit, :update, :destroy ]
+  before_action :set_versions, only: [ :edit, :update ]
 
   def index
     @results = @deck.deck_results.includes(archetype: :primary_card).order(played_at: :desc)
@@ -42,7 +43,16 @@ class DeckResultsController < ApplicationController
     @result = @deck.deck_results.find(params[:id])
   end
 
+  # The edit form's version select. Numbered in one query, so the form's cost does not grow with
+  # the deck's history.
+  def set_versions
+    @versions = @deck.ordered_versions
+  end
+
+  # deck_version_id is overruled by the model when a participation is attached: the result then
+  # takes its participation's version, whatever the select posted.
   def result_params
-    params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at, :match_format, :score, :tournament_entry_id)
+    params.require(:deck_result).permit(:result, :archetype_id, :notes, :played_at, :match_format, :score,
+      :tournament_entry_id, :deck_version_id)
   end
 end

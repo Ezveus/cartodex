@@ -119,7 +119,18 @@ class DecksController < ApplicationController
   def stats
     @deck = current_user.decks.includes(:archetype).find_by!(key: params[:id])
     authorize @deck
-    @results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ])
+    @versions = @deck.ordered_versions
+    @all_results = @deck.deck_results.includes(archetype: [ :parent, :primary_card, :secondary_card ]).to_a
+    # The versions are already loaded and numbered, so each result is pointed at its numbered
+    # instance rather than preloaded again: a preloaded copy would carry no number, and printing
+    # one would cost a COUNT per result.
+    by_id = @versions.index_by(&:id)
+    @all_results.each { |result| result.association(:deck_version).target = by_id[result.deck_version_id] }
+
+    # ?version=N names a version by the number the page prints. An unknown N falls back to every
+    # version rather than to an empty page, since a fresh version legitimately has no result yet.
+    @selected_version = @versions.find { |version| version.number.to_s == params[:version].to_s }
+    @results = @selected_version ? @all_results.select { |r| r.deck_version_id == @selected_version.id } : @all_results
   end
 
   # How this deck *opens*, from the decklist alone — as against #stats, which is how it has *done*,

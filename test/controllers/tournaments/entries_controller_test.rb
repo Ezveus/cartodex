@@ -120,7 +120,7 @@ module Tournaments
     end
 
     test "attach_results links unassigned results from the same deck to the participation" do
-      result = @deck.deck_results.create!(result: "win", played_at: Time.current)
+      result = @deck.deck_results.create!(result: "win", played_at: Time.current, deck_version: deck_versions(:one))
 
       post attach_results_tournament_entry_path(@tournament, @entry), params: { deck_result_ids: [ result.id ] }
 
@@ -129,7 +129,7 @@ module Tournaments
     end
 
     test "attach_results ignores results from a different deck" do
-      other = decks(:two).deck_results.create!(result: "win", played_at: Time.current)
+      other = decks(:two).deck_results.create!(result: "win", played_at: Time.current, deck_version: deck_versions(:two))
 
       post attach_results_tournament_entry_path(@tournament, @entry), params: { deck_result_ids: [ other.id ] }
 
@@ -150,6 +150,132 @@ module Tournaments
         params: { deck_result_ids: [] }
 
       assert_response :not_found
+    end
+
+    test "create on a drifted deck asks which version and writes nothing" do
+      drift(@deck)
+
+      assert_no_difference [ -> { TournamentEntry.count }, -> { DeckVersion.count }, -> { DeckVersionCard.count } ] do
+        post tournament_entries_path(tournaments(:two)), params: {
+          tournament_entry: { deck_id: @deck.id }
+        }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "input[type=radio][name=version_choice][value=new]"
+      assert_select "input[type=radio][name=version_choice][value=current]"
+      assert_select "label", text: "Create version 2 from the current list"
+      assert_select "label", text: "Attach to version 1"
+    end
+
+    test "create on a drifted deck with new records the participation on version 2" do
+      drift(@deck)
+
+      assert_difference -> { DeckVersion.count }, 1 do
+        post tournament_entries_path(tournaments(:two)), params: {
+          tournament_entry: { deck_id: @deck.id }, version_choice: "new"
+        }
+      end
+
+      created = @user.tournament_entries.order(:id).last
+      assert_redirected_to tournament_entry_path(tournaments(:two), created)
+      assert_equal @deck.latest_version, created.deck_version
+      assert_equal 2, created.deck_version.number
+    end
+
+    test "create on a drifted deck with current records the participation on version 1" do
+      drift(@deck)
+
+      assert_no_difference -> { DeckVersion.count } do
+        post tournament_entries_path(tournaments(:two)), params: {
+          tournament_entry: { deck_id: @deck.id }, version_choice: "current"
+        }
+      end
+
+      assert_equal deck_versions(:one), @user.tournament_entries.order(:id).last.deck_version
+    end
+
+    # Resolving a stranger's drifted deck would ask the member a question about somebody else's
+    # list — and, answered "new", snapshot it inside a transaction only the refusal rolls back.
+    test "create with somebody else's deck neither versions it nor asks" do
+      drift(decks(:two))
+
+      assert_no_difference [ -> { TournamentEntry.count }, -> { DeckVersion.count } ] do
+        post tournament_entries_path(tournaments(:two)), params: {
+          tournament_entry: { deck_id: decks(:two).id }
+        }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "input[name=version_choice]", count: 0
+    end
+
+    test "attach_results files the results on the participation's version" do
+      v2 = Decks::VersionSnapshot.call(@deck)
+      result = @deck.deck_results.create!(result: "win", played_at: Time.current, deck_version: v2)
+
+      post attach_results_tournament_entry_path(@tournament, @entry), params: { deck_result_ids: [ result.id ] }
+
+      assert_equal deck_versions(:one), result.reload.deck_version
+    end
+
+    test "update moves the participation and its results to another version" do
+      result = @deck.deck_results.create!(result: "win", tournament_entry: @entry)
+      v2 = Decks::VersionSnapshot.call(@deck)
+
+      patch tournament_entry_path(@tournament, @entry), params: {
+        tournament_entry: { deck_version_id: v2.id }
+      }
+
+      assert_redirected_to tournament_entry_path(@tournament, @entry)
+      assert_equal v2, @entry.reload.deck_version
+      assert_equal v2, result.reload.deck_version
+    end
+
+    test "update refuses a version of another deck" do
+      patch tournament_entry_path(@tournament, @entry), params: {
+        tournament_entry: { deck_version_id: deck_versions(:two).id }
+      }
+
+      assert_response :unprocessable_entity
+      assert_equal deck_versions(:one), @entry.reload.deck_version
+    end
+
+    test "update to a drifted deck asks which version, then files it on the choice" do
+      other = @user.decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
+      drift(other)
+
+      assert_no_difference -> { DeckVersion.count } do
+        patch tournament_entry_path(@tournament, @entry), params: { tournament_entry: { deck_id: other.id } }
+      end
+      assert_response :unprocessable_entity
+      assert_equal @deck, @entry.reload.deck
+
+      patch tournament_entry_path(@tournament, @entry), params: {
+        tournament_entry: { deck_id: other.id }, version_choice: "current"
+      }
+      assert_redirected_to tournament_entry_path(@tournament, @entry)
+      assert_equal other, @entry.reload.deck
+      assert_equal other.latest_version, @entry.deck_version
+    end
+
+    test "edit costs the same with one version as with four" do
+      get edit_tournament_entry_path(@tournament, @entry) # warm the session
+
+      small = ActiveRecord::Base.uncached { count_queries { get edit_tournament_entry_path(@tournament, @entry) } }
+      3.times { |i| Decks::VersionSnapshot.call(@deck, effective_at: (i + 1).days.ago) }
+      large = ActiveRecord::Base.uncached { count_queries { get edit_tournament_entry_path(@tournament, @entry) } }
+
+      assert_response :success
+      assert_equal small, large, "query count grew with the version count: #{small} -> #{large}"
+    end
+
+    private
+
+    # Leaves the deck on a version its live list no longer matches.
+    def drift(deck)
+      deck_version_for(deck)
+      deck.deck_cards.create!(card: cards(:froakie_twm), quantity: 1)
     end
   end
 end

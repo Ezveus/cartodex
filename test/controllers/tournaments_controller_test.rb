@@ -303,7 +303,8 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   # position still puts "Ash Ketchum" somewhere in the row.
   test "mine prints each participation's profile in its own column" do
     profileless_deck = Deck.create!(user: @user, name: "Profileless list", format: "expanded")
-    TournamentEntry.create!(user: @user, tournament: @other_tournament, deck: profileless_deck)
+    TournamentEntry.create!(user: @user, tournament: @other_tournament, deck: profileless_deck,
+      deck_version: deck_version_for(profileless_deck))
 
     get mine_tournaments_path
 
@@ -905,7 +906,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
       open_participant_count: 259
     )
     deck = Deck.create!(user: @user, name: "Online Deck", standard_pool: standard_pools(:twm_por))
-    @user.tournament_entries.create!(tournament: event, deck: deck)
+    @user.tournament_entries.create!(tournament: event, deck: deck, deck_version: deck_version_for(deck))
     standing = event.standings.create!(
       player_name: "JRobrueda", division: "open", placement: 2,
       wins: 8, losses: 0, ties: 0, archetype: archetypes(:standings_marker)
@@ -918,7 +919,8 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   def second_entry_for_misty
     deck = Deck.create!(user: @user, name: "Second Player Deck", standard_pool: standard_pools(:twm_por))
     @user.tournament_entries.create!(
-      tournament: @tournament, deck: deck, tournament_profile: tournament_profiles(:misty)
+      tournament: @tournament, deck: deck, deck_version: deck_version_for(deck),
+      tournament_profile: tournament_profiles(:misty)
     )
   end
 
@@ -932,7 +934,8 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
   end
 
   def record_entry(tournament, profile)
-    TournamentEntry.create!(user: @user, tournament: tournament, deck: decks(:one), tournament_profile: profile)
+    TournamentEntry.create!(user: @user, tournament: tournament, deck: decks(:one),
+      deck_version: deck_versions(:one), tournament_profile: profile)
   end
 
   def profile_of_its_own(index)
@@ -993,7 +996,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     # per user per event — a distinct user per row is what a shared user could not give us.
     user = User.create!(email: "quiet-player-#{index}@example.com", password: "password123")
     deck = Deck.create!(user: user, name: "Quiet Deck #{index}", standard_pool: standard_pools(:twm_por))
-    entry = user.tournament_entries.create!(tournament: @tournament, deck: deck)
+    entry = user.tournament_entries.create!(tournament: @tournament, deck: deck, deck_version: deck_version_for(deck))
     # A field list of its own per row too, and ownerless-and-shared rather than a reuse of the
     # entry's own deck: that is what Task 8's import actually produces (Deck requires an
     # ownerless deck to be shared and non-physical), so the fixture reflects reality rather than
