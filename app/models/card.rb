@@ -10,6 +10,10 @@ class Card < ApplicationRecord
   has_many :users, through: :collections
   has_many :deck_cards, dependent: :destroy
   has_many :decks, through: :deck_cards
+  # :destroy, the same call as deck_cards: a printing removed from the catalogue leaves every
+  # list that held it, recorded ones included. No screen deletes a card today; without a
+  # dependent at all, Card#destroy would raise InvalidForeignKey for any card a version holds.
+  has_many :deck_version_cards, dependent: :destroy
   # The printing a label decision was made from. Nullified, never cascaded: see
   # CardLabelAssignment.
   has_many :card_label_assignments, dependent: :nullify

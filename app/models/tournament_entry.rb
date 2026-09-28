@@ -5,6 +5,9 @@ class TournamentEntry < ApplicationRecord
   belongs_to :tournament
   belongs_to :deck
   belongs_to :tournament_profile, optional: true
+  # Which list was played here. Required: Tournaments::EntriesController resolves it through
+  # Decks::VersionResolver, and the entry's results inherit it (DeckResult#inherit_entry_version).
+  belongs_to :deck_version
   has_many :deck_results, dependent: :nullify
   # :nullify, not :destroy — the opposite call from Tournament#standings, and for the reason the
   # two tables are separate at all: deleting my private participation must not erase a public row
@@ -23,6 +26,11 @@ class TournamentEntry < ApplicationRecord
   validate :tournament_profile_belongs_to_user
   validate :one_entry_per_player
   validate :deck_unchanged_while_results_attached
+  validate :version_belongs_to_same_deck
+
+  # after_update runs inside the save's transaction, so an entry and its results move together
+  # or not at all. saved_change_to_*, not *_changed?: the latter is already false here.
+  after_update :move_results_to_version, if: :saved_change_to_deck_version_id?
 
   # The label both tournament pickers print — Decks::ResultModal and DeckResults::EditView —
   # kept here rather than in either of them for the reason Card#printing_label is: two callers
@@ -68,6 +76,18 @@ class TournamentEntry < ApplicationRecord
     return if placement.blank? || participant_count.blank?
 
     errors.add(:placement, "can't be greater than the number of participants") if placement > participant_count
+  end
+
+  def version_belongs_to_same_deck
+    return if deck_version.nil? || deck_id.nil?
+
+    errors.add(:deck_version, "must belong to the same deck") if deck_version.deck_id != deck_id
+  end
+
+  # update_all skips DeckResult's callbacks, and nothing there needs to run: the results' version
+  # is exactly what their entry's now is, which is the invariant version_matches_entry states.
+  def move_results_to_version
+    deck_results.update_all(deck_version_id: deck_version_id)
   end
 
   def deck_belongs_to_user

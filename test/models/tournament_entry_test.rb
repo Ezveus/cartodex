@@ -49,7 +49,7 @@ class TournamentEntryTest < ActiveSupport::TestCase
     existing = tournament_entries(:one)
     duplicate = TournamentEntry.new(
       user: existing.user, tournament: existing.tournament,
-      deck: existing.deck, tournament_profile: existing.tournament_profile
+      deck: existing.deck, deck_version: existing.deck_version, tournament_profile: existing.tournament_profile
     )
 
     assert_not duplicate.valid?
@@ -63,7 +63,8 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert_nil existing.tournament_profile_id, "sanity: this fixture is the profile-less case"
 
     duplicate = TournamentEntry.new(
-      user: existing.user, tournament: existing.tournament, deck: existing.deck
+      user: existing.user, tournament: existing.tournament, deck: existing.deck,
+      deck_version: existing.deck_version
     )
 
     assert_not duplicate.valid?
@@ -79,7 +80,8 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert_nil existing.tournament_profile_id, "sanity: this fixture is the profile-less case"
 
     other = TournamentEntry.new(
-      user: users(:one), tournament: existing.tournament, deck: decks(:one)
+      user: users(:one), tournament: existing.tournament, deck: decks(:one),
+      deck_version: deck_versions(:one)
     )
 
     assert other.valid?, other.errors.full_messages.to_sentence
@@ -89,7 +91,7 @@ class TournamentEntryTest < ActiveSupport::TestCase
     existing = tournament_entries(:one)
     second = TournamentEntry.new(
       user: existing.user, tournament: existing.tournament,
-      deck: existing.deck, tournament_profile: tournament_profiles(:misty)
+      deck: existing.deck, deck_version: existing.deck_version, tournament_profile: tournament_profiles(:misty)
     )
 
     assert second.valid?, second.errors.full_messages.to_sentence
@@ -112,7 +114,7 @@ class TournamentEntryTest < ActiveSupport::TestCase
     entry.deck.deck_results.create!(result: "win", played_at: Time.current, tournament_entry: entry)
     other_deck = Deck.create!(user: users(:one), name: "Other Deck", standard_pool: standard_pools(:twm_por))
 
-    assert_not entry.update(deck: other_deck)
+    assert_not entry.update(deck: other_deck, deck_version: deck_version_for(other_deck))
     assert_includes entry.errors[:deck], "can't be changed while matches are attached to this participation"
     assert_equal decks(:one).id, entry.reload.deck_id
   end
@@ -123,7 +125,7 @@ class TournamentEntryTest < ActiveSupport::TestCase
 
     other_deck = Deck.create!(user: users(:one), name: "Other Deck", standard_pool: standard_pools(:twm_por))
 
-    assert entry.update(deck: other_deck), entry.errors.full_messages.to_sentence
+    assert entry.update(deck: other_deck, deck_version: deck_version_for(other_deck)), entry.errors.full_messages.to_sentence
   end
 
   test "suggested_championship_points reads the grid with the event's tier and its own placement" do
@@ -188,9 +190,45 @@ class TournamentEntryTest < ActiveSupport::TestCase
     assert_nil standing.reload.tournament_entry_id
   end
 
+  test "an entry without a version is invalid" do
+    entry = build_entry(deck_version: nil)
+
+    assert_not entry.valid?
+    assert_includes entry.errors[:deck_version], "must exist"
+  end
+
+  test "an entry may not hang off another deck's version" do
+    entry = build_entry(deck_version: deck_versions(:two))
+
+    assert_not entry.valid?
+    assert_includes entry.errors[:deck_version], "must belong to the same deck"
+  end
+
+  # Results inherit their participation's version, so moving the participation moves them.
+  test "moving an entry to another version moves its results with it" do
+    entry = tournament_entries(:one)
+    results = 2.times.map { entry.deck.deck_results.create!(result: "win", tournament_entry: entry) }
+    v2 = Decks::VersionSnapshot.call(entry.deck)
+
+    assert entry.update(deck_version: v2), entry.errors.full_messages.to_sentence
+
+    assert_equal [ v2.id ] * 2, results.map { |result| result.reload.deck_version_id }
+  end
+
+  test "an invalid entry update leaves its results on their version" do
+    entry = tournament_entries(:one)
+    result = entry.deck.deck_results.create!(result: "win", tournament_entry: entry)
+    v2 = Decks::VersionSnapshot.call(entry.deck)
+
+    assert_not entry.update(deck_version: v2, placement: 600)
+
+    assert_equal deck_versions(:one), result.reload.deck_version
+    assert_equal deck_versions(:one), entry.reload.deck_version
+  end
+
   private
 
   def build_entry(attrs = {})
-    TournamentEntry.new({ user: @user, tournament: @tournament, deck: @deck }.merge(attrs))
+    TournamentEntry.new({ user: @user, tournament: @tournament, deck: @deck, deck_version: deck_versions(:one) }.merge(attrs))
   end
 end

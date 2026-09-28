@@ -79,6 +79,12 @@ module ActiveSupport
       deck
     end
 
+    # A version to hang a result or an entry off, since both require one and nothing assigns it
+    # for them: the deck's latest, or a snapshot of its live list when it has none.
+    def deck_version_for(deck)
+      deck.latest_version || Decks::VersionSnapshot.call(deck)
+    end
+
     # Commits more real copies of the card across a fresh physical deck than the
     # user owns — the state a collection decrease leaves behind. Defaults to
     # @user, set by the including test's setup, but takes one explicitly like

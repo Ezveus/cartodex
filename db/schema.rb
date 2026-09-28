@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_28_090000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -152,6 +152,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
     t.integer "archetype_id"
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
+    t.integer "deck_version_id", null: false
     t.string "match_format", default: "bo1", null: false
     t.text "notes"
     t.datetime "played_at"
@@ -161,7 +162,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
     t.datetime "updated_at", null: false
     t.index ["archetype_id"], name: "index_deck_results_on_archetype_id"
     t.index ["deck_id"], name: "index_deck_results_on_deck_id"
+    t.index ["deck_version_id"], name: "index_deck_results_on_deck_version_id"
     t.index ["tournament_entry_id"], name: "index_deck_results_on_tournament_entry_id"
+  end
+
+  create_table "deck_version_cards", force: :cascade do |t|
+    t.integer "card_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "deck_version_id", null: false
+    t.integer "quantity", null: false
+    t.datetime "updated_at", null: false
+    t.index ["card_id"], name: "index_deck_version_cards_on_card_id"
+    t.index ["deck_version_id", "card_id"], name: "index_deck_version_cards_on_deck_version_id_and_card_id", unique: true
+    t.check_constraint "quantity > 0", name: "deck_version_cards_quantity_positive"
+  end
+
+  create_table "deck_versions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "deck_id", null: false
+    t.datetime "effective_at", null: false
+    t.string "format", null: false
+    t.string "other_format_name"
+    t.integer "standard_pool_id"
+    t.datetime "updated_at", null: false
+    t.index ["deck_id", "effective_at"], name: "index_deck_versions_on_deck_id_and_effective_at"
+    t.index ["standard_pool_id"], name: "index_deck_versions_on_standard_pool_id"
   end
 
   create_table "decks", force: :cascade do |t|
@@ -286,6 +311,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
     t.integer "championship_points"
     t.datetime "created_at", null: false
     t.integer "deck_id", null: false
+    t.integer "deck_version_id", null: false
     t.integer "participant_count"
     t.integer "placement"
     t.integer "tournament_id", null: false
@@ -293,6 +319,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["deck_id"], name: "index_tournament_entries_on_deck_id"
+    t.index ["deck_version_id"], name: "index_tournament_entries_on_deck_version_id"
     t.index ["tournament_id", "tournament_profile_id"], name: "index_tournament_entries_on_tournament_and_profile", unique: true, where: "tournament_profile_id IS NOT NULL"
     t.index ["tournament_id", "user_id"], name: "index_tournament_entries_on_tournament_and_user", unique: true, where: "tournament_profile_id IS NULL"
     t.index ["tournament_id"], name: "index_tournament_entries_on_tournament_id"
@@ -395,8 +422,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
   add_foreign_key "deck_cards", "cards"
   add_foreign_key "deck_cards", "decks"
   add_foreign_key "deck_results", "archetypes"
+  add_foreign_key "deck_results", "deck_versions"
   add_foreign_key "deck_results", "decks"
   add_foreign_key "deck_results", "tournament_entries"
+  add_foreign_key "deck_version_cards", "cards"
+  add_foreign_key "deck_version_cards", "deck_versions"
+  add_foreign_key "deck_versions", "decks"
+  add_foreign_key "deck_versions", "standard_pools"
   add_foreign_key "decks", "archetypes"
   add_foreign_key "decks", "standard_pools"
   add_foreign_key "decks", "users"
@@ -407,6 +439,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_090000) do
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id"
   add_foreign_key "standard_pools", "card_sets", column: "first_card_set_id"
   add_foreign_key "standard_pools", "card_sets", column: "last_card_set_id"
+  add_foreign_key "tournament_entries", "deck_versions"
   add_foreign_key "tournament_entries", "decks"
   add_foreign_key "tournament_entries", "tournament_profiles"
   add_foreign_key "tournament_entries", "tournaments"

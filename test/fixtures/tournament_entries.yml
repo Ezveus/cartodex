@@ -2,6 +2,7 @@ one:
   user: one
   tournament: one
   deck: one
+  deck_version: one
   tournament_profile: ash
   participant_count: 512
   placement: 33
@@ -11,6 +12,7 @@ two:
   user: two
   tournament: two
   deck: two
+  deck_version: two
   participant_count: 12
   placement: 1
   championship_points: 50
@@ -21,5 +23,6 @@ shared_event:
   user: two
   tournament: one
   deck: two
+  deck_version: two
   participant_count: 512
   placement: 7

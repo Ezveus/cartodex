@@ -61,6 +61,7 @@ class StandardPools::AnchorBackfillTest < ActiveSupport::TestCase
   test "reports rather than writes when there is no pool at all" do
     Deck.update_all(standard_pool_id: nil)
     Tournament.update_all(standard_pool_id: nil)
+    DeckVersion.update_all(standard_pool_id: nil)
     StandardPool.delete_all
 
     result = StandardPools::AnchorBackfill.call
