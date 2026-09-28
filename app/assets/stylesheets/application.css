@@ -821,6 +821,62 @@ textarea.form-input {
   color: var(--ink-500);
 }
 
+/* Deck versions: the versions page, the per-version summary on the stats page, and the diff
+   page's one-line caption above the compare table (whose container carries its own centring,
+   so the caption repeats it rather than sitting against the page edge). */
+.deck-versions-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--ink-500);
+}
+
+.deck-versions-status p {
+  margin: 0;
+}
+
+.deck-versions-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* button_to wraps its button in a form, which is a block and would stack the row's two actions. */
+.deck-versions-delete {
+  display: inline;
+  margin: 0;
+}
+
+.version-summary {
+  margin-bottom: 2rem;
+}
+
+.version-summary-scope {
+  margin: 0.75rem 0 0;
+  color: var(--ink-500);
+}
+
+.deck-version-summary {
+  max-width: 1000px;
+  margin: 2rem auto 0;
+  padding: 0 1rem;
+  color: var(--ink-500);
+}
+
+/* The modal's version question takes the place of its Save row, so it keeps that row's spacing. */
+.result-version-prompt {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.result-version-prompt-text {
+  margin: 0;
+  font-weight: 600;
+}
+
 .matchup-archetype-section {
   margin-bottom: 2.5rem;
 }

@@ -1,12 +1,14 @@
 import { Controller } from "@hotwired/stimulus"
-import { requestJson } from "helpers/api"
+import { requestJson, HandedOver } from "helpers/api"
+import { flashAlert } from "helpers/flash"
 
 export default class extends Controller {
   static targets = [
     "dialog", "archetypeInput", "archetypeId", "archetypeResults",
     "notesInput", "createSection", "primaryInput", "primaryId",
     "primaryResults", "secondaryInput", "secondaryId", "secondaryResults",
-    "tournamentEntrySelect", "submitButton"
+    "tournamentEntrySelect", "submitButton", "actions",
+    "versionPrompt", "versionPromptText", "versionChoice"
   ]
   static values = { deckKey: String }
 
@@ -80,12 +82,17 @@ export default class extends Controller {
   // results as a duplicate — two matches with the same score on the same day is
   // an ordinary evening — so a second POST is a second row, and the modal only
   // closes once the first answer is back. The button is what has to say no.
+  //
+  // It stays disabled past the answer in one case: the server asked which
+  // version the match belongs to, and the prompt is now the only way forward.
+  // cancelVersionChoice is what gives it back.
   async submit(event) {
     event.preventDefault()
 
     const result = this.#fieldValue("result")
     if (!result || this.submitButtonTarget.disabled) return
     this.submitButtonTarget.disabled = true
+    let asking = false
 
     try {
       let archetypeId = this.archetypeIdTarget.value
@@ -96,34 +103,101 @@ export default class extends Controller {
         if (!archetypeId) return
       }
 
-      const data = await requestJson(`/api/decks/${this.deckKeyValue}/results`, {
-        method: "POST",
-        body: {
-          deck_result: {
-            result,
-            match_format: this.#fieldValue("match_format"),
-            score: this.#fieldValue("score") || null,
-            archetype_id: archetypeId || null,
-            tournament_entry_id: this.hasTournamentEntrySelectTarget ? (this.tournamentEntrySelectTarget.value || null) : null,
-            notes: this.notesInputTarget.value,
-            played_at: new Date().toISOString()
-          }
-        },
-        failure: "Couldn't log this result"
-      })
-      if (!data) return
+      // Kept whole for a resubmission, played_at included: the match was played
+      // when Save was clicked, not when the question was answered.
+      this.pendingResult = {
+        result,
+        match_format: this.#fieldValue("match_format"),
+        score: this.#fieldValue("score") || null,
+        archetype_id: archetypeId || null,
+        tournament_entry_id: this.hasTournamentEntrySelectTarget ? (this.tournamentEntrySelectTarget.value || null) : null,
+        notes: this.notesInputTarget.value,
+        played_at: new Date().toISOString()
+      }
 
-      this.close()
-      this.#updateStats(data.deck_stats)
+      asking = await this.#post()
     } finally {
       // finally, not after the await: every failure requestJson reports comes
       // back as null and returns early, and a button left disabled on the way
       // out cannot be used to retry.
-      this.submitButtonTarget.disabled = false
+      if (!asking) this.submitButtonTarget.disabled = false
     }
   }
 
+  // --- Version prompt ---
+
+  // The same result again, now saying which version it belongs to. The choice
+  // buttons are the double-submit guard here, for the reason Save is above:
+  // "new" twice would be two results, and possibly two versions.
+  async chooseVersion(event) {
+    if (!this.pendingResult || this.versionChoiceTargets.some((button) => button.disabled)) return
+
+    this.versionChoiceTargets.forEach((button) => { button.disabled = true })
+    try {
+      const asking = await this.#post(event.currentTarget.dataset.versionChoice)
+      // Refused (a 422, a dead connection — already flashed): back to the form,
+      // where whatever the server objected to can be corrected.
+      if (!asking && this.dialogTarget.open) this.cancelVersionChoice()
+    } finally {
+      this.versionChoiceTargets.forEach((button) => { button.disabled = false })
+    }
+  }
+
+  // Nothing was written: the 409 is the server refusing before any row, so
+  // cancelling is only a matter of putting the form back.
+  cancelVersionChoice() {
+    this.pendingResult = null
+    this.#hideVersionPrompt()
+    this.submitButtonTarget.disabled = false
+  }
+
   // --- Private ---
+
+  // Posts the pending result, with the version choice once there is one.
+  // Answers true when the server asked the question instead of saving, which
+  // is the one outcome that leaves the modal waiting on the reader.
+  async #post(versionChoice) {
+    const body = { deck_result: this.pendingResult }
+    if (versionChoice) body.version_choice = versionChoice
+
+    const data = await requestJson(`/api/decks/${this.deckKeyValue}/results`, {
+      method: "POST",
+      body,
+      failure: "Couldn't log this result",
+      handOver: [409]
+    })
+    if (!data) return false
+
+    if (data instanceof HandedOver) {
+      if (data.body.error === "version_choice_required" && !versionChoice) {
+        this.#showVersionPrompt(data.body)
+        return true
+      }
+      // A 409 after a choice was sent would ask the same question forever.
+      flashAlert("Couldn't log this result (HTTP 409)")
+      return false
+    }
+
+    this.close()
+    this.#updateStats(data.deck_stats)
+    return false
+  }
+
+  #showVersionPrompt({ current_version: current, next_version: next }) {
+    this.versionPromptTextTarget.textContent =
+      `This deck's list has changed since version ${current}. Which list was this match played with?`
+    const [createButton, attachButton] = this.versionChoiceTargets
+    createButton.textContent = `Create version ${next}`
+    attachButton.textContent = `Attach to version ${current}`
+
+    this.actionsTarget.hidden = true
+    this.versionPromptTarget.hidden = false
+  }
+
+  #hideVersionPrompt() {
+    this.versionPromptTarget.hidden = true
+    this.actionsTarget.hidden = false
+  }
 
   async #createArchetype() {
     const archetype = await requestJson("/api/archetypes", {
@@ -220,6 +294,9 @@ export default class extends Controller {
   }
 
   #reset() {
+    this.pendingResult = null
+    this.#hideVersionPrompt()
+    this.submitButtonTarget.disabled = false
     this.archetypeIdTarget.value = ""
     this.archetypeInputTarget.value = ""
     this.archetypeResultsTarget.innerHTML = ""

@@ -14,7 +14,24 @@ import { flashAlert, flashResponseError } from "helpers/flash"
 //
 // `failure` is what the user is told when the server sent no explanation of its
 // own; write it as the action that did not happen, not as the error.
-export async function requestJson(url, { method = "GET", body, failure } = {}) {
+//
+// `handOver` lists the refusals a caller answers itself instead of flashing — a
+// 409 that asks the user a question, say. Such a response comes back as a
+// HandedOver rather than as null, so it cannot be mistaken for a success body
+// (which is any object) nor for a failure already reported:
+//
+//   const data = await requestJson(url, { method: "POST", body, failure: "...", handOver: [409] })
+//   if (data instanceof HandedOver) return this.ask(data.body)
+//
+// Empty by default, which is every caller written before it.
+export class HandedOver {
+  constructor(status, body) {
+    this.status = status
+    this.body = body
+  }
+}
+
+export async function requestJson(url, { method = "GET", body, failure, handOver = [] } = {}) {
   let response
 
   try {
@@ -30,6 +47,10 @@ export async function requestJson(url, { method = "GET", body, failure } = {}) {
   } catch {
     flashAlert(`${failure} — the request didn't reach the server`)
     return null
+  }
+
+  if (!response.ok && handOver.includes(response.status)) {
+    return new HandedOver(response.status, await response.json().catch(() => ({})))
   }
 
   if (!response.ok) {

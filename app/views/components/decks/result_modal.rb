@@ -16,6 +16,7 @@ module Decks
           tournament_group
           notes_group
           actions
+          version_prompt
         end
       end
     end
@@ -79,8 +80,25 @@ module Decks
       end
     end
 
+    # Shipped hidden and filled in by the controller from the server's 409: which numbers to
+    # offer is the server's answer to "has the list changed since its latest version", and the
+    # page cannot know it — the list is edited in place on this very page. It takes the place of
+    # the Save row while it is shown, so the only ways forward are the three it offers.
+    def version_prompt
+      div(class: "result-version-prompt", hidden: true, data: { result_modal_target: "versionPrompt" }) do
+        p(class: "result-version-prompt-text", data: { result_modal_target: "versionPromptText" })
+        div(class: "form-actions result-modal-actions") do
+          button(type: "button", class: "btn btn-primary",
+                 data: { action: "result-modal#chooseVersion", version_choice: "new", result_modal_target: "versionChoice" })
+          button(type: "button", class: "btn btn-secondary",
+                 data: { action: "result-modal#chooseVersion", version_choice: "current", result_modal_target: "versionChoice" })
+          button(type: "button", class: "btn btn-secondary", data: { action: "result-modal#cancelVersionChoice" }) { "Cancel" }
+        end
+      end
+    end
+
     def actions
-      div(class: "form-actions result-modal-actions") do
+      div(class: "form-actions result-modal-actions", data: { result_modal_target: "actions" }) do
         button(class: "btn btn-primary", data: { action: "result-modal#submit", result_modal_target: "submitButton" }) { "Save" }
         button(class: "btn btn-secondary", type: "button", data: { action: "result-modal#close" }) { "Cancel" }
       end

@@ -15,6 +15,7 @@ module Decks
         button(class: button_class, data: { action: "dropdown#toggle" }) { "Actions ▾" }
         div(class: "dropdown-menu", data: { dropdown_target: "menu" }) do
           edit_item
+          versions_item
           share_item if @share
           duplicate_item
           delete_item
@@ -36,6 +37,13 @@ module Decks
       link_opts = { class: "dropdown-item" }
       link_opts[:data] = { turbo_frame: @edit_frame } if @edit_frame
       link_to "Edit", edit_deck_path(@deck), **link_opts
+    end
+
+    # Owner-only without a check of its own: this dropdown is rendered only on the owner's deck
+    # page and on the owner's own /decks rows, never on a public listing, which is what already
+    # keeps Edit and Delete from a visitor. `_top` for the frame reason given below.
+    def versions_item
+      link_to "Versions", deck_versions_path(@deck), class: "dropdown-item", data: { turbo_frame: "_top" }
     end
 
     # Duplicate and Delete always redirect to a full page (the new deck, the index),
