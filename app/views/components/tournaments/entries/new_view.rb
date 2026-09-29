@@ -1,13 +1,14 @@
 module Tournaments
   module Entries
     class NewView < ApplicationComponent
-      def initialize(tournament:, entry:, decks:, tournament_profiles:, version_prompt: nil, versions: [])
+      def initialize(tournament:, entry:, decks:, tournament_profiles:, version_prompt: nil, versions: [], periods: {})
         @tournament = tournament
         @entry = entry
         @decks = decks
         @tournament_profiles = tournament_profiles
         @version_prompt = version_prompt
         @versions = versions
+        @periods = periods
       end
 
       def view_template
@@ -15,7 +16,7 @@ module Tournaments
           h1 { "Record your participation" }
           render Tournaments::Entries::Form.new(
             tournament: @tournament, entry: @entry, decks: @decks, tournament_profiles: @tournament_profiles,
-            version_prompt: @version_prompt, versions: @versions
+            version_prompt: @version_prompt, versions: @versions, periods: @periods
           )
         end
       end

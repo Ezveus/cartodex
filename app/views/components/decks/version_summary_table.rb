@@ -7,10 +7,11 @@ module Decks
   # also how the reader picks the scope, so it cannot shrink with it. Grouped here in Ruby: the
   # controller has already loaded them, and a GROUP BY would be a second read of the same rows.
   class VersionSummaryTable < ApplicationComponent
-    COLUMNS = [ "Version", "Period", "Format", "W", "L", "D", "T", "Win%", "List" ].freeze
+    COLUMNS = [ "Version", "Played", "Format", "W", "L", "D", "T", "Win%", "List" ].freeze
 
-    def initialize(deck:, versions:, results:, selected_version: nil)
+    def initialize(deck:, versions:, results:, selected_version: nil, periods: {})
       @deck = deck
+      @periods = periods || {}
       @versions = versions
       @results_by_version = results.group_by(&:deck_version_id)
       @selected_version = selected_version
@@ -19,9 +20,7 @@ module Decks
     def view_template
       div(class: "version-summary") do
         render Ui::DataTable.new(columns: COLUMNS) do |t|
-          @versions.each_with_index do |version, i|
-            version_row(t, version, @versions[i + 1])
-          end
+          @versions.each { |version| version_row(t, version) }
         end
 
         scope_line
@@ -30,13 +29,13 @@ module Decks
 
     private
 
-    def version_row(t, version, following)
+    def version_row(t, version)
       results = @results_by_version.fetch(version.id, [])
       counts = @deck.result_counts(results)
 
       t.row do
         t.cell { version_link(version) }
-        t.cell { DeckVersions::Labels.period(version, following) }
+        t.cell { DeckVersions::Labels.played(@periods[version.id]) }
         t.cell { version.format_label }
         t.cell { counts["win"].to_s }
         t.cell { counts["loss"].to_s }

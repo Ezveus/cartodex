@@ -1,9 +1,10 @@
 module DeckVersions
   class IndexView < ApplicationComponent
-    COLUMNS = [ "Version", "Period", "Format", "W / L / D / T", "Participations", "" ].freeze
+    COLUMNS = [ "Version", "Played", "Format", "W / L / D / T", "Participations", "" ].freeze
 
-    def initialize(deck:, versions:, drift:, result_counts:, entry_counts:)
+    def initialize(deck:, versions:, drift:, result_counts:, entry_counts:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @versions = versions
       @drift = drift
       @result_counts = result_counts
@@ -35,7 +36,9 @@ module DeckVersions
           p { "No version yet. The first result logged with this deck records one." }
           snapshot_button("Record version 1 now")
         elsif @drift.drift?
-          p { "The list has changed since #{latest.label}." }
+          # The server's sentence: it alone knows whether the cards, the format or only the pool
+          # moved, and "the list has changed" over sixty identical cards is a false alarm.
+          p { @drift.message(latest.number) }
           snapshot_button("Record version #{latest.number + 1} from the current list")
         else
           p { "The list is #{latest.label}, unchanged." }
@@ -55,10 +58,10 @@ module DeckVersions
 
     def versions_table
       render Ui::DataTable.new(columns: COLUMNS) do |t|
-        @versions.each_with_index do |version, i|
+        @versions.each do |version|
           t.row do
             t.cell { link_to version.label, deck_version_path(@deck, version) }
-            t.cell { DeckVersions::Labels.period(version, @versions[i + 1]) }
+            t.cell { DeckVersions::Labels.played(@periods[version.id]) }
             t.cell { version.format_label }
             t.cell { record(version) }
             t.cell { @entry_counts.fetch(version.id, 0).to_s }

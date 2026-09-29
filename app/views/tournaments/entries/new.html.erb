@@ -1,4 +1,5 @@
 <%# app/views/tournaments/entries/new.html.erb %>
 <%= render Tournaments::Entries::NewView.new(tournament: @tournament, entry: @entry, decks: @decks,
                                              tournament_profiles: @tournament_profiles,
-                                             version_prompt: @version_prompt, versions: @entry_versions) %>
+                                             version_prompt: @version_prompt, versions: @entry_versions,
+                                             periods: @periods) %>

@@ -1,7 +1,8 @@
 module DeckResults
   class EditView < ApplicationComponent
-    def initialize(deck:, result:, versions:)
+    def initialize(deck:, result:, versions:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @result = result
       @versions = versions
     end
@@ -60,7 +61,7 @@ module DeckResults
       render Ui::FormGroup.new(hint: ("Follows its participation's version." if attached)) do
         form.label :deck_version_id, "Version", class: "form-label"
         form.select :deck_version_id,
-          @versions.map { |version| [ DeckVersions::Labels.option(version), version.id ] },
+          @versions.map { |version| [ DeckVersions::Labels.option(version, @periods[version.id]), version.id ] },
           {}, class: "form-input", disabled: attached
       end
     end

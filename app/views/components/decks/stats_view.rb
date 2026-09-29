@@ -1,7 +1,8 @@
 module Decks
   class StatsView < ApplicationComponent
-    def initialize(deck:, versions:, all_results:, results:, selected_version:)
+    def initialize(deck:, versions:, all_results:, results:, selected_version:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @versions = versions
       @all_results = all_results
       @results = results
@@ -39,7 +40,8 @@ module Decks
 
       h2 { "By Version" }
       render Decks::VersionSummaryTable.new(
-        deck: @deck, versions: @versions, results: @all_results, selected_version: @selected_version
+        deck: @deck, versions: @versions, results: @all_results, selected_version: @selected_version,
+        periods: @periods
       )
     end
 

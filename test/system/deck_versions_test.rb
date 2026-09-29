@@ -39,6 +39,7 @@ class DeckVersionsTest < ApplicationSystemTestCase
     log_a_win
 
     assert_prompt_offers(next_number: 2, current_number: 1)
+    assert_selector ".result-version-prompt-text", text: "The list has changed since version 1."
 
     within(".result-version-prompt") { click_button "Cancel" }
 
@@ -75,6 +76,39 @@ class DeckVersionsTest < ApplicationSystemTestCase
     assert_no_selector "dialog.result-modal[open]"
     assert_equal 1, @deck.deck_versions.count
     assert_equal @v1, @deck.deck_results.sole.deck_version
+  end
+
+  # The question leaves the form on screen, so the reader may notice a wrong field while it is
+  # asked. The answer has to send the form as it stands at that click, not as it stood at Save.
+  test "a field corrected while the prompt is shown is what the chosen version files" do
+    drifted_deck_on_v1
+    log_a_win
+
+    assert_prompt_offers(next_number: 2, current_number: 1)
+    within("dialog.result-modal") { find(".result-type-btn.result-loss").click }
+    click_button "Attach to version 1"
+
+    assert_no_selector "dialog.result-modal[open]"
+    result = @deck.deck_results.sole
+    assert_equal "loss", result.result
+    assert_equal @v1, result.deck_version
+  end
+
+  # A pool is not a card, so the sentence has to say which of the two moved: "the list has
+  # changed" over sixty identical cards sends the reader looking for a difference that is not there.
+  test "a pool-only change is named as such, in the modal and on the versions page" do
+    @v1 = Decks::VersionSnapshot.call(@deck, effective_at: 2.days.ago)
+    @deck.update!(standard_pool: standard_pools(:twm_asc))
+    sentence = "The Standard pool has changed since version 1 " \
+               "(#{standard_pools(:twm_por).name} → #{standard_pools(:twm_asc).name})."
+
+    log_a_win
+
+    assert_prompt_offers(next_number: 2, current_number: 1)
+    assert_selector ".result-version-prompt-text", text: sentence
+
+    visit deck_versions_path(@deck)
+    assert_selector ".deck-versions-status", text: sentence
   end
 
   # The one case the modal must not ask: with no version at all there is no "version N" to
@@ -121,6 +155,9 @@ class DeckVersionsTest < ApplicationSystemTestCase
     within ".version-summary" do
       rows = all(".data-table-row", count: 2)
       assert_match(/\Av1\b.*100%/m, rows.first.text)
+      # A period is when the version was played, not when it was dated from.
+      assert_includes rows.first.text, "played #{5.days.ago.to_date.strftime("%b %-d, %Y")} · 1 match"
+      assert_includes rows.last.text, "not played yet"
       # A version nothing was played with has no rate at all, rather than a rate of zero.
       assert_match(/\Av2\b.*—/m, rows.last.text)
       assert_no_match(/%/, rows.last.text)

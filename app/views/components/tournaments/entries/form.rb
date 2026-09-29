@@ -1,7 +1,7 @@
 module Tournaments
   module Entries
     class Form < ApplicationComponent
-      def initialize(tournament:, entry:, decks:, tournament_profiles:, version_prompt: nil, versions: [])
+      def initialize(tournament:, entry:, decks:, tournament_profiles:, version_prompt: nil, versions: [], periods: {})
         @tournament = tournament
         @entry = entry
         @decks = decks
@@ -10,6 +10,7 @@ module Tournaments
         # Array(): a controller that renders this form from a path which never assigned
         # @entry_versions passes nil, and the form should lose a field rather than raise.
         @versions = Array(versions)
+        @periods = periods || {}
       end
 
       def view_template
@@ -74,7 +75,8 @@ module Tournaments
         following = @version_prompt[:next]
 
         fieldset(class: "form-fieldset entry-version-prompt") do
-          legend(class: "form-label") { "This deck's list has changed since version #{current}" }
+          # The server's sentence, which says whether the cards, the format or only the pool moved.
+          legend(class: "form-label") { @version_prompt[:message] }
           p(class: "form-hint") { "Which list did you play at this event?" }
           version_choice("new", "Create version #{following} from the current list")
           version_choice("current", "Attach to version #{current}")
@@ -94,7 +96,7 @@ module Tournaments
         render Ui::FormGroup.new(hint: "Its results move with it.") do
           form.label :deck_version_id, "Version", class: "form-label"
           form.select :deck_version_id,
-            @versions.map { |version| [ DeckVersions::Labels.option(version), version.id ] },
+            @versions.map { |version| [ DeckVersions::Labels.option(version, @periods[version.id]), version.id ] },
             {}, class: "form-input"
         end
       end

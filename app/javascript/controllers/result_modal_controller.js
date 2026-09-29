@@ -89,33 +89,19 @@ export default class extends Controller {
   async submit(event) {
     event.preventDefault()
 
-    const result = this.#fieldValue("result")
-    if (!result || this.submitButtonTarget.disabled) return
+    if (!this.#fieldValue("result") || this.submitButtonTarget.disabled) return
     this.submitButtonTarget.disabled = true
     let asking = false
 
     try {
-      let archetypeId = this.archetypeIdTarget.value
+      // Only the time is kept for a resubmission: the match was played when
+      // Save was clicked, not when the question was answered. Every other field
+      // is read again at that click, since the form stays editable under it.
+      this.pendingPlayedAt = new Date().toISOString()
+      const payload = await this.#payload()
+      if (!payload) return
 
-      // If create section is visible and no archetype selected, create one first
-      if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
-        archetypeId = await this.#createArchetype()
-        if (!archetypeId) return
-      }
-
-      // Kept whole for a resubmission, played_at included: the match was played
-      // when Save was clicked, not when the question was answered.
-      this.pendingResult = {
-        result,
-        match_format: this.#fieldValue("match_format"),
-        score: this.#fieldValue("score") || null,
-        archetype_id: archetypeId || null,
-        tournament_entry_id: this.hasTournamentEntrySelectTarget ? (this.tournamentEntrySelectTarget.value || null) : null,
-        notes: this.notesInputTarget.value,
-        played_at: new Date().toISOString()
-      }
-
-      asking = await this.#post()
+      asking = await this.#post(payload)
     } finally {
       // finally, not after the await: every failure requestJson reports comes
       // back as null and returns early, and a button left disabled on the way
@@ -126,15 +112,24 @@ export default class extends Controller {
 
   // --- Version prompt ---
 
-  // The same result again, now saying which version it belongs to. The choice
-  // buttons are the double-submit guard here, for the reason Save is above:
-  // "new" twice would be two results, and possibly two versions.
+  // The result again, now saying which version it belongs to, rebuilt from the
+  // fields as they stand at this click: the form stays on screen while the
+  // question is asked, and a reader who notices a wrong score there corrects it
+  // before answering. The choice buttons are the double-submit guard here, for
+  // the reason Save is above: "new" twice would be two results, and possibly
+  // two versions.
   async chooseVersion(event) {
-    if (!this.pendingResult || this.versionChoiceTargets.some((button) => button.disabled)) return
+    if (!this.pendingPlayedAt || this.versionChoiceTargets.some((button) => button.disabled)) return
 
+    const choice = event.currentTarget.dataset.versionChoice
     this.versionChoiceTargets.forEach((button) => { button.disabled = true })
     try {
-      const asking = await this.#post(event.currentTarget.dataset.versionChoice)
+      const payload = await this.#payload()
+      // A result deselected under the prompt, or an archetype that could not be
+      // created (already flashed): nothing to send.
+      if (!payload) return
+
+      const asking = await this.#post(payload, choice)
       // Refused (a 422, a dead connection — already flashed): back to the form,
       // where whatever the server objected to can be corrected.
       if (!asking && this.dialogTarget.open) this.cancelVersionChoice()
@@ -146,18 +141,43 @@ export default class extends Controller {
   // Nothing was written: the 409 is the server refusing before any row, so
   // cancelling is only a matter of putting the form back.
   cancelVersionChoice() {
-    this.pendingResult = null
+    this.pendingPlayedAt = null
     this.#hideVersionPrompt()
     this.submitButtonTarget.disabled = false
   }
 
   // --- Private ---
 
-  // Posts the pending result, with the version choice once there is one.
-  // Answers true when the server asked the question instead of saving, which
-  // is the one outcome that leaves the modal waiting on the reader.
-  async #post(versionChoice) {
-    const body = { deck_result: this.pendingResult }
+  // The result as the fields hold it now, with the time of the first Save.
+  // Null when there is nothing to send.
+  async #payload() {
+    const result = this.#fieldValue("result")
+    if (!result) return null
+
+    let archetypeId = this.archetypeIdTarget.value
+
+    // If create section is visible and no archetype selected, create one first
+    if (!archetypeId && this.createSectionTarget.style.display !== "none" && this.primaryIdTarget.value) {
+      archetypeId = await this.#createdArchetypeId()
+      if (!archetypeId) return null
+    }
+
+    return {
+      result,
+      match_format: this.#fieldValue("match_format"),
+      score: this.#fieldValue("score") || null,
+      archetype_id: archetypeId || null,
+      tournament_entry_id: this.hasTournamentEntrySelectTarget ? (this.tournamentEntrySelectTarget.value || null) : null,
+      notes: this.notesInputTarget.value,
+      played_at: this.pendingPlayedAt
+    }
+  }
+
+  // Posts the result, with the version choice once there is one. Answers true
+  // when the server asked the question instead of saving, which is the one
+  // outcome that leaves the modal waiting on the reader.
+  async #post(payload, versionChoice) {
+    const body = { deck_result: payload }
     if (versionChoice) body.version_choice = versionChoice
 
     const data = await requestJson(`/api/decks/${this.deckKeyValue}/results`, {
@@ -183,9 +203,10 @@ export default class extends Controller {
     return false
   }
 
-  #showVersionPrompt({ current_version: current, next_version: next }) {
-    this.versionPromptTextTarget.textContent =
-      `This deck's list has changed since version ${current}. Which list was this match played with?`
+  // The sentence is the server's, printed as sent: it alone knows whether the
+  // cards, the format or only the pool moved. The buttons only need numbers.
+  #showVersionPrompt({ message, current_version: current, next_version: next }) {
+    this.versionPromptTextTarget.textContent = message
     const [createButton, attachButton] = this.versionChoiceTargets
     createButton.textContent = `Create version ${next}`
     attachButton.textContent = `Attach to version ${current}`
@@ -197,6 +218,18 @@ export default class extends Controller {
   #hideVersionPrompt() {
     this.versionPromptTarget.hidden = true
     this.actionsTarget.hidden = false
+  }
+
+  // Remembered per pair of member cards: the version question reads the form
+  // a second time, and creating again for the same two cards would be refused
+  // as a duplicate. A different pair picked in between is a different archetype.
+  async #createdArchetypeId() {
+    const members = `${this.primaryIdTarget.value}/${this.secondaryIdTarget.value}`
+    if (this.createdArchetype?.members === members) return this.createdArchetype.id
+
+    const id = await this.#createArchetype()
+    if (id) this.createdArchetype = { members, id }
+    return id
   }
 
   async #createArchetype() {
@@ -294,7 +327,8 @@ export default class extends Controller {
   }
 
   #reset() {
-    this.pendingResult = null
+    this.pendingPlayedAt = null
+    this.createdArchetype = null
     this.#hideVersionPrompt()
     this.submitButtonTarget.disabled = false
     this.archetypeIdTarget.value = ""

@@ -84,9 +84,14 @@ module Decks
     # offer is the server's answer to "has the list changed since its latest version", and the
     # page cannot know it — the list is edited in place on this very page. It takes the place of
     # the Save row while it is shown, so the only ways forward are the three it offers.
+    #
+    # The first line is the server's own sentence, copied verbatim: only the server knows whether
+    # the cards, the format or only the pool moved. The question under it is the same whatever
+    # moved, so it is written here once rather than sent with every refusal.
     def version_prompt
       div(class: "result-version-prompt", hidden: true, data: { result_modal_target: "versionPrompt" }) do
         p(class: "result-version-prompt-text", data: { result_modal_target: "versionPromptText" })
+        p(class: "form-hint") { "Which list was this match played with?" }
         div(class: "form-actions result-modal-actions") do
           button(type: "button", class: "btn btn-primary",
                  data: { action: "result-modal#chooseVersion", version_choice: "new", result_modal_target: "versionChoice" })

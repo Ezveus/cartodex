@@ -3,8 +3,9 @@ module DeckVersions
   # one deck, so every link the table carries is re-pointed at a version: the compare page's own
   # `deck_path(deck)` would build a deck address out of a version id.
   class ShowView < ApplicationComponent
-    def initialize(deck:, version:, previous:, comparison:)
+    def initialize(deck:, version:, previous:, comparison:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @version = version
       @previous = previous
       @comparison = comparison
@@ -13,7 +14,7 @@ module DeckVersions
     def view_template
       div(class: "deck-version-show") do
         p(class: "deck-version-summary") do
-          plain "#{@version.label}: #{@version.format_label}, from #{DeckVersions::Labels.date(@version)}. "
+          plain "#{@version.label}: #{@version.format_label}, #{DeckVersions::Labels.played(@periods[@version.id])}. "
           plain(@previous ? "Compared with #{@previous.label}." : "The first version: nothing to compare it with.")
         end
 

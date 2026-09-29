@@ -2,15 +2,20 @@ module DeckVersions
   # The date is the only thing about a version that can change: its cards are what was played,
   # and the date is the estimate — the backfill's in particular — that the owner may correct.
   class EditView < ApplicationComponent
-    def initialize(deck:, version:)
+    def initialize(deck:, version:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @version = version
     end
 
     def view_template
       div(class: "deck-form-container") do
         h1 { "Edit #{@version.label}" }
-        p(class: "form-hint") { "#{@deck.name} — #{@version.format_label}" }
+        # What the version was played through, beside the date being edited: that date only orders
+        # the versions, and the reader correcting it needs the span it ought to precede.
+        p(class: "form-hint") do
+          "#{@deck.name} — #{@version.format_label} · #{DeckVersions::Labels.played(@periods[@version.id])}"
+        end
 
         form_with(model: @version, scope: :deck_version, url: deck_version_path(@deck, @version),
                   method: :patch, class: "deck-form") do |f|
