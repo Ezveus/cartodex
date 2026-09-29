@@ -233,3 +233,67 @@ Instance variables and component signatures:
 - API modal: POST body gains top-level `version_choice` (`"new"` / `"current"`, omitted first).
   409 body `{ error: "version_choice_required", current_version: N, next_version: N+1 }`. Button
   labels: "Create version N+1", "Attach to version N", "Cancel".
+
+## Round 2 — review triage (owner decisions of 2026-09-29, all option A)
+
+### Owner decisions
+
+- **P1 — say what changed.** A pool-only change stays drift; every surface prints one sentence
+  built on the server by `Decks::VersionDrift::Result#message(number)`.
+- **P2 — periods come from matches.** A version's period is the span of its results' `played_at`
+  and its participations' tournament dates; `effective_at` only orders and numbers versions and is
+  never printed as a validity period.
+- **P3 — an earlier version must be earlier**: `effective_at` strictly before the latest version's.
+- **P4 — refuse an import identical to a neighbour** (the version just before or just after the
+  chosen date), compared exactly as drift compares.
+- **P5 — the import form defaults to the oldest existing version's pool** (and format).
+- **P6 — `Card has_many :deck_version_cards, dependent: :restrict_with_error`.**
+
+### Frozen contract, round 2
+
+Server lane:
+- `Decks::VersionDrift::Result` gains `changes` — ordered subset of `[:cards, :format, :pool]`
+  (`:format` when `format` or `other_format_name` differs; `:pool` when only `standard_pool_id`
+  differs) — plus `from_label`/`to_label` (for `:pool`, the two pool names; for `:format`, the two
+  `format_label`s) and `#message(number)`. Exact sentences:
+  - cards: `"The list has changed since version N."`
+  - pool: `"The Standard pool has changed since version N (TEF-PBL → TEF-30C)."`
+  - format: `"The format has changed since version N (Standard (TEF-PBL) → Expanded)."`
+  - cards+pool: `"The list and the Standard pool have changed since version N (TEF-PBL → TEF-30C)."`
+  - cards+format: `"The list and the format have changed since version N (… → …)."`
+  `drift?` stays `changes.any?`.
+- `ChoiceRequired` carries `message`; the 409 body gains `message`; `@version_prompt` gains
+  `:message`.
+- `Decks::VersionPeriods.call(versions)` → `{ version_id => Period }` for every id given, with
+  `Period = Struct(:first_on, :last_on, :results, :entries)` (Dates; nil when nothing is filed).
+  At most two grouped queries whatever the number of versions. Controllers set `@periods` in:
+  `DeckVersionsController#index/#show/#edit/#update`, `DecksController#stats`,
+  `DeckResultsController#edit/#update`, `Tournaments::EntriesController#edit/#update`.
+- Importer: `effective_at` must be before the latest version's (`"Effective from must be before
+  vN (September 23, 2026)."`); identical to its neighbour → `"This list is identical to vN."`;
+  quantity per line 1..60 else `"Line <n>: quantity must be between 1 and 60."`.
+- `DeckVersionsController#new` defaults `@form` format/pool/other_format_name to the oldest
+  version's (deck's own when there is none). `params.expect` on both write actions (400 on a
+  scalar). `#snapshot` goes through a service inside `serialized_transaction` (reuse
+  `Decks::VersionSnapshot` wrapped by the resolver-style drift check, e.g. a
+  `Decks::VersionSnapshot.call_if_drifted` or a small `Decks::ExplicitSnapshot`).
+- Remove the `association(:deck_version).target=` loop in `DecksController#stats` (dead).
+- `Card` restrict (P6), with a destroy test naming the refusal; `StandardPool` restrict test.
+- Tests for the surviving mutations: (a) the refused-date re-render names the right version
+  number; (b) cross-deck entry id → exactly the one error; (c) a `''` fingerprint card; (d)
+  backfill over a deck already holding a version; (e) snapshot after `deck_versions` was loaded.
+
+View lane:
+- **T1** — `result_modal_controller.js`: the choice resubmits a payload rebuilt from the fields
+  at click time (same `played_at` as the first Save).
+- **T2** — the three prompt buttons stack (full width, one per row) at ≤ 768px.
+- **P1** — the modal prints `data.message` (409 body); the entry form prints
+  `version_prompt[:message]`; the versions index prints `drift.message(versions.last.number)`.
+  No sentence is composed in JS or in a view.
+- **P2** — every version-listing view takes `periods:` (default `{}`) and prints
+  `"played Sep 17 → 22, 2026 · 5 matches"` / `"played Sep 22, 2026 · 1 match"` /
+  `"not played yet"` (participations count toward the dates, not the match count) through one
+  helper in `DeckVersions::Labels`; `effective_at` is no longer printed as "since"/"→". Option
+  labels in the two selects: `"v2 — Standard (TEF-PBL) · played Sep 17 → 22"` or
+  `"… · not played yet"`. Components: `IndexView`, `ShowView`, `EditView`, `VersionSummaryTable`,
+  `StatsView`, `DeckResults::EditView`, `Tournaments::Entries::Form` (+ New/EditView pass-through).
