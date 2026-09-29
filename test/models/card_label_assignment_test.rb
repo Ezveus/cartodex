@@ -41,7 +41,7 @@ class CardLabelAssignmentTest < ActiveSupport::TestCase
     card = cards(:honedge)
     assignment = @label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
 
-    card.destroy
+    remove_printing(card)
 
     assert_nil assignment.reload.card_id
     assert_equal "honedge_fp", assignment.fingerprint

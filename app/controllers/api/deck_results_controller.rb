@@ -30,7 +30,8 @@ module Api
     rescue Decks::VersionResolver::ChoiceRequired => e
       # Nothing has been written: the modal shows the choices and resubmits with one.
       render json: {
-        error: "version_choice_required", current_version: e.current_number, next_version: e.next_number
+        error: "version_choice_required", current_version: e.current_number, next_version: e.next_number,
+        message: e.message
       }, status: :conflict
     end
 

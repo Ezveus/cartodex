@@ -43,10 +43,11 @@ class DeckResultsController < ApplicationController
     @result = @deck.deck_results.find(params[:id])
   end
 
-  # The edit form's version select. Numbered in one query, so the form's cost does not grow with
-  # the deck's history.
+  # The edit form's version select, and when each was played. Numbered in one query and dated in
+  # two, so the form's cost does not grow with the deck's history.
   def set_versions
     @versions = @deck.ordered_versions
+    @periods = Decks::VersionPeriods.call(@versions)
   end
 
   # deck_version_id is overruled by the model when a participation is attached: the result then

@@ -21,6 +21,7 @@ class DeckVersionsController < ApplicationController
     DeckResult.where(deck_version_id: ids).group(:deck_version_id, :result).count
       .each { |(version_id, result), count| @result_counts[version_id][result] = count if @result_counts[version_id].key?(result) }
     @entry_counts = TournamentEntry.where(deck_version_id: ids).group(:deck_version_id).count
+    @periods = Decks::VersionPeriods.call(@versions)
   end
 
   def show
@@ -30,14 +31,19 @@ class DeckVersionsController < ApplicationController
     @previous = index.positive? ? versions[index - 1] : nil
 
     compared = [ @previous, @version ].compact
+    @periods = Decks::VersionPeriods.call(compared)
     ActiveRecord::Associations::Preloader.new(records: compared, associations: { deck_version_cards: :card }).call
     @comparison = Decks::Comparator.call(compared)
   end
 
+  # Defaults to the oldest version's classification: an earlier list was most likely played under
+  # the oldest one known, not under whatever the deck carries today. The deck's own when there is
+  # no version to go by.
   def new
+    source = @deck.deck_versions.first || @deck
     @form = {
-      decklist: "", effective_at: "", format: @deck.format,
-      standard_pool_id: @deck.standard_pool_id.to_s, other_format_name: @deck.other_format_name.to_s
+      decklist: "", effective_at: "", format: source.format,
+      standard_pool_id: source.standard_pool_id.to_s, other_format_name: source.other_format_name.to_s
     }
     @errors = []
     @standard_pools = standard_pools
@@ -60,7 +66,9 @@ class DeckVersionsController < ApplicationController
     end
   end
 
-  def edit; end
+  def edit
+    @periods = Decks::VersionPeriods.call([ @version ])
+  end
 
   # effective_at only: a version's content is a record of what was played and never changes.
   # Moving the date can renumber the deck's versions, which is the point of allowing it.
@@ -69,10 +77,11 @@ class DeckVersionsController < ApplicationController
     # refused from going, and the re-rendered form would name the wrong number.
     number = @version.number
 
-    if @version.update(params.require(:deck_version).permit(:effective_at))
+    if @version.update(params.expect(deck_version: [ :effective_at ]))
       redirect_to deck_versions_path(@deck), notice: "Version date updated."
     else
       @version.number = number
+      @periods = Decks::VersionPeriods.call([ @version ])
       render :edit, status: :unprocessable_entity
     end
   end
@@ -91,14 +100,13 @@ class DeckVersionsController < ApplicationController
   # The explicit "New version": allowed while the live list has moved on from the latest version,
   # or when there is none yet. Without drift it would record a duplicate of the latest.
   def snapshot
-    drift = Decks::VersionDrift.call(@deck)
-    if drift.latest && !drift.drift?
-      redirect_to deck_versions_path(@deck), alert: "The deck still matches #{drift.latest.label}: there is nothing new to record."
-      return
-    end
+    result = Decks::ExplicitSnapshot.call(@deck)
 
-    version = Decks::VersionSnapshot.call(@deck)
-    redirect_to deck_version_path(@deck, version), notice: "Version #{version.number} recorded."
+    if result.version
+      redirect_to deck_version_path(@deck, result.version), notice: "Version #{result.version.number} recorded."
+    else
+      redirect_to deck_versions_path(@deck), alert: "The deck still matches #{result.latest.label}: there is nothing new to record."
+    end
   end
 
   private
@@ -113,7 +121,7 @@ class DeckVersionsController < ApplicationController
   end
 
   def version_form_params
-    params.require(:deck_version).permit(:decklist, :effective_at, :format, :standard_pool_id, :other_format_name)
+    params.expect(deck_version: %i[decklist effective_at format standard_pool_id other_format_name])
   end
 
   def standard_pools

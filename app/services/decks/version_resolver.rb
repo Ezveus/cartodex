@@ -6,13 +6,15 @@ module Decks
   # It may snapshot, so every caller runs it inside the same transaction as the save it serves
   # and saves with save! — a version created for a write that then fails must not survive it.
   class VersionResolver < ApplicationService
+    # Its message is the sentence the member is shown (Decks::VersionDrift::Result#message), so
+    # every surface asking the question prints the same words and none composes its own.
     class ChoiceRequired < StandardError
       attr_reader :current_number, :next_number
 
-      def initialize(current_number)
+      def initialize(current_number, message)
         @current_number = current_number
         @next_number = current_number + 1
-        super("version choice required: #{current_number} or #{@next_number}")
+        super(message)
       end
     end
 
@@ -36,7 +38,9 @@ module Decks
       case @choice
       when NEW then Decks::VersionSnapshot.call(@deck)
       when CURRENT then drift.latest
-      else raise ChoiceRequired.new(drift.latest.number)
+      else
+        number = drift.latest.number
+        raise ChoiceRequired.new(number, drift.message(number))
       end
     end
   end

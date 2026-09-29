@@ -43,6 +43,66 @@ class DeckVersionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # --- periods (P2) ------------------------------------------------------------------------------
+
+  test "index, show, edit and a refused update hand the view every listed version's period" do
+    v2 = drift_and_snapshot
+
+    get deck_versions_path(@deck)
+    assert_equal [ @version.id, v2.id ].sort, periods.keys.sort
+    period = periods[@version.id]
+    assert_equal [ Date.new(2025, 1, 17), tournaments(:one).date, 1, 1 ],
+      [ period.first_on, period.last_on, period.results, period.entries ]
+
+    get deck_version_path(@deck, v2)
+    assert_equal [ @version.id, v2.id ].sort, periods.keys.sort
+
+    get edit_deck_version_path(@deck, @version)
+    assert_equal [ @version.id ], periods.keys
+
+    patch deck_version_path(@deck, @version), params: { deck_version: { effective_at: 2.days.from_now.iso8601 } }
+    assert_response :unprocessable_entity
+    assert_equal [ @version.id ], periods.keys
+  end
+
+  # --- new: defaults (P5) --------------------------------------------------------------------------
+
+  # An earlier version is most likely played under the oldest known classification, not under the
+  # deck's current one.
+  test "new defaults the classification to the oldest version's" do
+    @deck.update!(standard_pool: standard_pools(:twm_asc))
+
+    get new_deck_version_path(@deck)
+
+    form = controller.instance_variable_get(:@form)
+    assert_equal "standard", form[:format]
+    assert_equal standard_pools(:twm_por).id.to_s, form[:standard_pool_id]
+    assert_equal "", form[:other_format_name]
+  end
+
+  test "new falls back to the deck's own classification when it has no version" do
+    deck = @user.decks.create!(name: "Fresh", format: "other", other_format_name: "Theme Deck")
+
+    get new_deck_version_path(deck)
+
+    form = controller.instance_variable_get(:@form)
+    assert_equal [ "other", "", "Theme Deck" ], form.values_at(:format, :standard_pool_id, :other_format_name)
+  end
+
+  # --- params.expect --------------------------------------------------------------------------------
+
+  test "a scalar in place of the form is a 400 on both writes, not a 500" do
+    assert_no_difference -> { DeckVersion.count } do
+      post deck_versions_path(@deck), params: { deck_version: "x" }
+    end
+    assert_response :bad_request
+
+    # Re-signed: the raised ParameterMissing skips committing the refreshed session.
+    sign_in @user
+    patch deck_version_path(@deck, @version), params: { deck_version: "x" }
+    assert_response :bad_request
+  end
+
   # --- snapshot ---------------------------------------------------------------------------------
 
   test "snapshot is refused while the live list matches the latest version" do
@@ -121,6 +181,17 @@ class DeckVersionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal was, @version.reload.effective_at
   end
 
+  # Read before the refused date is assigned: ranked by the date it was refused, v1 would print
+  # as v2 on the re-rendered form.
+  test "a refused update re-renders the version under its own number" do
+    drift_and_snapshot
+
+    patch deck_version_path(@deck, @version), params: { deck_version: { effective_at: 2.days.from_now.iso8601 } }
+
+    assert_response :unprocessable_entity
+    assert_equal 1, controller.instance_variable_get(:@version).number
+  end
+
   test "update never touches the version's content" do
     patch deck_version_path(@deck, @version), params: { deck_version: {
       effective_at: "2024-01-02T03:04", format: "expanded", other_format_name: "x"
@@ -175,6 +246,8 @@ class DeckVersionsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def periods = controller.instance_variable_get(:@periods)
 
   def drift_and_snapshot
     @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)

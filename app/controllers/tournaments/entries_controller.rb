@@ -6,6 +6,7 @@ module Tournaments
     before_action :set_tournament
     before_action :set_entry, only: %i[show edit update destroy attach_results detach_result]
     before_action :set_form_collections, only: %i[new create edit update]
+    before_action :set_periods, only: %i[edit update]
 
     def show
       authorize @entry
@@ -92,6 +93,11 @@ module Tournaments
       @entry_versions = @entry&.persisted? ? @entry.deck.ordered_versions : []
     end
 
+    # What the edit form's version select prints beside each version: when it was played.
+    def set_periods
+      @periods = Decks::VersionPeriods.call(@entry_versions)
+    end
+
     def entry_params
       params.require(:tournament_entry).permit(
         :deck_id, :deck_version_id, :tournament_profile_id, :participant_count, :placement, :championship_points
@@ -113,7 +119,7 @@ module Tournaments
     rescue ActiveRecord::RecordInvalid
       false
     rescue Decks::VersionResolver::ChoiceRequired => e
-      @version_prompt = { current: e.current_number, next: e.next_number }
+      @version_prompt = { current: e.current_number, next: e.next_number, message: e.message }
       # Validate anyway, so the form shows any other error beside the question rather than
       # after it — valid? also fills errors[:deck_version], which the question answers.
       @entry.valid?

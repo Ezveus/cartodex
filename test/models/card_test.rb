@@ -89,8 +89,21 @@ class CardTest < ActiveSupport::TestCase
   test "destroying card destroys attacks" do
     card = cards(:honedge)
     assert_difference "Attack.count", -1 do
-      card.destroy
+      remove_printing(card)
     end
+  end
+
+  # A version is a record of what was played; removing a printing from the catalogue must not
+  # rewrite it. restrict rather than the :destroy deck_cards uses, and refused before anything else
+  # is removed.
+  test "a card a recorded version holds refuses to be destroyed" do
+    card = cards(:honedge)
+    assert DeckVersionCard.exists?(card: card), "sanity: a fixture version holds this card"
+
+    assert_no_difference [ -> { Card.count }, -> { DeckCard.count }, -> { Attack.count } ] do
+      assert_not card.destroy
+    end
+    assert_includes card.errors[:base].join, "deck version cards"
   end
 
   test "saving normalizes the name with full Unicode case folding" do

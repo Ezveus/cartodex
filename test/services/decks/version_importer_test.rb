@@ -76,11 +76,124 @@ module Decks
       assert_empty @deck.deck_versions.reload
     end
 
+    test "refuses a quantity outside 1..60, naming the line, and writes nothing" do
+      result = nil
+      assert_no_difference -> { DeckVersion.count } do
+        result = import("2 Honedge POR 56\n0 Doublade POR 57\n61 Honedge POR 56")
+      end
+
+      assert_nil result.version
+      assert_equal [ "Line 2: quantity must be between 1 and 60.", "Line 3: quantity must be between 1 and 60." ],
+        result.errors
+    end
+
+    test "sixty copies on one line is a quantity it accepts" do
+      result = import("60 Honedge POR 56")
+
+      assert_empty result.errors
+      assert_equal [ 60 ], result.version.deck_version_cards.pluck(:quantity)
+    end
+
+    # --- an earlier version must be earlier (P3) ------------------------------------------------
+
+    test "refuses a date after the latest version's, naming it and its date" do
+      record(Time.zone.local(2025, 9, 1, 10), honedge: 2)
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 2)
+
+      result = nil
+      assert_no_difference -> { DeckVersion.count } do
+        result = import("3 Honedge POR 56", effective_at: Time.zone.local(2025, 9, 25, 10))
+      end
+
+      assert_nil result.version
+      assert_equal [ "Effective from must be before v2 (September 23, 2025)." ], result.errors
+    end
+
+    test "refuses the latest version's own instant: before means strictly before" do
+      at = Time.zone.local(2025, 9, 23, 10)
+      record(at, doublade: 2)
+
+      result = import("3 Honedge POR 56", effective_at: at)
+
+      assert_equal [ "Effective from must be before v1 (September 23, 2025)." ], result.errors
+    end
+
+    # The form posts a string; the rule must read the date the version will carry, not the text.
+    # 09:00 is an hour before the latest in Paris, and an hour after it read as UTC.
+    test "reads a posted date string the way the version will" do
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 2)
+
+      assert_equal [ "Effective from must be before v1 (September 23, 2025)." ],
+        import("3 Honedge POR 56", effective_at: "2025-09-23T11:00").errors
+      assert_empty import("3 Honedge POR 56", effective_at: "2025-09-23T09:00").errors
+    end
+
+    # --- identical to a neighbour (P4) -----------------------------------------------------------
+
+    test "refuses a list identical to the version just before the chosen date" do
+      record(Time.zone.local(2025, 9, 1, 10), honedge: 2)
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 2)
+
+      result = nil
+      assert_no_difference -> { DeckVersion.count } do
+        result = import("2 Honedge POR 56", effective_at: Time.zone.local(2025, 9, 10, 10))
+      end
+
+      assert_equal [ "This list is identical to v1." ], result.errors
+    end
+
+    test "refuses a list identical to the version just after the chosen date" do
+      record(Time.zone.local(2025, 9, 1, 10), honedge: 2)
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 2)
+
+      result = import("2 Doublade POR 57", effective_at: Time.zone.local(2025, 9, 10, 10))
+
+      assert_equal [ "This list is identical to v2." ], result.errors
+    end
+
+    # Compared exactly as drift compares: by fingerprint and summed quantity.
+    test "a printing split of the neighbour's list is identical to it" do
+      record(Time.zone.local(2025, 9, 23, 10), budew_pre: 4)
+
+      result = import("2 Budew PRE 4\n2 Budew ASC 16", effective_at: Time.zone.local(2025, 9, 10, 10))
+
+      assert_equal [ "This list is identical to v1." ], result.errors
+    end
+
+    test "the same cards under another pool are not identical" do
+      record(Time.zone.local(2025, 9, 23, 10), honedge: 2)
+
+      result = VersionImporter.call(deck: @deck, decklist: "2 Honedge POR 56",
+        effective_at: Time.zone.local(2025, 9, 10, 10), format: "standard",
+        standard_pool: standard_pools(:twm_asc), other_format_name: nil)
+
+      assert_empty result.errors
+    end
+
+    # Only the neighbours: a list played again after an interlude is a legitimate version.
+    test "a list identical to a version that is not a neighbour is accepted" do
+      record(Time.zone.local(2025, 9, 1, 10), honedge: 2)
+      record(Time.zone.local(2025, 9, 10, 10), doublade: 2)
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 3)
+
+      result = import("2 Honedge POR 56", effective_at: Time.zone.local(2025, 9, 15, 10))
+
+      assert_empty result.errors
+      assert_equal 3, result.version.number
+    end
+
     private
 
     def import(decklist, effective_at: 5.days.ago)
       VersionImporter.call(deck: @deck, decklist: decklist, effective_at: effective_at,
         format: "standard", standard_pool: standard_pools(:twm_por), other_format_name: nil)
+    end
+
+    def record(effective_at, pool: standard_pools(:twm_por), **quantities)
+      version = @deck.deck_versions.create!(effective_at: effective_at, format: "standard", standard_pool: pool)
+      quantities.each { |name, quantity| version.deck_version_cards.create!(card: cards(name), quantity: quantity) }
+      @deck.deck_versions.reset
+      version
     end
   end
 end

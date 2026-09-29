@@ -80,7 +80,7 @@ class Cards::FetcherCacheTest < ActiveSupport::TestCase
   # --- Unknown cards and the force escape hatch still scrape ---
 
   test "issues exactly one HTTP request when the card is unknown" do
-    cards(:honedge).destroy
+    remove_printing(cards(:honedge))
     stub_http(URL, @honedge_html)
 
     assert_difference "Card.count", 1 do

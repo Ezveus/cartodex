@@ -35,6 +35,16 @@ module Decks
 
       assert_equal 1, error.current_number
       assert_equal 2, error.next_number
+      assert_equal "The list has changed since version 1.", error.message
+    end
+
+    test "the question names what changed" do
+      VersionSnapshot.call(@deck)
+      @deck.update!(standard_pool: standard_pools(:twm_asc))
+
+      error = assert_raises(VersionResolver::ChoiceRequired) { VersionResolver.call(deck: @deck.reload, choice: nil) }
+
+      assert_equal "The Standard pool has changed since version 1 (TWM-POR → TWM-ASC).", error.message
     end
 
     test "a drifted deck answers the latest on current and a snapshot on new" do

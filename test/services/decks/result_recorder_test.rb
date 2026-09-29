@@ -36,6 +36,22 @@ module Decks
       end
     end
 
+    # The participation of another deck is refused once, by the rule that says so. Resolving or
+    # inheriting through it would file the result on that deck's version and add a second error
+    # that only restates the first.
+    test "a participation of another deck is refused with exactly the one error" do
+      other = users(:one).decks.create!(name: "Other", standard_pool: standard_pools(:twm_por))
+      entry = users(:one).tournament_entries.create!(tournament: tournaments(:two), deck: other,
+        deck_version: VersionSnapshot.call(other))
+
+      outcome = nil
+      assert_no_difference [ -> { DeckResult.count }, -> { DeckVersion.count } ] do
+        outcome = ResultRecorder.call(deck: @deck, attributes: { result: "win", tournament_entry_id: entry.id }, choice: nil)
+      end
+
+      assert_equal [ "Tournament entry must belong to the same deck" ], outcome.errors
+    end
+
     test "lets ChoiceRequired through for the caller to ask" do
       VersionSnapshot.call(@deck)
       @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)

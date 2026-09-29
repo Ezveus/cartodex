@@ -27,7 +27,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   # --- Basic card (Honedge POR/56) ---
 
   test "creates a new card from HTML" do
-    cards(:honedge).destroy
+    remove_printing(cards(:honedge))
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     assert_difference "Card.count", 1 do
@@ -55,7 +55,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "parses attacks for basic card" do
-    cards(:honedge).destroy # or the printing is already known and never parsed
+    remove_printing(cards(:honedge)) # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
@@ -72,7 +72,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   # --- Stage 1 card (Doublade POR/57) ---
 
   test "parses stage 1 card with evolves_from" do
-    cards(:doublade).destroy # or the printing is already known and never parsed
+    remove_printing(cards(:doublade)) # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/57", @doublade_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/57")
@@ -84,7 +84,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "parses attack with multiplier damage and effect" do
-    cards(:doublade).destroy # or the printing is already known and never parsed
+    remove_printing(cards(:doublade)) # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/57", @doublade_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/57")
@@ -159,7 +159,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "regular pokemon has no pokemon_subtype" do
-    cards(:honedge).destroy # or the printing is already known and never parsed
+    remove_printing(cards(:honedge)) # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
@@ -182,7 +182,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   # --- find_or_create behavior ---
 
   test "updates existing card instead of creating duplicate" do
-    cards(:honedge).destroy
+    remove_printing(cards(:honedge))
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     card1 = Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
@@ -196,7 +196,7 @@ class Cards::FetcherTest < ActiveSupport::TestCase
   end
 
   test "replaces attacks on re-fetch" do
-    cards(:honedge).destroy
+    remove_printing(cards(:honedge))
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)
 
     Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")

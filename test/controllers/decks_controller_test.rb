@@ -1389,6 +1389,16 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ %w[v1 1 0], %w[v2 0 1] ], records
   end
 
+  test "stats hands the view every version's period" do
+    two_versions_played
+
+    get stats_deck_path(@deck, version: 2)
+
+    periods = controller.instance_variable_get(:@periods)
+    assert_equal @deck.deck_versions.ids.sort, periods.keys.sort
+    assert_equal [ 1, 1 ], @deck.deck_versions.map { |v| periods[v.id].results }
+  end
+
   test "stats costs the same with one version as with three" do
     two_versions_played
     get stats_deck_path(@deck) # warm the session

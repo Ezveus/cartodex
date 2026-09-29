@@ -141,6 +141,20 @@ class DeckResultsControllerTest < ActionDispatch::IntegrationTest
     assert_equal deck_versions(:one), @result.reload.deck_version
   end
 
+  test "edit and a refused update hand the form every listed version's period" do
+    sign_in @user
+    v2 = Decks::VersionSnapshot.call(@deck)
+
+    get edit_deck_deck_result_path(@deck, @result)
+    periods = controller.instance_variable_get(:@periods)
+    assert_equal [ deck_versions(:one).id, v2.id ].sort, periods.keys.sort
+    assert_equal deck_versions(:one).deck_results.count, periods[deck_versions(:one).id].results
+
+    patch deck_deck_result_path(@deck, @result), params: { deck_result: { deck_version_id: deck_versions(:two).id } }
+    assert_response :unprocessable_entity
+    assert_equal [ deck_versions(:one).id, v2.id ].sort, controller.instance_variable_get(:@periods).keys.sort
+  end
+
   test "edit costs the same with one version as with four" do
     sign_in @user
     get edit_deck_deck_result_path(@deck, @result) # warm the session

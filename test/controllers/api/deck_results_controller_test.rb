@@ -55,7 +55,8 @@ class Api::DeckResultsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :conflict
-    assert_equal({ "error" => "version_choice_required", "current_version" => 1, "next_version" => 2 },
+    assert_equal({ "error" => "version_choice_required", "current_version" => 1, "next_version" => 2,
+                   "message" => "The list has changed since version 1." },
       JSON.parse(response.body))
   end
 

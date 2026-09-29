@@ -200,6 +200,27 @@ class DeckVersionTest < ActiveSupport::TestCase
     assert_empty deck.deck_versions
   end
 
+  # Only decks with no version yet are touched, and the rows the run creates are told apart from
+  # older ones by id. A deck already holding a version keeps it alone and uncopied, and a row of
+  # it with no version is not quietly filed on that older version — it is left for the NOT NULL
+  # to refuse, loudly, rather than guessed at.
+  test "the backfill leaves a deck already holding a version alone" do
+    load_backfill
+    held = decks(:one)
+    held_cards = deck_versions(:one).deck_version_cards.pluck(:card_id, :quantity)
+    stray = insert_result(held)
+    fresh = @user.decks.create!(name: "Fresh", standard_pool: standard_pools(:twm_por))
+    fresh.deck_cards.create!(card: cards(:honedge), quantity: 1)
+    fresh_result = insert_result(fresh)
+
+    CreateDeckVersions.new.backfill
+
+    assert_equal [ deck_versions(:one) ], held.deck_versions.reload.to_a
+    assert_equal held_cards, deck_versions(:one).deck_version_cards.reload.pluck(:card_id, :quantity)
+    assert_nil stray.reload.deck_version_id
+    assert_equal fresh.deck_versions.sole.id, fresh_result.reload.deck_version_id
+  end
+
   private
 
   def build_version(effective_at:)

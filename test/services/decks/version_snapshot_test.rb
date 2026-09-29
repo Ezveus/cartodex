@@ -27,6 +27,18 @@ module Decks
       assert_in_delta 3.days.ago, VersionSnapshot.call(@deck, effective_at: 3.days.ago).effective_at, 1.second
     end
 
+    # latest_version reads a loaded association without querying, so a snapshot that left it loaded
+    # would go on answering the version before it.
+    test "a snapshot taken after the deck's versions were loaded is its latest" do
+      first = VersionSnapshot.call(@deck, effective_at: 2.days.ago)
+      @deck.deck_versions.load
+      assert_equal first, @deck.latest_version
+
+      second = VersionSnapshot.call(@deck)
+
+      assert_equal second, @deck.latest_version
+    end
+
     test "raises rather than answering an unsaved version" do
       assert_raises(ActiveRecord::RecordInvalid) do
         VersionSnapshot.call(@deck, effective_at: 1.day.from_now)

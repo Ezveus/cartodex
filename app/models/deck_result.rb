@@ -55,9 +55,14 @@ class DeckResult < ApplicationRecord
   # A participation says which list was played, so a match played there was played with it.
   # Every write path that attaches a result to an entry goes through here, except
   # Tournaments::EntriesController#attach_results, whose update_all writes both columns itself.
+  #
+  # Only a participation of this deck: another deck's is refused by entry_belongs_to_same_deck,
+  # and inheriting its version would add a second error that only restates that one.
   def inherit_entry_version
-    self.deck_version = tournament_entry.deck_version if tournament_entry
+    self.deck_version = tournament_entry.deck_version if own_entry?
   end
+
+  def own_entry? = tournament_entry.present? && tournament_entry.deck_id == deck_id
 
   def version_belongs_to_same_deck
     return if deck_version.nil? || deck_id.nil?
@@ -68,7 +73,7 @@ class DeckResult < ApplicationRecord
   # Cannot fail after inherit_entry_version has run. Kept so the invariant is a stated rule and
   # not only a side effect of a callback that a later edit might reorder or condition away.
   def version_matches_entry
-    return if tournament_entry.nil? || deck_version_id.nil?
+    return if !own_entry? || deck_version_id.nil?
 
     errors.add(:deck_version, "must be its participation's version") if deck_version_id != tournament_entry.deck_version_id
   end

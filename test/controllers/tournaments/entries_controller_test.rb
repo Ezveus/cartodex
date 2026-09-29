@@ -162,6 +162,8 @@ module Tournaments
       end
 
       assert_response :unprocessable_entity
+      assert_equal({ current: 1, next: 2, message: "The list has changed since version 1." },
+        controller.instance_variable_get(:@version_prompt))
       assert_select "input[type=radio][name=version_choice][value=new]"
       assert_select "input[type=radio][name=version_choice][value=current]"
       assert_select "label", text: "Create version 2 from the current list"
@@ -257,6 +259,20 @@ module Tournaments
       assert_redirected_to tournament_entry_path(@tournament, @entry)
       assert_equal other, @entry.reload.deck
       assert_equal other.latest_version, @entry.deck_version
+    end
+
+    test "edit and a refused update hand the form every listed version's period" do
+      v2 = Decks::VersionSnapshot.call(@deck, effective_at: 1.day.ago)
+
+      get edit_tournament_entry_path(@tournament, @entry)
+      assert_equal [ deck_versions(:one).id, v2.id ].sort, controller.instance_variable_get(:@periods).keys.sort
+      assert_equal 1, controller.instance_variable_get(:@periods)[deck_versions(:one).id].entries
+
+      patch tournament_entry_path(@tournament, @entry), params: {
+        tournament_entry: { deck_version_id: deck_versions(:two).id }
+      }
+      assert_response :unprocessable_entity
+      assert_equal [ deck_versions(:one).id, v2.id ].sort, controller.instance_variable_get(:@periods).keys.sort
     end
 
     test "edit costs the same with one version as with four" do
