@@ -79,6 +79,20 @@ module ActiveSupport
       deck
     end
 
+    # A version to hang a result or an entry off, since both require one and nothing assigns it
+    # for them: the deck's latest, or a snapshot of its live list when it has none.
+    def deck_version_for(deck)
+      deck.latest_version || Decks::VersionSnapshot.call(deck)
+    end
+
+    # Takes a printing out of the catalogue for a test that needs it unknown. Card restricts its
+    # deck_version_cards, so a fixture version holding it goes first — and destroy!, so a refusal
+    # cannot leave the printing known and the test passing without ever parsing it.
+    def remove_printing(card)
+      DeckVersionCard.where(card: card).delete_all
+      card.destroy!
+    end
+
     # Commits more real copies of the card across a fresh physical deck than the
     # user owns — the state a collection decrease leaves behind. Defaults to
     # @user, set by the including test's setup, but takes one explicitly like

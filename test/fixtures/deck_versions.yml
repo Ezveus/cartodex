@@ -1,0 +1,15 @@
+# Every deck fixture a result or an entry hangs off carries one version, since both columns are
+# NOT NULL — the state the migration's backfill leaves a deck in. Each matches its deck's live
+# list (deck_version_cards.yml), so the fixture decks carry no drift.
+
+one:
+  deck: one
+  effective_at: 2025-01-10 10:00:00
+  format: standard
+  standard_pool: twm_por
+
+two:
+  deck: two
+  effective_at: 2025-01-10 10:00:00
+  format: standard
+  standard_pool: twm_por

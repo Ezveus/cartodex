@@ -1,11 +1,16 @@
 module Tournaments
   module Entries
     class Form < ApplicationComponent
-      def initialize(tournament:, entry:, decks:, tournament_profiles:)
+      def initialize(tournament:, entry:, decks:, tournament_profiles:, version_prompt: nil, versions: [], periods: {})
         @tournament = tournament
         @entry = entry
         @decks = decks
         @tournament_profiles = tournament_profiles
+        @version_prompt = version_prompt
+        # Array(): a controller that renders this form from a path which never assigned
+        # @entry_versions passes nil, and the form should lose a field rather than raise.
+        @versions = Array(versions)
+        @periods = periods || {}
       end
 
       def view_template
@@ -21,10 +26,14 @@ module Tournaments
             plain localize(@tournament.date, format: :long)
           end
 
+          version_prompt if @version_prompt
+
           render Ui::FormGroup.new do
             f.label :deck_id, "Deck", class: "form-label"
             f.collection_select :deck_id, @decks, :id, :name, {}, class: "form-input"
           end
+
+          version_select(f) if @versions.any?
 
           render Ui::FormGroup.new do
             f.label :tournament_profile_id, "Tournament profile (optional)", class: "form-label"
@@ -55,6 +64,42 @@ module Tournaments
       end
 
       private
+
+      # The server's question, not the form's: it is rendered only once a create came back
+      # because the deck's list has changed since its latest version. `version_choice` is a
+      # top-level param rather than an entry attribute, since it says which version to use —
+      # possibly one that does not exist yet — and not a column of the entry. Required, so the
+      # browser asks again instead of posting a choice-less form the server would only refuse.
+      def version_prompt
+        current = @version_prompt[:current]
+        following = @version_prompt[:next]
+
+        fieldset(class: "form-fieldset entry-version-prompt") do
+          # The server's sentence, which says whether the cards, the format or only the pool moved.
+          legend(class: "form-label") { @version_prompt[:message] }
+          p(class: "form-hint") { "Which list did you play at this event?" }
+          version_choice("new", "Create version #{following} from the current list")
+          version_choice("current", "Attach to version #{current}")
+        end
+      end
+
+      def version_choice(value, text)
+        label(class: "form-check") do
+          input(type: "radio", name: "version_choice", value: value, required: true)
+          plain text
+        end
+      end
+
+      # The versions of the deck the entry was saved with. Moving the entry moves every result
+      # attached to it, which the hint says because nothing else on the page would.
+      def version_select(form)
+        render Ui::FormGroup.new(hint: "Its results move with it.") do
+          form.label :deck_version_id, "Version", class: "form-label"
+          form.select :deck_version_id,
+            @versions.map { |version| [ DeckVersions::Labels.option(version, @periods[version.id]), version.id ] },
+            {}, class: "form-input"
+        end
+      end
 
       def form_url
         return tournament_entries_path(@tournament) unless @entry.persisted?

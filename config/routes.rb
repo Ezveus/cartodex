@@ -57,6 +57,12 @@ Rails.application.routes.draw do
     post :duplicate, on: :member
     patch :share, on: :member
     resources :deck_results, only: [ :index, :edit, :update, :destroy ]
+    # The lists a deck was played with. Rides out of `authenticate :user` by nesting, like
+    # deck_results, and keeps ApplicationController's authenticate_user! as its gate — owner only.
+    # `snapshot` records the live list as the next version; `new`/`create` import an earlier one.
+    resources :versions, controller: "deck_versions", only: %i[index show new create edit update destroy] do
+      post :snapshot, on: :collection
+    end
   end
 
   # The Open Graph preview images, outside `authenticate :user` because a crawler has no session.

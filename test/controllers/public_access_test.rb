@@ -88,7 +88,8 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     placement_was = entry.placement
     # Same deck as the entry, so attach_results would really link it if the gate were gone: a
     # result from another deck is refused on the merits and would prove nothing.
-    attachable = decks(:one).deck_results.create!(result: "win", played_at: Time.current)
+    attachable = decks(:one).deck_results.create!(result: "win", played_at: Time.current,
+      deck_version: deck_versions(:one))
     attached = deck_results(:one)
     attached.update!(tournament_entry: entry)
 
@@ -151,6 +152,48 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal 3, TournamentEntry.count
     assert_nil attachable.reload.tournament_entry
     assert_equal entry, attached.reload.tournament_entry
+  end
+
+  # DeckVersionsController rides out of `authenticate :user` nested under `resources :decks`, the
+  # way deck_results do, so ApplicationController's before_action is its only gate. One row per
+  # action; kept out of owner_only_gets because the version pages are written by another lane
+  # and the signed-in half below is what reaches their views.
+  test "the deck version actions send a visitor to sign in and change nothing" do
+    version = deck_versions(:one)
+    effective_at_was = version.effective_at
+
+    version_gets(version).each do |label, path|
+      get path
+      assert_redirected_to new_user_session_path, "expected #{label} to require a session"
+    end
+
+    assert_no_difference [ -> { DeckVersion.count }, -> { DeckVersionCard.count } ] do
+      post deck_versions_path(@deck), params: { deck_version: {
+        decklist: "1 Honedge POR 56", effective_at: "2024-06-01T10:00", format: "expanded"
+      } }
+      assert_redirected_to new_user_session_path
+
+      post snapshot_deck_versions_path(@deck)
+      assert_redirected_to new_user_session_path
+
+      patch deck_version_path(@deck, version), params: { deck_version: { effective_at: "2024-01-01" } }
+      assert_redirected_to new_user_session_path
+
+      delete deck_version_path(@deck, deck_versions(:one))
+      assert_redirected_to new_user_session_path
+    end
+
+    assert_equal effective_at_was, version.reload.effective_at
+  end
+
+  # DeckVersionsController carries verify_authorized, so this half catches a missing authorize.
+  test "every deck version read authorizes when a session is present" do
+    sign_in @user
+
+    version_gets(deck_versions(:one)).each do |label, path|
+      get path
+      assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
+    end
   end
 
   # An event's existence is public, so this is the opposite answer from a deck's: not the
@@ -356,6 +399,15 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
   ensure
     Og::Cache.singleton_class.remove_method(:fetch)
     Og::Cache.define_singleton_method(:fetch, original)
+  end
+
+  def version_gets(version)
+    {
+      "deck versions" => deck_versions_path(@deck),
+      "deck version" => deck_version_path(@deck, version),
+      "new deck version" => new_deck_version_path(@deck),
+      "edit deck version" => edit_deck_version_path(@deck, version)
+    }
   end
 
   def owner_only_gets

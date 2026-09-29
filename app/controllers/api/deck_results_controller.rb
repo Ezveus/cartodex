@@ -4,16 +4,19 @@ module Api
     before_action :set_deck
 
     def create
-      result = @deck.deck_results.build(deck_result_params)
-      result.played_at ||= Time.current
+      outcome = Decks::ResultRecorder.call(
+        deck: @deck, attributes: deck_result_params, choice: params[:version_choice]
+      )
+      result = outcome.result
 
-      if result.save
+      if outcome.errors.empty?
         render json: {
           id: result.id,
           result: result.result,
           archetype: result.archetype&.name,
           notes: result.notes,
           created_at: result.created_at,
+          deck_version: { number: result.deck_version.number, id: result.deck_version_id },
           deck_stats: {
             wins: @deck.deck_results.where(result: "win").count,
             losses: @deck.deck_results.where(result: "loss").count,
@@ -22,8 +25,14 @@ module Api
           }
         }, status: :created
       else
-        render json: { errors: result.errors.full_messages }, status: :unprocessable_entity
+        render json: { errors: outcome.errors }, status: :unprocessable_entity
       end
+    rescue Decks::VersionResolver::ChoiceRequired => e
+      # Nothing has been written: the modal shows the choices and resubmits with one.
+      render json: {
+        error: "version_choice_required", current_version: e.current_number, next_version: e.next_number,
+        message: e.message
+      }, status: :conflict
     end
 
     private

@@ -50,6 +50,10 @@ module Decks
 
     # One row per distinct fingerprint within the type, sorted by name then
     # print. Each row keeps a representative card so the view can link to it.
+    # A card with no fingerprint is its own row, keyed on its id: keyed on the
+    # bare fingerprint, every such card collapsed into one nil row, and two
+    # decks playing two different unfingerprinted cards compared equal — the
+    # same key Decks::VersionDrift uses, so a version diff agrees with drift.
     def build_rows(type)
       rows = {}
 
@@ -58,7 +62,7 @@ module Decks
           card = deck_card.card
           next unless card.card_type == type
 
-          row = rows[card.fingerprint] ||= { card: card, name: card.name, quantities: Hash.new(0) }
+          row = rows[card.fingerprint.presence || "card:#{card.id}"] ||= { card: card, name: card.name, quantities: Hash.new(0) }
           row[:quantities][deck.id] += deck_card.quantity
         end
       end

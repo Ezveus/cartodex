@@ -4,6 +4,10 @@ class Card < ApplicationRecord
   # Relationships
   belongs_to :card_set, optional: true
   belongs_to :pokemon_subtype, optional: true
+  # Restrict: a version is a record of what was played, and removing a printing from the catalogue
+  # must not rewrite it. Where the line sits does not matter — a refusal rolls the whole destroy
+  # back, attacks and collections included — it is first only so it reads first.
+  has_many :deck_version_cards, dependent: :restrict_with_error
   has_many :attacks, -> { order(:position) }, dependent: :destroy
   has_many :abilities, -> { order(:position) }, dependent: :destroy
   has_many :collections, dependent: :destroy

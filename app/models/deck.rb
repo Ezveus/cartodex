@@ -1,5 +1,6 @@
 class Deck < ApplicationRecord
   include NameNormalizable
+  include FormatLabelled
 
   # Nullable since tournament standings: a field list belongs to an event, not to a member.
   # Every allocation service that reads deck.user sits behind an owner-only policy that a nil
@@ -20,6 +21,11 @@ class Deck < ApplicationRecord
   # User#tournament_entries is declared ahead of User#decks precisely so account cancellation
   # empties the entries before it reaches this rule — see the note there.
   has_many :tournament_entries, dependent: :restrict_with_error
+  # Declared after both associations above, and the order is load-bearing: dependent callbacks
+  # run in declaration order, and a version refuses to go while a result or an entry points at
+  # it. The results are destroyed first; the entries have already refused the whole destroy if
+  # any exist. The scope is what numbers them — see DeckVersion#number.
+  has_many :deck_versions, -> { ordered }, dependent: :destroy
   # :nullify, the reverse direction of #destroy_if_ownerless (called by
   # TournamentStanding#destroy_ownerless_deck on destroy, and by
   # Tournaments::StandingListImportJob when a re-import replaces a standing's field list).
@@ -45,12 +51,9 @@ class Deck < ApplicationRecord
   KEY_BYTES = 16
 
   validates :name, presence: true
-  validates :other_format_name, presence: true, if: :other?
-  validates :standard_pool, presence: true, if: :standard?
   validates :key, presence: true
   validate :ownerless_deck_is_shared_and_virtual
 
-  before_validation :clear_inapplicable_classification
   before_validation :assign_key, if: -> { key.blank? }
   after_update :release_owned_copies_if_not_physical
 
@@ -87,16 +90,20 @@ class Deck < ApplicationRecord
   scope :shared, -> { where(shared: true) }
   scope :unshared, -> { where(shared: false) }
 
-  # Human-readable format label. For the "other" format the user-supplied name
-  # takes precedence when present; for Standard the pool is named, since
-  # "Standard" alone does not identify a card pool.
-  def format_label
-    return other_format_name if other? && other_format_name.present?
+  # The version the deck's list was last recorded as, or nil. Reads a loaded association
+  # rather than querying again, so a page that has numbered the versions pays nothing for it.
+  def latest_version
+    return deck_versions.max_by { |version| [ version.effective_at, version.id ] } if deck_versions.loaded?
 
-    base = FORMAT_LABELS.fetch(format, format.to_s.humanize)
-    return base unless standard? && standard_pool
+    deck_versions.reorder(effective_at: :desc, id: :desc).first
+  end
 
-    "#{base} (#{standard_pool.name})"
+  # Every version, oldest first, each with its number written so that nothing rendering them
+  # pays DeckVersion#number's COUNT per row. The pool and its bounds come along because every
+  # caller prints format_label, and StandardPool#name reads both bounds.
+  def ordered_versions
+    deck_versions.includes(standard_pool: [ :first_card_set, :last_card_set ]).to_a
+      .each.with_index(1) { |version, number| version.number = number }
   end
 
   # Who to print in the admin panel's three deck listings. Named here rather than repeated as
@@ -187,13 +194,6 @@ class Deck < ApplicationRecord
 
     errors.add(:shared, "must be true for a deck with no owner") unless shared?
     errors.add(:physical, "must be false for a deck with no owner") if physical?
-  end
-
-  # Drops classification fields that don't apply to the current state so we never persist a stale
-  # custom format name once the format is no longer "other".
-  def clear_inapplicable_classification
-    self.other_format_name = nil unless other?
-    self.standard_pool_id = nil unless standard?
   end
 
   def merge_counts!(target, source)

@@ -457,7 +457,8 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
   test "prefilling from a participation never carries an age division onto an online event" do
     event = online_event
     entry = @user.tournament_entries.create!(
-      tournament: event, deck: decks(:one), tournament_profile: tournament_profiles(:ash)
+      tournament: event, deck: decks(:one), deck_version: deck_versions(:one),
+      tournament_profile: tournament_profiles(:ash)
     )
 
     get new_tournament_standing_path(event, tournament_entry_id: entry.id)

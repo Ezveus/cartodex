@@ -152,6 +152,19 @@ class StandardPoolTest < ActiveSupport::TestCase
     assert_includes pool.errors[:base].join, "decks"
     assert StandardPool.exists?(pool.id)
   end
+  # A NULL pool on a Standard version would be unsavable, the reason decks restrict. This pool
+  # holds no deck, so the version is the only thing in the way.
+  test "a pool a recorded version holds refuses to be destroyed" do
+    tail = CardSet.create!(code: "ZZZ", name: "Zed Zone", release_date: Date.new(2026, 2, 1))
+    pool = StandardPool.create!(first_card_set: card_sets(:twm), last_card_set: tail,
+      regulation_marks: %w[H], released_on: Date.new(2026, 2, 1), legal_on: Date.new(2026, 2, 15))
+    decks(:one).deck_versions.create!(effective_at: 1.day.ago, format: "standard", standard_pool: pool)
+
+    assert_not pool.destroy
+    assert_includes pool.errors[:base].join, "deck versions"
+    assert StandardPool.exists?(pool.id)
+  end
+
   # released_on carries no uniqueness constraint and the admin screen is maintained by hand, so
   # two pools can share one. Without a tiebreaker `current` picks arbitrarily and can pick the
   # other one on the next request, leaving a form's pre-selection and the stale-anchor notice

@@ -1,8 +1,12 @@
 module Decks
   class StatsView < ApplicationComponent
-    def initialize(deck:, results:)
+    def initialize(deck:, versions:, all_results:, results:, selected_version:, periods: {})
       @deck = deck
+      @periods = periods || {}
+      @versions = versions
+      @all_results = all_results
       @results = results
+      @selected_version = selected_version
     end
 
     def view_template
@@ -12,6 +16,7 @@ module Decks
         end
 
         deck_archetype_line
+        version_summary
         overall_stats
         archetype_table
       end
@@ -26,6 +31,18 @@ module Decks
         plain "Archetype: "
         strong { @deck.archetype.name }
       end
+    end
+
+    # Absent on a deck nothing was ever played with: it has no version yet, since the first
+    # result is what creates one.
+    def version_summary
+      return if @versions.empty?
+
+      h2 { "By Version" }
+      render Decks::VersionSummaryTable.new(
+        deck: @deck, versions: @versions, results: @all_results, selected_version: @selected_version,
+        periods: @periods
+      )
     end
 
     def overall_stats

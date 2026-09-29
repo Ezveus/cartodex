@@ -244,7 +244,7 @@ class UserTest < ActiveSupport::TestCase
       player_name: "Departing Player", player_id: "9000001", date_of_birth: Date.new(2000, 1, 1)
     )
     entry = user.tournament_entries.create!(
-      tournament: tournaments(:one), deck: deck, tournament_profile: profile
+      tournament: tournaments(:one), deck: deck, deck_version: deck_version_for(deck), tournament_profile: profile
     )
 
     assert user.destroy, user.errors.full_messages.to_sentence

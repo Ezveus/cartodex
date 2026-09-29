@@ -1,11 +1,20 @@
 module Decks
   class CompareView < ApplicationComponent
-    def initialize(comparison:, diff_only: false)
+    # The header is a parameter because a deck version's diff page renders this same table, and
+    # its columns are versions of one deck: `deck_path` on a version would build a deck address
+    # out of a version id. nil keeps the deck comparison's own wording and links, resolved at
+    # render time because route helpers need the view context.
+    def initialize(comparison:, diff_only: false, title: "Compare Decks", back_label: "Back to Decks",
+                   back_path: nil, column_path: nil)
       @decks = comparison[:decks]
       @groups = comparison[:groups]
       @totals = comparison[:totals]
       @diff_totals = comparison[:diff_totals]
       @diff_only = diff_only
+      @title = title
+      @back_label = back_label
+      @back_path = back_path
+      @column_path = column_path
     end
 
     def view_template
@@ -20,9 +29,9 @@ module Decks
         }
       ) do
         div(class: "deck-compare-header") do
-          h1 { "Compare Decks" }
+          h1 { @title }
           diff_toggle
-          link_to "Back to Decks", decks_path, class: "btn btn-secondary"
+          link_to @back_label, @back_path || decks_path, class: "btn btn-secondary"
         end
 
         div(class: "deck-compare-content") do
@@ -75,7 +84,7 @@ module Decks
         tr do
           th(class: "deck-compare-card-col") { "Card" }
           @decks.each do |deck|
-            th { link_to deck.name, deck_path(deck) }
+            th { link_to deck.name, @column_path ? @column_path.call(deck) : deck_path(deck) }
           end
         end
       end

@@ -1,0 +1,9 @@
+one:
+  deck_version: one
+  card: honedge
+  quantity: 1
+
+two:
+  deck_version: two
+  card: doublade
+  quantity: 1

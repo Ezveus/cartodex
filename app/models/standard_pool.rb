@@ -10,6 +10,10 @@ class StandardPool < ApplicationRecord
   # deck unsavable on its next edit. A referenced pool is corrected, never deleted.
   has_many :decks, dependent: :restrict_with_error
   has_many :tournaments, dependent: :restrict_with_error
+  # A version records the pool a list was played under, and a history rewritten to NULL would
+  # be unsavable for the same reason a deck's anchor would. Without this the delete is an
+  # unrescued InvalidForeignKey rather than the admin panel's readable refusal.
+  has_many :deck_versions, dependent: :restrict_with_error
 
   validates :regulation_marks, presence: true
   validates :released_on, presence: true

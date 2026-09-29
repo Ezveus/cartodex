@@ -6,7 +6,7 @@ class DeckResultTest < ActiveSupport::TestCase
   end
 
   test "defaults to bo1 match format" do
-    result = @deck.deck_results.create!(result: "win")
+    result = @deck.deck_results.create!(result: "win", deck_version: deck_versions(:one))
     assert_equal "bo1", result.match_format
   end
 
@@ -29,7 +29,7 @@ class DeckResultTest < ActiveSupport::TestCase
   end
 
   test "normalizes score to uppercase" do
-    result = @deck.deck_results.create!(match_format: "bo3", score: "ww")
+    result = @deck.deck_results.create!(match_format: "bo3", score: "ww", deck_version: deck_versions(:one))
     assert_equal "WW", result.score
   end
 
@@ -44,12 +44,12 @@ class DeckResultTest < ActiveSupport::TestCase
   end
 
   test "derives the overall result from a bo3 score, overriding a conflicting value" do
-    result = @deck.deck_results.create!(result: "loss", match_format: "bo3", score: "WW")
+    result = @deck.deck_results.create!(result: "loss", match_format: "bo3", score: "WW", deck_version: deck_versions(:one))
     assert_equal "win", result.result
   end
 
   test "keeps the manual result for a bo3 with no score" do
-    result = @deck.deck_results.create!(result: "draw", match_format: "bo3")
+    result = @deck.deck_results.create!(result: "draw", match_format: "bo3", deck_version: deck_versions(:one))
     assert_equal "draw", result.result
     assert_nil result.score
   end
@@ -59,7 +59,7 @@ class DeckResultTest < ActiveSupport::TestCase
     deck = decks(:one)
     deck.update_columns(updated_at: 3.days.ago)
 
-    travel_to(2.days.ago) { @result = deck.deck_results.create!(result: "win") }
+    travel_to(2.days.ago) { @result = deck.deck_results.create!(result: "win", deck_version: deck_versions(:one)) }
     assert_in_delta 2.days.ago, deck.reload.updated_at, 1.minute
 
     travel_to(1.day.ago) { @result.update!(result: "loss") }
@@ -67,5 +67,32 @@ class DeckResultTest < ActiveSupport::TestCase
 
     @result.destroy!
     assert_in_delta Time.current, deck.reload.updated_at, 1.minute
+  end
+
+  # No fallback: the only automatic assignment is the entry's version, so a result nobody
+  # placed on a version is refused rather than quietly filed on the latest.
+  test "a result without a version is invalid" do
+    result = @deck.deck_results.new(result: "win")
+
+    assert_not result.valid?
+    assert_includes result.errors[:deck_version], "must exist"
+  end
+
+  test "a result may not hang off another deck's version" do
+    result = @deck.deck_results.new(result: "win", deck_version: deck_versions(:two))
+
+    assert_not result.valid?
+    assert_includes result.errors[:deck_version], "must belong to the same deck"
+  end
+
+  test "a result attached to a participation takes its version, whatever it was given" do
+    v1 = deck_versions(:one)
+    v2 = Decks::VersionSnapshot.call(@deck)
+    entry = tournament_entries(:one)
+    assert_equal v1, entry.deck_version, "sanity: the fixture entry is on v1"
+
+    result = @deck.deck_results.create!(result: "win", tournament_entry: entry, deck_version: v2)
+
+    assert_equal v1, result.reload.deck_version
   end
 end

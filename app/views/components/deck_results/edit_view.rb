@@ -1,8 +1,10 @@
 module DeckResults
   class EditView < ApplicationComponent
-    def initialize(deck:, result:)
+    def initialize(deck:, result:, versions:, periods: {})
       @deck = deck
+      @periods = periods || {}
       @result = result
+      @versions = versions
     end
 
     def view_template
@@ -33,6 +35,8 @@ module DeckResults
               { include_blank: "— None —" }, class: "form-input"
           end
 
+          version_group(f)
+
           render Ui::FormGroup.new do
             f.label :notes, class: "form-label"
             f.text_area :notes, class: "form-input", rows: 3
@@ -43,6 +47,22 @@ module DeckResults
             link_to "Cancel", deck_deck_results_path(@deck), class: "btn btn-secondary"
           end
         end
+      end
+    end
+
+    private
+
+    # Disabled rather than hidden while a participation is attached: the model gives such a
+    # result its participation's version whatever is posted, so a live select would offer a
+    # choice the save then silently overrules — and a disabled field is not submitted at all.
+    def version_group(form)
+      attached = @result.tournament_entry_id.present?
+
+      render Ui::FormGroup.new(hint: ("Follows its participation's version." if attached)) do
+        form.label :deck_version_id, "Version", class: "form-label"
+        form.select :deck_version_id,
+          @versions.map { |version| [ DeckVersions::Labels.option(version, @periods[version.id]), version.id ] },
+          {}, class: "form-input", disabled: attached
       end
     end
   end

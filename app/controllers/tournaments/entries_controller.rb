@@ -6,6 +6,7 @@ module Tournaments
     before_action :set_tournament
     before_action :set_entry, only: %i[show edit update destroy attach_results detach_result]
     before_action :set_form_collections, only: %i[new create edit update]
+    before_action :set_periods, only: %i[edit update]
 
     def show
       authorize @entry
@@ -22,7 +23,7 @@ module Tournaments
       @entry = current_user.tournament_entries.build(entry_params.merge(tournament: @tournament))
       authorize @entry, :create?
 
-      if @entry.save
+      if save_with_version(resolve: true)
         redirect_to tournament_entry_path(@tournament, @entry), notice: "Participation recorded."
       else
         render :new, status: :unprocessable_entity
@@ -35,8 +36,10 @@ module Tournaments
 
     def update
       authorize @entry
+      @entry.assign_attributes(entry_params)
 
-      if @entry.update(entry_params)
+      # A new deck needs a version of its own; the one the select posted belongs to the old deck.
+      if save_with_version(resolve: @entry.deck_id_changed?)
         redirect_to tournament_entry_path(@tournament, @entry), notice: "Participation updated."
       else
         render :edit, status: :unprocessable_entity
@@ -52,8 +55,9 @@ module Tournaments
     def attach_results
       authorize @entry, :attach_results?
       ids = Array(params[:deck_result_ids]).map(&:to_i)
+      # update_all skips DeckResult#inherit_entry_version, so the version is written here too.
       @entry.deck.deck_results.where(id: ids, tournament_entry_id: nil)
-        .update_all(tournament_entry_id: @entry.id)
+        .update_all(tournament_entry_id: @entry.id, deck_version_id: @entry.deck_version_id)
 
       redirect_to tournament_entry_path(@tournament, @entry), notice: "Results attached."
     end
@@ -84,12 +88,49 @@ module Tournaments
     def set_form_collections
       @decks = current_user.decks.order(:name)
       @tournament_profiles = current_user.tournament_profiles.order(:player_name)
+      # The edit form's version select. Read before #update assigns anything, so it lists the
+      # versions of the deck the entry was saved with.
+      @entry_versions = @entry&.persisted? ? @entry.deck.ordered_versions : []
+    end
+
+    # What the edit form's version select prints beside each version: when it was played.
+    def set_periods
+      @periods = Decks::VersionPeriods.call(@entry_versions)
     end
 
     def entry_params
       params.require(:tournament_entry).permit(
-        :deck_id, :tournament_profile_id, :participant_count, :placement, :championship_points
+        :deck_id, :deck_version_id, :tournament_profile_id, :participant_count, :placement, :championship_points
       )
+    end
+
+    # Resolves the version and saves in one transaction, with save!, so a version snapshotted
+    # for an entry that then fails validation does not survive it. A deck that is not the
+    # member's is never resolved: the entry refuses it anyway, and resolving first would snapshot
+    # a stranger's deck. On ChoiceRequired nothing has been written and the form asks.
+    def save_with_version(resolve:)
+      skipped = false
+      TournamentEntry.transaction do
+        if resolve
+          deck = current_user.decks.find_by(id: @entry.deck_id)
+          skipped = deck.nil?
+          @entry.deck_version = Decks::VersionResolver.call(deck: deck, choice: params[:version_choice]) if deck
+        end
+        @entry.save!
+      end
+      true
+    rescue ActiveRecord::RecordInvalid
+      # A skipped resolution leaves the version missing, or the old deck's: the deck's own error
+      # already says why, and a version error would name a field the new form does not have.
+      @entry.errors.delete(:deck_version) if skipped
+      false
+    rescue Decks::VersionResolver::ChoiceRequired => e
+      @version_prompt = { current: e.current_number, next: e.next_number, message: e.message }
+      # Validate anyway, so the form shows any other error beside the question rather than
+      # after it — valid? also fills errors[:deck_version], which the question answers.
+      @entry.valid?
+      @entry.errors.delete(:deck_version)
+      false
     end
   end
 end

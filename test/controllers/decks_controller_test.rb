@@ -154,7 +154,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     @deck.deck_cards.destroy_all
     @deck.deck_results.destroy_all
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
-    @deck.deck_results.create!(result: "win", played_at: Time.current)
+    @deck.deck_results.create!(result: "win", played_at: Time.current, deck_version: deck_versions(:one))
 
     assert_difference [ -> { DeckCard.count }, -> { DeckResult.count } ], -1 do
       delete deck_path(@deck)
@@ -166,7 +166,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # options a user cannot tell apart.
   test "the result modal tells two participations in one event apart" do
     second = @user.tournament_entries.create!(
-      tournament: tournaments(:one), deck: @deck, tournament_profile: tournament_profiles(:misty)
+      tournament: tournaments(:one), deck: @deck, deck_version: deck_versions(:one),
+      tournament_profile: tournament_profiles(:misty)
     )
 
     get deck_path(@deck)
@@ -438,7 +439,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   test "matchups groups the user's decks by archetype" do
     @deck.update!(archetype: archetypes(:ogerpon))
     @deck.deck_results.destroy_all
-    @deck.deck_results.create!(result: "win", played_at: Time.current)
+    @deck.deck_results.create!(result: "win", played_at: Time.current, deck_version: deck_versions(:one))
 
     get matchups_decks_path
 
@@ -791,7 +792,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     theirs.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 0)
     # Five decided results at 100% is what makes `hot?` true — and the foil flag it renders is
     # the win rate, i.e. the record decision 3 keeps private.
-    5.times { theirs.deck_results.create!(result: "win") }
+    5.times { theirs.deck_results.create!(result: "win", deck_version: deck_versions(:two)) }
 
     get shared_decks_path
 
@@ -1322,6 +1323,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "a[href=?]", odds_deck_path(@deck), text: "Odds"
     assert_select "a[href=?]", stats_deck_path(@deck), count: 0
+    assert_select "a[href=?]", deck_versions_path(@deck), count: 0
   end
 
   # An ownerless field list is shared by construction, and is the population the page is most
@@ -1335,7 +1337,92 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", odds_deck_path(field_list), text: "Odds"
   end
 
+  # --- stats, scoped by version -------------------------------------------------------------
+
+  test "stats covers every version by default" do
+    two_versions_played
+
+    get stats_deck_path(@deck)
+
+    assert_response :success
+    assert_select ".data-table-cell", text: "Teal Mask Ogerpon ex"
+    assert_select ".data-table-cell", text: "Standings Marker"
+  end
+
+  test "stats scoped to version 1 shows version 1's matches alone" do
+    two_versions_played
+
+    get stats_deck_path(@deck, version: 1)
+
+    assert_select ".data-table-cell", text: "Teal Mask Ogerpon ex"
+    assert_select ".data-table-cell", text: "Standings Marker", count: 0
+  end
+
+  test "stats scoped to version 2 shows version 2's matches alone" do
+    two_versions_played
+
+    get stats_deck_path(@deck, version: 2)
+
+    assert_select ".data-table-cell", text: "Teal Mask Ogerpon ex", count: 0
+    assert_select ".data-table-cell", text: "Standings Marker"
+  end
+
+  test "stats for a version that does not exist falls back to all of them" do
+    two_versions_played
+
+    get stats_deck_path(@deck, version: 99)
+
+    assert_response :success
+    assert_select ".data-table-cell", text: "Teal Mask Ogerpon ex"
+    assert_select ".data-table-cell", text: "Standings Marker"
+  end
+
+  # The record is counted over every result whatever the scope, so the table can pick the scope.
+  test "stats opens with one row per version and its record" do
+    two_versions_played
+
+    get stats_deck_path(@deck)
+
+    rows = css_select(".version-summary .data-table-body .data-table-row")
+    # Version, W and L — the first, fourth and fifth of Decks::VersionSummaryTable::COLUMNS.
+    records = rows.map { |row| row.css(".data-table-cell").map { |cell| cell.text.strip }.values_at(0, 3, 4) }
+    assert_equal [ %w[v1 1 0], %w[v2 0 1] ], records
+  end
+
+  test "stats hands the view every version's period" do
+    two_versions_played
+
+    get stats_deck_path(@deck, version: 2)
+
+    periods = controller.instance_variable_get(:@periods)
+    assert_equal @deck.deck_versions.ids.sort, periods.keys.sort
+    assert_equal [ 1, 1 ], @deck.deck_versions.map { |v| periods[v.id].results }
+  end
+
+  test "stats costs the same with one version as with three" do
+    two_versions_played
+    get stats_deck_path(@deck) # warm the session
+
+    small = ActiveRecord::Base.uncached { count_queries { get stats_deck_path(@deck) } }
+    @deck.deck_cards.create!(card: cards(:froakie_twm), quantity: 1)
+    v3 = Decks::VersionSnapshot.call(@deck)
+    @deck.deck_results.create!(result: "draw", deck_version: v3, archetype: archetypes(:budew_ogerpon))
+    large = ActiveRecord::Base.uncached { count_queries { get stats_deck_path(@deck) } }
+
+    assert_response :success
+    assert_equal small, large, "query count grew with the version count: #{small} -> #{large}"
+  end
+
   private
+
+  # v1 won against Ogerpon; the list then changed, and v2 lost against the marker archetype.
+  def two_versions_played
+    @deck.deck_results.destroy_all
+    @deck.deck_results.create!(result: "win", deck_version: deck_versions(:one), archetype: archetypes(:ogerpon))
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)
+    v2 = Decks::VersionSnapshot.call(@deck)
+    @deck.deck_results.create!(result: "loss", deck_version: v2, archetype: archetypes(:standings_marker))
+  end
 
   # A pool nothing else shares, so that a page rendering N decks has N pool names to
   # resolve. Dated well before twm_por, so StandardPool.current is untouched.
@@ -1349,7 +1436,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     profile = @user.tournament_profiles.create!(
       player_name: "Player #{index}", player_id: "200000#{index}", date_of_birth: Date.new(2000, 1, 1)
     )
-    @user.tournament_entries.create!(tournament: event, deck: deck, tournament_profile: profile)
+    @user.tournament_entries.create!(tournament: event, deck: deck, deck_version: deck_version_for(deck),
+      tournament_profile: profile)
   end
 
   def pool_of_its_own(index)
