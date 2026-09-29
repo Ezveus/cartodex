@@ -20,6 +20,7 @@ class DeckVersion < ApplicationRecord
 
   validates :effective_at, presence: true
   validate :effective_at_not_in_the_future
+  validate :effective_at_stays_between_neighbours, on: :update, if: :effective_at_changed?
 
   # The order a version's number is its rank in. `id` breaks ties, so two versions dated the same
   # instant still number deterministically.
@@ -49,6 +50,30 @@ class DeckVersion < ApplicationRecord
   def deck_cards = deck_version_cards
 
   private
+
+  # A date is corrected, never used to reorder. Moving past a neighbour would bypass both of the
+  # import's rules at once — an old list becoming the latest one drift is measured against, or two
+  # identical lists ending up side by side — so the edit keeps the version where it ranks. Strict
+  # on both sides: at a neighbour's exact instant the id decides the rank, and that is a reorder.
+  def effective_at_stays_between_neighbours
+    return if effective_at.nil?
+
+    siblings = DeckVersion.where(deck_id: deck_id).order(:effective_at, :id).to_a
+    index = siblings.index { |sibling| sibling.id == id }
+    before = siblings[index - 1] if index.positive?
+    after = siblings[index + 1]
+    return if (before.nil? || effective_at > before.effective_at) && (after.nil? || effective_at < after.effective_at)
+
+    errors.add(:base, neighbour_bounds(before && [ index, before ], after && [ index + 2, after ]))
+  end
+
+  def neighbour_bounds(before, after)
+    bound = ->((number, version)) { "v#{number} (#{version.effective_at.strftime('%B %-d, %Y')})" }
+    return "Effective from must stay between #{bound.(before)} and #{bound.(after)}" if before && after
+    return "Effective from must be before #{bound.(after)}" if after
+
+    "Effective from must be after #{bound.(before)}"
+  end
 
   def effective_at_not_in_the_future
     return if effective_at.nil? || effective_at <= Time.current

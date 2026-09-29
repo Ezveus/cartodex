@@ -877,6 +877,19 @@ textarea.form-input {
   font-weight: 600;
 }
 
+/* The version question's three answers do not fit one row: side by side each squeezed to its
+   longest word and wrapped — three lines at 344px, two even at 1400px inside the dialog's width.
+   One full-width row each, at every width, and `flex: none` because the row's `flex: 1` would
+   otherwise size them against a column's height. */
+.result-version-prompt .result-modal-actions {
+  flex-direction: column;
+}
+
+.result-version-prompt .result-modal-actions .btn {
+  flex: none;
+  width: 100%;
+}
+
 .matchup-archetype-section {
   margin-bottom: 2.5rem;
 }
@@ -2916,18 +2929,6 @@ textarea.form-input {
 
   .result-type-btn {
     flex: 1 1 40%;
-  }
-
-  /* The version question's three answers do not fit one row of a phone's dialog: side by side
-     each squeezed to its longest word and grew several lines tall. One full-width row each, and
-     `flex: none` because the row's `flex: 1` would otherwise size them against a column's height. */
-  .result-version-prompt .result-modal-actions {
-    flex-direction: column;
-  }
-
-  .result-version-prompt .result-modal-actions .btn {
-    flex: none;
-    width: 100%;
   }
 
   /* Auth */

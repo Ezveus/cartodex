@@ -220,9 +220,10 @@ export default class extends Controller {
     this.actionsTarget.hidden = false
   }
 
-  // Remembered per pair of member cards: the version question reads the form
-  // a second time, and creating again for the same two cards would be refused
-  // as a duplicate. A different pair picked in between is a different archetype.
+  // Remembered per pair of member cards: the version question reads the form a
+  // second time, and this spares that second read its POST — the endpoint would
+  // answer the same archetype anyway, since it looks the pair up before building.
+  // A different pair picked in between is a different archetype.
   async #createdArchetypeId() {
     const members = `${this.primaryIdTarget.value}/${this.secondaryIdTarget.value}`
     if (this.createdArchetype?.members === members) return this.createdArchetype.id

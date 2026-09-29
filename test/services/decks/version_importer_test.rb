@@ -151,6 +151,16 @@ module Decks
       assert_equal [ "This list is identical to v2." ], result.errors
     end
 
+    # The new version ranks after every version sharing its instant (its id is higher), so dated at
+    # v1's exact instant its neighbour after is v2 — never v1 twice.
+    test "at a neighbour's exact instant, the version after is still compared" do
+      at = Time.zone.local(2025, 9, 1, 10)
+      record(at, honedge: 2)
+      record(Time.zone.local(2025, 9, 23, 10), doublade: 2)
+
+      assert_equal [ "This list is identical to v2." ], import("2 Doublade POR 57", effective_at: at).errors
+    end
+
     # Compared exactly as drift compares: by fingerprint and summed quantity.
     test "a printing split of the neighbour's list is identical to it" do
       record(Time.zone.local(2025, 9, 23, 10), budew_pre: 4)

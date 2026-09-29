@@ -223,6 +223,30 @@ class DeckVersionTest < ActiveSupport::TestCase
 
   private
 
+  # A date may be corrected, never used to reorder: reordering is what an import's rules (strictly
+  # before the latest, never beside an identical list) exist to control, and an edit would bypass
+  # both.
+  test "an edited date must stay between the version's neighbours" do
+    v1 = build_version(effective_at: Time.zone.local(2026, 9, 17, 10))
+    v2 = build_version(effective_at: Time.zone.local(2026, 9, 20, 10))
+    v3 = build_version(effective_at: Time.zone.local(2026, 9, 23, 10))
+
+    assert_not v2.update(effective_at: Time.zone.local(2026, 9, 24, 10))
+    assert_equal [ "Effective from must stay between v1 (September 17, 2026) and v3 (September 23, 2026)" ],
+      v2.errors.full_messages
+    assert_not v2.reload.update(effective_at: v3.effective_at), "an equal instant would reorder by id"
+    assert_not v2.reload.update(effective_at: v1.effective_at), "an equal instant would reorder by id"
+    assert v2.reload.update(effective_at: Time.zone.local(2026, 9, 22, 10))
+
+    assert_not v1.update(effective_at: Time.zone.local(2026, 9, 25, 10))
+    assert_equal [ "Effective from must be before v2 (September 22, 2026)" ], v1.errors.full_messages
+    assert v1.reload.update(effective_at: Time.zone.local(2026, 9, 1, 10))
+
+    assert_not v3.update(effective_at: Time.zone.local(2026, 9, 21, 10))
+    assert_equal [ "Effective from must be after v2 (September 22, 2026)" ], v3.errors.full_messages
+    assert v3.reload.update(effective_at: 1.hour.ago)
+  end
+
   def build_version(effective_at:)
     DeckVersion.create!(deck: @deck, effective_at: effective_at, format: "standard",
       standard_pool: standard_pools(:twm_por))

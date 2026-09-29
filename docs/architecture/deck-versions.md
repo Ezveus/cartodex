@@ -30,6 +30,15 @@ against "the deck". List A existed nowhere in the database.
   match read as UTC lands on the day before). On the production copy the backfill files 36 of 123
   results on a version whose `effective_at` is later than the match — harmless only because of
   this rule.
+  Two consequences of reading matches rather than a date: results whose `played_at` was cleared
+  (the edit form accepts it) are counted and printed as "1 match · date unknown", never as "not
+  played yet"; and a participation at an event still to come neither dates nor counts, since
+  `Tournament` accepts a future date and an event not yet held is not a time the list was played.
+- **A date is corrected, never used to reorder.** Editing `effective_at` must keep the version
+  strictly between its neighbours (`DeckVersion#effective_at_stays_between_neighbours`): moving
+  past one would bypass both of the import's rules below at once — an old list becoming the one
+  drift is measured against, or two identical lists landing side by side. Strict, because at a
+  neighbour's exact instant the id decides the rank, which is a reorder too.
 - **Drift** (`Decks::VersionDrift`) compares the live deck with its latest version by
   `COALESCE(NULLIF(fingerprint, ''), 'card:' || id)` and summed quantity, plus the three
   classification columns — so a printing swap or a proxy turned real is not drift, and a pool

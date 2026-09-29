@@ -37,10 +37,12 @@ module Decks
         .map { |id, first, last, count| [ id, to_date(played_at, first), to_date(played_at, last), count ] }
     end
 
+    # An event still to come is not a time the list was played, so it neither dates nor counts.
     def entry_spans
       date = Tournament.type_for_attribute(:date)
 
-      TournamentEntry.joins(:tournament).where(deck_version_id: @ids).group(:deck_version_id)
+      TournamentEntry.joins(:tournament).where(deck_version_id: @ids)
+        .where(tournaments: { date: ..Date.current }).group(:deck_version_id)
         .pluck(:deck_version_id, Arel.sql("MIN(tournaments.date)"), Arel.sql("MAX(tournaments.date)"), Arel.sql("COUNT(*)"))
         .map { |id, first, last, count| [ id, to_date(date, first), to_date(date, last), count ] }
     end

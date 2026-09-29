@@ -29,6 +29,13 @@ class DeckVersions::LabelsTest < ActiveSupport::TestCase
   end
 
   # A participation dates the version without being a match, so it cannot be counted as one.
+  # Counted matches with no date are said as such, never as "not played yet".
+  test "matches with no date are counted and said to be undated" do
+    assert_equal "1 match · date unknown", DeckVersions::Labels.played(Period.new(nil, nil, 1, 0))
+    assert_equal "3 matches · date unknown", DeckVersions::Labels.played(Period.new(nil, nil, 3, 0))
+    assert_equal "v2 — Standard (TEF-PBL) · date unknown", DeckVersions::Labels.option(version, Period.new(nil, nil, 3, 0))
+  end
+
   test "a version played only at an event carries its dates and no match count" do
     period = Period.new(Date.new(2026, 9, 20), Date.new(2026, 9, 20), 0, 1)
 

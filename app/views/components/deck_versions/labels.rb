@@ -14,6 +14,7 @@ module DeckVersions
     module_function
 
     NOT_PLAYED = "not played yet".freeze
+    DATE_UNKNOWN = "date unknown".freeze
 
     # "v2 — Standard (TEF-PBL) · played Sep 17 → 22". No year and no match count: an option has
     # to stay short enough for a phone's select, and the versions page carries the rest.
@@ -25,7 +26,9 @@ module DeckVersions
     # event, not a match, so it can move the dates without adding to the count — and a version
     # played at an event nobody logged a match of prints its dates with no count at all.
     def played(period, year: true, count: true)
-      return NOT_PLAYED if period.nil? || period.first_on.nil?
+      return NOT_PLAYED if period.nil?
+      # Matches whose played_at was cleared: counted, and said to be undated rather than unplayed.
+      return undated(period, count:) if period.first_on.nil?
 
       text = "played #{span(period.first_on, period.last_on || period.first_on, year:)}"
       matches = tally(period.results)
@@ -49,6 +52,14 @@ module DeckVersions
 
     # The contract names the field `results` without saying whether it holds the rows or their
     # count; both read the same here, and nil (nothing filed) reads as none.
+    def undated(period, count:)
+      matches = tally(period.results)
+      return NOT_PLAYED unless matches.positive?
+      return DATE_UNKNOWN unless count
+
+      "#{matches} #{matches == 1 ? "match" : "matches"} · #{DATE_UNKNOWN}"
+    end
+
     def tally(results)
       results.is_a?(Integer) ? results : Array(results).size
     end

@@ -82,6 +82,29 @@ module Decks
 
     private
 
+    # A result whose played_at was cleared from the edit form still counts: the version was played,
+    # the page just cannot say when.
+    test "a result with no played_at is counted without inventing a date" do
+      @deck.deck_results.create!(result: "win", played_at: nil, deck_version: @v1)
+
+      period = VersionPeriods.call([ @v1 ])[@v1.id]
+
+      assert_nil period.first_on
+      assert_nil period.last_on
+      assert_equal 1, period.results
+    end
+
+    # An event still to come is not a time the list was played.
+    test "a participation at an event still to come does not date the version" do
+      tournament = Tournament.create!(name: "Next month's cup", date: Date.current + 30, format: "expanded")
+      @user.tournament_entries.create!(tournament: tournament, deck: @deck, deck_version: @v1)
+
+      period = VersionPeriods.call([ @v1 ])[@v1.id]
+
+      assert_nil period.first_on
+      assert_equal 0, period.entries
+    end
+
     def version(effective_at)
       @deck.deck_versions.create!(effective_at: effective_at, format: "standard", standard_pool: standard_pools(:twm_por))
     end
