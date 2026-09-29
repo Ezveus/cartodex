@@ -37,10 +37,13 @@ class DeckVersionsController < ApplicationController
   end
 
   # Defaults to the oldest version's classification: an earlier list was most likely played under
-  # the oldest one known, not under whatever the deck carries today. The deck's own when there is
-  # no version to go by.
+  # the oldest one known, not under whatever the deck carries today. A deck with no version is
+  # sent back to the history, where recording version 1 is offered: Decks::VersionImporter would
+  # refuse the form anyway, and only after the member had pasted a whole list into it.
   def new
-    source = @deck.deck_versions.first || @deck
+    source = @deck.deck_versions.first
+    return redirect_to deck_versions_path(@deck), alert: Decks::VersionImporter::NO_VERSION if source.nil?
+
     @form = {
       decklist: "", effective_at: "", format: source.format,
       standard_pool_id: source.standard_pool_id.to_s, other_format_name: source.other_format_name.to_s

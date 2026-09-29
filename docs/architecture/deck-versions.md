@@ -65,7 +65,10 @@ would survive it. `Decks::ResultRecorder` exists for exactly that, inside `seria
 ## Reconstructing the past
 
 "Add an earlier version" (`Decks::VersionImporter`) takes a pasted list, resolves printings through
-`Cards::ReferenceResolver` (never fetches), and refuses — writing nothing — an unreadable line (PTCG
+`Cards::ReferenceResolver` (never fetches), and refuses — writing nothing — a deck with no version
+yet (the import would become the latest, and the live list would then be measured against a past
+one: the first result logged afterwards would ask to be filed under it; `#new` redirects to the
+history, which offers "Record version 1 now" and hides the import until then), an unreadable line (PTCG
 section headers and blank lines are skipped), an unknown printing, a quantity outside 1..60, a
 date not strictly before the latest version (the present is "New version"'s job), and a list
 identical to the version just before or just after it (a re-import used to duplicate and renumber

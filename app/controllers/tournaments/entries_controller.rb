@@ -109,14 +109,20 @@ module Tournaments
     # member's is never resolved: the entry refuses it anyway, and resolving first would snapshot
     # a stranger's deck. On ChoiceRequired nothing has been written and the form asks.
     def save_with_version(resolve:)
+      skipped = false
       TournamentEntry.transaction do
-        if resolve && (deck = current_user.decks.find_by(id: @entry.deck_id))
-          @entry.deck_version = Decks::VersionResolver.call(deck: deck, choice: params[:version_choice])
+        if resolve
+          deck = current_user.decks.find_by(id: @entry.deck_id)
+          skipped = deck.nil?
+          @entry.deck_version = Decks::VersionResolver.call(deck: deck, choice: params[:version_choice]) if deck
         end
         @entry.save!
       end
       true
     rescue ActiveRecord::RecordInvalid
+      # A skipped resolution leaves the version missing, or the old deck's: the deck's own error
+      # already says why, and a version error would name a field the new form does not have.
+      @entry.errors.delete(:deck_version) if skipped
       false
     rescue Decks::VersionResolver::ChoiceRequired => e
       @version_prompt = { current: e.current_number, next: e.next_number, message: e.message }

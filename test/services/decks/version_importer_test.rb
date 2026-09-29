@@ -7,6 +7,7 @@ module Decks
     end
 
     test "creates a version from a pasted PTCG list, section headers and blank lines included" do
+      record(1.day.ago, doublade: 4)
       decklist = <<~LIST
         Pokémon: 3
 
@@ -31,6 +32,7 @@ module Decks
     end
 
     test "sums a printing written on two lines" do
+      record(1.day.ago, doublade: 4)
       result = import("2 Honedge POR 56\n1 Honedge POR 56")
 
       assert_empty result.errors
@@ -88,6 +90,7 @@ module Decks
     end
 
     test "sixty copies on one line is a quantity it accepts" do
+      record(1.day.ago, doublade: 4)
       result = import("60 Honedge POR 56")
 
       assert_empty result.errors
@@ -95,6 +98,18 @@ module Decks
     end
 
     # --- an earlier version must be earlier (P3) ------------------------------------------------
+
+    # With no version, the import would become the latest and the live list would be measured
+    # against it: the first result logged afterwards would ask to be filed under a past list.
+    test "refuses a deck with no version yet, and writes nothing" do
+      result = nil
+      assert_no_difference -> { DeckVersion.count } do
+        result = import("3 Honedge POR 56")
+      end
+
+      assert_nil result.version
+      assert_equal [ VersionImporter::NO_VERSION ], result.errors
+    end
 
     test "refuses a date after the latest version's, naming it and its date" do
       record(Time.zone.local(2025, 9, 1, 10), honedge: 2)

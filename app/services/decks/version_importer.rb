@@ -20,6 +20,7 @@ module Decks
     SECTION_HEADER_RE = /\A(Pokémon|Trainer|Energy|Total Cards):\s*\d+\z/
 
     NO_CARD_LINE = "The list holds no card line.".freeze
+    NO_VERSION = "Record the current list as version 1 first: an earlier version is dated before it.".freeze
 
     # A deck is sixty cards: a line beyond that is a typo, and a zero is not a card.
     QUANTITY_RANGE = (1..60)
@@ -94,7 +95,7 @@ module Decks
     def history_refusal(version, resolved)
       versions = @deck.deck_versions.reload.to_a
       latest = versions.last
-      return if latest.nil?
+      return NO_VERSION if latest.nil?
 
       if version.effective_at >= latest.effective_at
         return "Effective from must be before v#{versions.size} (#{latest.effective_at.strftime('%B %-d, %Y')})."

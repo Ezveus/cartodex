@@ -15,7 +15,9 @@ module DeckVersions
       div(class: "admin-container") do
         render Ui::PageHeader.new(title: "#{@deck.name} — Versions") do
           div(class: "admin-header-actions") do
-            link_to "Add an earlier version", new_deck_version_path(@deck), class: "btn btn-secondary"
+            # Only once a version exists: an earlier one is dated before it, and with none the
+            # import would become the list the live deck is measured against.
+            link_to "Add an earlier version", new_deck_version_path(@deck), class: "btn btn-secondary" if @versions.any?
             link_to "Back to Deck", deck_path(@deck), class: "btn btn-secondary"
           end
         end

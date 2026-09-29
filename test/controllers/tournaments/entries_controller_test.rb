@@ -92,6 +92,25 @@ module Tournaments
       assert_response :unprocessable_entity
     end
 
+    # Without a deck there is no version to resolve, and the new form has no version field: the
+    # deck's own error is the one to show.
+    test "create without a deck names the deck and not its version" do
+      assert_no_difference -> { TournamentEntry.count } do
+        post tournament_entries_path(tournaments(:two)), params: { tournament_entry: { deck_id: "" } }
+      end
+
+      assert_response :unprocessable_entity
+      assert_match "Deck must exist", response.body
+      assert_no_match "Deck version", response.body
+    end
+
+    test "create with somebody else's deck does not name a version either" do
+      post tournament_entries_path(tournaments(:two)), params: { tournament_entry: { deck_id: decks(:two).id } }
+
+      assert_response :unprocessable_entity
+      assert_no_match "Deck version", response.body
+    end
+
     test "update saves the participation" do
       patch tournament_entry_path(@tournament, @entry), params: {
         tournament_entry: { placement: 4 }

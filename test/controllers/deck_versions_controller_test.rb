@@ -80,13 +80,21 @@ class DeckVersionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "", form[:other_format_name]
   end
 
-  test "new falls back to the deck's own classification when it has no version" do
+  # An import onto a deck with no version would become the latest one, and the live list would
+  # then be measured against a past list. The history is where version 1 is offered instead.
+  test "new sends a deck with no version back to the history, which does not offer the import" do
     deck = @user.decks.create!(name: "Fresh", format: "other", other_format_name: "Theme Deck")
 
     get new_deck_version_path(deck)
+    assert_redirected_to deck_versions_path(deck)
+    assert_equal Decks::VersionImporter::NO_VERSION, flash[:alert]
 
-    form = controller.instance_variable_get(:@form)
-    assert_equal [ "other", "", "Theme Deck" ], form.values_at(:format, :standard_pool_id, :other_format_name)
+    get deck_versions_path(deck)
+    assert_response :success
+    assert_select "a[href=?]", new_deck_version_path(deck), count: 0
+
+    get deck_versions_path(@deck)
+    assert_select "a[href=?]", new_deck_version_path(@deck), text: "Add an earlier version"
   end
 
   # --- params.expect --------------------------------------------------------------------------------
