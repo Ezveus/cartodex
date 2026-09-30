@@ -68,6 +68,23 @@ class Api::ArchetypesControllerTest < ActionDispatch::IntegrationTest
     assert_equal archetypes(:ogerpon).id, JSON.parse(response.body)["id"]
   end
 
+  # The standings import pre-fills each line's pair in the order its own Limitless name gives, and
+  # a line creating *A / B* offers it to every other select on the page without re-ordering their
+  # create sections — so a second line named the other way round posts *B / A*. The proposer can
+  # only align a pair with an archetype that existed when the page was drawn; this is what stops
+  # the one created a click earlier from getting a reversed duplicate with a public page.
+  test "returns the existing archetype when given its two members in the other order" do
+    assert_no_difference "Archetype.count" do
+      post api_archetypes_path, params: {
+        primary_card_id: cards(:teal_mask_ogerpon_ex).id,
+        secondary_card_id: cards(:budew_pre).id
+      }, as: :json
+    end
+
+    assert_response :created
+    assert_equal archetypes(:budew_ogerpon).id, JSON.parse(response.body)["id"]
+  end
+
   test "answers 404 for an unknown card" do
     post api_archetypes_path, params: { primary_card_id: 0 }, as: :json
 
