@@ -54,7 +54,10 @@ class Admin::StandingsImports::MappingTableTest < ActiveSupport::TestCase
     html = table(unresolved_line("1", :no_candidate), proposed_line("2"), confirmed_line("3"), error_line("4"))
 
     rows(html).each do |row|
-      assert row.at_css("button.standings-import-mapping-new"), "#{row.at_css('.standings-import-reference').text} has no button"
+      button = row.at_css("button.standings-import-mapping-new")
+      assert button, "#{row.at_css('.standings-import-reference').text} has no button"
+      assert_nil button["hidden"]
+      assert_equal "mapping-archetype#toggle", button["data-action"]
       assert row.at_css(".standings-import-mapping-create[hidden]")
     end
   end
@@ -136,6 +139,10 @@ class Admin::StandingsImports::MappingTableTest < ActiveSupport::TestCase
 
     assert_equal [ "3 to decide", "1 proposal to check", "2 confirmed earlier" ], summary(html)
     assert_equal [ "2 confirmed earlier" ], summary(table(confirmed_line("5"), confirmed_line("6")))
+  end
+
+  test "an event with no deck line prints no summary" do
+    assert_nil Nokogiri::HTML5.fragment(table).at_css(".standings-import-mapping-summary")
   end
 
   private

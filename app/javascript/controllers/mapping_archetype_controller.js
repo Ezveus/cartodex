@@ -1,5 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 import { requestJson } from "helpers/api"
+import { flashAlert } from "helpers/flash"
 
 // One line of the event import's "Decks in this event" table: create the archetype a Limitless
 // deck is when the catalogue has none, without leaving the preview. Re-running the preview
@@ -53,7 +54,13 @@ export default class extends Controller {
   // Disabled for the length of the request, as the archetype picker's own button is: to say the
   // click landed, and to spend one POST rather than one per impatient click.
   async create() {
-    if (!this.primaryIdTarget.value || this.createButtonTarget.disabled) return
+    if (this.createButtonTarget.disabled) return
+    // Said rather than ignored: the id is only written by picking a result, and typing clears it,
+    // so a name typed and never picked — or a line nothing was pre-filled on — reached here silently.
+    if (!this.primaryIdTarget.value) {
+      flashAlert("Pick a primary card from the search results first.")
+      return
+    }
     this.createButtonTarget.disabled = true
 
     try {

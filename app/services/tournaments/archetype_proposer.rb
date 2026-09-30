@@ -54,13 +54,14 @@ class Tournaments::ArchetypeProposer < ApplicationService
     scored = Decks::ArchetypeDetector.candidates(fingerprints, archetypes: @archetypes)
     if scored.empty?
       return Proposal.new(archetype: nil, verdict: :no_candidate, candidates: [],
-        suggested_cards: suggested_cards)
+        suggested_cards: suggested_cards([]))
     end
 
     ranked = rank(scored)
 
     Proposal.new(archetype: archetype_for(ranked), verdict: verdict_for(ranked),
-      candidates: ranked.map { |candidate| candidate[:archetype] }, suggested_cards: suggested_cards)
+      candidates: ranked.map { |candidate| candidate[:archetype] },
+      suggested_cards: suggested_cards(ranked.map { |candidate| candidate[:archetype] }))
   end
 
   private
@@ -112,7 +113,29 @@ class Tournaments::ArchetypeProposer < ApplicationService
   # the way Limitless does, primary first), then is the most notable by the detector's own order.
   # The winner consumes every token it covers, so `Cynthia's Garchomp` does not go on to pick
   # *Cynthia's Gabite* for the leftover `cynthia`. A name matching nothing suggests nothing.
-  def suggested_cards
+  #
+  # The name gives the order only when no archetype has already given one: archetype identity is the
+  # *ordered* fingerprint pair, and on event 578 `Clefairy Ogerpon` names the pair backwards from
+  # the catalogue's *Teal Mask Ogerpon ex / Lillie's Clefairy ex* — "Create & select" on that line
+  # made a reversed duplicate with a public page of its own. An existing candidate over exactly the
+  # same cards therefore dictates the order, and the create answers with that archetype instead.
+  def suggested_cards(candidates)
+    aligned(picked_by_name, candidates)
+  end
+
+  def aligned(picked, candidates)
+    # `to_s`: a card saved by a callback-bypassing write has no fingerprint, and nil does not sort.
+    fingerprints = picked.map { |card| card.fingerprint.to_s }
+    twin = candidates.find { |archetype|
+      members = [ archetype.primary_card, archetype.secondary_card ].compact.map { |card| card.fingerprint.to_s }
+      members.size == picked.size && members.sort == fingerprints.sort
+    }
+    return picked if twin.nil?
+
+    picked.sort_by { |card| card.fingerprint == twin.primary_card.fingerprint ? 0 : 1 }
+  end
+
+  def picked_by_name
     words = tokens(@label).to_a
     pool = Decks::ArchetypeDetector.notable_pokemon_among(resolved_rows)
     picked = []

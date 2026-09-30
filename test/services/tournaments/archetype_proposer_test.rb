@@ -337,6 +337,41 @@ class Tournaments::ArchetypeProposerTest < ActiveSupport::TestCase
     end
   end
 
+  # Measured on event 578: `Clefairy Ogerpon` names Clefairy first, the catalogue's archetype is
+  # *Teal Mask Ogerpon ex / Lillie's Clefairy ex*, and archetype identity is the *ordered*
+  # fingerprint pair — so a name-ordered pre-fill created a reversed duplicate with its own public
+  # page. An existing archetype over exactly these cards dictates the order.
+  test "an existing archetype over the same two cards dictates their order" do
+    clefairy = pokemon("Lillie's Clefairy ex", rule_box: true)
+    ogerpon = pokemon("Teal Mask Ogerpon ex", rule_box: true)
+    Archetype.create!(primary_card: ogerpon, secondary_card: clefairy,
+      name: "Teal Mask Ogerpon ex / Lillie's Clefairy ex", custom_name: true)
+
+    assert_equal [ ogerpon, clefairy ], propose("Clefairy Ogerpon", clefairy, ogerpon).suggested_cards
+  end
+
+  # The resolver refuses a quantity of 0, so the line must reach it as "no quantity" — or a `0`
+  # line would lose its fingerprint and, with it, its candidates.
+  test "a line listing zero copies still counts toward containment" do
+    charizard = pokemon("Charizard ex", rule_box: true)
+    Archetype.create!(primary_card: charizard, name: "Charizard ex", custom_name: true)
+
+    proposal = Tournaments::ArchetypeProposer.call(
+      list_text: "0 Charizard ex #{charizard.set_name} #{charizard.set_number}", label: "Charizard", archetypes: Archetype.all
+    )
+
+    assert_equal :decided, proposal.verdict
+  end
+
+  # Two slots, primary and secondary: a name that names three Pokémon still suggests two.
+  test "never suggests more than an archetype's two members" do
+    a = pokemon("Alakazam")
+    b = pokemon("Dudunsparce")
+    c = pokemon("Dusknoir")
+
+    assert_equal [ a, b ], propose("Alakazam Dudunsparce Dusknoir", a, b, c).suggested_cards
+  end
+
   private
 
   def propose(label, *cards)

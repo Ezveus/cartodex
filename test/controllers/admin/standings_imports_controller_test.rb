@@ -419,8 +419,9 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # End to end through the real proposer, not a stubbed one: "+ New archetype" opens pre-filled
-  # with the Pokémon the published deck name names, read off the deck's representative list. On the
-  # measured event this is Beedrill (371), which had no candidate at all and no archetype to pick.
+  # with the Pokémon the published deck name names, read off the deck's representative list. The
+  # list also holds Teal Mask Ogerpon ex, so this line has a candidate and goes through the ranked
+  # branch; the no-candidate branch's suggestion (Beedrill on event 578) is the proposer's own test.
   test "an unmapped deck's line opens its new-archetype search pre-filled from its own list" do
     stub_event_pages
     dhelmise = Card.create!(name: "Dhelmise", card_type: "Pokémon", set_name: "TST", set_number: "901",

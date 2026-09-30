@@ -159,15 +159,19 @@ class StandingsImportTest < ApplicationSystemTestCase
     assert_equal false, page.evaluate_script("window.__submitted")
     assert_equal imports_before, Import.pluck(:id)
     within(row) do
-      primary = find(".standings-import-mapping-create input[type=text]", match: :first)
+      primary, secondary = all(".standings-import-mapping-create input[type=text]").to_a
       primary.fill_in(with: "Dhelmise")
       find(".archetype-search-item", text: "TST 901").click
+      # A secondary picked and kept is the one created.
+      secondary.fill_in(with: "Budew")
+      find(".archetype-search-item", text: "ASC 16").click
     end
 
     within(row) { click_on "Create & select" }
 
     within(row) { assert_no_selector ".standings-import-mapping-create", visible: true }
     created = Archetype.find_by!(primary_card: dhelmise)
+    assert_equal cards(:budew_asc), created.secondary_card
     assert_equal created.id.to_s, row.find("select").value
     assert row[:class].include?("standings-import-mapping--answered")
     # Offered on every other line too: two decks can be one new archetype.
@@ -226,6 +230,9 @@ class StandingsImportTest < ApplicationSystemTestCase
     confirmed = find(".standings-import-mapping--confirmed", match: :first)
     decide_background = style(row, "backgroundColor")
     assert_not_equal style(confirmed, "backgroundColor"), decide_background
+    # Two classes in the selector are what keep `.data-table-row:hover` from washing it out.
+    row.find("[data-label=Deck]").hover
+    assert_equal decide_background, style(row, "backgroundColor")
 
     row.find("select").select(@archetype.name)
     assert row.matches_css?(".standings-import-mapping--answered")
@@ -255,6 +262,27 @@ class StandingsImportTest < ApplicationSystemTestCase
     row.find("select").find("option[value='#{kept}']").select_option
     assert row.matches_css?(".standings-import-mapping--confirmed")
     assert row.not_matches_css?(".standings-import-mapping--decide, .standings-import-mapping--answered")
+  end
+
+  # A line nothing was pre-filled on (339 reads "Basic Box") has no primary to create from: the click
+  # says so rather than doing nothing, and Cancel closes the section again.
+  test "creating without a primary card says so, and cancel closes the section" do
+    stub_event(list: "4 Teal Mask Ogerpon ex TWM 25\n")
+    archetypes_before = Archetype.pluck(:id)
+    visit preview_admin_standings_imports_path(source: "event", tournament_id: "577")
+    row = find(".standings-import-reference", exact_text: "339").ancestor(".standings-import-mapping")
+
+    within(row) do
+      click_on "+ New archetype"
+      click_on "Create & select"
+    end
+    assert_selector ".flash", text: "Pick a primary card from the search results first."
+    assert_equal archetypes_before, Archetype.pluck(:id)
+
+    within(row) do
+      click_on "Cancel"
+      assert_no_selector ".standings-import-mapping-create", visible: true
+    end
   end
 
   # The endpoint answers an archetype that already exists with that archetype. Nothing is added
