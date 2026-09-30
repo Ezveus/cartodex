@@ -185,6 +185,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     new_deck = Deck.order(:id).last
     assert_redirected_to deck_path(new_deck)
     assert_equal "Copy of Original", new_deck.name
+    assert_equal "Deck duplicated.", flash[:notice]
   end
 
   test "update persists the classification fields" do

@@ -68,6 +68,7 @@ class DeckPolicyTest < ActiveSupport::TestCase
     # Deliberately no admin clause: Admin::BaseController is the admin gate, and an admin
     # opening any private deck at its normal URL is well beyond what an admin panel needs.
     refute DeckPolicy.new(admin, @deck).show?
+    refute DeckPolicy.new(admin, @deck).duplicate?
   end
 
   test "creating a deck needs a session" do

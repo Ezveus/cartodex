@@ -91,11 +91,22 @@ class Decks::DuplicatorTest < ActiveSupport::TestCase
     @deck.update!(physical: true)
     @deck.user.collections.find_or_create_by!(card: cards(:honedge)).update!(quantity: 2)
     @deck.deck_cards.find_by!(card: cards(:honedge)).update!(owned_copies: 2)
+    # setup loaded the association before this row was backed; without the reload the service
+    # reads the stale 0 and a Duplicator copying owned_copies would stay green.
+    @deck.reload
 
     copy = Decks::Duplicator.call(@deck, user: @deck.user)
 
     assert_predicate copy, :physical?
     assert_equal [ 0 ], copy.deck_cards.pluck(:owned_copies).uniq
+  end
+
+  test "the owner's copy of a shared deck is private" do
+    @deck.update!(shared: true)
+
+    copy = Decks::Duplicator.call(@deck, user: @deck.user)
+
+    refute_predicate copy, :shared?
   end
 
   test "a shared deck copied by another member is theirs, private, and keeps its name verbatim" do
