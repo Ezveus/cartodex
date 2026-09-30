@@ -13,7 +13,9 @@ the **format**, the **archetype** and the **list, printings included**.
    contradicts the standing on **512 of 1798** field lists in development (405 of 1223 on the
    production copy cited in `CLAUDE.md`); #195 realigns it. Until then the public page's badge
    (which reads the column) can name a different archetype than the copy receives, and that is
-   accepted: the copy gets the true one.
+   accepted: the copy gets the true one. `index_tournament_standings_on_deck_id` is not unique, so
+   when two standings list one deck the **oldest** (lowest id) decides — it is the one whose
+   import created the list. No development deck has two standings today.
 2. **The name is copied verbatim** for a deck the reader does not own. `"Copy of "` stays the rule
    for duplicating one's own deck, where the two would otherwise sit side by side under one name.
 3. **Duplicating one's own deck now copies the archetype too.** It never did, and one code path
