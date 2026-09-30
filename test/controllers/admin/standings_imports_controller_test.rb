@@ -418,6 +418,26 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       "mappings[284][archetype_id]", archetypes(:ogerpon).id.to_s
   end
 
+  # End to end through the real proposer, not a stubbed one: "+ New archetype" opens pre-filled
+  # with the Pokémon the published deck name names, read off the deck's representative list. On the
+  # measured event this is Beedrill (371), which had no candidate at all and no archetype to pick.
+  test "an unmapped deck's line opens its new-archetype search pre-filled from its own list" do
+    stub_event_pages
+    dhelmise = Card.create!(name: "Dhelmise", card_type: "Pokémon", set_name: "TST", set_number: "901",
+      rarity: "Rare", hp: 130, type_symbol: "Grass", retreat_cost: 3)
+    record_decklist_keys("4 Dhelmise TST 901\n4 Teal Mask Ogerpon ex TWM 25\n")
+
+    get preview_admin_standings_imports_path, params: event_params
+
+    assert_response :success
+    row = Nokogiri::HTML5(response.body).css(".standings-import-mapping")
+      .find { |node| node.at_css(".standings-import-reference")&.text == "374" }
+    assert row, "the fixture event carries deck 374"
+    assert_includes row.at_css("[data-label=Deck]").text, "Dhelmise"
+    assert_equal dhelmise.id.to_s, row.at_css("[data-mapping-archetype-target=primaryId]")["value"]
+    assert_includes row["class"], "standings-import-mapping--decide"
+  end
+
   # A form field *name* is user input and was already guarded; its value is too, and was not. Both
   # of these reached String#[] and Array#to_i — unrescued 500s on the one screen in the panel that
   # writes to a public catalogue, where every other refusal is a redirect.

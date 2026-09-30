@@ -53,13 +53,18 @@ class Decks::ArchetypeDetector < ApplicationService
   # `.uniq(&:name)` is part of the ranking and not a tidy-up: without it two printings of one
   # Pokémon take both slots, which on a banner draws the same card twice.
   def self.notable_pokemon(deck)
-    deck.deck_cards
-        .select { |deck_card| deck_card.card&.card_type == "Pokémon" }
-        .sort_by { |deck_card|
-          [ deck_card.card.pokemon_subtype&.rule_box ? 0 : 1, -deck_card.card.hp.to_i, -deck_card.quantity ]
-        }
-        .map(&:card)
-        .uniq(&:name)
+    notable_pokemon_among(deck.deck_cards.map { |deck_card| { card: deck_card.card, quantity: deck_card.quantity } })
+  end
+
+  # The same ranking over `{ card:, quantity: }` rows — the shape Cards::ReferenceResolver answers
+  # with — for a list that is not a Deck. Tournaments::ArchetypeProposer ranks a Limitless list
+  # with it, and a third copy of this order is how two suggestions come to disagree.
+  def self.notable_pokemon_among(rows)
+    rows
+      .select { |row| row[:card]&.card_type == "Pokémon" }
+      .sort_by { |row| [ row[:card].pokemon_subtype&.rule_box ? 0 : 1, -row[:card].hp.to_i, -row[:quantity].to_i ] }
+      .map { |row| row[:card] }
+      .uniq(&:name)
   end
 
   # Every archetype the given fingerprints *contain*, with the score containment earns it —

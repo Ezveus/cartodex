@@ -13,9 +13,11 @@ module Ui
       end
     end
 
-    def row(&block)
+    # `class:` is added to `data-table-row`, never replaces it; every other attribute passes through.
+    def row(**attrs, &block)
       @col_index = 0
-      div(class: "data-table-row", &block)
+      extra = attrs.delete(:class)
+      div(class: [ "data-table-row", extra ].compact.join(" "), **attrs, &block)
     end
 
     def cell(**attrs, &block)

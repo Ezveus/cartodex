@@ -200,6 +200,143 @@ class Tournaments::ArchetypeProposerTest < ActiveSupport::TestCase
     assert_equal grimmsnarl_archetype, proposal.archetype
   end
 
+  # --- suggested_cards: what "+ New archetype" opens pre-filled with ---------------------------
+  #
+  # Measured on event 578: Decks::ArchetypeDetector's notable-Pokémon ranking (rule-box first)
+  # proposes *Beedrill ex / Fezandipiti ex* for `Beedrill` and *Cornerstone Mask Ogerpon ex* first
+  # for `Okidogi Barbaracle` — rule-box techs, the failure this proposer exists to avoid. The
+  # suggestion is therefore read off the published name too.
+
+  test "suggests the Pokémon the deck name names, never a rule-box tech it does not" do
+    beedrill = pokemon("Beedrill ex", rule_box: true, hp: 310)
+    fezandipiti = pokemon("Fezandipiti ex", rule_box: true, hp: 210)
+    meowth = pokemon("Meowth ex", rule_box: true, hp: 170)
+
+    proposal = propose("Beedrill", fezandipiti, meowth, beedrill)
+
+    assert_equal :no_candidate, proposal.verdict
+    assert_equal [ beedrill ], proposal.suggested_cards
+  end
+
+  # Label order decides which is primary, because cartodex names an archetype the way Limitless
+  # does — "Okidogi Barbaracle" is Okidogi first — and the more notable card is not always first.
+  test "two named Pokémon come back in the order the name gives them" do
+    ogerpon = pokemon("Cornerstone Mask Ogerpon ex", rule_box: true, hp: 210)
+    barbaracle = pokemon("Barbaracle", hp: 150)
+    okidogi = pokemon("Okidogi", hp: 130)
+
+    proposal = propose("Okidogi Barbaracle", ogerpon, barbaracle, okidogi)
+
+    assert_equal [ okidogi, barbaracle ], proposal.suggested_cards
+  end
+
+  # Coverage before position: `rocket` comes first in the name and a rule-box Mewtwo carries it,
+  # but only Honchkrow carries both words.
+  test "the card covering more of the name wins over one that merely comes first" do
+    mewtwo = pokemon("Team Rocket's Mewtwo ex", rule_box: true, hp: 280)
+    honchkrow = pokemon("Team Rocket's Honchkrow", hp: 140)
+
+    proposal = propose("Rocket's Honchkrow", mewtwo, honchkrow)
+
+    assert_equal [ honchkrow ], proposal.suggested_cards
+  end
+
+  # A winner consumes every word it covers. Without that, the leftover `cynthia` pulls the deck's
+  # own Stage 1 in as a "secondary" — an archetype nobody plays.
+  test "a chosen card consumes every word of the name it covers" do
+    garchomp = pokemon("Cynthia's Garchomp ex", rule_box: true, hp: 330)
+    gabite = pokemon("Cynthia's Gabite", hp: 90)
+
+    proposal = propose("Cynthia's Garchomp", gabite, garchomp)
+
+    assert_equal [ garchomp ], proposal.suggested_cards
+  end
+
+  # Two cards carrying the same single word: notability settles it (the detector's order), and
+  # the word is then spent, so the second is not suggested as a partner.
+  test "two cards carrying the same word are settled by notability, and only one is kept" do
+    greninja = pokemon("Greninja ex", rule_box: true, hp: 310)
+    mega = pokemon("Mega Greninja ex", rule_box: true, hp: 350)
+
+    proposal = propose("Mega Greninja", greninja, mega)
+
+    assert_equal [ mega ], proposal.suggested_cards
+  end
+
+  # `Basic Box` is Limitless saying "no single name fits", and `basic` is a word of every Basic
+  # Energy's name. Pokémon only, and nothing when the name matches no Pokémon: an empty search is
+  # the honest pre-fill.
+  test "suggests only Pokémon, and nothing when the name names none" do
+    charizard = pokemon("Charizard ex", rule_box: true)
+    energy = Card.create!(name: "Basic Grass Energy", card_type: "Energy", subtype: "Basic Energy",
+      set_name: "TST", set_number: (@next_number += 1).to_s)
+
+    proposal = propose("Basic Box", charizard, energy)
+
+    assert_equal [], proposal.suggested_cards
+  end
+
+  test "a list the catalogue cannot resolve suggests nothing" do
+    proposal = Tournaments::ArchetypeProposer.call(
+      list_text: "4 Beedrill ex ZZ9 404", label: "Beedrill", archetypes: Archetype.all
+    )
+
+    assert_equal [], proposal.suggested_cards
+  end
+
+  # A decided proposal still carries a suggestion: the admin may reject the machine's archetype
+  # and create the right one from the same line.
+  test "a decided proposal carries its suggestion too" do
+    okidogi = pokemon("Okidogi", hp: 130)
+    barbaracle = pokemon("Barbaracle", hp: 150)
+    Archetype.create!(primary_card: okidogi, name: "Okidogi", custom_name: true)
+
+    proposal = propose("Okidogi Barbaracle", okidogi, barbaracle)
+
+    assert_equal :decided, proposal.verdict
+    assert_equal [ okidogi, barbaracle ], proposal.suggested_cards
+  end
+
+  # The detector's notability order, all three keys. Copies are only readable if the list's own
+  # quantities reach the resolver — dropped, every line counts as the resolver's default of one.
+  test "among cards the name names equally, rule-box beats HP and HP beats copies played" do
+    plain = pokemon("Greninja", hp: 350)
+    ex = pokemon("Greninja ex", rule_box: true, hp: 310)
+    assert_equal [ ex ], propose("Greninja", plain, ex).suggested_cards
+
+    one_copy = pokemon("Frogadier Greninja", hp: 120)
+    four_copies = pokemon("Ash's Greninja", hp: 120)
+    proposal = Tournaments::ArchetypeProposer.call(
+      list_text: "1 #{one_copy.name} TST #{one_copy.set_number}\n4 #{four_copies.name} TST #{four_copies.set_number}",
+      label: "Greninja", archetypes: Archetype.none
+    )
+    assert_equal [ four_copies ], proposal.suggested_cards
+  end
+
+  # One resolution for both readers, and one subtype query whatever the list's length: the preview
+  # proposes for up to 45 decks in one web request.
+  test "resolves the list once and loads subtypes in one query" do
+    small = Array.new(2) { |i| pokemon("Small #{i} ex", rule_box: true) }
+    large = Array.new(6) { |i| pokemon("Large #{i} ex", rule_box: true) }
+
+    resolver = Cards::ReferenceResolver
+    calls = 0
+    original = resolver.method(:call)
+    resolver.define_singleton_method(:call) { |**options| calls += 1; original.call(**options) }
+    begin
+      subtype_queries = ->(cards) {
+        ActiveRecord::Base.uncached do
+          capture_queries { propose("Small Large", *cards) }.count { |sql| sql.include?('FROM "pokemon_subtypes"') }
+        end
+      }
+      assert_equal 1, subtype_queries.call(small)
+      assert_equal 1, subtype_queries.call(large)
+      assert_equal 2, calls
+    ensure
+      resolver.define_singleton_method(:call, original)
+    end
+  end
+
   private
 
   def propose(label, *cards)
@@ -222,10 +359,10 @@ class Tournaments::ArchetypeProposerTest < ActiveSupport::TestCase
     Decks::ArchetypeDetector.call(deck.reload).archetype
   end
 
-  def pokemon(name, rule_box: false, set_name: "TST")
+  def pokemon(name, rule_box: false, set_name: "TST", hp: 120)
     Card.create!(
       name: name, card_type: "Pokémon", set_name: set_name, set_number: (@next_number += 1).to_s,
-      rarity: "Rare", hp: 120, type_symbol: "Psychic", retreat_cost: 1,
+      rarity: "Rare", hp: hp, type_symbol: "Psychic", retreat_cost: 1,
       pokemon_subtype: rule_box ? pokemon_subtypes(:pokemon_ex) : nil
     )
   end
