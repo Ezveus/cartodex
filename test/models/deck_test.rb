@@ -364,7 +364,7 @@ class DeckTest < ActiveSupport::TestCase
     source = decks(:one)
     source.update!(shared: true)
 
-    copy = Decks::Duplicator.call(source)
+    copy = Decks::Duplicator.call(source, user: source.user)
 
     # Duplicator copies an explicit attribute allowlist, so `shared` is excluded by
     # construction. The test guards the next person who reaches for `dup` instead.

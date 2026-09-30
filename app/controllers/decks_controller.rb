@@ -276,11 +276,16 @@ class DecksController < ApplicationController
     end
   end
 
+  # The app's fourth unscoped deck lookup, after #show, #export and #odds, and for their reason:
+  # a shared deck is copyable by any member. `authorize` is the next line, and a refusal is the
+  # same 404 as an unknown key (PubliclyReachable). Not publicly reachable — a visitor is sent to
+  # sign in before the lookup runs.
   def duplicate
-    source = current_user.decks.find_by!(key: params[:id])
+    source = Deck.find_by!(key: params[:id])
     authorize source
-    new_deck = Decks::Duplicator.call(source)
-    redirect_to new_deck, notice: "Deck duplicated."
+    new_deck = Decks::Duplicator.call(source, user: current_user)
+    notice = source.user_id == current_user.id ? "Deck duplicated." : "Deck copied to your decks."
+    redirect_to new_deck, notice: notice
   end
 
   def share

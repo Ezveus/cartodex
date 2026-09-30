@@ -185,6 +185,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     new_deck = Deck.order(:id).last
     assert_redirected_to deck_path(new_deck)
     assert_equal "Copy of Original", new_deck.name
+    assert_equal "Deck duplicated.", flash[:notice]
   end
 
   test "update persists the classification fields" do
@@ -467,6 +468,56 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :not_found
+  end
+
+  # `Deck.count` alone would hold whichever member got the copy — a Duplicator still creating it
+  # under the source's owner passes that. Both owners' counts are what discriminate.
+  test "a member copies another member's shared deck into their own decks" do
+    source = decks(:two)
+    source.update!(shared: true, name: "Their list")
+
+    assert_difference -> { @user.decks.count }, 1 do
+      assert_no_difference -> { source.user.decks.count } do
+        post duplicate_deck_path(source)
+      end
+    end
+
+    copy = @user.decks.order(:id).last
+    assert_redirected_to deck_path(copy)
+    assert_equal "Their list", copy.name
+    refute_predicate copy, :shared?
+    assert_equal "Deck copied to your decks.", flash[:notice]
+  end
+
+  test "a member copies a tournament field list into their own decks" do
+    field_list = decks(:field_list)
+
+    assert_difference -> { @user.decks.count }, 1 do
+      post duplicate_deck_path(field_list)
+    end
+
+    copy = @user.decks.order(:id).last
+    assert_redirected_to deck_path(copy)
+    assert_equal field_list.name, copy.name
+  end
+
+  test "a signed-in reader of a shared deck is offered the copy, inside the actions bar" do
+    source = decks(:two)
+    source.update!(shared: true)
+
+    get deck_path(source)
+
+    assert_select ".deck-actions-bar form[action=?][method=post]", duplicate_deck_path(source), count: 1
+  end
+
+  # Keyed on the form, not on the label: a renamed button would otherwise pass this.
+  test "a visitor reading a shared deck is not offered the copy" do
+    sign_out @user
+
+    get deck_path(decks(:field_list))
+
+    assert_response :success
+    assert_select "form[action=?]", duplicate_deck_path(decks(:field_list)), count: 0
   end
 
   test "tournament_pdf export returns a PDF" do
