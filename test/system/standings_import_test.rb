@@ -237,6 +237,26 @@ class StandingsImportTest < ApplicationSystemTestCase
     assert_equal decide_background, style(row, "backgroundColor")
   end
 
+  # The row says what the POST will do. Emptied, a confirmed line *retracts* its mapping and a
+  # proposal is not stored, so both block the deck's rows — the same state as a line nobody decided.
+  # Put back, each returns to what it was.
+  test "a confirmed or proposed line set to leave unmapped reads as undecided" do
+    stub_event(list: "4 Teal Mask Ogerpon ex TWM 25\n")
+    visit preview_admin_standings_imports_path(source: "event", tournament_id: "577")
+    # 284 is confirmed in the fixtures (limitless_archetype_mappings.yml).
+    row = find(".standings-import-reference", exact_text: "284").ancestor(".standings-import-mapping")
+    assert row.matches_css?(".standings-import-mapping--confirmed")
+    kept = row.find("select").value
+
+    row.find("select").select("— Leave unmapped —")
+    assert row.matches_css?(".standings-import-mapping--decide")
+    assert row.not_matches_css?(".standings-import-mapping--confirmed")
+
+    row.find("select").find("option[value='#{kept}']").select_option
+    assert row.matches_css?(".standings-import-mapping--confirmed")
+    assert row.not_matches_css?(".standings-import-mapping--decide, .standings-import-mapping--answered")
+  end
+
   # The endpoint answers an archetype that already exists with that archetype. Nothing is added
   # then — every select already offers it — and the lists stay in name order either way.
   test "creating an archetype that exists selects it without offering it twice" do

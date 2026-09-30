@@ -10,6 +10,8 @@ import { requestJson } from "helpers/api"
 // here: the new archetype is only selected, and the confirm form stores it like any other choice.
 export default class extends Controller {
   static targets = ["select", "createSection", "createButton", "primaryId", "secondaryId"]
+  // The level the server rendered the line at: decide, check or confirmed.
+  static values = { attention: String }
 
   toggle() {
     this.createSectionTarget.hidden = !this.createSectionTarget.hidden
@@ -31,10 +33,21 @@ export default class extends Controller {
     if (field) field.value = ""
   }
 
-  // Quiet once answered: the rail and the wash say "this line needs you", and after a choice it no
-  // longer does. Server-side the line keeps its verdict; this is only what is left to do.
+  // The row says what the confirm POST will do with the line, re-read on every change. Empty is
+  // undecided whatever the line was: on a confirmed line it *retracts* the stored mapping and on a
+  // proposal it stores nothing, so either way the deck's rows are blocked — and a row still wearing
+  // its quiet confirmed look over that was the page saying the opposite. The server's own value
+  // restores the server's level; anything else is the admin's answer, and quiet.
   answered() {
-    this.element.classList.toggle("standings-import-mapping--answered", this.selectTarget.value !== "")
+    const value = this.selectTarget.value
+    const initial = [...this.selectTarget.options].find(option => option.defaultSelected)?.value ?? ""
+    const state = value === "" ? "decide" : value === initial ? this.attentionValue : "answered"
+    const level = state === "answered" ? this.attentionValue : state
+
+    for (const each of ["decide", "check", "confirmed"]) {
+      this.element.classList.toggle(`standings-import-mapping--${each}`, each === level)
+    }
+    this.element.classList.toggle("standings-import-mapping--answered", state === "answered")
   }
 
   // Disabled for the length of the request, as the archetype picker's own button is: to say the

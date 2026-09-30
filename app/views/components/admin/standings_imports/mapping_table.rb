@@ -45,7 +45,7 @@ module Admin
             ordered_lines.each do |line|
               attention = attention(line)
               t.row(class: "standings-import-mapping standings-import-mapping--#{attention}",
-                    data: { controller: "mapping-archetype" }) do
+                    data: { controller: "mapping-archetype", mapping_archetype_attention_value: attention }) do
                 t.cell { deck_cell(line) }
                 t.cell { proposal_cell(line, attention) }
                 t.cell { archetype_cell(line) }
