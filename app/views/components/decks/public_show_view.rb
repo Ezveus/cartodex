@@ -7,8 +7,12 @@ module Decks
   # conditions in the app's largest component, and one forgotten condition is a collection
   # leak to a stranger. This view cannot leak what it does not contain.
   class PublicShowView < ApplicationComponent
-    def initialize(deck:)
+    # `can_duplicate` is passed by the ERB from DeckPolicy#duplicate?, the `can_record` pattern of
+    # tournaments/show: this view stays unaware of sessions. A visitor gets no button — sign-in is
+    # the navbar's to offer.
+    def initialize(deck:, can_duplicate: false)
       @deck = deck
+      @can_duplicate = can_duplicate
     end
 
     def view_template
@@ -39,7 +43,13 @@ module Decks
       nav(class: "deck-actions-bar") do
         render Decks::ExportDropdown.new(deck: @deck)
         link_to "Odds", odds_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        copy_button if @can_duplicate
       end
+    end
+
+    # Lands on the reader's new deck, a full page — outside any frame, so no `_top` is needed.
+    def copy_button
+      button_to "Copy to my decks", duplicate_deck_path(@deck), method: :post, class: "btn btn-primary btn-sm"
     end
 
     # The card count only. No wins, losses, draws or timeouts: the record stays private.

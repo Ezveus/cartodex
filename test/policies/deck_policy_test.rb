@@ -36,10 +36,29 @@ class DeckPolicyTest < ActiveSupport::TestCase
 
     [ @stranger, nil ].each do |viewer|
       policy = DeckPolicy.new(viewer, @deck)
-      %i[tournament_pdf? stats? results? update? destroy? duplicate? share?].each do |query|
+      %i[tournament_pdf? stats? results? update? destroy? share?].each do |query|
         refute policy.public_send(query), "expected #{viewer.inspect} to be refused #{query}"
       end
     end
+  end
+
+  # Duplicating writes nothing to the source: it makes the reader a deck of their own. So it
+  # follows show?, but only for somebody signed in — a visitor has no decks to put it in.
+  test "a signed-in reader may copy a shared deck, a visitor may not" do
+    @deck.update!(shared: true)
+
+    assert DeckPolicy.new(@stranger, @deck).duplicate?
+    refute DeckPolicy.new(nil, @deck).duplicate?
+  end
+
+  test "nobody but the owner may copy a private deck" do
+    refute DeckPolicy.new(@stranger, @deck).duplicate?
+    refute DeckPolicy.new(nil, @deck).duplicate?
+  end
+
+  test "a signed-in reader may copy a tournament field list" do
+    assert DeckPolicy.new(@stranger, decks(:field_list)).duplicate?
+    refute DeckPolicy.new(nil, decks(:field_list)).duplicate?
   end
 
   test "an admin gets no special access to a private deck" do

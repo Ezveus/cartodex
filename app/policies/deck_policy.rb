@@ -21,7 +21,11 @@ class DeckPolicy < ApplicationPolicy
   def update? = owner?
   def edit? = owner?
   def destroy? = owner?
-  def duplicate? = owner?
+  # Not a write to this deck: it makes the reader one of their own, so whoever may read it may copy
+  # it. `user.present?` because a visitor has no decks to put it in — the controller's session gate
+  # stops them first, which is why only the policy test can see this half.
+  def duplicate? = user.present? && show?
+
   def share? = owner?
 
   def index? = user.present?

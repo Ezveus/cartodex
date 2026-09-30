@@ -1,1 +1,1 @@
-<%= render Decks::PublicShowView.new(deck: @deck) %>
+<%= render Decks::PublicShowView.new(deck: @deck, can_duplicate: policy(@deck).duplicate?) %>

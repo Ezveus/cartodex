@@ -27,4 +27,24 @@ class DeckSharingTest < ApplicationSystemTestCase
     assert_no_field "share-url"
     refute_predicate @deck.reload, :shared?
   end
+
+  # The copy keeps the source's name, so "the heading reads the name" is as true of the source's own
+  # public page: the owner-only "Log Result" button is what proves the click landed on a new deck
+  # that is the reader's.
+  test "a member copies somebody else's shared deck and lands on their own copy" do
+    source = decks(:two)
+    source.update!(shared: true, name: "Their list")
+
+    visit deck_path(source)
+    assert_no_button "Log Result"
+
+    click_on "Copy to my decks"
+
+    assert_text "Deck copied to your decks."
+    assert_button "Log Result"
+    assert_no_current_path deck_path(source)
+    copy = @user.decks.order(:id).last
+    assert_current_path deck_path(copy)
+    assert_equal "Their list", copy.name
+  end
 end

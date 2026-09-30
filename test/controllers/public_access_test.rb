@@ -77,6 +77,19 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_equal 3, Deck.count
   end
 
+  # Anybody signed in may copy a shared deck, but #duplicate is not publicly reachable: a visitor is
+  # bounced by authenticate_user! before the unscoped lookup runs. Made publicly reachable, it would
+  # answer identically (the refusal lands in DecksController#not_found, which also sends a visitor
+  # to sign in), so the only difference left to observe is whether the deck was read at all.
+  test "a visitor copying a shared deck is sent to sign in before the deck is read" do
+    # The path is built outside the block: the fixture accessor is itself a SELECT on decks.
+    path = duplicate_deck_path(decks(:field_list))
+    statements = capture_queries { post path }
+
+    assert_redirected_to new_user_session_path
+    assert_empty statements.grep(/FROM "decks"/), "expected no deck lookup before the session check"
+  end
+
   # Every write below rides out of the `authenticate :user` block by nesting alone, and what
   # still gates the four entry ones is ApplicationController's own before_action, which
   # Tournaments::EntriesController does not skip. They are the mutating half of that
