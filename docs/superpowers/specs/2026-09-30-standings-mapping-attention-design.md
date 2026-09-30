@@ -52,6 +52,13 @@ creator in another tab and re-running the preview — which re-fetches the event
    *Greninja ex* on notability and stops; a name matching nothing pre-fills nothing, which is the
    honest answer for `Basic Box`. A confirmed line or one with no readable list has no list read,
    so it opens empty.
+
+   **An existing candidate over exactly the same cards dictates the order** (found in review):
+   archetype identity is the ordered fingerprint pair, and `Clefairy Ogerpon` names backwards the
+   catalogue's *Teal Mask Ogerpon ex / Lillie's Clefairy ex*, so a name-ordered pre-fill made
+   "Create & select" produce a reversed duplicate with its own public page.
+8. **An emptied line reads as undecided** whatever it was (found in review): on a confirmed line
+   the POST retracts the mapping, on a proposal it stores nothing.
 7. **The inline fields must never reach the confirm POST.** The card inputs carry no `name`, and
    Enter inside them is swallowed: implicit submission would otherwise run *Confirm mappings and
    import* from a search box.
