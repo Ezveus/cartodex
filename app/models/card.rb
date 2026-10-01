@@ -89,7 +89,10 @@ class Card < ApplicationRecord
   with_options if: -> { card_type == "Pokémon" } do
     validates :hp, presence: true, numericality: { only_integer: true, greater_than: 0 }
     validates :type_symbol, presence: true, inclusion: { in: ENERGY_TYPES }
-    validates :retreat_cost, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+    # A BREAK card prints no retreat cost: it keeps the one of the card it is played on, so the
+    # value does not exist on this printing and nil is what is true of it.
+    validates :retreat_cost, presence: true, unless: -> { stage == "BREAK" }
+    validates :retreat_cost, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
   end
 
   # Which printing this row is: "Boss's Orders (PAL 172)". Several cards share a

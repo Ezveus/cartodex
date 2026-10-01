@@ -181,6 +181,8 @@ class Cards::Fetcher < ApplicationService
   def parse_stage(type_line)
     text = type_line.text.strip
     case text
+    # First: the card it evolves from is named on the same line, and could read as anything below.
+    when /BREAK Evolution/ then "BREAK"
     when /Basic/ then "Basic"
     when /Stage 2/ then "Stage 2"
     when /Stage 1/ then "Stage 1"
