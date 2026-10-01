@@ -317,6 +317,43 @@ retraction, because a hand-made request must not be able to undo an arbitration 
 also what makes the pre-selected proposal reversible — confirming an untouched line records the
 machine's guess as a human decision, and this is the door back out of it.
 
+**The lines that need a human come first, and the row says what the POST will do with them.**
+Measured on `/tournaments/578`: 28 decks, of which 25 confirmed earlier, 2 proposed and 1 with no
+candidate — and the three read exactly like the 25, a bare grey word in the event's own order.
+`Admin::StandingsImports::MappingTable` now sorts on three levels — *decide* (nothing selected: no
+candidate, ambiguous, the name says nothing, an unreadable list), *check* (a proposal is selected
+and will be stored as-is) and *confirmed* — keeping the event's order within each, and counts them
+above the table. The index is part of the sort key rather than trusted to `sort_by`: Ruby keeps
+tied items in order up to 16 of them and not beyond, so a test over the 15-line fixture cannot see
+the difference and a 28-line test can. In the browser the `mapping-archetype` controller re-reads
+each row on every change against the select's server value: **empty is *decide* whatever the line
+was**, because on a confirmed line it retracts the mapping (above) and on a proposal it stores
+nothing — a row left quiet under "confirmed earlier" over that was the page saying the opposite of
+the POST. The server value restores the server level; anything else is the admin's answer. The
+summary is counted once, at render, and does not follow those changes.
+
+**"+ New archetype" creates from the line, through the deck form's own endpoint.** Every line, the
+confirmed ones included, opens a primary/secondary card search posting to `POST /api/archetypes` —
+idempotent on the fingerprint pair and race-safe already — whose answer is added to every mapping
+select (two decks can be one new archetype) and selected on this one. Nothing is stored as a
+mapping until the confirm form is submitted. The section sits *inside* that form, so none of its
+inputs carries a `name` and Enter is swallowed on both searches: implicit submission there is a
+click on "Confirm mappings and import". Typing in a search clears the card id it held, because
+`card-select` only ever writes that id on a pick, and an erased pre-fill otherwise rode the create.
+
+**The search is pre-filled by the published name, not by `Decks::ArchetypeDetector`'s
+suggestion.** That suggestion ranks rule-box first and answers *Beedrill ex / Fezandipiti ex* for
+`Beedrill` on event 578, and *Cornerstone Mask Ogerpon ex* first for `Okidogi Barbaracle` — the
+Slowking regression again. `Tournaments::ArchetypeProposer#suggested_cards` keeps Pokémon only
+(`basic` is a word of every Basic Energy's name), requires a token shared with what is left of the
+name, prefers the card covering most of it, then the earliest in it, then the detector's
+notability (`notable_pokemon_among`, the same order over resolver rows), and lets the winner
+consume every token it covers, twice at most. **An existing candidate over exactly the same cards
+dictates the order**: archetype identity is the *ordered* fingerprint pair, and `Clefairy Ogerpon`
+names backwards the catalogue's *Teal Mask Ogerpon ex / Lillie's Clefairy ex* — name-ordered, the
+create made a reversed duplicate with its own public page. A confirmed line or one with no readable
+list opens empty, and so does a name matching no Pokémon, which is the honest answer for `Basic Box`.
+
 **The confirm button withholds itself on a blocked event *and* on the row ceiling, and the second
 one had to be asked separately.** `Admin::StandingsImports::EventConfirmForm` wraps the mapping
 selects and the plan in one POST, so it renders `PlanTable` with `confirm: false` and

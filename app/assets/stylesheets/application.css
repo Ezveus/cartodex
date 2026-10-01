@@ -3227,6 +3227,93 @@ textarea.form-input {
   margin-top: 1.5rem;
 }
 
+/* The lines that need a human, carried by the row rather than by the badge alone: measured on
+   event 578, 3 of 28 lines needed one and they read exactly like the 25 that did not. A rail *and*
+   a wash here, unlike a blocked event's rail alone, because these rows carry one badge and no
+   status column for a wash to compete with. `border-left` rather than an inset shadow, so the
+   stacked-card layout below the breakpoint keeps its own `--e1` shadow. Two classes, so that
+   `.data-table-row:hover` and the breakpoint's `background: var(--surface)` cannot outrank it. */
+.data-table-row.standings-import-mapping--decide {
+  border-left: 4px solid var(--flare);
+  background: var(--loss-bg);
+}
+
+.data-table-row.standings-import-mapping--check {
+  border-left: 4px solid var(--bolt);
+  background: var(--bolt-bg);
+}
+
+/* Answered in the browser since the preview rendered: nothing left to do on it. */
+.data-table-row.standings-import-mapping--answered {
+  border-left-color: var(--win);
+  background: var(--surface);
+}
+
+.standings-import-mapping-summary {
+  margin: 0 0 1rem;
+}
+
+/* One value in the cell, stacked, rather than three flex items spread across it — below the
+   breakpoint a cell is `display: flex; justify-content: space-between`. */
+.standings-import-mapping-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+
+/* The select and its "+ New archetype" on one line where the column allows, wrapping below it
+   where it does not. */
+.standings-import-mapping-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.standings-import-mapping-pick select {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.standings-import-mapping-new {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--water-strong);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.standings-import-mapping-new:hover {
+  text-decoration: underline;
+}
+
+/* The badge's own soft fill is the row's wash, so on these two rows it would vanish into it:
+   solid instead. */
+.standings-import-mapping--decide .badge-danger {
+  background: var(--flare);
+  color: #fff;
+}
+
+.standings-import-mapping--check .badge-warning {
+  background: var(--bolt);
+  color: var(--ink-900);
+}
+
+.standings-import-mapping-create {
+  position: relative;
+  padding: 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
 
 /* ============================================================
    Design System layer — overrides applied last (source order

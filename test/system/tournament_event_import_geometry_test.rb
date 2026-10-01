@@ -63,4 +63,29 @@ class TournamentEventImportGeometryTest < ApplicationSystemTestCase
     assert_operator measured["scrollWidth"], :<=, measured["innerWidth"],
       "the document scrolls sideways at #{measured["innerWidth"]}px"
   end
+
+  # Every line's create section open at once — the tallest the table gets — and still nothing wider
+  # than the phone. And the badge a row needs noticed is solid: its soft fill is the row's own wash.
+  test "no open create section pushes the document past the viewport, and decide badges are solid" do
+    visit preview_admin_standings_imports_path(source: "event", tournament_id: "577")
+    all("button.standings-import-mapping-new").each(&:click)
+    assert_selector ".standings-import-mapping-create", visible: true, minimum: 2
+
+    measured = evaluate_script(<<~JS)
+      (() => {
+        const sections = [ ...document.querySelectorAll(".standings-import-mapping-create") ];
+        const badge = document.querySelector(".standings-import-mapping--decide .badge-danger");
+        return {
+          innerWidth: window.innerWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          overflowing: sections.filter((s) => s.getBoundingClientRect().right > window.innerWidth).length,
+          badge: getComputedStyle(badge).backgroundColor
+        };
+      })()
+    JS
+
+    assert_equal 0, measured["overflowing"]
+    assert_operator measured["scrollWidth"], :<=, measured["innerWidth"]
+    assert_equal "rgb(221, 44, 22)", measured["badge"], "the decide badge must be solid --flare"
+  end
 end

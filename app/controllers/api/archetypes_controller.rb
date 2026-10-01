@@ -67,6 +67,14 @@ module Api
     # resolves to `""` would match a single-member archetype on the same primary
     # and quietly drop the card the user chose. Both halves fall through to `build`,
     # where the model's presence validations answer with a readable 422.
+    #
+    # The same two cards in the other order are answered with the archetype that
+    # exists rather than a reversed duplicate: the index is on the *ordered* pair,
+    # so nothing below this would refuse one, and the standings import's
+    # "Create & select" posts each line's pair in the order its own Limitless name
+    # gives — two lines naming one deck both ways round would otherwise make two
+    # archetypes, each with a public page. The written order is tried first, so a
+    # catalogue already holding both keeps answering with the one asked for.
     def existing(primary, secondary)
       return nil if primary.fingerprint.blank?
       return nil if secondary && secondary.fingerprint.blank?
@@ -74,7 +82,10 @@ module Api
       Archetype.find_by(
         primary_fingerprint: primary.fingerprint,
         secondary_fingerprint: secondary&.fingerprint.to_s
-      )
+      ) || (secondary && Archetype.find_by(
+        primary_fingerprint: secondary.fingerprint,
+        secondary_fingerprint: primary.fingerprint
+      ))
     end
 
     def build(primary, secondary)

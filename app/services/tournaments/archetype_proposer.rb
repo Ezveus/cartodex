@@ -21,9 +21,15 @@
 # Banette and Sinistcha), 3 with no candidate (`Marnie's Grimmsnarl`). One of the 80 is still wrong.
 # A good proposer and a bad decider, which is exactly why it only proposes.
 class Tournaments::ArchetypeProposer < ApplicationService
-  Proposal = Struct.new(:archetype, :verdict, :candidates, keyword_init: true) do
+  # `suggested_cards` is what the preview's "+ New archetype" opens pre-filled with — at most two
+  # Pokémon of the list, primary first. See #suggested_cards for why it is not the detector's own
+  # suggestion.
+  Proposal = Struct.new(:archetype, :verdict, :candidates, :suggested_cards, keyword_init: true) do
     def decided? = verdict == :decided
   end
+
+  # Primary and secondary: an archetype has two member slots.
+  MAX_SUGGESTED_CARDS = 2
 
   # `mega` and `ex` because cartodex spells a deck *Mega Lucario ex / Hariyama* where Limitless
   # spells it `Lucario Hariyama`: kept, they lend every Mega archetype an overlap against every
@@ -46,12 +52,16 @@ class Tournaments::ArchetypeProposer < ApplicationService
 
   def call
     scored = Decks::ArchetypeDetector.candidates(fingerprints, archetypes: @archetypes)
-    return Proposal.new(archetype: nil, verdict: :no_candidate, candidates: []) if scored.empty?
+    if scored.empty?
+      return Proposal.new(archetype: nil, verdict: :no_candidate, candidates: [],
+        suggested_cards: suggested_cards([]))
+    end
 
     ranked = rank(scored)
 
     Proposal.new(archetype: archetype_for(ranked), verdict: verdict_for(ranked),
-      candidates: ranked.map { |candidate| candidate[:archetype] })
+      candidates: ranked.map { |candidate| candidate[:archetype] },
+      suggested_cards: suggested_cards(ranked.map { |candidate| candidate[:archetype] }))
   end
 
   private
@@ -91,6 +101,61 @@ class Tournaments::ArchetypeProposer < ApplicationService
         .to_set
   end
 
+  # Which cards a new archetype for this deck would be built from, read off the published name and
+  # not off Decks::ArchetypeDetector#call's suggestion. Measured on event 578 (2026-09-30), that
+  # suggestion — rule-box first, then HP — answers *Beedrill ex / Fezandipiti ex* for `Beedrill`
+  # and puts *Cornerstone Mask Ogerpon ex* first for `Okidogi Barbaracle`: the rule-box tech
+  # outscoring the deck's own card, which is the Slowking regression this class exists to avoid.
+  #
+  # Pokémon only — `basic` is a word of every Basic Energy's name, and `Basic Box` would otherwise
+  # pre-fill *Basic Grass Energy*. A card is eligible only if it shares a token with what is left
+  # of the name; the best covers the most of it, then comes earliest in it (cartodex names a pair
+  # the way Limitless does, primary first), then is the most notable by the detector's own order.
+  # The winner consumes every token it covers, so `Cynthia's Garchomp` does not go on to pick
+  # *Cynthia's Gabite* for the leftover `cynthia`. A name matching nothing suggests nothing.
+  #
+  # The name gives the order only when no archetype has already given one: archetype identity is the
+  # *ordered* fingerprint pair, and on event 578 `Clefairy Ogerpon` names the pair backwards from
+  # the catalogue's *Teal Mask Ogerpon ex / Lillie's Clefairy ex* — "Create & select" on that line
+  # made a reversed duplicate with a public page of its own. An existing candidate over exactly the
+  # same cards therefore dictates the order, and the create answers with that archetype instead.
+  def suggested_cards(candidates)
+    aligned(picked_by_name, candidates)
+  end
+
+  def aligned(picked, candidates)
+    # `to_s`: a card saved by a callback-bypassing write has no fingerprint, and nil does not sort.
+    fingerprints = picked.map { |card| card.fingerprint.to_s }
+    twin = candidates.find { |archetype|
+      members = [ archetype.primary_card, archetype.secondary_card ].compact.map { |card| card.fingerprint.to_s }
+      members.size == picked.size && members.sort == fingerprints.sort
+    }
+    return picked if twin.nil?
+
+    picked.sort_by { |card| card.fingerprint == twin.primary_card.fingerprint ? 0 : 1 }
+  end
+
+  def picked_by_name
+    words = tokens(@label).to_a
+    pool = Decks::ArchetypeDetector.notable_pokemon_among(resolved_rows)
+    picked = []
+
+    MAX_SUGGESTED_CARDS.times do
+      best = pool.filter_map.with_index { |card, notability|
+        covered = words & tokens(card.name).to_a
+        [ -covered.size, words.index(covered.first), notability, card ] if covered.any?
+      }.min_by { |key| key.first(3) }
+      break if best.nil?
+
+      card = best.last
+      picked << card
+      words -= tokens(card.name).to_a
+      pool -= [ card ]
+    end
+
+    picked
+  end
+
   # The list resolved against the catalogue alone. Cards::ReferenceResolver never fetches — the
   # Cards::Printings rule — so a printing cartodex does not hold is simply not a fingerprint, and
   # the preview cannot turn into 45 lists' worth of card scrapes inside one web request.
@@ -98,13 +163,23 @@ class Tournaments::ArchetypeProposer < ApplicationService
   # Fingerprints and not card ids: the archetype names one printing to *display* and the list holds
   # whichever the player registered, so an id-keyed resolution misses every reprint.
   def fingerprints
-    entries = @list_text.lines.filter_map { |line|
-      match = line.strip.match(::Decks::Fetcher::CARD_LINE_RE)
-      { set_code: match[3], set_number: match[4] } if match
-    }
-    return [] if entries.empty?
+    resolved_rows.filter_map { |row| row[:card].fingerprint }.uniq
+  end
 
-    Cards::ReferenceResolver.call(entries: entries)
-      .resolved.filter_map { |row| row[:card].fingerprint }.uniq
+  # Resolved once for both readers. The quantity travels because notability ranks on copies played
+  # — `nonzero?`, because the resolver refuses a `0` and that line would lose its fingerprint, where
+  # before it resolved at the resolver's default of one. `pokemon_subtype` is preloaded in one query
+  # because notability reads `rule_box` on every card.
+  def resolved_rows
+    @resolved_rows ||= begin
+      entries = @list_text.lines.filter_map { |line|
+        match = line.strip.match(::Decks::Fetcher::CARD_LINE_RE)
+        { set_code: match[3], set_number: match[4], quantity: match[1].to_i.nonzero? } if match
+      }
+      rows = entries.empty? ? [] : Cards::ReferenceResolver.call(entries: entries).resolved
+      ActiveRecord::Associations::Preloader.new(records: rows.map { |row| row[:card] },
+        associations: :pokemon_subtype).call
+      rows
+    end
   end
 end
