@@ -17,6 +17,9 @@ class Decks::CardmarketExporter < ApplicationService
 
   private
 
+  # Deliberately not the "(V.n) (Expansion)" grammar AddDeckList documents: pasted for real,
+  # it refused Trainer lines this form matches and recognised only some expansion
+  # spellings (#112).
   def card_line(dc)
     prefix = dc.quantity > 1 ? "#{dc.quantity}x " : ""
     "#{prefix}#{card_name(dc.card)}".squish
