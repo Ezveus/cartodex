@@ -83,6 +83,15 @@ class Decks::CardmarketExporterTest < ActiveSupport::TestCase
     end
   end
 
+  test "keeps the hyphen of a card name when matching it against the slug" do
+    card = cards(:trainer_card)
+    card.update_columns(name: "U-Turn Board",
+                        cardmarket_url: "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unified-Minds/U-Turn-Board-V1-UNM211")
+    @deck.deck_cards.create!(card: card, quantity: 1)
+
+    assert_equal "U-Turn Board V1\n", Decks::CardmarketExporter.call(@deck)
+  end
+
   test "skips the Tera ability when exporting Tera Pokémon" do
     ogerpon = cards(:teal_mask_ogerpon_ex)
     ogerpon.abilities.create!(name: "Tera", position: 0)

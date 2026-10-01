@@ -62,7 +62,8 @@ class Decks::CardmarketExporter < ApplicationService
     suffix.presence&.tr("-", " ")
   end
 
+  # A hyphen in the name is a word break on Cardmarket too ("U-Turn-Board-V1-UNM211").
   def slugify(name)
-    I18n.transliterate(name).gsub(/[^A-Za-z0-9\s]/, "").strip.gsub(/\s+/, "-")
+    I18n.transliterate(name).gsub(/[^A-Za-z0-9\s-]/, "").split(/[\s-]+/).compact_blank.join("-")
   end
 end
