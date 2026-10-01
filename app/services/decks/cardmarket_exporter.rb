@@ -1,6 +1,9 @@
 class Decks::CardmarketExporter < ApplicationService
   TERA_ABILITY = "Tera".freeze
-  NOTHING_TO_BUY = "Nothing to buy — every card is owned".freeze
+  # Says what the netted export measured — the deck's proxies — and not "every card is owned":
+  # a collection may have dropped below what a deck backs (a tolerated over-allocation), and an
+  # empty deck owns nothing either.
+  NOTHING_TO_BUY = "Nothing to buy — no proxies in this deck".freeze
 
   # The trailing printing code of a product slug: "PAL172", "CRZGG11", "SV1en166", "SVEen001",
   # and occasionally a bare "SVP" or "SV1en". Never a version tag, which a few slugs end on

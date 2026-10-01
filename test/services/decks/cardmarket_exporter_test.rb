@@ -139,13 +139,13 @@ class Decks::CardmarketExporterTest < ActiveSupport::TestCase
     assert_equal "Boss's Orders\n", Decks::CardmarketExporter.call(@deck, missing_only: true)
   end
 
-  # The dropped row sits between the other two, so a filter that left a blank line or broke the
-  # name order would show.
+  # The dropped row sorts between the other two, so a filter that left a blank line would show;
+  # the rows are created out of name order, so a filter that lost the sort would show too.
   test "a fully backed line is dropped and the rest keep their order" do
     @deck.update!(physical: true)
-    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 0)
-    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
     @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 6, owned_copies: 0)
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 0)
 
     assert_equal "2x Boss's Orders\n6x Basic Psychic Energy\n",
                  Decks::CardmarketExporter.call(@deck, missing_only: true)
@@ -159,6 +159,11 @@ class Decks::CardmarketExporterTest < ActiveSupport::TestCase
     @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 0)
 
     assert_equal "4x Boss's Orders\n", Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
+
+  # Only the netted style answers "": the whole export of an empty deck keeps its lone newline.
+  test "an empty deck's whole export is still a lone newline" do
+    assert_equal "\n", Decks::CardmarketExporter.call(@deck)
   end
 
   test "a physical deck with nothing left to buy exports nothing at all" do

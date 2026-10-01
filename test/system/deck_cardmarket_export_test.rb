@@ -40,7 +40,10 @@ class DeckCardmarketExportTest < ApplicationSystemTestCase
 
     assert_selector ".dropdown-item", text: Decks::CardmarketExporter::NOTHING_TO_BUY
     assert_equal [], evaluate_script("window.__clipboardWrites")
-    # The label goes back, so the item can be clicked again.
+
+    # A second click while the notice shows must not take the notice for the label: the item
+    # goes back to its own label, so it can be clicked again once the deck has a proxy.
+    find(".dropdown-item", text: Decks::CardmarketExporter::NOTHING_TO_BUY).click
     assert_selector ".dropdown-item", text: MISSING, wait: 5
 
     within_allocation_of("Honedge") { click_on "−" }
