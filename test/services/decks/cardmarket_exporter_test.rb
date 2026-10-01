@@ -60,6 +60,38 @@ class Decks::CardmarketExporterTest < ActiveSupport::TestCase
     assert_equal "2x Boss's Orders V2\n", output
   end
 
+  # Every shape below is one the real catalogue's cardmarket_url column holds.
+  {
+    "Bosss-Orders-PAL172"            => "Boss's Orders",
+    "Bosss-Orders-SV1en196"          => "Boss's Orders",
+    "Bosss-Orders-V1-SV1en166"       => "Boss's Orders V1",
+    "Bosss-Orders-SVEen001"          => "Boss's Orders",
+    "Bosss-Orders-SV1en"             => "Boss's Orders",
+    "Bosss-Orders-SVP"               => "Boss's Orders",
+    "Bosss-Orders-V2-CRZGG11"        => "Boss's Orders V2",
+    "Bosss-Orders-V1"                => "Boss's Orders V1",
+    "Bosss-Orders-Ghetsis-MEG114"    => "Boss's Orders Ghetsis",
+    "Bosss-Orders-Ghetsis"           => "Boss's Orders Ghetsis",
+    "Bosss-Orders-Corbeau-V1-ASC183" => "Boss's Orders Corbeau V1"
+  }.each do |slug, expected|
+    test "reads the variant out of a #{slug} product slug" do
+      card = cards(:trainer_card)
+      card.update_column(:cardmarket_url, "https://www.cardmarket.com/en/Pokemon/Products/Singles/Some-Set/#{slug}")
+      @deck.deck_cards.create!(card: card, quantity: 1)
+
+      assert_equal "#{expected}\n", Decks::CardmarketExporter.call(@deck)
+    end
+  end
+
+  test "keeps the hyphen of a card name when matching it against the slug" do
+    card = cards(:trainer_card)
+    card.update_columns(name: "U-Turn Board",
+                        cardmarket_url: "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unified-Minds/U-Turn-Board-V1-UNM211")
+    @deck.deck_cards.create!(card: card, quantity: 1)
+
+    assert_equal "U-Turn Board V1\n", Decks::CardmarketExporter.call(@deck)
+  end
+
   test "skips the Tera ability when exporting Tera Pokémon" do
     ogerpon = cards(:teal_mask_ogerpon_ex)
     ogerpon.abilities.create!(name: "Tera", position: 0)
