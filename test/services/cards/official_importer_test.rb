@@ -210,6 +210,16 @@ class Cards::OfficialImporterTest < ActiveSupport::TestCase
     assert_equal "30th Classic Collection", CardSet.find_by(code: "30CC").name
   end
 
+  test "imports a BREAK card with a nil retreat cost" do
+    with_fragments("30th-c_9", slug: "30th-c") do |dir, slug|
+      Cards::OfficialImporter.call(dir: dir, slug: slug, set_code: "30CC")
+    end
+
+    greninja = Card.find_by!(set_name: "30CC", set_number: "9")
+    assert_equal "BREAK", greninja.stage
+    assert_nil greninja.retreat_cost
+  end
+
   test "never renames a set somebody already named" do
     # The `||=` is the CardSets::Importer rule: a re-run must not revert an admin's correction.
     CardSet.create!(code: "30C", name: "Thirtieth Anniversary")

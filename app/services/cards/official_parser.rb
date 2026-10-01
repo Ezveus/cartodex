@@ -107,6 +107,7 @@ class Cards::OfficialParser < ApplicationService
     return nil unless card_type == "Pokémon"
 
     case type_line
+    when /BREAK/ then "BREAK"
     when /Basic/ then "Basic"
     when /Stage 2/ then "Stage 2"
     when /Stage 1/ then "Stage 1"
@@ -153,10 +154,13 @@ class Cards::OfficialParser < ApplicationService
   end
 
   # A Pokémon whose retreat list is empty retreats for free, and `Card` validates `retreat_cost`
-  # present and `>= 0` on every Pokémon — so 0 and nil are a saved card and a refused one. A
-  # Trainer has no retreat block at all and keeps nil, which the same validation permits.
+  # present and `>= 0` on every Pokémon but a BREAK — so 0 and nil are a saved card and a refused
+  # one. A Trainer has no retreat block at all and keeps nil, which the same validation permits.
+  # So does a BREAK ("Pokémon BREAK", empty stats block): it keeps the retreat of the card it is
+  # played on, and 0 would claim a free retreat it does not have.
   def retreat_cost
     return nil unless card_type == "Pokémon"
+    return nil if stage == "BREAK"
 
     stat("Retreat Cost")&.css("li")&.size.to_i
   end
