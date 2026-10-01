@@ -2,7 +2,7 @@ require "test_helper"
 
 # Every fixture here is a verbatim `section.card-detail` fragment captured from
 # www.pokemon.com — the same bytes `bin/scrape_official_cards` writes. `30th_1` was captured
-# without a browser and so carries none of the `data-gtm-vis-*` attributes the other sixteen do;
+# without a browser and so carries none of the `data-gtm-vis-*` attributes the other seventeen do;
 # it is kept for exactly that reason.
 class Cards::OfficialParserTest < ActiveSupport::TestCase
   FIXTURE_DIR = Rails.root.join("test/fixtures/files/official_cards")
@@ -190,6 +190,20 @@ class Cards::OfficialParserTest < ActiveSupport::TestCase
     assert_equal 0, parse("30th_66")[:retreat_cost]
     assert_equal 0, parse("30th_120")[:retreat_cost]
     assert_equal 1, parse("30th_21")[:retreat_cost]
+  end
+
+  # The source prints "Pokémon BREAK" and an empty stats block: a BREAK card keeps the weakness,
+  # resistance and retreat of the card it is played on, so none of the three exists on it. 0 would
+  # claim a free retreat the card does not have; Card accepts nil on a BREAK and only there.
+  test "a BREAK card has its own stage and no retreat cost, rather than 0" do
+    greninja = parse("30th-c_9")
+
+    assert_equal "Greninja BREAK", greninja[:name]
+    assert_equal "BREAK", greninja[:stage]
+    assert_equal "Greninja", greninja[:evolves_from]
+    assert_nil greninja[:retreat_cost]
+    assert_nil greninja[:weakness]
+    assert_nil greninja[:resistance]
   end
 
   test "a Trainer has no retreat cost at all, rather than 0" do

@@ -158,6 +158,23 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     assert_equal 3, card.pokemon_subtype.prize_cards_on_ko
   end
 
+  # Limitless prints "Pokémon - BREAK Evolution - Evolves from Greninja" and no
+  # weakness/resistance/retreat block at all. Refusing it aborted a whole 30C import at CC22.
+  test "imports a BREAK card, which prints no retreat cost" do
+    stub_http("https://limitlesstcg.com/cards/30C/CC22",
+              File.read(Rails.root.join("test/fixtures/files/30C_CC22.html"), encoding: "utf-8"))
+
+    card = Cards::Fetcher.call("https://limitlesstcg.com/cards/30C/CC22")
+
+    assert card.persisted?
+    assert_equal "Greninja BREAK", card.name
+    assert_equal "BREAK", card.stage
+    assert_equal "Greninja", card.evolves_from
+    assert_nil card.retreat_cost
+    assert_nil card.weakness
+    assert_nil card.resistance
+  end
+
   test "regular pokemon has no pokemon_subtype" do
     remove_printing(cards(:honedge)) # or the printing is already known and never parsed
     stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html)

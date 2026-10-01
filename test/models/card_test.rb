@@ -74,6 +74,22 @@ class CardTest < ActiveSupport::TestCase
     assert_not card.valid?
   end
 
+  # A BREAK card prints no weakness, resistance or retreat: it keeps those of the card it is
+  # played on, so there is no value to store and nil is the truthful one.
+  test "does not require retreat_cost for a BREAK pokémon" do
+    card = cards(:honedge)
+    card.stage = "BREAK"
+    card.retreat_cost = nil
+    assert card.valid?, card.errors.full_messages.to_sentence
+  end
+
+  test "still refuses a negative retreat_cost on a BREAK pokémon" do
+    card = cards(:honedge)
+    card.stage = "BREAK"
+    card.retreat_cost = -1
+    assert_not card.valid?
+  end
+
   test "does not require hp for trainer cards" do
     card = cards(:trainer_card)
     card.hp = nil
