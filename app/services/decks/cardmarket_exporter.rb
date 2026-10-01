@@ -1,6 +1,11 @@
 class Decks::CardmarketExporter < ApplicationService
   TERA_ABILITY = "Tera".freeze
 
+  # The trailing printing code of a product slug: "PAL172", "CRZGG11", "SV1en166", "SVEen001",
+  # and occasionally a bare "SVP" or "SV1en". Never a version tag, which a few slugs end on
+  # because they carry no code at all ("Fog-Crystal-V1").
+  PRINTING_CODE = /-(?!V\d+\z)[A-Z][A-Z0-9]*(?:en)?\d*\z/
+
   def initialize(deck)
     @deck = deck
   end
@@ -49,7 +54,7 @@ class Decks::CardmarketExporter < ApplicationService
     return nil if card.cardmarket_url.blank?
 
     slug = File.basename(URI.parse(card.cardmarket_url).path)
-    slug = slug.sub(/-[A-Z]+\d+\z/, "")
+    slug = slug.sub(PRINTING_CODE, "")
     name_slug = slugify(card.name)
     return nil unless slug.start_with?(name_slug)
 
