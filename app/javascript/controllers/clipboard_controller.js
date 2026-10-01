@@ -7,9 +7,18 @@ export default class extends Controller {
     const original = this.element.textContent
 
     try {
-      const text = this.hasTextValue
-        ? this.textValue
-        : (await (await fetch(this.urlValue, { credentials: "same-origin" })).json()).text
+      const { text, notice } = this.hasTextValue
+        ? { text: this.textValue }
+        : await (await fetch(this.urlValue, { credentials: "same-origin" })).json()
+
+      // The server had nothing to copy and says why (a wishlist with nothing left to buy).
+      // Leave the clipboard as it was rather than empty it.
+      if (notice) {
+        this.element.textContent = notice
+        setTimeout(() => { this.element.textContent = original }, 3000)
+        return
+      }
+
       await navigator.clipboard.writeText(text)
 
       this.element.textContent = "Copied!"

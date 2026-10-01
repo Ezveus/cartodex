@@ -982,6 +982,78 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-badges .badge", text: "Shared", count: 0
   end
 
+  # #208. The owner of a physical deck gets a wishlist netted of the copies they already back.
+  test "the missing-copies Cardmarket export asks the owner only for what they still have to buy" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 1)
+
+    get export_deck_path(@deck, style: "cardmarket_missing")
+
+    assert_response :success
+    assert_equal({ "text" => "3x Boss's Orders\n" }, response.parsed_body)
+
+    # The whole-deck item stays whole for the owner too — buying a second copy of the deck.
+    get export_deck_path(@deck, style: "cardmarket")
+    assert_equal({ "text" => "4x Boss's Orders\n" }, response.parsed_body)
+  end
+
+  test "the missing-copies Cardmarket export says there is nothing to buy instead of copying nothing" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 2)
+
+    get export_deck_path(@deck, style: "cardmarket_missing")
+
+    assert_response :success
+    assert_equal({ "text" => "", "notice" => Decks::CardmarketExporter::NOTHING_TO_BUY }, response.parsed_body)
+  end
+
+  # owned_copies is collection data, the reason Decks::PublicBadges hides the Proxies badge, and
+  # netting the owner's collection off a visitor's shopping list would be wrong anyway.
+  test "a stranger gets the whole Cardmarket wishlist of a shared physical deck and never the netted one" do
+    @deck.update!(shared: true, physical: true)
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 3)
+    sign_in users(:two)
+
+    get export_deck_path(@deck, style: "cardmarket_missing")
+    assert_response :not_found
+
+    get export_deck_path(@deck, style: "cardmarket")
+    assert_response :success
+    assert_equal({ "text" => "4x Boss's Orders\n" }, response.parsed_body)
+
+    # A visitor's refusal is the sign-in page, the answer DecksController gives an unknown key too.
+    sign_out users(:two)
+    get export_deck_path(@deck, style: "cardmarket_missing")
+    assert_redirected_to new_user_session_path
+  end
+
+  test "the export menu splits the Cardmarket wishlist for the owner of a physical deck only" do
+    missing = export_deck_path(@deck, style: "cardmarket_missing")
+    whole = export_deck_path(@deck, style: "cardmarket")
+
+    @deck.update!(physical: true, shared: true)
+    get deck_path(@deck)
+
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", missing, text: "Copy as Cardmarket wishlist (missing copies)"
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", whole, text: "Copy as Cardmarket wishlist (whole deck)"
+
+    sign_out @user
+    get deck_path(@deck)
+
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", whole, text: "Copy as Cardmarket wishlist"
+    assert_select "[data-clipboard-url-value=?]", missing, count: 0
+
+    sign_in @user
+    @deck.update!(physical: false)
+    get deck_path(@deck)
+
+    assert_select ".dropdown-item[data-clipboard-url-value=?]", whole, text: "Copy as Cardmarket wishlist"
+    assert_select "[data-clipboard-url-value=?]", missing, count: 0
+  end
+
   test "the export menu offers the owner the tournament PDF and a visitor everything else" do
     @deck.update!(shared: true)
 
