@@ -118,4 +118,77 @@ class Decks::CardmarketExporterTest < ActiveSupport::TestCase
 
     assert_equal "2x Prism Energy\n", output
   end
+
+  # missing_only: the copies the member still has to buy (#208).
+
+  test "a physical deck asks only for the copies its collection does not back" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 1)
+    @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 8, owned_copies: 5)
+
+    output = Decks::CardmarketExporter.call(@deck, missing_only: true)
+
+    assert_equal "3x Boss's Orders\n3x Basic Psychic Energy\n", output
+  end
+
+  # The prefix reads the netted count, not the deck's: 1 missing of 3 is a bare line.
+  test "a single missing copy loses its quantity prefix" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 3, owned_copies: 2)
+
+    assert_equal "Boss's Orders\n", Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
+
+  # The dropped row sorts between the other two, so a filter that left a blank line would show;
+  # the rows are created out of name order, so a filter that lost the sort would show too.
+  test "a fully backed line is dropped and the rest keep their order" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 6, owned_copies: 0)
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 0)
+
+    assert_equal "2x Boss's Orders\n6x Basic Psychic Energy\n",
+                 Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
+
+  # Only what the deck backs is netted off (#208's scope): free copies sitting in the collection
+  # are not, since backing is not re-derived here.
+  test "free copies in the collection are not netted off" do
+    @deck.update!(physical: true)
+    @deck.user.collections.find_or_initialize_by(card: cards(:trainer_card)).update!(quantity: 4)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 0)
+
+    assert_equal "4x Boss's Orders\n", Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
+
+  # Only the netted style answers "": the whole export of an empty deck keeps its lone newline.
+  test "an empty deck's whole export is still a lone newline" do
+    assert_equal "\n", Decks::CardmarketExporter.call(@deck)
+  end
+
+  test "a physical deck with nothing left to buy exports nothing at all" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2, owned_copies: 2)
+
+    assert_equal "", Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
+
+  # The full export is untouched by owned_copies, so buying a second copy of the deck stays possible.
+  test "the full export of a physical deck still asks for every copy" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4, owned_copies: 4)
+
+    assert_equal "4x Boss's Orders\n", Decks::CardmarketExporter.call(@deck)
+  end
+
+  # owned_copies is 0 on a non-physical deck by validation, so this cannot be built through the
+  # model; written past it, it proves the rule is "only a physical deck nets" and not an accident
+  # of that validation.
+  test "a non-physical deck asks for every copy even when missing_only" do
+    @deck.update!(physical: false)
+    dc = @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 4)
+    dc.update_column(:owned_copies, 3)
+
+    assert_equal "4x Boss's Orders\n", Decks::CardmarketExporter.call(@deck, missing_only: true)
+  end
 end

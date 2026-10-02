@@ -15,6 +15,9 @@ class DeckPolicy < ApplicationPolicy
   def og_image? = record.shared?
 
   def tournament_pdf? = owner?
+  # The wishlist netted of the copies the deck already backs reads the owner's collection, which
+  # a visitor never sees (Decks::PublicBadges hides the Proxies badge for the same reason).
+  def cardmarket_missing? = owner?
   def stats? = owner?
   def results? = owner?
 

@@ -11,7 +11,7 @@ class DeckPolicyTest < ActiveSupport::TestCase
   test "an owner may do everything to their own deck" do
     policy = DeckPolicy.new(@owner, @deck)
 
-    %i[show? export? tournament_pdf? stats? results? update? destroy? duplicate? share?].each do |query|
+    %i[show? export? tournament_pdf? cardmarket_missing? stats? results? update? destroy? duplicate? share?].each do |query|
       assert policy.public_send(query), "expected the owner to be allowed #{query}"
     end
   end
@@ -36,7 +36,7 @@ class DeckPolicyTest < ActiveSupport::TestCase
 
     [ @stranger, nil ].each do |viewer|
       policy = DeckPolicy.new(viewer, @deck)
-      %i[tournament_pdf? stats? results? update? destroy? share?].each do |query|
+      %i[tournament_pdf? cardmarket_missing? stats? results? update? destroy? share?].each do |query|
         refute policy.public_send(query), "expected #{viewer.inspect} to be refused #{query}"
       end
     end

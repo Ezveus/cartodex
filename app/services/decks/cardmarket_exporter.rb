@@ -1,27 +1,50 @@
 class Decks::CardmarketExporter < ApplicationService
   TERA_ABILITY = "Tera".freeze
+  # Says what the netted export measured — the deck's proxies — and not "every card is owned":
+  # a collection may have dropped below what a deck backs (a tolerated over-allocation), and an
+  # empty deck owns nothing either.
+  NOTHING_TO_BUY = "Nothing to buy — no proxies in this deck".freeze
 
   # The trailing printing code of a product slug: "PAL172", "CRZGG11", "SV1en166", "SVEen001",
   # and occasionally a bare "SVP" or "SV1en". Never a version tag, which a few slugs end on
   # because they carry no code at all ("Fog-Crystal-V1").
   PRINTING_CODE = /-(?!V\d+\z)[A-Z][A-Z0-9]*(?:en)?\d*\z/
 
-  def initialize(deck)
+  # `missing_only:` asks only for the copies the member still has to buy (#208): on a physical
+  # deck that is each row's proxies, netting off the real copies it already backs. Free copies
+  # in the collection and other printings are deliberately not netted off — backing is not
+  # re-derived here, and owning an equivalent printing is the printing swap's business.
+  def initialize(deck, missing_only: false)
     @deck = deck
+    @missing_only = missing_only
   end
 
+  # Nothing to list answers "" rather than a lone newline, so a caller can tell "nothing to buy"
+  # from a list.
   def call
     deck_cards = @deck.deck_cards.includes(card: [ :attacks, :abilities ]).order("cards.name")
-    deck_cards.map { |dc| card_line(dc) }.join("\n") + "\n"
+    lines = deck_cards.filter_map do |dc|
+      quantity = wanted(dc)
+      card_line(dc, quantity) if quantity.positive?
+    end
+    return "" if lines.empty? && @missing_only
+
+    lines.join("\n") + "\n"
   end
 
   private
 
+  # Only a physical deck nets: a TCG Live deck's owned_copies is 0 by validation, so proxies would
+  # give the same answer, but the rule is stated here rather than left to that validation.
+  def wanted(dc)
+    @missing_only && @deck.physical? ? dc.proxies : dc.quantity
+  end
+
   # Deliberately not the "(V.n) (Expansion)" grammar AddDeckList documents: pasted for real,
   # it refused Trainer lines this form matches and recognised only some expansion
   # spellings (#112).
-  def card_line(dc)
-    prefix = dc.quantity > 1 ? "#{dc.quantity}x " : ""
+  def card_line(dc, quantity)
+    prefix = quantity > 1 ? "#{quantity}x " : ""
     "#{prefix}#{card_name(dc.card)}".squish
   end
 

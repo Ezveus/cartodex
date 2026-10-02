@@ -52,7 +52,7 @@ module Decks
       end
       nav(class: "deck-actions-bar") do
         button(class: "btn btn-primary btn-sm", data: { action: "result-modal#open" }) { "Log Result" }
-        render Decks::ExportDropdown.new(deck: @deck, tournament_pdf: true)
+        render Decks::ExportDropdown.new(deck: @deck, owner: true)
         link_to "Results", deck_deck_results_path(@deck), class: "btn btn-secondary btn-sm"
         # "Match stats", not "Stats": the Odds link beside it is also a page of statistics, and one
         # of them is about games played while the other is about the list itself.

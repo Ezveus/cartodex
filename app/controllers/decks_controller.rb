@@ -217,6 +217,11 @@ class DecksController < ApplicationController
         filename: "#{deck.name.parameterize}-decklist.pdf"
     when "cardmarket"
       render json: { text: Decks::CardmarketExporter.call(deck) }
+    when "cardmarket_missing"
+      authorize @deck, :cardmarket_missing?
+      text = Decks::CardmarketExporter.call(deck, missing_only: true)
+      # clipboard_controller shows the notice instead of copying an empty list.
+      render json: text.empty? ? { text:, notice: Decks::CardmarketExporter::NOTHING_TO_BUY } : { text: }
     else
       render json: { text: Decks::Exporter.call(deck) }
     end

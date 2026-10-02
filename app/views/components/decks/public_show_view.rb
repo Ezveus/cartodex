@@ -37,7 +37,8 @@ module Decks
           p(class: "deck-show-description") { @deck.description } if @deck.description.present?
         end
       end
-      # No tournament_pdf: it reads one of the owner's tournament profiles. The odds are a function
+      # Not `owner:`, so neither the tournament PDF (it reads one of the owner's tournament profiles)
+      # nor the Cardmarket wishlist netted of the owner's backed copies. The odds are a function
       # of the decklist alone, which this page already renders in full, so they are offered here on
       # exactly the rule that let the reader in — DeckPolicy#show?.
       nav(class: "deck-actions-bar") do
