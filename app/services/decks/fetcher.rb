@@ -48,7 +48,8 @@ class Decks::Fetcher < ApplicationService
     # Cards::Fetcher reads a printing then writes it, so two concurrent imports
     # of the same card must not both miss and both create it. What actually
     # guarantees that is the UNIQUE index on (cards.set_name, set_number): the
-    # loser raises instead of duplicating. This is serialized_transaction rather
+    # loser's write is refused, and Cards::Fetcher then returns the winner's row
+    # instead of failing the import. This is serialized_transaction rather
     # than a plain one for consistency with the other write services and because
     # it stays correct if this is ever called from inside another transaction —
     # not because it changes the locking, which a top-level ActiveRecord

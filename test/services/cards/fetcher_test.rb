@@ -257,6 +257,35 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     assert_equal "https://www.cardmarket.com/en/Pokemon/Products/Singles/Perfect-Order/Honedge-POR056", card.cardmarket_url
   end
 
+  # --- concurrent imports ---
+
+  test "a printing another import created during the fetch is returned, not refused" do
+    remove_printing(cards(:honedge))
+    url = "https://limitlesstcg.com/cards/POR/56"
+    body = @honedge_html
+    raced = false
+    # The competitor lands the same printing while this fetch is on the network,
+    # after its find_by missed and before its save! — the window CardSets::Importer
+    # and a Decks::ImportJob naming one new card can both fall into.
+    HttpFetcher.define_singleton_method(:call) do |u|
+      raise "Unexpected URL: #{u}" unless u == url
+      unless raced
+        raced = true
+        Cards::Fetcher.call(url)
+      end
+      body
+    end
+
+    card = nil
+    assert_difference "Card.count", 1 do
+      assert_nothing_raised { card = Cards::Fetcher.call(url) }
+    end
+
+    assert card.persisted?
+    assert_equal Card.find_by!(set_name: "POR", set_number: "56"), card
+    assert_equal 1, card.attacks.count
+  end
+
   private
 
   def stub_http(url, body)

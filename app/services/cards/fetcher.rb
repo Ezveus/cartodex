@@ -44,9 +44,26 @@ class Cards::Fetcher < ApplicationService
       card.save!
     end
     card
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    raise unless lost_creation_race?(card, e)
+
+    # The find_by above and this write are seconds apart (the fetch sits between
+    # them), so a concurrent import can land the same printing first. The text is
+    # identical — it was scraped from the same page — so its row is the answer.
+    Card.find_by!(set_name: @set_name, set_number: @set_number).tap { |existing| link_card_set(existing) }
   end
 
   private
+
+  # Only a card this call was creating can have lost the race. The validation is
+  # the usual path, since serialized_transaction takes the write lock before it
+  # runs; the index error covers a write that reaches the table first anyway.
+  def lost_creation_race?(card, error)
+    return false unless card&.new_record?
+    return true if error.is_a?(ActiveRecord::RecordNotUnique)
+
+    card.errors.of_kind?(:set_number, :taken)
+  end
 
   # A card imported before its `CardSet` existed carries no association, and the
   # skip path above is now what most cards go through — so the link has to be
