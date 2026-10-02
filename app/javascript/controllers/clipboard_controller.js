@@ -5,7 +5,9 @@ export default class extends Controller {
 
   connect() {
     // Read once: a click landing while "Copied!" or a notice is showing would otherwise take that
-    // text for the label and restore it, leaving the button stuck on it.
+    // text for the label and restore it, leaving the button stuck on it. This does not cover a
+    // Turbo snapshot taken while that text is showing: restored from the cache, the element
+    // reconnects with it as its content, and it becomes the label.
     this.label = this.element.textContent
   }
 
