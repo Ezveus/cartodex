@@ -286,6 +286,52 @@ class Cards::FetcherTest < ActiveSupport::TestCase
     assert_equal 1, card.attacks.count
   end
 
+  test "a printing the uniqueness validation missed is returned once the index refuses it" do
+    remove_printing(cards(:honedge))
+    url = "https://limitlesstcg.com/cards/POR/56"
+    body = @honedge_html
+    raced = false
+    HttpFetcher.define_singleton_method(:call) do |u|
+      raise "Unexpected URL: #{u}" unless u == url
+      unless raced
+        raced = true
+        Cards::Fetcher.call(url)
+      end
+      body
+    end
+    # The competitor commits between the validation's SELECT and the INSERT, so
+    # the validation passes and only the UNIQUE index sees the conflict. Silencing
+    # the validator is how that ordering is reached in a single process.
+    validator = Card.validators_on(:set_number).grep(ActiveRecord::Validations::UniquenessValidator).sole
+    validator.define_singleton_method(:validate_each) { |*| }
+
+    card = nil
+    begin
+      assert_difference "Card.count", 1 do
+        assert_nothing_raised { card = Cards::Fetcher.call(url) }
+      end
+    ensure
+      validator.singleton_class.remove_method(:validate_each)
+    end
+
+    assert card.persisted?
+    assert_equal Card.find_by!(set_name: "POR", set_number: "56"), card
+  end
+
+  test "a new printing invalid for any other reason is still refused" do
+    remove_printing(cards(:honedge))
+    # HP is required for a Pokémon; no competitor exists, so nothing was lost to
+    # a race and the RecordInvalid must reach the caller rather than become a
+    # RecordNotFound from the winner lookup.
+    stub_http("https://limitlesstcg.com/cards/POR/56", @honedge_html.sub("70 HP", ""))
+
+    assert_no_difference "Card.count" do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        Cards::Fetcher.call("https://limitlesstcg.com/cards/POR/56")
+      end
+    end
+  end
+
   private
 
   def stub_http(url, body)
