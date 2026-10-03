@@ -83,9 +83,12 @@ parser**, and the round-trip tests in `Admin::StandingsImportsControllerTest` po
 rendered form carries to hold that. The parser only *extracts*. `DECK_ID_RE`, `SLUG_RE`,
 `ROTATION_RE`, `SET_RE` and `TOURNAMENT_ID_RE` still narrow every value before a fetch, and they are
 what say why. What it refuses are pages a run would read *differently from how the admin saw them*,
-measured on 2026-10-03. The first is a paper page with `?variant=`: `decks/284/results?variant=3` is
-1.58 MB against the whole deck's 3.12 MB, and `LimitlessResults` reads the whole deck. The second is
-an online page missing `format`, `rotation` or `set`: the bare page serves Limitless's default,
+measured on 2026-10-03. The first is a paper page carrying **any** query parameter. The page has six filters (`variant`,
+`time`, `region`, `division`, `format`, `type`), each written into the URL only once it is picked,
+and `LimitlessResults` reads the whole deck: `?division=jr` is 134 KB against the whole deck's
+3.12 MB. Refusing only `variant` was the first version, and two reviews caught it. The second is
+an online page missing `format`, `rotation` or `set`, or carrying anything else (`game=POCKET` is a
+Pocket leaderboard): the bare page serves Limitless's default,
 which was byte for byte `2026`/`30C` that day and follows the newest set, while `set` anchors every
 row to a pool. The third is an online page in a format other than `ONLINE_FORMAT`, which the job
 fetches whatever the URL says. Input is `squish`ed and not `strip`ped, because an address copied out

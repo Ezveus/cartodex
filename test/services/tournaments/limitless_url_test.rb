@@ -69,19 +69,28 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
     end
   end
 
-  # Measured: ?variant=3 serves 1.58 MB against the whole deck's 3.12 MB. LimitlessResults reads the
-  # whole deck, so dropping the parameter would import about twice what the admin was looking at.
-  test "a paper variant page is refused rather than widened to the whole deck" do
+  # The paper page has six filters, each written into the URL only once it is picked, and the
+  # unfiltered page carries none. LimitlessResults reads the whole deck, so a dropped filter is a
+  # wider import than the page the admin was looking at — measured, ?division=jr is 134 KB against
+  # the whole deck's 3.12 MB.
+  test "a filtered paper page is refused rather than widened to the whole deck" do
     %w[
       https://limitlesstcg.com/decks/284/results?variant=3
       https://limitlesstcg.com/decks/284?variant=3
       https://limitlesstcg.com/decks/284/?variant=3
+      https://limitlesstcg.com/decks/284/results?variant=
+      https://limitlesstcg.com/decks/284/results?time=1months
+      https://limitlesstcg.com/decks/284/results?region=eu
+      https://limitlesstcg.com/decks/284/results?division=jr
+      https://limitlesstcg.com/decks/284/results?format=expanded
+      https://limitlesstcg.com/decks/284/results?type=regional
     ].each do |text|
       message = refusal(text)
 
-      assert_match "variant", message, text
-      assert_match "284", message, text
+      assert_match "filtered", message, text
+      assert_match "decks/284/results with no filter", message, text
     end
+    assert_match "(region, division)", refusal("https://limitlesstcg.com/decks/284/results?region=eu&division=jr")
   end
 
   # The set anchors every row the run writes to a Standard pool, and the bare page's default follows
@@ -96,6 +105,35 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
       assert_match missing, message, "missing #{missing}"
     end
     assert_match "rotation", refusal("https://play.limitlesstcg.com/decks/dragapult-ex")
+  end
+
+  # The run fetches by format, rotation and set alone, so anything else on the URL would be dropped.
+  # A Pocket leaderboard is the measured case: refused on `game`, not asked for a rotation Pocket
+  # does not have.
+  test "an online URL carrying anything beyond its three parameters is refused, naming it" do
+    message = refusal("https://play.limitlesstcg.com/decks/dragapult-ex?game=POCKET&format=standard&rotation=2026&set=PBL")
+    assert_match "game", message
+
+    message = refusal("https://play.limitlesstcg.com/decks/aegislash-b1-archaludon-b4?game=POCKET&format=standard&set=B4a")
+    assert_match "game", message
+    assert_no_match "rotation and set on Limitless", message
+  end
+
+  test "a repeated or malformed parameter is refused, not raised" do
+    [
+      "https://play.limitlesstcg.com/decks/dragapult-ex?format=standard&format=standard&rotation=2026&set=30C",
+      "https://limitlesstcg.com/decks/284/results?x=%",
+      "https://play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=2026&set=%"
+    ].each do |text|
+      assert_match "limitlesstcg.com/tournaments/<id>", refusal(text), text
+    end
+  end
+
+  # The screen prints every address without its scheme, so typing what it shows has to work.
+  test "an address without a scheme is read as https" do
+    assert_equal "284", parse("limitlesstcg.com/decks/284/results").deck_id
+    assert_equal "578", parse("www.limitlesstcg.com/tournaments/578").tournament_id
+    assert_equal "30C", parse("play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=2026&set=30C").set
   end
 
   # The job fetches with ONLINE_FORMAT whatever the URL says, so another format would import the
@@ -127,6 +165,15 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
       assert_match "limitlesstcg.com/decks/<id>/results", message, text.inspect
       assert_match "limitlesstcg.com/tournaments/<id>", message, text.inspect
     end
+  end
+
+  # A percent-escape that decodes to invalid UTF-8 is a hand-made URL, never a copied one, and it
+  # must still be a refusal on the form rather than an ArgumentError out of the query parser.
+  test "a parameter that decodes to invalid UTF-8 is refused, not raised" do
+    assert_match "limitlesstcg.com/tournaments/<id>",
+      refusal("https://play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=2026&set=%FF")
+    assert_match "limitlesstcg.com/tournaments/<id>",
+      refusal("https://limitlesstcg.com/decks/284/results?variant=%FF")
   end
 
   # Extraction and validation are two jobs. The controller's guards (SLUG_RE, SET_RE, …) already

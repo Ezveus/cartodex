@@ -762,7 +762,29 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_empty @http_calls
-    assert_match "one variant of Limitless deck 280", response.body
+    assert_match "That page of Limitless deck 280 is filtered (variant)", response.body
+  end
+
+  # Any of the page's filters, not only variant: the run reads the whole deck either way.
+  test "a paper URL carrying a division filter is refused rather than importing every division" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results?division=jr", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_select "form.standings-import-confirm", 0
+    assert_match "filtered (division)", response.body
+  end
+
+  # Rack raises on a malformed escape before any controller code runs its own checks, and the admin
+  # got Rack's bare 400 page instead of the form.
+  test "a URL with a malformed escape re-renders the form with a refusal" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results?x=%", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "Paste the address of one of the three Limitless pages", response.body
   end
 
   # The parser extracts; the controller's guards still narrow what goes into a URL, and say why.

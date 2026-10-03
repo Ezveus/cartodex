@@ -3,15 +3,22 @@
 #
 # It only *extracts*. Each value is still narrowed by Admin::StandingsImportsController's own
 # guards before anything is fetched, and those guards are what say why a value cannot go into a URL.
-# What this refuses is a page the import does not read. Three of those refusals were measured on
+# What this refuses is a page the import does not read. Each refusal below was measured on
 # 2026-10-03, and each one stops a run from importing something other than what the admin saw:
 #
-#   * a paper page carrying `?variant=` — decks/284/results?variant=3 is 1.58 MB against the whole
-#     deck's 3.12 MB, and Tournaments::LimitlessResults reads the whole deck;
-#   * an online page missing `format`, `rotation` or `set` — the bare page serves Limitless's
-#     default, which follows the newest set, and `set` anchors every row to a Standard pool;
+#   * a paper page carrying any query parameter. The page has six filters — variant, time, region,
+#     division, format, type — and each lands in the URL only once it is picked; the unfiltered
+#     page has none. Tournaments::LimitlessResults reads the whole deck, so a filter dropped here is
+#     a wider import than the page: ?division=jr is 134 KB against the whole deck's 3.12 MB,
+#     ?region=eu 940 KB, ?variant=3 1.58 MB;
+#   * an online page missing `format`, `rotation` or `set`, or carrying anything else — the bare
+#     page serves Limitless's default, which follows the newest set, and `set` anchors every row to
+#     a Standard pool;
 #   * an online page in a format other than ONLINE_FORMAT, which the job fetches whatever the URL
 #     says.
+#
+# An event's query string is not read: the run reads every division of the event whichever page
+# was pasted, and the screen says so.
 class Tournaments::LimitlessUrl < ApplicationService
   class ParseError < StandardError; end
 
@@ -28,6 +35,7 @@ class Tournaments::LimitlessUrl < ApplicationService
   PAPER_PATH_RE = %r{\A/decks/(\d+)(?:/results)?/?\z}
   EVENT_PATH_RE = %r{\A/tournaments/(\d+)(?:/[A-Za-z]+)?/?\z}
   ONLINE_PATH_RE = %r{\A/decks/([^/]+)/?\z}
+  SCHEME_RE = %r{\A[a-z][a-z0-9+.-]*://}i
 
   UNKNOWN = "Paste the address of one of the three Limitless pages this reads: " \
     "limitlesstcg.com/decks/<id>/results, " \
@@ -36,8 +44,10 @@ class Tournaments::LimitlessUrl < ApplicationService
 
   def initialize(text)
     # squish rather than strip: an address copied out of a web page carries U+00A0, which strip
-    # leaves in place and URI.parse refuses.
-    @text = text.to_s.squish
+    # leaves in place and URI.parse refuses. A missing scheme is supplied because the screen itself
+    # prints every address without one, and an admin who types what it shows must not be refused.
+    text = text.to_s.squish
+    @text = text.empty? || SCHEME_RE.match?(text) ? text : "https://#{text}"
   end
 
   def call
@@ -60,7 +70,19 @@ class Tournaments::LimitlessUrl < ApplicationService
     raise ParseError, UNKNOWN
   end
 
-  def query(uri) = Rack::Utils.parse_query(uri.query.to_s)
+  # Three hand-made shapes no copied Limitless address carries, each of which was a 400 or a 500
+  # rather than a sentence: a malformed escape (`x=%`) raises out of Rack, an escape decoding to
+  # invalid UTF-8 (`set=%FF`) raises from the first regex that reads it, and a repeated parameter
+  # comes back as an Array that every message here would print as `["standard", "standard"]`.
+  def query(uri)
+    params = Rack::Utils.parse_query(uri.query.to_s)
+    valid = params.all? { |key, value| value.is_a?(String) && key.valid_encoding? && value.valid_encoding? }
+    raise ParseError, UNKNOWN unless valid
+
+    params
+  rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::ParameterTypeError
+    raise ParseError, UNKNOWN
+  end
 
   def paper_or_event(uri)
     if (match = EVENT_PATH_RE.match(uri.path))
@@ -70,10 +92,11 @@ class Tournaments::LimitlessUrl < ApplicationService
     match = PAPER_PATH_RE.match(uri.path)
     raise ParseError, UNKNOWN unless match
 
-    if query(uri).key?("variant")
-      raise ParseError, "That is one variant of Limitless deck #{match[1]}, and this import reads the " \
-        "deck's whole tournament history — it would write more rows than that page shows. Paste " \
-        "limitlesstcg.com/decks/#{match[1]}/results without ?variant."
+    filters = query(uri).keys
+    if filters.any?
+      raise ParseError, "That page of Limitless deck #{match[1]} is filtered (#{filters.join(", ")}), " \
+        "and this import reads the deck's whole tournament history — it would write more rows " \
+        "than that page shows. Paste limitlesstcg.com/decks/#{match[1]}/results with no filter."
     end
 
     Parsed.new(source: "paper", deck_id: match[1])
@@ -84,6 +107,13 @@ class Tournaments::LimitlessUrl < ApplicationService
     raise ParseError, UNKNOWN unless match
 
     params = query(uri)
+    extra = params.keys - ONLINE_PARAMS
+    if extra.any?
+      raise ParseError, "The leaderboard URL also carries #{extra.join(", ")}, which this import " \
+        "does not read: it fetches the PTCG leaderboard by format, rotation and set alone, and a " \
+        "Pocket leaderboard is the one that carries game=POCKET."
+    end
+
     missing = ONLINE_PARAMS.reject { |name| params[name].present? }
     if missing.any?
       raise ParseError, "The leaderboard URL has no #{missing.to_sentence}. Pick the format, " \
