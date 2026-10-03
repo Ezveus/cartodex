@@ -105,6 +105,9 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
       assert_match missing, message, "missing #{missing}"
     end
     assert_match "rotation", refusal("https://play.limitlesstcg.com/decks/dragapult-ex")
+    # Present but blank is how a half-filled filter arrives, and it is as missing as absent.
+    assert_match "rotation", refusal("https://play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=&set=30C")
+    assert_match "set", refusal("https://play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=2026&set=")
   end
 
   # The run fetches by format, rotation and set alone, so anything else on the URL would be dropped.
@@ -142,6 +145,9 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
     message = refusal("https://play.limitlesstcg.com/decks/dragapult-ex?format=expanded&rotation=2026&set=30C")
 
     assert_match "expanded", message
+    %w[Standard standardx].each do |format|
+      assert_match format, refusal("https://play.limitlesstcg.com/decks/dragapult-ex?format=#{format}&rotation=2026&set=30C")
+    end
   end
 
   test "anything that is not one of the three pages is refused, naming the three" do
@@ -152,6 +158,12 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
       "ftp://limitlesstcg.com/decks/284/results",
       "https://example.com/decks/284/results",
       "https://limitlesstcg.com.evil.example/decks/284/results",
+      "https://notlimitlesstcg.com/decks/284/results",
+      "https://evil.limitlesstcg.com/decks/284/results",
+      "ftp://limitlesstcg.com//decks/284/results",
+      "javascript:alert(1)//limitlesstcg.com/decks/284/results",
+      "https://limitlesstcg.com/decks/284/matchups",
+      "https://limitlesstcg.com/decks/284/results/extra",
       "https://limitlesstcg.com/decks/list/12345",
       "https://limitlesstcg.com/tournaments",
       "https://limitlesstcg.com/tournaments/578/JR/extra",
