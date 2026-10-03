@@ -115,6 +115,37 @@ module Admin
     private
 
     def read_form_params
+      params.key?(:url) ? read_url : read_source_fields
+      @archetype_id = params[:archetype_id].presence&.to_i
+      @archetype = Archetype.find_by(id: @archetype_id)
+      @event_filters_text = params[:event_filters].to_s
+      @event_filters = parse_filters(@event_filters_text)
+      @limit_per_event_text = params[:limit_per_event].to_s.strip
+      @limit_per_event = @limit_per_event_text.presence&.to_i
+    end
+
+    # The form takes one Limitless URL and the source is read off it. The fields it is read into are
+    # the ones the confirm forms post back as hidden inputs, so #create and the job never see a URL.
+    # A URL the parser refuses leaves every field blank and is reported by #source_refusal, before
+    # the archetype and before any fetch.
+    def read_url
+      @url = params[:url].to_s.strip
+      parsed = Tournaments::LimitlessUrl.call(@url)
+      @source = parsed.source
+      @tournament_id = parsed.tournament_id.to_s
+      @deck_id = parsed.deck_id.to_s
+      @slug = parsed.slug.to_s
+      @rotation = parsed.rotation.to_s
+      @set = parsed.set.to_s
+    rescue Tournaments::LimitlessUrl::ParseError => e
+      @url_error = e.message
+      @source = DEFAULT_SOURCE
+      @tournament_id = @deck_id = @slug = @rotation = @set = ""
+    end
+
+    # What the confirm forms post to #create, and what a preview bookmarked before the screen took a
+    # URL still carries.
+    def read_source_fields
       # An allowlist rather than a ternary now that there are three: an unknown value reads as
       # paper, which is also what a run enqueued before this screen knew about a second source
       # carries.
@@ -124,12 +155,6 @@ module Admin
       @slug = params[:slug].to_s.strip
       @rotation = params[:rotation].to_s.strip
       @set = params[:set].to_s.strip
-      @archetype_id = params[:archetype_id].presence&.to_i
-      @archetype = Archetype.find_by(id: @archetype_id)
-      @event_filters_text = params[:event_filters].to_s
-      @event_filters = parse_filters(@event_filters_text)
-      @limit_per_event_text = params[:limit_per_event].to_s.strip
-      @limit_per_event = @limit_per_event_text.presence&.to_i
     end
 
     def load_archetypes
@@ -165,6 +190,7 @@ module Admin
     def archetype_required? = !event?
 
     def source_refusal
+      return @url_error if @url_error
       return tournament_id_refusal if event?
       return deck_id_refusal unless online?
 

@@ -37,7 +37,7 @@ class StandingsImportTest < ApplicationSystemTestCase
     click_nav_link "Limitless import"
     assert_current_path new_admin_standings_import_path
 
-    fill_in "Limitless deck id", with: "280"
+    fill_in "Limitless URL", with: "https://limitlesstcg.com/decks/280/results"
     select @archetype.name, from: "Archetype"
     fill_in "Only these events (optional)", with: "NAIC"
     click_on "Preview"
@@ -56,7 +56,7 @@ class StandingsImportTest < ApplicationSystemTestCase
 
     # The form is still above the plan, still carrying what produced it — the whole reason the
     # preview is a GET onto the same screen rather than a page of its own.
-    assert_field "Limitless deck id", with: "280"
+    assert_field "Limitless URL", with: "https://limitlesstcg.com/decks/280/results"
     assert_field "Only these events (optional)", with: "NAIC"
 
     # Present, and named with the count it will write. Not clicked: enqueuing the run is a
@@ -65,9 +65,8 @@ class StandingsImportTest < ApplicationSystemTestCase
   end
 
   # The online source on the same screen. Worth a browser and not just a request test for the
-  # reason the paper one is: the source select and the three fields it governs are all rendered
-  # together and come back filled in above the plan, and an admin who picked "online" has to see
-  # the run they described rather than retype it.
+  # reason the paper one is: the URL comes back filled in above the plan, and an admin who pasted a
+  # leaderboard has to see the run they described rather than paste it again.
   #
   # It also puts the leaderboard's one genuinely deceptive column in front of a human. The fixture
   # row for "Moujii's Dojo" carries data-place="4" and really finished 2nd; a parser that read the
@@ -78,10 +77,8 @@ class StandingsImportTest < ApplicationSystemTestCase
 
     visit new_admin_standings_import_path
 
-    select "Online best finishes — play.limitlesstcg.com/decks/<slug>", from: "Source"
-    fill_in "Leaderboard slug (online)", with: "raging-bolt-ogerpon"
-    fill_in "Rotation (online)", with: "2026"
-    fill_in "Set (online)", with: card_sets(:por).code
+    fill_in "Limitless URL",
+      with: "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon?format=standard&rotation=2026&set=#{card_sets(:por).code}"
     select @archetype.name, from: "Archetype"
     click_on "Preview"
 
@@ -94,9 +91,9 @@ class StandingsImportTest < ApplicationSystemTestCase
     assert_selector "[data-label=Placement]", text: "2", minimum: 1
     assert_no_selector "[data-label=Placement]", text: "6"
 
-    # The form still carries what produced the plan, source included.
-    assert_field "Leaderboard slug (online)", with: "raging-bolt-ogerpon"
-    assert_field "Set (online)", with: card_sets(:por).code
+    # The form still carries what produced the plan.
+    assert_field "Limitless URL",
+      with: "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon?format=standard&rotation=2026&set=#{card_sets(:por).code}"
 
     # The count the admin approves is the plan's, before de-duplication — which happens in the run,
     # because the plan never fetches a decklist and a preview must not be 21 HTTP requests.
@@ -110,7 +107,7 @@ class StandingsImportTest < ApplicationSystemTestCase
   test "an event no Standard pool covers is shown blocked, with no way to run it" do
     visit new_admin_standings_import_path
 
-    fill_in "Limitless deck id", with: "280"
+    fill_in "Limitless URL", with: "https://limitlesstcg.com/decks/280/results"
     select @archetype.name, from: "Archetype"
     fill_in "Only these events (optional)", with: "Antwerp"
     click_on "Preview"

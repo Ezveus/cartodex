@@ -8,7 +8,8 @@ module Admin
     class NewView < ApplicationComponent
       def initialize(source:, deck_id:, slug:, rotation:, set:, archetype_id:, event_filters:,
                      limit_per_event:, archetypes:, plan: nil, archetype: nil, tournament_id: nil,
-                     mapping_lines: nil)
+                     mapping_lines: nil, url: nil)
+        @url = url
         @source = source
         @tournament_id = tournament_id
         @mapping_lines = mapping_lines
@@ -30,9 +31,8 @@ module Admin
           lead
 
           render Admin::StandingsImports::Form.new(
-            source: @source, tournament_id: @tournament_id, deck_id: @deck_id, slug: @slug,
-            rotation: @rotation, set: @set, archetype_id: @archetype_id,
-            event_filters: @event_filters, limit_per_event: @limit_per_event, archetypes: @archetypes
+            url: @url, archetype_id: @archetype_id, event_filters: @event_filters,
+            limit_per_event: @limit_per_event, archetypes: @archetypes
           )
 
           plan_section if @plan

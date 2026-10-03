@@ -230,16 +230,17 @@ module Admin
         end
       end
 
-      # The same inputs again, plus the count the admin actually looked at. Carrying them as
-      # hidden fields rather than re-reading the query string keeps the POST self-contained: what
-      # runs is what this plan was built from — the source included, since the two of them read
-      # different fields and a run that lost it would silently become a paper one.
+      # What the form's URL was read into, plus the count the admin actually looked at. Carrying
+      # them as hidden fields rather than re-reading the query string keeps the POST
+      # self-contained: what runs is what this plan was built from — the source included, since the
+      # sources read different fields and a run that lost it would silently become a paper one.
       def confirm_form
         form_with(url: admin_standings_imports_path, method: :post, class: "standings-import-confirm") do
           # `id: nil` on every one of them: hidden_field_tag derives an id from the name, and the
-          # form above this plan already carries inputs called source, deck_id, slug, rotation,
-          # set, archetype_id, event_filters and limit_per_event. Duplicated ids break
-          # `label for=`, make `fill_in "deck_id"` ambiguous, and are invalid HTML besides.
+          # form above this plan carries inputs called archetype_id, event_filters and
+          # limit_per_event. Duplicated ids break `label for=`, make `fill_in` ambiguous, and are
+          # invalid HTML besides. The other five no longer collide with anything since the form
+          # took one URL, and keep `id: nil` so that a field added back above cannot start to.
           hidden_field_tag "source", @source, id: nil
           hidden_field_tag "deck_id", @deck_id, id: nil
           hidden_field_tag "slug", @slug, id: nil

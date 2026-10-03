@@ -46,7 +46,11 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     get new_admin_standings_import_path
 
     assert_response :success
-    assert_select "input#deck_id"
+    assert_select "input#url"
+    # The URL replaced the source select and the five fields it governed.
+    %w[select#source input#tournament_id input#deck_id input#slug input#rotation input#set].each do |selector|
+      assert_select selector, 0
+    end
     assert_select "select#archetype_id option", text: @archetype.name
     # Nothing has been fetched: opening the form must not talk to Limitless.
     assert_empty @http_calls
@@ -98,7 +102,7 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match "Could not read Limitless deck 280", response.body
     assert_match "HTTP 429", response.body
-    assert_select "input#deck_id"
+    assert_select "input#url"
   end
 
   # The Import row is the run's receipt: it carries the label the admin table prints and, once the
@@ -137,7 +141,8 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
   # this is the half that says the rendered form agrees with it.
   test "the confirm form carries the previewed parameters back" do
     get preview_admin_standings_imports_path,
-      params: { deck_id: "280", archetype_id: @archetype.id, event_filters: "NAIC", limit_per_event: "1" }
+      params: { url: "https://limitlesstcg.com/decks/280/results", archetype_id: @archetype.id,
+                event_filters: "NAIC", limit_per_event: "1" }
 
     assert_response :success
     assert_select "form.standings-import-confirm" do
@@ -151,8 +156,8 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       # else.
       assert_select "input[name=expected_row_count][value=3]"
     end
-    # A hidden field must not steal the id of the input the admin types into.
-    assert_select "input#deck_id", 1
+    # A hidden field must not steal the id of an input the admin types into.
+    %w[url archetype_id event_filters limit_per_event].each { |id| assert_select "[id=#{id}]", 1 }
   end
 
   # A plan with nothing to write must offer no button at all. Rendering a disabled one, or one
@@ -289,7 +294,7 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match "Could not read the online raging-bolt-ogerpon leaderboard (2026 POR)", response.body
     assert_match "no results table", response.body
-    assert_select "input#slug"
+    assert_select "input#url"
   end
 
   # A pool is its *pair* of bounds, so two of them may legitimately end at one set — a rotation
@@ -562,7 +567,7 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match "Could not read Limitless tournament #{EVENT_ID}", response.body
     assert_match "no standings table", response.body
-    assert_select "input#tournament_id"
+    assert_select "input#url"
   end
 
   # The bulk pages publish a list for some rows and not others — 4 of 8 Masters here, 6 of 10 on
@@ -612,8 +617,186 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       assert_select "input[name=tournament_id][value=?]", EVENT_ID
       assert_select "select[name=?]", "mappings[339][archetype_id]"
     end
-    # A hidden field must not steal the id of the input the admin types into.
-    assert_select "input#tournament_id", 1
+    # A hidden field must not steal the id of an input the admin types into.
+    %w[url event_filters limit_per_event].each { |id| assert_select "[id=#{id}]", 1 }
+  end
+
+  # --- the URL the form takes -----------------------------------------------------------------
+  #
+  # The form has one field, the Limitless URL, and every preview the screen itself sends goes
+  # through it. The tests above address the preview by the fields the URL is read into, which is
+  # what the confirm forms post back to #create; these are the half that says the URL lands in them.
+
+  test "a paper results URL previews that deck and carries its id into the confirm form" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_equal [ "https://limitlesstcg.com/decks/280/results" ], @http_calls
+    assert_select "input#url[value=?]", "https://limitlesstcg.com/decks/280/results"
+    assert_select "form.standings-import-confirm" do
+      assert_select "input[name=source][value=paper]"
+      assert_select "input[name=deck_id][value=280]"
+    end
+  end
+
+  test "an online leaderboard URL previews that leaderboard and carries its three values" do
+    stub_http(ONLINE_RESULTS_HTML)
+    url = "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon/?format=standard&rotation=2026&set=#{ONLINE_SET}"
+
+    get preview_admin_standings_imports_path, params: { url: url, archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_equal(
+      [ "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon?format=standard&rotation=2026&set=POR" ],
+      @http_calls
+    )
+    assert_select "form.standings-import-confirm" do
+      assert_select "input[name=source][value=online]"
+      assert_select "input[name=slug][value=raging-bolt-ogerpon]"
+      assert_select "input[name=rotation][value=2026]"
+      assert_select "input[name=set][value=?]", ONLINE_SET
+    end
+  end
+
+  test "an event URL previews that event, whichever of its pages was pasted" do
+    stub_event_pages
+    record_decklist_keys
+
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/tournaments/#{EVENT_ID}/SR" }
+
+    assert_response :success
+    assert_includes @http_calls, "https://limitlesstcg.com/tournaments/#{EVENT_ID}"
+    assert_select "form.standings-import-confirm" do
+      assert_select "input[name=source][value=event]"
+      assert_select "input[name=tournament_id][value=?]", EVENT_ID
+    end
+  end
+
+  # The URL decides the source. A stray `source` beside it — a hand-edited query string, a field
+  # left over from the screen this replaced — must not make an event URL read as a paper deck.
+  test "the URL decides the source over any field sent beside it" do
+    stub_event_pages
+    record_decklist_keys
+
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/tournaments/#{EVENT_ID}", source: "paper", deck_id: "280" }
+
+    assert_response :success
+    assert_not_includes @http_calls, "https://limitlesstcg.com/decks/280/results"
+    assert_select "input[name=tournament_id][value=?]", EVENT_ID
+  end
+
+  # The confirm forms post the fields the URL was read into, never the URL: a `url` among them
+  # would send every confirmation through the parser again. So the round trip is driven from the
+  # rendered form itself — every input it carries, posted exactly as a browser would.
+  test "a paper preview by URL confirms into the run it previewed" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results", archetype_id: @archetype.id }
+
+    assert_difference -> { Import.count }, 1 do
+      post admin_standings_imports_path, params: confirm_form_fields
+    end
+    assert_redirected_to admin_imports_path
+    assert_enqueued_with(job: Tournaments::LimitlessImportJob,
+      args: ->(args) { args.last["deck_id"] == "280" && args.last["archetype_id"] == @archetype.id })
+  end
+
+  test "an online preview by URL confirms into the run it previewed" do
+    stub_http(ONLINE_RESULTS_HTML)
+    get preview_admin_standings_imports_path, params: {
+      url: "https://play.limitlesstcg.com/decks/raging-bolt-ogerpon?format=standard&rotation=2026&set=#{ONLINE_SET}",
+      archetype_id: @archetype.id
+    }
+
+    assert_difference -> { Import.count }, 1 do
+      post admin_standings_imports_path, params: confirm_form_fields
+    end
+    assert_redirected_to admin_imports_path
+    assert_enqueued_with(job: Tournaments::LimitlessImportJob, args: ->(args) {
+      args.last.slice("source", "slug", "rotation", "set") ==
+        { "source" => "online", "slug" => "raging-bolt-ogerpon", "rotation" => "2026", "set" => ONLINE_SET }
+    })
+  end
+
+  test "an event preview by URL confirms into the run it previewed" do
+    stub_event_pages
+    record_decklist_keys
+    get preview_admin_standings_imports_path, params: { url: "https://limitlesstcg.com/tournaments/#{EVENT_ID}" }
+
+    assert_difference -> { Import.count }, 1 do
+      post admin_standings_imports_path, params: confirm_form_fields
+    end
+    assert_redirected_to admin_imports_path
+    assert_enqueued_with(job: Tournaments::LimitlessImportJob, args: ->(args) {
+      args.last.slice("source", "tournament_id") == { "source" => "event", "tournament_id" => EVENT_ID }
+    })
+  end
+
+  # Refused before the archetype and before any fetch, and the field keeps what was typed so the
+  # admin corrects it rather than pasting it again.
+  test "a URL that is none of the three pages is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: { url: "https://example.com/decks/280/results" }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "Paste the address of one of the three Limitless pages", response.body
+    assert_no_match "Pick the archetype", response.body
+    assert_select "input#url[value=?]", "https://example.com/decks/280/results"
+    assert_select "form.standings-import-confirm", 0
+  end
+
+  test "a blank URL is refused before anything is fetched" do
+    get preview_admin_standings_imports_path, params: { url: "", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "Paste the address of one of the three Limitless pages", response.body
+  end
+
+  # Measured: a variant page is about half the deck's whole history, which is what the run reads.
+  test "a paper variant URL is refused rather than importing the whole deck" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results?variant=3", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "That page of Limitless deck 280 is filtered (variant)", response.body
+  end
+
+  # Any of the page's filters, not only variant: the run reads the whole deck either way.
+  test "a paper URL carrying a division filter is refused rather than importing every division" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results?division=jr", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_select "form.standings-import-confirm", 0
+    assert_match "filtered (division)", response.body
+  end
+
+  # Rack raises on a malformed escape before any controller code runs its own checks, and the admin
+  # got Rack's bare 400 page instead of the form.
+  test "a URL with a malformed escape re-renders the form with a refusal" do
+    get preview_admin_standings_imports_path,
+      params: { url: "https://limitlesstcg.com/decks/280/results?x=%", archetype_id: @archetype.id }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "Paste the address of one of the three Limitless pages", response.body
+  end
+
+  # The parser extracts; the controller's guards still narrow what goes into a URL, and say why.
+  test "a URL whose slug the guard refuses is refused by that guard, before anything is fetched" do
+    get preview_admin_standings_imports_path, params: {
+      url: "https://play.limitlesstcg.com/decks/Raging-Bolt?format=standard&rotation=2026&set=#{ONLINE_SET}",
+      archetype_id: @archetype.id
+    }
+
+    assert_response :success
+    assert_empty @http_calls
+    assert_match "slug must be lowercase letters", response.body
   end
 
   # The event source renders PlanTable with `confirm: false`, so the ceiling test that withholds
@@ -744,6 +927,21 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
     Energy: 1
     4 Psychic Energy SVE 5
   TEXT
+
+  # What the rendered confirm form would post: every named input and select inside it, hidden or
+  # not, with its current value.
+  def confirm_form_fields
+    form = Nokogiri::HTML(response.body).at_css("form.standings-import-confirm")
+    assert form, "the preview rendered no confirm form"
+    assert_nil form.at_css("[name=url]"), "the confirm form must not carry the URL"
+
+    fields = form.css("input[name]").reject { |input| input["type"] == "submit" }
+      .map { |input| [ input["name"], input["value"].to_s ] }
+    fields += form.css("select[name]").map do |select|
+      [ select["name"], (select.at_css("option[selected]") || select.at_css("option"))&.[]("value").to_s ]
+    end
+    Rack::Utils.parse_nested_query(fields.map { |name, value| Rack::Utils.build_query(name => value) }.join("&"))
+  end
 
   def event_params(**overrides)
     { source: "event", tournament_id: EVENT_ID }.merge(overrides)

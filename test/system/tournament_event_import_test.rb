@@ -49,8 +49,7 @@ class TournamentEventImportTest < ApplicationSystemTestCase
   test "an admin previews a whole event, arbitrates one of its decks and confirms the run" do
     visit new_admin_standings_import_path
 
-    select "One whole event — limitlesstcg.com/tournaments/<id>", from: "Source"
-    fill_in "Limitless tournament id (event)", with: "577"
+    fill_in "Limitless URL", with: "https://limitlesstcg.com/tournaments/577"
     click_on "Preview"
 
     # One event out of three division pages, with the plan underneath.
@@ -67,7 +66,7 @@ class TournamentEventImportTest < ApplicationSystemTestCase
     select archetypes(:standings_marker).name, from: "mappings[339][archetype_id]"
 
     # The form still carries what produced the plan, so nothing has to be retyped.
-    assert_field "Limitless tournament id (event)", with: "577"
+    assert_field "Limitless URL", with: "https://limitlesstcg.com/tournaments/577"
 
     assert_difference -> { LimitlessArchetypeMapping.count }, 1 do
       click_on "Confirm mappings and import"

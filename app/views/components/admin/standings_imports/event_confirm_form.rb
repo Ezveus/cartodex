@@ -23,7 +23,8 @@ module Admin
         form_with(url: admin_standings_imports_path, method: :post, class: "standings-import-confirm") do
           # Carried rather than re-read off the query string, so what runs is what this plan was
           # built from — the source included, since a run that lost it would silently become a
-          # paper one. No id on any of them: the form above this one already owns those ids.
+          # paper one. No id on any of them: the form above this one already owns the ids
+          # event_filters and limit_per_event.
           input(type: "hidden", name: "source", value: @source)
           input(type: "hidden", name: "tournament_id", value: @tournament_id)
           input(type: "hidden", name: "event_filters", value: @event_filters)
