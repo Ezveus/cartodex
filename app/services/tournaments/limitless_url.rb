@@ -11,6 +11,10 @@
 #     page has none. Tournaments::LimitlessResults reads the whole deck, so a filter dropped here is
 #     a wider import than the page: ?division=jr is 134 KB against the whole deck's 3.12 MB,
 #     ?region=eu 940 KB, ?variant=3 1.58 MB;
+#   * a paper deck's overview page (limitlesstcg.com/decks/<id>, without /results). It names the
+#     same deck, but shows 15 "Latest results" where the run writes the whole history: 56 KB and
+#     15 lists for deck 284, against 3.12 MB and 4593 lists on its /results page. An event's sheet
+#     links every deck to that overview, so it is the address an admin is most likely to paste;
 #   * an online page missing `format`, `rotation` or `set`, or carrying anything else — the bare
 #     page serves Limitless's default, which follows the newest set, and `set` anchors every row to
 #     a Standard pool;
@@ -32,7 +36,7 @@ class Tournaments::LimitlessUrl < ApplicationService
 
   # One trailing segment on an event: its division pages (JR, SR) and its decklists, statistics and
   # cards pages all belong to the same event, and a run reads every division whichever was pasted.
-  PAPER_PATH_RE = %r{\A/decks/(\d+)(?:/results)?/?\z}
+  PAPER_PATH_RE = %r{\A/decks/(\d+)(/results)?/?\z}
   EVENT_PATH_RE = %r{\A/tournaments/(\d+)(?:/[A-Za-z]+)?/?\z}
   ONLINE_PATH_RE = %r{\A/decks/([^/]+)/?\z}
   SCHEME_RE = %r{\A[a-z][a-z0-9+.-]*://}i
@@ -97,6 +101,12 @@ class Tournaments::LimitlessUrl < ApplicationService
       raise ParseError, "That page of Limitless deck #{match[1]} is filtered (#{filters.join(", ")}), " \
         "and this import reads the deck's whole tournament history — it would write more rows " \
         "than that page shows. Paste limitlesstcg.com/decks/#{match[1]}/results with no filter."
+    end
+
+    unless match[2]
+      raise ParseError, "That is the overview of Limitless deck #{match[1]}, which shows only its " \
+        "latest results, and this import reads the deck's whole tournament history — it would " \
+        "write more rows than that page shows. Paste limitlesstcg.com/decks/#{match[1]}/results."
     end
 
     Parsed.new(source: "paper", deck_id: match[1])

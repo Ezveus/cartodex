@@ -44,7 +44,6 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
     {
       "  https://limitlesstcg.com/decks/284/results  " => "284",
       "https://limitlesstcg.com/decks/284/results/" => "284",
-      "https://limitlesstcg.com/decks/284" => "284",
       "http://www.limitlesstcg.com/decks/284/results#top" => "284",
       "HTTPS://LimitlessTCG.com/decks/284/results" => "284",
       # A non-breaking space comes along when the address is copied out of a web page rather than
@@ -91,6 +90,22 @@ class Tournaments::LimitlessUrlTest < ActiveSupport::TestCase
       assert_match "decks/284/results with no filter", message, text
     end
     assert_match "(region, division)", refusal("https://limitlesstcg.com/decks/284/results?region=eu&division=jr")
+  end
+
+  # The overview names the same deck but shows only its latest results — measured on deck 284, 15
+  # lists against the 4593 its /results page carries and the run writes. An event's sheet links every
+  # deck there, so the refusal has to name the address to paste rather than the generic three.
+  test "a paper deck's overview page is refused, naming its results page" do
+    %w[
+      https://limitlesstcg.com/decks/284
+      https://limitlesstcg.com/decks/284/
+      limitlesstcg.com/decks/284
+    ].each do |text|
+      message = refusal(text)
+
+      assert_match "overview of Limitless deck 284", message, text
+      assert_match "Paste limitlesstcg.com/decks/284/results.", message, text
+    end
   end
 
   # The set anchors every row the run writes to a Standard pool, and the bare page's default follows
