@@ -52,8 +52,8 @@ class TournamentStanding < ApplicationRecord
   # wrapped, far more often than it arrives typed.
   #
   # NameNormalizable is not included: it normalizes `name`, and the column here is
-  # `player_name`. Its `name_matching` scope is the point of that concern, and nothing searches
-  # standings by player name.
+  # `player_name`. The sheet's player filter is player_matching, below, which folds the query the
+  # way this callback folds the column.
   before_validation :normalize_player_name
   before_save :normalize_player_name
 
@@ -98,6 +98,16 @@ class TournamentStanding < ApplicationRecord
   # 0.4 ms — and it buys a page boundary the reader can see.
   scope :as_a_sheet, -> {
     order(division_order.asc, Arel.sql("placement IS NULL"), :placement, :player_name)
+  }
+
+  # The sheet's player filter: a substring of the folded name, folded the same way —
+  # squished and Unicode-downcased in Ruby, since that is how normalize_player_name wrote the
+  # column and SQLite's own LOWER folds ASCII only. LIKE metacharacters are escaped, and ESCAPE is
+  # required rather than decorative: SQLite's LIKE has no default escape character (see
+  # NameNormalizable.normalize_for_match, the same rule for `name`).
+  scope :player_matching, ->(query) {
+    folded = sanitize_sql_like(query.to_s.squish.downcase.first(NameNormalizable::MAX_QUERY_LENGTH))
+    where("#{table_name}.player_name_normalized LIKE ? ESCAPE '\\'", "%#{folded}%")
   }
 
   # Which page of its own event's sheet this row falls on. One pluck of ids over a bounded set —

@@ -13,8 +13,11 @@ class TournamentsController < ApplicationController
   # and the (name_normalized, date) UNIQUE key leads with the wrong column to serve that sort.
   # Unlike decks#shared there is no `return if frame_request?` here, and none is needed —
   # nothing renders or queries outside the frame, so a frame request costs what a plain one
-  # does (measured: 4 queries either way). #show gets none — one page load per click, with no
-  # live control behind it, exactly as decks#show has none.
+  # does (measured: 4 queries either way). #show gets none, and since its sheet grew a debounced
+  # player filter that is no longer because nothing fires on its own: the event page is read at
+  # the venue, during the event, by a room of players behind one NAT address, and a per-IP limiter
+  # would ration the whole venue's access to the standings. A filter request costs what a plain
+  # load does. See docs/superpowers/specs/2026-10-03-standings-sheet-filters-design.md.
   CATALOG_RATE_LIMIT_TO = 60
   RATE_LIMIT_WITHIN = 1.minute
 
@@ -165,12 +168,18 @@ class TournamentsController < ApplicationController
   # preloads three associations for every row it renders, so rendering the whole sheet was only
   # ever fine while nothing could fill it.
   #
-  # No Turbo Frame, unlike the three listings that have one: those wrap a debounced filter field,
-  # where a keystroke would otherwise pay for the whole surrounding page. Nothing here fires on
-  # its own, and a frame would capture every link inside the rows — the deck link, Edit, Delete,
-  # "This is me" — each of which would then need data-turbo-frame="_top" to keep working.
+  # Filtered by player, archetype and division. The options are read off the whole event, not the
+  # filtered sheet: the filter form sits outside Tournaments::ShowView::SHEET_FRAME_ID and a
+  # filter request never re-renders it, so options narrowed by one filter would be stale the
+  # moment another moved. Both are flat in the size of the sheet — one query each.
   def load_standings_page
-    scope = @tournament.standings
+    event_scope = @tournament.standings
+    @archetype_options = Archetype.where(id: event_scope.select(:archetype_id)).order(:name_normalized).to_a
+    @division_options = event_scope.distinct.pluck(:division)
+      .sort_by { |division| TournamentStanding::DIVISIONS.index(division) }
+    @sheet_filters = sheet_filters
+    scope = filtered_sheet(event_scope)
+
     @sheet_pages = (scope.count / TournamentStanding::SHEET_PER_PAGE.to_f).ceil
     # Clamped rather than allowed to run off the end: an out-of-range page renders an empty table
     # under "No standings recorded for this event yet.", which is false — and this URL is public,
@@ -184,6 +193,39 @@ class TournamentsController < ApplicationController
       .offset((@sheet_page - 1) * TournamentStanding::SHEET_PER_PAGE)
       .limit(TournamentStanding::SHEET_PER_PAGE)
       .includes(:deck, :tournament_entry, archetype: :primary_card).to_a
+  end
+
+  # Only a value the page itself could have offered is kept: an archetype slug among the options,
+  # a division the event holds. Anything else — a renamed archetype's old slug in a shared link,
+  # a hand-typed division — is dropped rather than refused, and the select then says "All", which
+  # is what the sheet shows.
+  def sheet_filters
+    archetype = scalar_param(:archetype)
+    division = scalar_param(:division)
+    {
+      player: scalar_param(:player).squish.presence,
+      archetype: (archetype if @archetype_options.any? { |option| option.slug == archetype }),
+      division: (division if @division_options.include?(division))
+    }.compact
+  end
+
+  # Exact archetype, variants not folded in — the rule Archetypes::DeckList and MetagameScope
+  # follow: "Dragapult ex" is the parent's rows, and each variant is an option of its own. Keyed
+  # on the option already loaded, so the slug costs no lookup of its own.
+  def filtered_sheet(scope)
+    scope = scope.player_matching(@sheet_filters[:player]) if @sheet_filters[:player]
+    if (archetype = @archetype_options.find { |option| option.slug == @sheet_filters[:archetype] })
+      scope = scope.where(archetype_id: archetype.id)
+    end
+    scope = scope.where(division: @sheet_filters[:division]) if @sheet_filters[:division]
+    scope
+  end
+
+  # A String or nothing: `?player[]=x` hands over an Array and `?player[a]=b` Parameters, and
+  # to_s on either is a string nobody typed, which would then be searched for.
+  def scalar_param(key)
+    value = params[key]
+    value.is_a?(String) ? value : ""
   end
 
   # to_s first: `?page[]=1` hands over an Array and `?page[a]=b` ActionController::Parameters,

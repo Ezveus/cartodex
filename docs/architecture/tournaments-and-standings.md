@@ -32,14 +32,29 @@ of the last page otherwise leaves a `?page=` that no longer exists in the addres
 link shared from it. `#show` clamps an out-of-range `?page=` to the last page rather than rendering
 an empty table under "No standings recorded for this event yet." — which is false, and which a
 public URL will be asked for; `#index` got the same clamp for the same reason, having told the same
-lie about the catalog since it was written. There is **no Turbo Frame** here,
-unlike the three listings that have one: those wrap a debounced filter field where a keystroke
-would otherwise pay for the whole surrounding page, nothing on this page fires on its own, and a
-frame would capture every link inside the rows — the deck link, Edit, Delete, "This is me" — each
-of which would then need `data-turbo-frame="_top"`. `Ui::Pagination` is the markup all four
-listings now share; `turbo_action: "replace"` is opt-in on it, because inside a frame it is what
+lie about the catalog since it was written. **The sheet is filterable — player, archetype, division — and that put it in a Turbo Frame it had
+deliberately refused.** It used to carry none, on the ground that nothing on the page fired on its
+own while a frame captures every link in the rows. A debounced player field is exactly what was
+absent: a full-page visit per keystroke replaces the field being typed in and drops its focus. So
+the table and its pager sit in `Tournaments::ShowView::SHEET_FRAME_ID`, declared
+**`target="_top"`** — every link and form in the rows (the deck link, Edit, Delete, "This is me",
+Unlink) keeps navigating the page without learning `data-turbo-frame="_top"` one by one, and only
+the pager's two links opt back in through `Ui::Pagination`'s `turbo_frame:`, with
+`turbo_action: "replace"` so `?page=` and the filters reach the address bar. `Ui::Pagination` is the
+markup all four listings share; `turbo_action` is opt-in on it, because inside a frame it is what
 puts `?page=` into the address bar at all while on an ordinary page it would only overwrite the
-history entry, so Back from page 2 would skip page 1.
+history entry, so Back from page 2 would skip page 1. The archetype filter is **exact** — a
+variant's rows are not its parent's, the `Archetypes::DeckList` rule, confirmed by the owner — and
+travels as the slug. The options (archetypes by `name_normalized`, divisions in `DIVISIONS` order,
+the division select only when the event holds more than one) are read off the **whole event**,
+since the form sits outside the frame and is never re-rendered by a filter request; a value the
+page could not have offered, or a non-scalar param, is dropped rather than refused. An empty
+filtered result says "No standings match these filters.", never the unfiltered sentence, which
+would be false. Writes still send the member back to the row's page in the **unfiltered** sheet —
+`Row.sheet_position` answers for the whole field. **No rate limit came with the field**, unlike
+`#index`'s: the event page is read at the venue by a room of players behind one NAT address, and
+a filter request costs what a plain load does. See
+`docs/superpowers/specs/2026-10-03-standings-sheet-filters-design.md`.
 
 `Tournament.with_standard_pool` is a deliberate twin of `Deck`'s, for the same measured reason — `StandardPool#name` reads both of its bounds, and dropping the scope took the catalog page from 11 queries to 23. A view that reaches the event through `entry.tournament` throws that preload away and lazily re-reads all four rows, which is why `Tournaments::Entries::ShowView` takes `tournament:` as its own keyword rather than deriving it.
 
