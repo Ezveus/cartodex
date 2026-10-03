@@ -4,25 +4,12 @@ module Admin
     # reachable by reload and by bookmark, and the browser is never asked to answer a POST with a
     # rendered body — which Turbo refuses.
     #
-    # Both sources' fields are rendered at once and labelled with the source they belong to, rather
-    # than shown and hidden by a Stimulus controller: the field the run does not read is ignored,
-    # while a field JavaScript has hidden is a field an admin cannot correct when JavaScript has
-    # not loaded — on the one screen in the app that writes to a public catalog.
+    # One field for the source: the Limitless URL the admin is looking at. Which of the three pages
+    # it is, and the values a run is addressed by, are read off it by Tournaments::LimitlessUrl —
+    # the admin used to split that address into a source select and five fields by hand.
     class Form < ApplicationComponent
-      SOURCES = [
-        [ "paper", "Paper events — limitlesstcg.com/decks/<id>/results" ],
-        [ "online", "Online best finishes — play.limitlesstcg.com/decks/<slug>" ],
-        [ "event", "One whole event — limitlesstcg.com/tournaments/<id>" ]
-      ].freeze
-
-      def initialize(source:, deck_id:, slug:, rotation:, set:, archetype_id:, event_filters:,
-                     limit_per_event:, archetypes:, tournament_id: nil)
-        @source = source
-        @tournament_id = tournament_id
-        @deck_id = deck_id
-        @slug = slug
-        @rotation = rotation
-        @set = set
+      def initialize(url:, archetype_id:, event_filters:, limit_per_event:, archetypes:)
+        @url = url
         @archetype_id = archetype_id
         @event_filters = event_filters
         @limit_per_event = limit_per_event
@@ -31,12 +18,7 @@ module Admin
 
       def view_template
         form_with(url: preview_admin_standings_imports_path, method: :get, class: "deck-form") do
-          source_field
-          tournament_id_field
-          deck_id_field
-          slug_field
-          rotation_field
-          set_field
+          url_field
           archetype_field
           event_filters_field
           limit_field
@@ -51,74 +33,21 @@ module Admin
 
       private
 
-      def source_field
+      def url_field
         render Ui::FormGroup.new(
-          label: "Source", field_name: "source",
-          hint: "Paper reads one archetype's tournament history. Online reads its best finishes in one card pool — a top-20 leaderboard, de-duplicated to one row per player and list. One whole event reads every division of one real-world tournament, whose rows carry a deck each rather than one archetype."
+          label: "Limitless URL", field_name: "url",
+          hint: "Paste the address of the page to import. A paper deck's results " \
+            "(limitlesstcg.com/decks/284/results) reads one archetype's tournament history. An online " \
+            "leaderboard (play.limitlesstcg.com/decks/dragapult-ex?format=standard&rotation=2026&set=30C) " \
+            "reads its best finishes in one card pool, de-duplicated to one row per player and list; " \
+            "its set decides the Standard pool. An event (limitlesstcg.com/tournaments/578) reads every " \
+            "division of one real-world tournament, whose rows carry a deck each rather than one archetype."
         ) do
-          select(name: "source", id: "source", class: "form-input") do
-            SOURCES.each do |value, label|
-              option(value: value, selected: value == @source) { label }
-            end
-          end
-        end
-      end
-
-      # The one field of the third source, and the only input it takes: an event states its own
-      # date, tier, format, card pool and three field sizes, so there is nothing else to declare.
-      def tournament_id_field
-        render Ui::FormGroup.new(
-          label: "Limitless tournament id (event)", field_name: "tournament_id",
-          hint: "The number in limitlesstcg.com/tournaments/577. Digits only — it goes straight into the URL this fetches. Every division is read, and each row's archetype is arbitrated per deck below."
-        ) do
-          input(type: "text", name: "tournament_id", id: "tournament_id", value: @tournament_id,
-                class: "form-input", inputmode: "numeric", placeholder: "577")
-        end
-      end
-
-      def deck_id_field
-        render Ui::FormGroup.new(
-          label: "Limitless deck id (paper)", field_name: "deck_id",
-          hint: "The number in limitlesstcg.com/decks/280/results. Digits only — it goes straight into the URL this fetches."
-        ) do
-          # Strings, not Symbols, for every name and id: Phlex dasherizes a Symbol passed as an
-          # attribute value, and `name="deck-id"` reaches the controller as nothing at all.
-          input(type: "text", name: "deck_id", id: "deck_id", value: @deck_id,
-                class: "form-input", inputmode: "numeric", placeholder: "280")
-        end
-      end
-
-      def slug_field
-        render Ui::FormGroup.new(
-          label: "Leaderboard slug (online)", field_name: "slug",
-          hint: "The slug in play.limitlesstcg.com/decks/raging-bolt-ogerpon. Lowercase letters, digits and dashes — it goes straight into the URL this fetches."
-        ) do
-          input(type: "text", name: "slug", id: "slug", value: @slug,
-                class: "form-input", placeholder: "raging-bolt-ogerpon")
-        end
-      end
-
-      def rotation_field
-        render Ui::FormGroup.new(
-          label: "Rotation (online)", field_name: "rotation",
-          hint: "The four-digit year in the leaderboard's URL. A rotation and set pair that does not exist answers with an empty page, not an error, so it is refused rather than read as “no finishes”."
-        ) do
-          input(type: "text", name: "rotation", id: "rotation", value: @rotation,
-                class: "form-input", inputmode: "numeric", placeholder: "2026")
-        end
-      end
-
-      # The one input on this screen that decides something no later edit can catch: it is the
-      # anchor of every row the run writes, and it is deliberately not the event's date — online
-      # play follows a set's release, which runs about two weeks ahead of the date Play! Pokémon
-      # considers that pool legal.
-      def set_field
-        render Ui::FormGroup.new(
-          label: "Set (online)", field_name: "set",
-          hint: "The newest set of the pool the leaderboard covers, e.g. PBL. It has to name exactly one Standard pool — that pool anchors every row this writes."
-        ) do
-          input(type: "text", name: "set", id: "set", value: @set,
-                class: "form-input", placeholder: "PBL")
+          # type="url" would hand the refusal to the browser, which knows nothing of the three pages
+          # and refuses nothing a copied address bar produces. The server says which page it wanted.
+          input(type: "text", name: "url", id: "url", value: @url, class: "form-input",
+                inputmode: "url", autocomplete: "off", spellcheck: "false",
+                placeholder: "https://limitlesstcg.com/decks/284/results")
         end
       end
 
@@ -129,7 +58,7 @@ module Admin
       def archetype_field
         render Ui::FormGroup.new(
           label: "Archetype", field_name: "archetype_id",
-          hint: "Every row this run writes carries it. Nothing is guessed and no archetype is created."
+          hint: "Every row a paper or online run writes carries it. Nothing is guessed and no archetype is created. Not read for a whole event, whose decks are arbitrated one by one under the preview."
         ) do
           select(name: "archetype_id", id: "archetype_id", class: "form-input") do
             option(value: "") { "— Pick an archetype —" }
