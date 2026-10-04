@@ -15,6 +15,26 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     login_as @user, scope: :user
   end
 
+  # The bar slides in over 0.2s, a CSS transform transition that runs whenever it becomes visible
+  # — on a click, and on every page load with a stored selection, since the controller only adds
+  # `is-visible` on connect. A click aimed at it mid-slide is computed at one position and
+  # dispatched at another, so it lands on the row below: on CI's mobile run, "Remove … from the
+  # comparison" hit the (disabled) Compare button and removed nothing. Every click inside the bar
+  # therefore waits for it to stop moving; assertions alone do not need to.
+  def within_settled_bar(&block)
+    bar = find(".deck-compare-bar.is-visible")
+
+    page.document.synchronize do
+      transform = page.evaluate_script("getComputedStyle(document.querySelector('.deck-compare-bar')).transform")
+      # At rest the matrix's last term — the vertical offset — is 0; mid-slide it is not.
+      unless transform == "none" || transform.match?(/,\s*0\)\z/)
+        raise Capybara::ExpectationNotMet, "the compare bar is still sliding (#{transform})"
+      end
+    end
+
+    within(bar, &block)
+  end
+
   test "a deck picked on the shared listing is still picked on /decks, and both are compared" do
     visit shared_decks_path
     find(".deck-compare-checkbox[value='#{@theirs.key}']").check
@@ -26,7 +46,7 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     within(".deck-compare-bar") { assert_text "Their Build" }
     find(".deck-compare-checkbox[value='#{@mine.key}']").check
 
-    within(".deck-compare-bar") do
+    within_settled_bar do
       assert_text "My Build"
       click_button "Compare"
     end
@@ -41,7 +61,7 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     click_button "Add to comparison"
 
     assert_button "Remove from comparison"
-    within(".deck-compare-bar") do
+    within_settled_bar do
       assert_text "1 selected"
       click_button "Remove Their Build from the comparison"
     end
@@ -60,7 +80,7 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     find(".deck-compare-checkbox[value='#{@mine.key}']").check
 
     @theirs.update!(shared: false)
-    within(".deck-compare-bar") { click_button "Compare" }
+    within_settled_bar { click_button "Compare" }
 
     assert_text "One of the decks you picked is no longer available."
     within(".deck-compare-bar") do
@@ -86,7 +106,7 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     find(".deck-compare-checkbox[value='#{other.key}']").check
 
     @theirs.update!(shared: false)
-    within(".deck-compare-bar") { click_button "Compare" }
+    within_settled_bar { click_button "Compare" }
 
     assert_text "One of the decks you picked is no longer available."
     assert_selector ".deck-compare-table thead th a", count: 2
