@@ -3,8 +3,9 @@ import { Controller } from "@hotwired/stimulus"
 // The selection is kept in sessionStorage rather than in the page, so that it survives what the
 // listings do to their own DOM: a filter swapping the grid frame, a pager, and above all a move
 // from one listing to another — picking a shared deck on /decks/shared, then one of your own on
-// /decks, is the comparison this exists for. Per tab, and gone with it; a stale key (a deck since
-// made private) is the server's to refuse, which it does with the 404 that deck's own page gives.
+// /decks, is the comparison this exists for. Per tab, and gone with it. A stored key can outlive
+// its deck (deleted, or made private): DecksController#compare drops it from the comparison and
+// names it back in a `data-deck-compare-gone` element, which connect() prunes from the selection.
 const STORAGE_KEY = "cartodex:deck-compare"
 
 // Lets the reader pick 2 to `max` decks across the deck listings and the shared deck page, then
@@ -18,6 +19,7 @@ export default class extends Controller {
 
   connect() {
     this.selection = this.#load()
+    this.#pruneGone()
     this.update()
   }
 
@@ -91,6 +93,26 @@ export default class extends Controller {
 
     this.#save()
     this.update()
+  }
+
+  // The carrier may be this element itself (the compare page's bare instance) or inside it (the
+  // compare bar on the page a refused comparison redirects to).
+  #pruneGone() {
+    const carriers = [this.element, ...this.element.querySelectorAll("[data-deck-compare-gone]")]
+      .filter((node) => node.hasAttribute("data-deck-compare-gone"))
+    if (carriers.length === 0) return
+
+    const gone = new Set(carriers.flatMap((node) => {
+      try {
+        const keys = JSON.parse(node.dataset.deckCompareGone)
+        return Array.isArray(keys) ? keys : []
+      } catch {
+        return []
+      }
+    }))
+
+    this.selection = this.selection.filter(({ key }) => !gone.has(key))
+    this.#save()
   }
 
   #has(key) {

@@ -191,10 +191,16 @@ class DecksController < ApplicationController
   end
 
   # Any 2 to 4 decks the reader may read: their own, private or not, beside anybody's shared deck
-  # or tournament field list. Each column is authorized on DeckPolicy#show?, so a key naming a deck
-  # the reader may not see 404s the whole page exactly as that deck's own page would — an unknown
-  # key and a private one stay indistinguishable (PubliclyReachable), rather than a column
-  # silently missing from a comparison the reader asked for.
+  # or tournament field list. Each column is asked DeckPolicy#show?.
+  #
+  # A key that resolves to nothing and a key naming a deck the reader may not see are treated
+  # alike — "no longer available" — so the page says nothing about which of the two it was
+  # (PubliclyReachable's rule, kept without failing the page). They are dropped rather than
+  # failing the whole comparison, because the selection behind this address lives in the browser
+  # and outlives the decks it names: a deck since deleted or unshared would otherwise make Compare
+  # fail on every click, with the bar still listing it. The dropped keys go back in
+  # flash[:compare_gone], which Decks::CompareBar and Decks::CompareView hand to
+  # deck_compare_controller.js to prune, so the stored selection heals itself.
   def compare
     authorize Deck, :compare?
     # Only an Array is a list: `?ids=x` hands over a String and `?ids[a]=b` Parameters, and on a
@@ -205,10 +211,20 @@ class DecksController < ApplicationController
       redirect_to compare_fallback_path, alert: "Select 2 to #{Decks::Comparator::MAX_DECKS} decks to compare." and return
     end
 
-    decks = Deck.where(key: keys).includes(deck_cards: :card).to_a
-    raise ActiveRecord::RecordNotFound if decks.size < keys.size
+    decks = Deck.where(key: keys).includes(deck_cards: :card).select { |deck| policy(deck).show? }
+    gone = keys - decks.map(&:key)
 
-    decks.each { |deck| authorize deck, :show? }
+    if decks.size < 2
+      flash[:compare_gone] = gone
+      redirect_to compare_fallback_path,
+        alert: "#{unavailable_decks(gone.size)} Pick at least two decks to compare." and return
+    end
+
+    if gone.any?
+      flash.now[:compare_gone] = gone
+      flash.now[:alert] = "#{unavailable_decks(gone.size)} The others are compared below."
+    end
+
     decks = decks.sort_by { |deck| keys.index(deck.key) }
 
     @comparison = Decks::Comparator.call(decks)
@@ -338,6 +354,10 @@ class DecksController < ApplicationController
   end
 
   private
+
+  def unavailable_decks(count)
+    count == 1 ? "One of the decks you picked is no longer available." : "#{count} of the decks you picked are no longer available."
+  end
 
   # A visitor has no /decks to go back to; the shared listing is where their selection came from.
   def compare_fallback_path

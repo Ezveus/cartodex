@@ -417,10 +417,41 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to decks_path
   end
 
-  test "compare refuses a deck another member has not shared" do
+  # A deck another member has not shared is "no longer available", exactly as an unknown key is,
+  # and with one deck left there is nothing to compare: back to the listing, saying so, with the
+  # dropped key handed to the compare bar to prune from the stored selection.
+  test "compare drops a deck another member has not shared, and redirects when one deck is left" do
     get compare_decks_path(ids: [ @deck.key, decks(:two).key ])
 
-    assert_response :not_found
+    assert_redirected_to decks_path
+    assert_equal "One of the decks you picked is no longer available. Pick at least two decks to compare.", flash[:alert]
+    assert_equal [ decks(:two).key ], flash[:compare_gone]
+
+    follow_redirect!
+    assert_select ".deck-compare-bar"
+    assert_select "[data-deck-compare-gone=?]", [ decks(:two).key ].to_json
+  end
+
+  # The bug this replaced: a deck deleted or unshared after it was picked stays in the browser's
+  # selection, and failing the whole page made Compare fail on every click.
+  test "compare leaves out the decks that are gone and compares the rest" do
+    field_list = decks(:field_list)
+    gone = [ decks(:two).key, "deleted-deck-key" ]
+
+    get compare_decks_path(ids: [ @deck.key, gone.first, field_list.key, gone.last ])
+
+    assert_response :success
+    assert_select ".deck-compare-table thead th a", count: 2
+    assert_select ".flash-alert", text: "2 of the decks you picked are no longer available. The others are compared below."
+    assert_select "[data-controller=deck-compare][data-deck-compare-gone=?]", gone.to_json
+  end
+
+  test "a complete comparison carries no pruning list" do
+    get compare_decks_path(ids: [ @deck.key, decks(:field_list).key ])
+
+    assert_response :success
+    assert_select "[data-deck-compare-gone]", count: 0
+    assert_nil flash[:alert]
   end
 
   test "compare redirects when more than four decks are named" do

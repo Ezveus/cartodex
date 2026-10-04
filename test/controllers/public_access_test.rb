@@ -246,28 +246,25 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  # Each column is DeckPolicy#show?, so a comparison naming a private deck answers what that deck's
-  # own page answers, and exactly what an unknown key gets: a visitor is sent to sign in
-  # (DecksController#not_found), a signed-in stranger is served the static 404.
+  # Each column is DeckPolicy#show?, and a deck the reader may not see is dropped exactly as an
+  # unknown key is: same status, same message, to a visitor and to a signed-in stranger alike.
   test "a comparison naming a private deck is indistinguishable from one naming no deck" do
     shared = decks(:field_list)
-    private_path = compare_decks_path(ids: [ shared.key, @deck.key ])
-    unknown_path = compare_decks_path(ids: [ shared.key, "no-such-deck-key" ])
+    other_shared = decks(:two)
+    other_shared.update!(user: users(:two), shared: true)
 
-    get private_path
-    assert_redirected_to new_user_session_path
-    get unknown_path
-    assert_redirected_to new_user_session_path
+    [ nil, users(:two) ].each do |reader|
+      sign_in reader if reader
 
-    sign_in users(:two)
+      get compare_decks_path(ids: [ shared.key, other_shared.key, @deck.key ])
+      assert_response :success
+      private_alert = flash[:alert]
 
-    get private_path
-    assert_response :not_found
-    private_body = response.body
-
-    get unknown_path
-    assert_response :not_found
-    assert_equal private_body, response.body
+      get compare_decks_path(ids: [ shared.key, other_shared.key, "no-such-deck-key" ])
+      assert_response :success
+      assert_equal private_alert, flash[:alert]
+      assert_select ".deck-compare-table thead th a", count: 2
+    end
   end
 
   test "the owner whose session expired is returned to the deck they asked for" do

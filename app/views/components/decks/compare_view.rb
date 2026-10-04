@@ -49,6 +49,8 @@ module Decks
 
         card_preview_modal
       end
+
+      gone_keys
     end
 
     private
@@ -173,6 +175,15 @@ module Decks
 
     def any_difference?
       @groups.any? { |group| group[:differing] }
+    end
+
+    # Decks DecksController#compare dropped from the comparison it still renders. This page carries
+    # no compare bar — its columns come from the address, which may be a link somebody shared rather
+    # than the reader's own selection — so a bare controller instance prunes the stored selection.
+    # Never set on the deck version diff, which renders this view too.
+    def gone_keys
+      keys = flash[:compare_gone]
+      div(hidden: true, data: { controller: "deck-compare", deck_compare_gone: keys.to_json }) if keys.present?
     end
 
     # The pane sits inside .deck-compare-content and the dialog outside it — hence two

@@ -49,4 +49,52 @@ class DeckCompareSelectionTest < ApplicationSystemTestCase
     assert_button "Add to comparison"
     assert_no_selector ".deck-compare-bar.is-visible"
   end
+
+  # A picked deck its owner unshares before Compare is pressed: the comparison is refused with one
+  # deck left, and the bar on the page it lands on no longer lists the deck, so the next Compare
+  # does not fail the same way.
+  test "a picked deck that stops being shared is pruned from the selection" do
+    visit shared_decks_path
+    find(".deck-compare-checkbox[value='#{@theirs.key}']").check
+    visit decks_path
+    find(".deck-compare-checkbox[value='#{@mine.key}']").check
+
+    @theirs.update!(shared: false)
+    within(".deck-compare-bar") { click_button "Compare" }
+
+    assert_text "One of the decks you picked is no longer available."
+    within(".deck-compare-bar") do
+      assert_text "1 selected"
+      assert_text "My Build"
+      assert_no_text "Their Build"
+    end
+
+    # Stored, not just redrawn: a fresh page reads the pruned selection back.
+    visit shared_decks_path
+    within(".deck-compare-bar") { assert_no_text "Their Build" }
+  end
+
+  # The same, with enough decks left to compare: the page renders the rest, and its own bare
+  # controller instance prunes the selection — this page has no bar to do it.
+  test "a comparison that leaves a deck out prunes it from the selection too" do
+    other = @user.decks.create!(name: "Second Build", standard_pool: standard_pools(:twm_por))
+
+    visit shared_decks_path
+    find(".deck-compare-checkbox[value='#{@theirs.key}']").check
+    visit decks_path
+    find(".deck-compare-checkbox[value='#{@mine.key}']").check
+    find(".deck-compare-checkbox[value='#{other.key}']").check
+
+    @theirs.update!(shared: false)
+    within(".deck-compare-bar") { click_button "Compare" }
+
+    assert_text "One of the decks you picked is no longer available."
+    assert_selector ".deck-compare-table thead th a", count: 2
+
+    visit decks_path
+    within(".deck-compare-bar") do
+      assert_text "2 selected"
+      assert_no_text "Their Build"
+    end
+  end
 end

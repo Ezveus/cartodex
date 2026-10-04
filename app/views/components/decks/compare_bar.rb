@@ -17,6 +17,7 @@ module Decks
     end
 
     def view_template
+      gone_keys
       div(class: "deck-compare-bar", data: { deck_compare_target: "bar" }) do
         span(class: "deck-compare-bar-label") do
           span(data: { deck_compare_target: "count" }) { "0" }
@@ -31,6 +32,13 @@ module Decks
           button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "deck-compare#clear" }) { "Clear" }
         end
       end
+    end
+
+    # The keys DecksController#compare dropped before redirecting here, for the controller to
+    # remove from the stored selection on connect. See DecksController#compare.
+    def gone_keys
+      keys = flash[:compare_gone]
+      div(hidden: true, data: { deck_compare_gone: keys.to_json }) if keys.present?
     end
   end
 end
