@@ -10,19 +10,25 @@ module Decks
     # `can_duplicate` is passed by the ERB from DeckPolicy#duplicate?, the `can_record` pattern of
     # tournaments/show: this view stays unaware of sessions. A visitor gets no button — sign-in is
     # the navbar's to offer.
-    def initialize(deck:, can_duplicate: false)
+    #
+    # `compare_candidates` are the reader's own decks, for "Compare with…": empty for a visitor,
+    # who has none, and the menu is then not rendered at all.
+    def initialize(deck:, can_duplicate: false, compare_candidates: [])
       @deck = deck
       @can_duplicate = can_duplicate
+      @compare_candidates = compare_candidates
     end
 
     def view_template
-      div(class: "deck-show-container", data: { controller: "card-preview" }) do
+      compare = Decks::CompareBar.controller_data
+      div(class: "deck-show-container", data: compare.merge(controller: "card-preview #{compare[:controller]}")) do
         header_section
         stats_section
         div(class: "deck-show-content") do
           main_section
           preview_section
         end
+        render Decks::CompareBar.new
       end
     end
 
@@ -44,8 +50,32 @@ module Decks
       nav(class: "deck-actions-bar") do
         render Decks::ExportDropdown.new(deck: @deck)
         link_to "Odds", odds_deck_path(@deck), class: "btn btn-secondary btn-sm"
+        compare_with_dropdown if @compare_candidates.any?
+        compare_toggle
         copy_button if @can_duplicate
       end
+    end
+
+    # The one-click case: this deck against one of the reader's own. Plain links, so the address
+    # is the same one the compare bar builds, with this deck in the first column.
+    def compare_with_dropdown
+      div(class: "dropdown", data: { controller: "dropdown" }) do
+        button(type: "button", class: "btn btn-secondary btn-sm", data: { action: "dropdown#toggle" }) { "Compare with… ▾" }
+        div(class: "dropdown-menu dropdown-menu--scroll", data: { dropdown_target: "menu" }) do
+          @compare_candidates.each do |mine|
+            link_to mine.name, compare_decks_path(ids: [ @deck.key, mine.key ]), class: "dropdown-item"
+          end
+        end
+      end
+    end
+
+    # The many-decks case: adds this deck to the selection the listings' compare bar carries, for
+    # a visitor as much as for a member. The controller writes its label on connect.
+    def compare_toggle
+      button(
+        type: "button", class: "btn btn-secondary btn-sm deck-compare-toggle-deck", aria_pressed: "false",
+        data: { deck_compare_target: "toggle", action: "deck-compare#toggleDeck", deck_key: @deck.key, deck_name: @deck.name }
+      ) { "Add to comparison" }
     end
 
     # Lands on the reader's new deck, a full page — outside any frame, so no `_top` is needed.

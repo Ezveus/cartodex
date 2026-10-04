@@ -1,0 +1,120 @@
+require "application_system_test_case"
+
+# The compare selection lives in sessionStorage, so it follows the reader from one listing to
+# another — which is what lets a member put somebody's shared deck beside one of their own.
+# Nothing about it is visible to a request test: the server only ever sees the finished address.
+class DeckCompareSelectionTest < ApplicationSystemTestCase
+  setup do
+    @user = users(:one)
+    @mine = @user.decks.create!(name: "My Build", standard_pool: standard_pools(:twm_por))
+    @theirs = users(:two).decks.create!(name: "Their Build", standard_pool: standard_pools(:twm_por), shared: true)
+
+    @mine.deck_cards.create!(card: cards(:honedge), quantity: 2)
+    @theirs.deck_cards.create!(card: cards(:honedge), quantity: 3)
+
+    login_as @user, scope: :user
+  end
+
+  # The bar slides in over 0.2s, a CSS transform transition that runs whenever it becomes visible
+  # — on a click, and on every page load with a stored selection, since the controller only adds
+  # `is-visible` on connect. A click aimed at it mid-slide is computed at one position and
+  # dispatched at another, so it lands on the row below: on CI's mobile run, "Remove … from the
+  # comparison" hit the (disabled) Compare button and removed nothing. Every click inside the bar
+  # therefore waits for it to stop moving; assertions alone do not need to.
+  def within_settled_bar(&block)
+    bar = find(".deck-compare-bar.is-visible")
+
+    page.document.synchronize do
+      transform = page.evaluate_script("getComputedStyle(document.querySelector('.deck-compare-bar')).transform")
+      # At rest the matrix's last term — the vertical offset — is 0; mid-slide it is not.
+      unless transform == "none" || transform.match?(/,\s*0\)\z/)
+        raise Capybara::ExpectationNotMet, "the compare bar is still sliding (#{transform})"
+      end
+    end
+
+    within(bar, &block)
+  end
+
+  test "a deck picked on the shared listing is still picked on /decks, and both are compared" do
+    visit shared_decks_path
+    find(".deck-compare-checkbox[value='#{@theirs.key}']").check
+
+    within(".deck-compare-bar") { assert_text "Their Build" }
+
+    visit decks_path
+    # Not on this listing, but still in the bar.
+    within(".deck-compare-bar") { assert_text "Their Build" }
+    find(".deck-compare-checkbox[value='#{@mine.key}']").check
+
+    within_settled_bar do
+      assert_text "My Build"
+      click_button "Compare"
+    end
+
+    assert_selector ".deck-compare-table thead th", text: "Their Build"
+    assert_selector ".deck-compare-table thead th", text: "My Build"
+    assert_selector ".deck-compare-card-row", text: "Honedge"
+  end
+
+  test "the shared deck page adds itself to the selection, and the bar removes it again" do
+    visit deck_path(@theirs)
+    click_button "Add to comparison"
+
+    assert_button "Remove from comparison"
+    within_settled_bar do
+      assert_text "1 selected"
+      click_button "Remove Their Build from the comparison"
+    end
+
+    assert_button "Add to comparison"
+    assert_no_selector ".deck-compare-bar.is-visible"
+  end
+
+  # A picked deck its owner unshares before Compare is pressed: the comparison is refused with one
+  # deck left, and the bar on the page it lands on no longer lists the deck, so the next Compare
+  # does not fail the same way.
+  test "a picked deck that stops being shared is pruned from the selection" do
+    visit shared_decks_path
+    find(".deck-compare-checkbox[value='#{@theirs.key}']").check
+    visit decks_path
+    find(".deck-compare-checkbox[value='#{@mine.key}']").check
+
+    @theirs.update!(shared: false)
+    within_settled_bar { click_button "Compare" }
+
+    assert_text "One of the decks you picked is no longer available."
+    within(".deck-compare-bar") do
+      assert_text "1 selected"
+      assert_text "My Build"
+      assert_no_text "Their Build"
+    end
+
+    # Stored, not just redrawn: a fresh page reads the pruned selection back.
+    visit shared_decks_path
+    within(".deck-compare-bar") { assert_no_text "Their Build" }
+  end
+
+  # The same, with enough decks left to compare: the page renders the rest, and its own bare
+  # controller instance prunes the selection — this page has no bar to do it.
+  test "a comparison that leaves a deck out prunes it from the selection too" do
+    other = @user.decks.create!(name: "Second Build", standard_pool: standard_pools(:twm_por))
+
+    visit shared_decks_path
+    find(".deck-compare-checkbox[value='#{@theirs.key}']").check
+    visit decks_path
+    find(".deck-compare-checkbox[value='#{@mine.key}']").check
+    find(".deck-compare-checkbox[value='#{other.key}']").check
+
+    @theirs.update!(shared: false)
+    within_settled_bar { click_button "Compare" }
+
+    assert_text "One of the decks you picked is no longer available."
+    assert_selector ".deck-compare-table thead th a", count: 2
+
+    visit decks_path
+    within(".deck-compare-bar") do
+      assert_text "2 selected"
+      assert_no_text "Their Build"
+    end
+  end
+end

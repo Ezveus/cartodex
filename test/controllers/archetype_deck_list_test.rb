@@ -29,6 +29,19 @@ class ArchetypeDeckListTest < ActionDispatch::IntegrationTest
     assert_no_match "Recorded in Cartodex", response.body
   end
 
+  # Two lists of one archetype side by side is what the comparison is most often for, and the
+  # checkbox needs the controller and its bar around it to do anything.
+  test "every listed deck can be picked for a comparison, by a visitor too" do
+    deck = field_list(name: "Comparable List")
+    record(@archetype, deck: deck)
+
+    get archetype_path(@archetype)
+
+    assert_response :success
+    assert_select "[data-controller~=deck-compare] .deck-compare-checkbox[value=?]", deck.key
+    assert_select "[data-controller~=deck-compare] .deck-compare-bar"
+  end
+
   test "a field list is captioned with its event inside its own link, and names no archetype badge" do
     tagged_elsewhere = fresh_archetype("Detector Guess")
     record(@archetype, deck: field_list(name: "Captioned List", archetype: tagged_elsewhere),
@@ -73,9 +86,9 @@ class ArchetypeDeckListTest < ActionDispatch::IntegrationTest
     sign_in users(:one)
     get archetype_path(@archetype)
 
-    # public_listing: true for the reader's own decks too — no collection badges, no compare
-    # checkbox whose controller this page does not carry.
-    assert_select ".deck-item .deck-compare-checkbox", count: 0
+    # public_listing: true for the reader's own decks too — no collection badges. The compare
+    # checkbox is on every row, the reader's own included: comparing them is the point.
+    assert_select ".deck-item .deck-compare-checkbox", count: 3
     assert_select ".archetype-own-decks .deck-badges", text: /Physical/, count: 0
   end
 

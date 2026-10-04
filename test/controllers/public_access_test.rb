@@ -39,15 +39,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     # as an after_action, and an after_action does not run when a before_action halted.
     owner_only_gets.each do |label, path|
       get path
-
-      if label == "deck compare"
-        # Fewer than two decks resolve for a single id, so #compare redirects rather than
-        # rendering — that is #compare authorizing and behaving, not a failure to authorize.
-        assert_response :redirect, "expected #{label} to answer for its owner, got #{response.status}"
-        assert_redirected_to decks_path
-      else
-        assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
-      end
+      assert_response :success, "expected #{label} to answer for its owner, got #{response.status}"
     end
   end
 
@@ -244,6 +236,37 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # The same signed-in half for #compare, which went public after #odds: its own deck mixed with
+  # somebody's shared one, the comparison this action exists for.
+  test "the comparison authorizes when a session is present" do
+    sign_in @user
+
+    get compare_decks_path(ids: [ @deck.key, decks(:field_list).key ])
+
+    assert_response :success
+  end
+
+  # Each column is DeckPolicy#show?, and a deck the reader may not see is dropped exactly as an
+  # unknown key is: same status, same message, to a visitor and to a signed-in stranger alike.
+  test "a comparison naming a private deck is indistinguishable from one naming no deck" do
+    shared = decks(:field_list)
+    other_shared = decks(:two)
+    other_shared.update!(user: users(:two), shared: true)
+
+    [ nil, users(:two) ].each do |reader|
+      sign_in reader if reader
+
+      get compare_decks_path(ids: [ shared.key, other_shared.key, @deck.key ])
+      assert_response :success
+      private_alert = flash[:alert]
+
+      get compare_decks_path(ids: [ shared.key, other_shared.key, "no-such-deck-key" ])
+      assert_response :success
+      assert_equal private_alert, flash[:alert]
+      assert_select ".deck-compare-table thead th a", count: 2
+    end
+  end
+
   test "the owner whose session expired is returned to the deck they asked for" do
     # The regression this replaces: the static 404 carries no navbar, no sign-in link and no
     # return-to, so an owner following their own bookmark had nowhere to go from it.
@@ -387,6 +410,7 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "card show" => card_path(@card),
       "deck show (shared)" => deck_path(@deck),
       "deck odds (shared)" => odds_deck_path(@deck),
+      "deck compare (shared)" => compare_decks_path(ids: [ @deck.key, decks(:field_list).key ]),
       "shared decks index" => shared_decks_path,
       "tournament catalog" => tournaments_path,
       "tournament page" => tournament_path(tournaments(:one)),
@@ -431,7 +455,6 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
       "deck stats" => stats_deck_path(@deck),
       "deck matchups" => matchups_decks_path,
       "deck results" => deck_deck_results_path(@deck),
-      "deck compare" => compare_decks_path(ids: [ @deck.key ]),
       "collections" => collections_path,
       "my tournaments" => mine_tournaments_path,
       "new tournament" => new_tournament_path,

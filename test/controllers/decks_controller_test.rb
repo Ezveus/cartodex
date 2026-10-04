@@ -417,10 +417,116 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to decks_path
   end
 
-  test "compare ignores decks belonging to other users" do
+  # A deck another member has not shared is "no longer available", exactly as an unknown key is,
+  # and with one deck left there is nothing to compare: back to the listing, saying so, with the
+  # dropped key handed to the compare bar to prune from the stored selection.
+  test "compare drops a deck another member has not shared, and redirects when one deck is left" do
     get compare_decks_path(ids: [ @deck.key, decks(:two).key ])
 
     assert_redirected_to decks_path
+    assert_equal "One of the decks you picked is no longer available. Pick at least two decks to compare.", flash[:alert]
+    assert_equal [ decks(:two).key ], flash[:compare_gone]
+
+    follow_redirect!
+    assert_select ".deck-compare-bar"
+    assert_select "[data-deck-compare-gone=?]", [ decks(:two).key ].to_json
+  end
+
+  # The bug this replaced: a deck deleted or unshared after it was picked stays in the browser's
+  # selection, and failing the whole page made Compare fail on every click.
+  test "compare leaves out the decks that are gone and compares the rest" do
+    field_list = decks(:field_list)
+    gone = [ decks(:two).key, "deleted-deck-key" ]
+
+    get compare_decks_path(ids: [ @deck.key, gone.first, field_list.key, gone.last ])
+
+    assert_response :success
+    assert_select ".deck-compare-table thead th a", count: 2
+    assert_select ".flash-alert", text: "2 of the decks you picked are no longer available. The others are compared below."
+    assert_select "[data-controller=deck-compare][data-deck-compare-gone=?]", gone.to_json
+  end
+
+  test "a complete comparison carries no pruning list" do
+    get compare_decks_path(ids: [ @deck.key, decks(:field_list).key ])
+
+    assert_response :success
+    assert_select "[data-deck-compare-gone]", count: 0
+    assert_nil flash[:alert]
+  end
+
+  test "compare redirects when more than four decks are named" do
+    keys = 5.times.map { |i| @user.decks.create!(name: "Deck #{i}", standard_pool: standard_pools(:twm_por)).key }
+
+    get compare_decks_path(ids: keys)
+
+    assert_redirected_to decks_path
+  end
+
+  # `?ids=x` and `?ids[a]=b` are not lists. On a public action either one reaching `.map` or
+  # `Array()` was a 500 for any bot that tried the shape.
+  test "compare redirects on an ids parameter that is not a list" do
+    get compare_decks_path, params: { ids: @deck.key }
+    assert_redirected_to decks_path
+
+    get "#{compare_decks_path}?ids[a]=#{@deck.key}&ids[b]=#{decks(:field_list).key}"
+    assert_redirected_to decks_path
+  end
+
+  # The comparison this feature is for: the member's own private list beside somebody else's
+  # shared deck and a tournament field list, in the order the reader picked them.
+  test "compare mixes the reader's own deck with shared decks of others" do
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true, name: "Their list")
+    field_list = decks(:field_list)
+    @deck.update!(name: "My list")
+
+    get compare_decks_path(ids: [ field_list.key, @deck.key, theirs.key ])
+
+    assert_response :success
+    assert_select ".deck-compare-table thead th a", count: 3
+    assert_select ".deck-compare-table thead th:nth-child(2) a", text: field_list.name
+    assert_select ".deck-compare-table thead th:nth-child(3) a", text: "My list"
+    assert_select ".deck-compare-table thead th:nth-child(4) a", text: "Their list"
+    assert_select ".deck-compare-header a[href=?]", decks_path, text: "Back to Decks"
+  end
+
+  test "a visitor compares two shared decks and is pointed back at the shared listing" do
+    sign_out @user
+    @deck.update!(shared: true)
+
+    get compare_decks_path(ids: [ @deck.key, decks(:field_list).key ])
+
+    assert_response :success
+    assert_select ".deck-compare-table thead th a", count: 2
+    assert_select ".deck-compare-header a[href=?]", shared_decks_path, text: "Back to shared decks"
+  end
+
+  test "a visitor naming fewer than two decks is sent to the shared listing, not to sign in" do
+    sign_out @user
+
+    get compare_decks_path(ids: [ decks(:field_list).key ])
+
+    assert_redirected_to shared_decks_path
+  end
+
+  # Five decks are in the database, and only the two named may cost anything: the lookup is keyed
+  # on the named keys and the cards preloaded, whatever the columns hold.
+  test "compare costs the same for two decks and for four" do
+    field_list = decks(:field_list)
+    theirs = decks(:two)
+    theirs.update!(user: users(:two), shared: true)
+    extra = @user.decks.create!(name: "Extra", standard_pool: standard_pools(:twm_por))
+    [ @deck, field_list, theirs, extra ].each do |deck|
+      deck.deck_cards.create!(card: cards(:teal_mask_ogerpon_ex), quantity: 1) unless deck.deck_cards.exists?
+    end
+
+    # Warmed first: the session's user is loaded on whichever request comes first, which would
+    # otherwise be charged to the two-deck measurement alone.
+    get compare_decks_path(ids: [ @deck.key, field_list.key ])
+    two = count_queries { get compare_decks_path(ids: [ @deck.key, field_list.key ]) }
+    four = count_queries { get compare_decks_path(ids: [ @deck.key, field_list.key, theirs.key, extra.key ]) }
+
+    assert_equal two, four
   end
 
   test "the compare checkbox carries the key" do
@@ -518,6 +624,34 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "form[action=?]", duplicate_deck_path(decks(:field_list)), count: 0
+  end
+
+  # "Compare with…" lists the reader's own decks, each a link to the comparison with this deck in
+  # the first column. Keyed on the href, not the label.
+  test "a signed-in reader of a shared deck may compare it with each of their own decks" do
+    source = decks(:two)
+    source.update!(shared: true)
+    other = @user.decks.create!(name: "Second", standard_pool: standard_pools(:twm_por))
+
+    get deck_path(source)
+
+    assert_select ".deck-actions-bar .dropdown-menu a[href=?]", compare_decks_path(ids: [ source.key, @deck.key ])
+    assert_select ".deck-actions-bar .dropdown-menu a[href=?]", compare_decks_path(ids: [ source.key, other.key ]), text: "Second"
+    assert_select ".deck-compare-toggle-deck[data-deck-key=?]", source.key
+  end
+
+  # A visitor has no decks of their own to offer, so no menu — but the deck still goes into the
+  # selection the listings' compare bar carries.
+  test "a visitor reading a shared deck may add it to a comparison" do
+    sign_out @user
+    field_list = decks(:field_list)
+
+    get deck_path(field_list)
+
+    assert_response :success
+    assert_select "a[href^=?]", compare_decks_path, count: 0
+    assert_select "[data-controller~=deck-compare] .deck-compare-toggle-deck[data-deck-key=?]", field_list.key
+    assert_select "[data-controller~=deck-compare] .deck-compare-bar"
   end
 
   test "tournament_pdf export returns a PDF" do
@@ -855,9 +989,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-item-actions", count: 0
     assert_select ".deck-hot-flag", count: 0
     assert_select ".deck-item.is-foil", count: 0
-    # No deck-compare controller on this page, so a checkbox here would be a live control that
-    # does nothing.
-    assert_select ".deck-compare-checkbox", count: 0
+    # The compare checkbox stays: a comparison prints decklists, which this page already shows.
+    # It needs the controller and the bar around it, or it is a live control that does nothing.
+    assert_select ".deck-compare-checkbox[value=?][data-deck-name]", theirs.key
+    assert_select "[data-controller~=deck-compare] .deck-compare-bar"
   end
 
   # Decks::PublicBadges passed no href at all while /archetypes was a sign-in wall, and nothing

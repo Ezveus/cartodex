@@ -16,7 +16,7 @@ module Archetypes
     end
 
     def view_template
-      div(class: "admin-container") do
+      div(class: "admin-container", data: Decks::CompareBar.controller_data) do
         render Ui::PageHeader.new(title: @archetype.name) do
           div(class: "decks-header-actions") do
             render Ui::ArchetypeBadge.new(archetype: @archetype)
@@ -27,6 +27,7 @@ module Archetypes
 
         own_decks if @list.own_decks.any?
         public_decks
+        render Decks::CompareBar.new
       end
     end
 
@@ -56,8 +57,7 @@ module Archetypes
     end
 
     # `public_listing: true` for the reader's own decks too: the owner's badges (Physical,
-    # Proxies…) read the collection and belong on /decks, and the compare checkbox needs the
-    # controller only that page carries.
+    # Proxies…) read the collection and belong on /decks.
     def grid(decks, &caption)
       div(class: "decks-grid") do
         decks.each do |deck|

@@ -1,7 +1,8 @@
 module Decks
   # The public listing of shared decks. Same rows as the owner's index, minus everything that
   # compares a deck against a collection the reader does not have: no support or proxies
-  # filter, no over-allocation marker, no actions dropdown, no compare bar, no import panel.
+  # filter, no over-allocation marker, no actions dropdown, no import panel. The compare bar
+  # stays: comparing decklists reads nothing but the decklists.
   class SharedIndexView < ApplicationComponent
     include Phlex::Rails::Helpers::TurboFrameTag
 
@@ -20,12 +21,13 @@ module Decks
     end
 
     def view_template
-      div(class: "decks-container") do
+      div(class: "decks-container", data: Decks::CompareBar.controller_data) do
         h1 { "Shared decks" }
         filter_bar
         # Rows, pager and empty state inside the frame; the filter bar outside it. A keystroke
         # then costs the grid and nothing else — no layout, no archetype options query.
-        turbo_frame_tag(FRAME_ID) do
+        # turbo:frame-load re-ticks the swapped-in checkboxes from the stored selection.
+        turbo_frame_tag(FRAME_ID, data: { action: "turbo:frame-load->deck-compare#update" }) do
           if @decks.any?
             # decks-grid, not a name of this page's own: application.css is the app's only
             # stylesheet and every class here has to exist in it. The owner's index lays its
@@ -38,6 +40,7 @@ module Decks
             p(class: "empty-state") { "No shared decks yet." }
           end
         end
+        render Decks::CompareBar.new
       end
     end
 
