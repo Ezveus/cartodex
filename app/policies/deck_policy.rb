@@ -37,6 +37,11 @@ class DeckPolicy < ApplicationPolicy
   # The index of shared decks is the same page for a visitor and a member.
   def shared_index? = true
 
+  # The comparison page as such: anybody may open it. Which decks it may print is DeckPolicy#show?,
+  # asked of each one — a comparison is the decklists side by side, and each column is exactly
+  # what that deck's own page already shows its reader.
+  def compare? = true
+
   private
 
   # nil user included: a visitor owns nothing.

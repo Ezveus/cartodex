@@ -87,6 +87,34 @@ class DecksRateLimitTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # #compare joined the public surface after #odds, with the same shape of budget: its own name, and
+  # nothing spent by a signed-in reader.
+  test "throttles an anonymous comparison on a budget of its own, but never a signed-in one" do
+    path = compare_decks_path(ids: [ @deck.key, decks(:field_list).key ])
+
+    with_real_rate_limit_store do
+      limit = DecksController::COMPARE_RATE_LIMIT_TO
+
+      limit.times do
+        get path
+        assert_response :success
+      end
+
+      get path
+      assert_response :too_many_requests
+
+      get odds_deck_path(@deck)
+      assert_response :success
+
+      sign_in users(:one)
+
+      (limit + 1).times do
+        get path
+        assert_response :success
+      end
+    end
+  end
+
   private
 
   def with_real_rate_limit_store

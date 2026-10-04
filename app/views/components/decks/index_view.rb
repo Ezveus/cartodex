@@ -23,7 +23,8 @@ module Decks
     end
 
     def view_template
-      div(class: "decks-container", data: { controller: "decks deck-compare", deck_compare_compare_url_value: compare_decks_path }) do
+      compare = Decks::CompareBar.controller_data
+      div(class: "decks-container", data: compare.merge(controller: "decks #{compare[:controller]}")) do
         render Allocations::OverAllocationBanner.new(count: @over_allocation_count)
         div(class: "decks-header") do
           h1 { "My Decks" }
@@ -41,9 +42,9 @@ module Decks
         # Everything inside this frame is frame-scoped by default, so each deck link
         # and dropdown action carries data-turbo-frame="_top" (see Decks::DeckCard).
         #
-        # compare_bar lives outside the frame but counts the checkboxes inside it, so
-        # a filter swap replaces them with unchecked ones while the bar keeps its
-        # stale count. turbo:frame-load re-runs the controller's own update path.
+        # The compare bar lives outside the frame and the checkboxes inside it, so a filter
+        # swap replaces them with unchecked ones. turbo:frame-load re-runs the controller's
+        # update, which ticks them again from the stored selection.
         turbo_frame_tag(FRAME_ID, data: { action: "turbo:frame-load->deck-compare#update" }) do
           div(class: "decks-grid", id: "decks-grid") do
             if @decks.any?
@@ -58,30 +59,11 @@ module Decks
           end
         end
 
-        compare_bar
+        render Decks::CompareBar.new
       end
     end
 
     private
-
-    def compare_bar
-      div(class: "deck-compare-bar", data: { deck_compare_target: "bar" }) do
-        span(class: "deck-compare-bar-label") do
-          span(data: { deck_compare_target: "count" }) { "0" }
-          plain " selected (pick 2–4)"
-        end
-        button(
-          type: "button",
-          class: "btn btn-primary btn-sm",
-          data: { deck_compare_target: "button", action: "deck-compare#compare" }
-        ) { "Compare" }
-        button(
-          type: "button",
-          class: "btn btn-secondary btn-sm",
-          data: { action: "deck-compare#clear" }
-        ) { "Clear" }
-      end
-    end
 
     def filter_bar
       form(

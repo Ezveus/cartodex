@@ -1171,18 +1171,24 @@ textarea.form-input {
   opacity: 0.4;
 }
 
-/* Floating compare action bar on the decks index */
+/* Floating compare action bar on the deck listings and the shared deck page. It names the
+   selected decks, which may have been picked on another page, so it wraps rather than pills. */
 .deck-compare-bar {
   position: fixed;
   left: 50%;
   bottom: 1.5rem;
   transform: translate(-50%, 150%);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  box-sizing: border-box;
   padding: 0.75rem 1.25rem;
   background: var(--surface);
-  border-radius: 999px;
+  border-radius: 1rem;
   box-shadow: var(--e3);
   transition: transform 0.2s ease;
   z-index: 50;
@@ -1192,9 +1198,60 @@ textarea.form-input {
   transform: translate(-50%, 0);
 }
 
+/* The bar floats over the end of the page; leave room to scroll the last row out from under it.
+   It wraps to three lines below the breakpoint, hence a figure sized for that. */
+[data-controller~="deck-compare"]:has(> .deck-compare-bar.is-visible) {
+  padding-bottom: 10rem;
+}
+
 .deck-compare-bar-label {
   font-weight: 600;
   color: var(--secondary-color);
+}
+
+.deck-compare-bar-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deck-compare-bar-list:empty {
+  display: none;
+}
+
+.deck-compare-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 14rem;
+  padding: 0.15rem 0.25rem 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--background-color);
+  font-size: 0.85rem;
+}
+
+.deck-compare-bar-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-compare-bar-remove {
+  border: none;
+  background: none;
+  padding: 0 0.3rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--secondary-color);
+}
+
+.deck-compare-bar-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Deck compare page */
@@ -2562,6 +2619,12 @@ textarea.form-input {
 
 .dropdown-menu--open {
   display: block;
+}
+
+/* A menu listing the reader's own decks has no natural length. */
+.dropdown-menu--scroll {
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .dropdown-item {

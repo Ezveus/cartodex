@@ -2,7 +2,7 @@ class DecksController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  publicly_reachable :show, :export, :shared, :odds
+  publicly_reachable :show, :export, :shared, :odds, :compare
 
   SHARED_PER_PAGE = 24
 
@@ -28,7 +28,12 @@ class DecksController < ApplicationController
   # combination calculator *is* a live control, and it navigates a Turbo Frame back to this action.
   SHARED_RATE_LIMIT_TO = 60
   EXPORT_RATE_LIMIT_TO = 30
+  #
+  # 30/min for the comparison, the same click-not-fire shape: nothing navigates to it but the
+  # compare bar's button, a full page load preloading up to four whole decks. The bar builds the
+  # address in JS, so no hover prefetch can reach it either.
   ODDS_RATE_LIMIT_TO = 30
+  COMPARE_RATE_LIMIT_TO = 30
   RATE_LIMIT_WITHIN = 1.minute
 
   rate_limit to: SHARED_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
@@ -42,6 +47,10 @@ class DecksController < ApplicationController
   rate_limit to: ODDS_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-odds", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :odds
+
+  rate_limit to: COMPARE_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-compare", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :compare
 
   def index
     authorize Deck, :index?
@@ -181,15 +190,26 @@ class DecksController < ApplicationController
     }.sort_by { |g| -g[:counts].values.sum }
   end
 
+  # Any 2 to 4 decks the reader may read: their own, private or not, beside anybody's shared deck
+  # or tournament field list. Each column is authorized on DeckPolicy#show?, so a key naming a deck
+  # the reader may not see 404s the whole page exactly as that deck's own page would — an unknown
+  # key and a private one stay indistinguishable (PubliclyReachable), rather than a column
+  # silently missing from a comparison the reader asked for.
   def compare
-    authorize Deck, :index?
-    keys = Array(params[:ids]).map(&:to_s).uniq
-    decks = current_user.decks.where(key: keys).includes(deck_cards: :card)
-    decks = decks.sort_by { |deck| keys.index(deck.key) }
+    authorize Deck, :compare?
+    # Only an Array is a list: `?ids=x` hands over a String and `?ids[a]=b` Parameters, and on a
+    # public action either shape must land on the redirect rather than on a 500.
+    keys = params[:ids].is_a?(Array) ? params[:ids].map(&:to_s).uniq : []
 
-    if decks.size < 2 || decks.size > 4
-      redirect_to decks_path, alert: "Select 2 to 4 decks to compare." and return
+    unless keys.size.between?(2, Decks::Comparator::MAX_DECKS)
+      redirect_to compare_fallback_path, alert: "Select 2 to #{Decks::Comparator::MAX_DECKS} decks to compare." and return
     end
+
+    decks = Deck.where(key: keys).includes(deck_cards: :card).to_a
+    raise ActiveRecord::RecordNotFound if decks.size < keys.size
+
+    decks.each { |deck| authorize deck, :show? }
+    decks = decks.sort_by { |deck| keys.index(deck.key) }
 
     @comparison = Decks::Comparator.call(decks)
     # The filter's state travels in the URL so a shared link arrives filtered, and it is
@@ -197,6 +217,7 @@ class DecksController < ApplicationController
     # would add lands after first paint, which is a visible flash of the full table on the
     # very page whose point is that it is shorter.
     @diff_only = params[:diff] == "1"
+    @back_label, @back_path = user_signed_in? ? [ "Back to Decks", decks_path ] : [ "Back to shared decks", shared_decks_path ]
   end
 
   def export
@@ -318,6 +339,11 @@ class DecksController < ApplicationController
 
   private
 
+  # A visitor has no /decks to go back to; the shared listing is where their selection came from.
+  def compare_fallback_path
+    user_signed_in? ? decks_path : shared_decks_path
+  end
+
   # PubliclyReachable's renderer, with the one branch the other three including controllers do
   # not need. A deck can be private, so "unknown key" and "not yours" have to stay one answer
   # — and for a request carrying no session, the answer that satisfies that *and* leads
@@ -380,6 +406,9 @@ class DecksController < ApplicationController
     # this a visitor who clicks Sign in here lands on the dashboard and has to find the deck
     # again.
     store_location_for(:user, request.fullpath) if remember_return_to?
+    # What "Compare with…" offers a signed-in member: their own decks, the /decks order. Only
+    # key and name are read, so only key and name are loaded.
+    @compare_candidates = current_user ? current_user.decks.recently_updated.select(:id, :key, :name).to_a : []
     assign_og_payload
     render :public_show
   end

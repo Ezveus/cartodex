@@ -1,10 +1,13 @@
 module Decks
   class DeckCard < ApplicationComponent
-    # `public_listing` is one switch for the three things on this row a stranger must not get:
-    # the owner's badges, the foil flag (which prints the win rate — the record stays private),
-    # and the compare checkbox (whose controller a public page does not carry). One keyword
-    # rather than three because they are one decision, and the next caller cannot get one of
-    # them wrong.
+    # `public_listing` is one switch for the two things on this row a stranger must not get:
+    # the owner's badges and the foil flag (which prints the win rate — the record stays private).
+    # One keyword rather than two because they are one decision, and the next caller cannot get
+    # one of them wrong.
+    #
+    # The compare checkbox is on every row, public or not: a comparison prints decklists, which
+    # any reader of the row may already read. Every page rendering this row therefore wraps it in
+    # Decks::CompareBar.controller_data and renders the bar.
     #
     # `caption` and `archetype_badge` are for a listing that is already *about* one archetype
     # (Archetypes::ShowView): the caption says where a list was played, and the badge would repeat
@@ -32,7 +35,7 @@ module Decks
           div(class: "deck-foil-sheen", aria_hidden: "true")
           span(class: "deck-hot-flag") { "★ #{(@deck.win_rate * 100).round}%" }
         end
-        compare_checkbox unless @public_listing
+        compare_checkbox
         # The decks index renders this card inside the deck_results Turbo Frame, so
         # every link in it is frame-scoped by default and would swap the grid for a
         # "Content missing" error. Break out to the top level instead.
@@ -79,7 +82,7 @@ module Decks
         class: "deck-compare-checkbox",
         value: @deck.key,
         aria_label: "Select #{@deck.name} to compare",
-        data: { deck_compare_target: "checkbox", action: "deck-compare#toggle" }
+        data: { deck_compare_target: "checkbox", action: "deck-compare#toggle", deck_name: @deck.name }
       )
     end
   end

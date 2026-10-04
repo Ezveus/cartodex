@@ -1,56 +1,147 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Lets the user pick 2 to 4 decks on the index and jump to the compare page.
-// Shows an action bar while any deck is selected and caps the selection at 4.
+// The selection is kept in sessionStorage rather than in the page, so that it survives what the
+// listings do to their own DOM: a filter swapping the grid frame, a pager, and above all a move
+// from one listing to another — picking a shared deck on /decks/shared, then one of your own on
+// /decks, is the comparison this exists for. Per tab, and gone with it; a stale key (a deck since
+// made private) is the server's to refuse, which it does with the 404 that deck's own page gives.
+const STORAGE_KEY = "cartodex:deck-compare"
+
+// Lets the reader pick 2 to `max` decks across the deck listings and the shared deck page, then
+// jump to the compare page. Every surface is a target of this one controller:
+// - `checkbox`: a deck card's box, `value` the deck key, `data-deck-name` its label in the bar;
+// - `toggle`: the shared deck page's "Add to comparison" button, `data-deck-key`/`-name`;
+// - `bar`, `count`, `list`, `button`: Decks::CompareBar.
 export default class extends Controller {
-  static targets = ["checkbox", "bar", "count", "button"]
+  static targets = ["checkbox", "toggle", "bar", "count", "list", "button"]
   static values = { compareUrl: String, max: { type: Number, default: 4 } }
 
   connect() {
+    this.selection = this.#load()
     this.update()
   }
 
-  toggle() {
-    this.update()
+  // A deck card broadcast into the grid by an import arrives after connect. Stimulus also calls
+  // this for every target present on connect — before connect() itself, hence the guard.
+  checkboxTargetConnected() {
+    if (this.selection) this.update()
   }
 
-  // Also wired to turbo:frame-load on the deck_results frame: filtering swaps the
-  // checkboxes in unchecked while the bar (outside the frame) survives, so its count
-  // has to be recomputed against the new DOM. Target getters query live, so the
-  // freshly inserted checkboxes are already visible here.
+  toggle(event) {
+    const box = event.target
+    this.#set(box.value, box.dataset.deckName, box.checked)
+  }
+
+  toggleDeck(event) {
+    const { deckKey, deckName } = event.currentTarget.dataset
+    this.#set(deckKey, deckName, !this.#has(deckKey))
+  }
+
+  remove(event) {
+    this.#set(event.currentTarget.dataset.deckKey, null, false)
+  }
+
+  // Also wired to turbo:frame-load on the listings' grid frames: filtering swaps the checkboxes
+  // in unchecked, and only the stored selection knows which of the new ones to tick.
   update() {
-    const selected = this.#selected()
-    const count = selected.length
+    const count = this.selection.length
+    const full = count >= this.maxValue
 
-    if (this.hasCountTarget) this.countTarget.textContent = count
-
-    this.checkboxTargets.forEach((cb) => {
-      if (!cb.checked) cb.disabled = count >= this.maxValue
+    this.checkboxTargets.forEach((box) => {
+      box.checked = this.#has(box.value)
+      box.disabled = !box.checked && full
     })
 
+    this.toggleTargets.forEach((button) => {
+      const selected = this.#has(button.dataset.deckKey)
+      button.setAttribute("aria-pressed", String(selected))
+      button.textContent = selected ? "Remove from comparison" : "Add to comparison"
+      button.disabled = !selected && full
+    })
+
+    if (this.hasCountTarget) this.countTarget.textContent = count
+    if (this.hasListTarget) this.#renderList()
     if (this.hasBarTarget) this.barTarget.classList.toggle("is-visible", count > 0)
     if (this.hasButtonTarget) this.buttonTarget.disabled = count < 2 || count > this.maxValue
   }
 
   compare(event) {
     event.preventDefault()
-    const ids = this.#selected()
-    if (ids.length < 2 || ids.length > this.maxValue) return
+    if (this.selection.length < 2 || this.selection.length > this.maxValue) return
 
     const params = new URLSearchParams()
-    ids.forEach((id) => params.append("ids[]", id))
+    this.selection.forEach(({ key }) => params.append("ids[]", key))
     window.location.href = `${this.compareUrlValue}?${params.toString()}`
   }
 
   clear() {
-    this.checkboxTargets.forEach((cb) => {
-      cb.checked = false
-      cb.disabled = false
-    })
+    this.selection = []
+    this.#save()
     this.update()
   }
 
-  #selected() {
-    return this.checkboxTargets.filter((cb) => cb.checked).map((cb) => cb.value)
+  #set(key, name, selected) {
+    if (!key) return
+
+    if (selected && !this.#has(key) && this.selection.length < this.maxValue) {
+      this.selection.push({ key, name: name || key })
+    } else if (!selected) {
+      this.selection = this.selection.filter((entry) => entry.key !== key)
+    }
+
+    this.#save()
+    this.update()
+  }
+
+  #has(key) {
+    return this.selection.some((entry) => entry.key === key)
+  }
+
+  // Built with the DOM rather than innerHTML: a deck name is whatever its owner typed.
+  #renderList() {
+    const items = this.selection.map(({ key, name }) => {
+      const item = document.createElement("li")
+      item.className = "deck-compare-bar-item"
+
+      const label = document.createElement("span")
+      label.textContent = name
+      item.append(label)
+
+      const remove = document.createElement("button")
+      remove.type = "button"
+      remove.className = "deck-compare-bar-remove"
+      remove.textContent = "×"
+      remove.setAttribute("aria-label", `Remove ${name} from the comparison`)
+      remove.dataset.deckKey = key
+      remove.dataset.action = "deck-compare#remove"
+      item.append(remove)
+
+      return item
+    })
+
+    this.listTarget.replaceChildren(...items)
+  }
+
+  // Storage can throw (private windows, blocked site data) or hold anything; either way the
+  // reader starts from an empty selection rather than from a broken bar.
+  #load() {
+    try {
+      const parsed = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) || "[]")
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .filter((entry) => entry && typeof entry.key === "string")
+        .map(({ key, name }) => ({ key, name: typeof name === "string" ? name : key }))
+        .slice(0, this.maxValue)
+    } catch {
+      return []
+    }
+  }
+
+  #save() {
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.selection))
+    } catch {
+      // The selection still works for this page; it just will not follow the reader.
+    }
   }
 }

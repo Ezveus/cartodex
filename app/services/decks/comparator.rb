@@ -13,6 +13,9 @@ module Decks
   # drop the group — header and subtotal included — when only differences are shown.
   class Comparator < ApplicationService
     TYPE_ORDER = %w[Pokémon Trainer Energy].freeze
+    # Four columns is what the table holds at the app's width; the compare bar caps a selection
+    # at the same number, so the page's refusal is only ever reached by an edited address.
+    MAX_DECKS = 4
 
     def initialize(decks)
       @decks = decks
