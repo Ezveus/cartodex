@@ -164,9 +164,9 @@ class TournamentsController < ApplicationController
   end
 
   # A hand-typed sheet is a handful of rows; an imported one is a Worlds field. This page is
-  # public, carries no rate limit (one page load per click, which is why it never needed one) and
-  # preloads three associations for every row it renders, so rendering the whole sheet was only
-  # ever fine while nothing could fill it.
+  # public, carries no rate limit (see the class comment for why) and preloads three associations
+  # for every row it renders, so rendering the whole sheet was only ever fine while nothing could
+  # fill it.
   #
   # Filtered by player, archetype and division. The options are read off the whole event, not the
   # filtered sheet: the filter form sits outside Tournaments::ShowView::SHEET_FRAME_ID and a
@@ -182,8 +182,8 @@ class TournamentsController < ApplicationController
 
     @sheet_pages = (scope.count / TournamentStanding::SHEET_PER_PAGE.to_f).ceil
     # Clamped rather than allowed to run off the end: an out-of-range page renders an empty table
-    # under "No standings recorded for this event yet.", which is false — and this URL is public,
-    # so something will try it.
+    # under "No standings match these filters.", which is false — and this URL is public, so
+    # something will try it.
     @sheet_page = requested_page.clamp(1, [ @sheet_pages, 1 ].max)
     # Exactly the three legs the render touches, each pinned by its own leg of the flat-cost test:
     # Row#list_link reads :deck, the "You" marker reads :tournament_entry's user_id, and
@@ -196,16 +196,21 @@ class TournamentsController < ApplicationController
   end
 
   # Only a value the page itself could have offered is kept: an archetype slug among the options,
-  # a division the event holds. Anything else — a renamed archetype's old slug in a shared link,
-  # a hand-typed division — is dropped rather than refused, and the select then says "All", which
-  # is what the sheet shows.
+  # a division among the ones the select offers (none on a one-division event, where Clear would
+  # otherwise show beside no control that says anything is set). Anything else — a renamed
+  # archetype's old slug in a shared link, a hand-typed division — is dropped rather than refused,
+  # and on a full load the select then says "All", which is what the sheet shows. One race it does
+  # not cover: an archetype that loses its last row at this event between the page load and the
+  # pick is dropped by a frame request while the select, outside the frame, still names it, and
+  # the sheet shows everything. Rare enough — a wiki edit inside a reader's minute — to accept.
   def sheet_filters
     archetype = scalar_param(:archetype)
     division = scalar_param(:division)
     {
-      player: scalar_param(:player).squish.presence,
+      # strip, not squish: player_matching folds inner spacing itself, and one fold is one place.
+      player: scalar_param(:player).strip.presence,
       archetype: (archetype if @archetype_options.any? { |option| option.slug == archetype }),
-      division: (division if @division_options.include?(division))
+      division: (division if @division_options.size > 1 && @division_options.include?(division))
     }.compact
   end
 

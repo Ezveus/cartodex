@@ -13,7 +13,7 @@ Design records:
 
 **An event's sheet is paginated** (`TournamentStanding::SHEET_PER_PAGE`, 50). A hand-typed sheet is
 a handful of rows; a Worlds field is a thousand, on a page that is public and deliberately carries
-no rate limit ("one page load per click"), and that preloads three associations for every row it
+no rate limit (see the filter paragraph below for why), and that preloads three associations for every row it
 renders. Two things had to move for a page boundary to be drawable at all. `as_a_sheet` now orders
 the divisions **in SQL** by `TournamentStanding.division_order`, an Arel CASE over `DIVISIONS` — `ORDER BY division` is
 alphabetical (junior, masters, senior) while players read junior, senior, masters, and
@@ -30,7 +30,7 @@ event's field rather than a COUNT predicate that would restate the scope's order
 `#destroy` reads the page *before* the row goes and clamps it *after*, since deleting the only row
 of the last page otherwise leaves a `?page=` that no longer exists in the address bar and in any
 link shared from it. `#show` clamps an out-of-range `?page=` to the last page rather than rendering
-an empty table under "No standings recorded for this event yet." — which is false, and which a
+an empty table under a sentence saying nothing was found — which is false, and which a
 public URL will be asked for; `#index` got the same clamp for the same reason, having told the same
 lie about the catalog since it was written. **The sheet is filterable — player, archetype, division — and that put it in a Turbo Frame it had
 deliberately refused.** It used to carry none, on the ground that nothing on the page fired on its
@@ -48,7 +48,8 @@ variant's rows are not its parent's, the `Archetypes::DeckList` rule, confirmed 
 travels as the slug. The options (archetypes by `name_normalized`, divisions in `DIVISIONS` order,
 the division select only when the event holds more than one) are read off the **whole event**,
 since the form sits outside the frame and is never re-rendered by a filter request; a value the
-page could not have offered, or a non-scalar param, is dropped rather than refused. An empty
+page could not have offered, or a non-scalar param, is dropped rather than refused — and so is a
+division filter on an event holding one division, which renders no select to show it. An empty
 filtered result says "No standings match these filters.", never the unfiltered sentence, which
 would be false. Writes still send the member back to the row's page in the **unfiltered** sheet —
 `Row.sheet_position` answers for the whole field. **No rate limit came with the field**, unlike

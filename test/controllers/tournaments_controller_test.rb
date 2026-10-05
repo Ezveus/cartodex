@@ -927,6 +927,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "Senior Player" ], sheet_players
     assert_select "select[name=archetype] option[value=standings-marker]"
     assert_select "select[name=division] option[value=masters]"
+    assert_select "select[name=division] option[selected][value=senior]"
   end
 
   # A `%` typed into the field is a percent sign, not "anything": unescaped, it matches every row.
@@ -1005,6 +1006,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     get tournament_path(@tournament, archetype: absent.slug)
 
     assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+    assert_select "a[data-card-filter-target=clear][hidden]"
   end
 
   # Public URL: `?player[]=x` is an Array and `?player[a]=b` Parameters. to_s on either is a string
@@ -1049,6 +1051,14 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "select[name=division]", count: 0
     assert_select "input[name=player]"
+  end
+
+  # Kept, it would light Clear up beside a bar where no control says anything is set.
+  test "a division filter on a one-division event is ignored, so Clear stays hidden" do
+    get tournament_path(@tournament, division: "masters")
+
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+    assert_select "a[data-card-filter-target=clear][hidden]"
   end
 
   test "an event with no standings offers no filter at all" do

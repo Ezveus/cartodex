@@ -5,13 +5,13 @@ One lane (server + view are ~150 lines together; a second lane would cost more t
 
 ## Contract
 
-- Params: `player`, `archetype` (slug), `division`. Each read with `params[:x].to_s` (non-scalar
-  shapes become `""`-ish garbage and are ignored).
+- Params: `player`, `archetype` (slug), `division`. Each read only when it is a String — `to_s`
+  on an Array would produce `["x"]`, which would then be searched for.
 - `TournamentStanding.player_matching(query)` — scope, `LIKE '%…%' ESCAPE '\'` on
   `tournament_standings.player_name_normalized`, query folded with `squish.downcase` and
   `sanitize_sql_like`.
 - `TournamentsController#load_standings_page` builds:
-  - `@archetype_options` — `Archetype.where(id: scope.select(:archetype_id)).order(:name)`, loaded
+  - `@archetype_options` — `Archetype.where(id: scope.select(:archetype_id)).order(:name_normalized)`, loaded
     (needs `name`, `slug` only).
   - `@division_options` — `scope.distinct.pluck(:division)` sorted by `DIVISIONS.index`.
   - `@sheet_filters` — `{ player:, archetype:, division: }`, each kept only if valid: archetype

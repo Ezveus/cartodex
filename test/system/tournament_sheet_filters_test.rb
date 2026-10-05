@@ -44,6 +44,10 @@ class TournamentSheetFiltersTest < ApplicationSystemTestCase
 
     assert_text "Giovanni"
     assert_text "Variant Player"
+    # The controls too, not only the rows: a Clear that swapped the frame alone would leave the
+    # select still naming the archetype it no longer filters on.
+    assert_equal "", find("select[name=archetype]").value
+    assert_no_link "Clear"
   end
 
   # The frame is target="_top": a row's link must navigate the page, not the frame — which would
