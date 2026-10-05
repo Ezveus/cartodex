@@ -3,7 +3,12 @@ module Tournaments
   # entry count, no deck anybody played. The only thing it knows about its reader is whether
   # they have a participation of their own to go to.
   class ShowView < ApplicationComponent
+    include Phlex::Rails::Helpers::TurboFrameTag
+
+    SHEET_FRAME_ID = "tournament_sheet".freeze
+
     def initialize(tournament:, my_entries: [], standings: [], sheet_page: 1, sheet_pages: 1,
+                   sheet_filters: {}, archetype_options: [], division_options: [],
                    can_record: false, can_record_another: false, can_edit: false,
                    can_edit_standings: false, viewer: nil, pending_standing_imports: [],
                    claimable_entries: [])
@@ -12,6 +17,9 @@ module Tournaments
       @standings = standings
       @sheet_page = sheet_page
       @sheet_pages = sheet_pages
+      @sheet_filters = sheet_filters
+      @archetype_options = archetype_options
+      @division_options = division_options
       @can_record = can_record
       @can_record_another = can_record_another
       @can_edit = can_edit
@@ -78,21 +86,89 @@ module Tournaments
           list_id: "importing-standings"
         )
 
+        # The event's divisions, read off its whole field: none means no standing at all, and
+        # then there is nothing to filter.
+        if @division_options.empty?
+          p(class: "empty-state") { "No standings recorded for this event yet." }
+        else
+          sheet_filter_bar
+          sheet_frame
+        end
+      end
+    end
+
+    # The rows and the pager, and nothing else, so a keystroke in the filter swaps one page of
+    # rows instead of visiting the whole page — which would replace the field being typed in and
+    # drop its focus. `target: "_top"` is what keeps every link and form *in* the rows (the deck
+    # link, Edit, Delete, "This is me", Unlink) navigating the page as it always has, without each
+    # one learning data-turbo-frame="_top"; only the pager's two links opt back into the frame.
+    def sheet_frame
+      turbo_frame_tag(SHEET_FRAME_ID, target: "_top") do
         if @standings.any?
           render Tournaments::Standings::Table.new(
             standings: @standings, viewer: @viewer,
             can_edit: @can_edit_standings, claimable_entries: claimable_entries
           )
-          # No turbo_action: this pager is not inside a frame, so the link navigates and updates
-          # the address bar by itself — see Ui::Pagination for why "replace" would break Back.
+          # Inside the frame, so "replace" is what puts ?page= and the filters into the address
+          # bar at all — see Ui::Pagination.
           render Ui::Pagination.new(
-            page: @sheet_page, pages: @sheet_pages,
-            href: ->(page) { tournament_path(@tournament, page: page) }
+            page: @sheet_page, pages: @sheet_pages, turbo_action: "replace",
+            turbo_frame: SHEET_FRAME_ID,
+            href: ->(page) { tournament_path(@tournament, page: page, **@sheet_filters) }
           )
         else
-          p(class: "empty-state") { "No standings recorded for this event yet." }
+          # Never "No standings recorded for this event yet.": the event has some, this filter
+          # matched none of them.
+          p(class: "empty-state") { "No standings match these filters." }
         end
       end
+    end
+
+    # Player, archetype, division — AND-ed. Outside the frame, so live filtering never re-renders
+    # it: the options are the whole event's, and Clear ships in both states for card-filter to
+    # flip from the form's own values, the way the deck listings' bar does.
+    def sheet_filter_bar
+      form(
+        action: tournament_path(@tournament),
+        method: "get",
+        class: "deck-filters",
+        data: { controller: "card-filter", turbo_frame: SHEET_FRAME_ID, turbo_action: "replace" }
+      ) do
+        input(
+          type: "search",
+          name: "player",
+          value: @sheet_filters[:player],
+          placeholder: "Player name…",
+          class: "form-input deck-filter-search",
+          autocomplete: "off",
+          aria_label: "Filter by player name",
+          data: { action: "input->card-filter#debounce" }
+        )
+        render Ui::FilterSelect.new(name: :archetype, options: archetype_options,
+                                    selected: @sheet_filters[:archetype])
+        # One division is no choice: an online event is all "open", and a hand-typed sheet is
+        # often masters alone.
+        if @division_options.size > 1
+          render Ui::FilterSelect.new(name: :division, options: division_options,
+                                      selected: @sheet_filters[:division])
+        end
+        a(
+          href: tournament_path(@tournament),
+          class: "btn btn-secondary btn-sm",
+          hidden: @sheet_filters.empty?,
+          data: { card_filter_target: "clear" }
+        ) { "Clear" }
+      end
+    end
+
+    # The slug travels in the URL, not the id: a filtered sheet is a public address worth sharing,
+    # and the slug is what an archetype's address already is.
+    def archetype_options
+      [ [ "All archetypes", "" ] ] + @archetype_options.map { |archetype| [ archetype.name, archetype.slug ] }
+    end
+
+    def division_options
+      [ [ "All divisions", "" ] ] + @division_options.map { |division| [ division.capitalize, division ] }
     end
 
     # Two rules meet here. A reader has as many participations as they have Play! Pokémon

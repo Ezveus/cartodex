@@ -11,12 +11,17 @@ module Ui
   # all — the three listings whose pagers sit in a frame pass it. On an ordinary page the link
   # already navigates and updates the URL, and `replace` would only overwrite the history entry,
   # so pressing Back from page 2 would skip page 1 entirely.
+  #
+  # `turbo_frame` is for the one pager that sits in a frame declared `target="_top"` — an event's
+  # sheet, whose rows link out of the frame by default. Its two links are the ones that must stay
+  # in it, so they name it.
   class Pagination < ApplicationComponent
-    def initialize(page:, pages:, href:, turbo_action: nil)
+    def initialize(page:, pages:, href:, turbo_action: nil, turbo_frame: nil)
       @page = page
       @pages = pages
       @href = href
       @turbo_action = turbo_action
+      @turbo_frame = turbo_frame
     end
 
     def view_template
@@ -36,9 +41,7 @@ module Ui
     end
 
     def link_data
-      return {} if @turbo_action.blank?
-
-      { turbo_action: @turbo_action }
+      { turbo_action: @turbo_action.presence, turbo_frame: @turbo_frame.presence }.compact
     end
   end
 end

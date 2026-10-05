@@ -590,7 +590,7 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
 
     get tournament_path(@tournament)
 
-    assert_equal %w[Junior Senior Masters], css_select(".tournament-standings > h3").map(&:text)
+    assert_equal %w[Junior Senior Masters], css_select("##{Tournaments::ShowView::SHEET_FRAME_ID} > h3").map(&:text)
   end
 
   test "a standing's row names its archetype and its record" do
@@ -891,7 +891,266 @@ class TournamentsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a", text: /Publish/, count: 0
   end
 
+
+  # --- Filtering the sheet -----------------------------------------------------------------------
+
+  test "the player filter matches a substring of the name, whatever its case and spacing" do
+    get tournament_path(@tournament, player: "  KETCH ")
+
+    assert_equal [ "Ash Ketchum" ], sheet_players
+
+    # A double space where a copy-paste wrapped, folded the way the column was.
+    get tournament_path(@tournament, player: "ash  ketchum")
+
+    assert_equal [ "Ash Ketchum" ], sheet_players
+  end
+
+  # `_` is "any one character" to LIKE: unescaped, "a_h" matches "ash".
+  test "the player filter reads an underscore literally" do
+    @tournament.standings.create!(player_name: "a_h Test", division: "masters",
+                                  archetype: archetypes(:standings_marker))
+
+    get tournament_path(@tournament, player: "a_h")
+
+    assert_equal [ "a_h Test" ], sheet_players
+  end
+
+  # The form sits outside the frame and a filter request never re-renders it, so options narrowed
+  # by the current filter would be stale — and the division select, which renders only for more
+  # than one division, would vanish outright.
+  test "the options stay the whole event's while a filter is applied" do
+    other = sheet_archetype("Other Deck")
+    @tournament.standings.create!(player_name: "Senior Player", division: "senior", archetype: other)
+
+    get tournament_path(@tournament, archetype: other.slug, division: "senior")
+
+    assert_equal [ "Senior Player" ], sheet_players
+    assert_select "select[name=archetype] option[value=standings-marker]"
+    assert_select "select[name=division] option[value=masters]"
+    assert_select "select[name=division] option[selected][value=senior]"
+  end
+
+  # A `%` typed into the field is a percent sign, not "anything": unescaped, it matches every row.
+  test "the player filter reads LIKE metacharacters literally" do
+    @tournament.standings.create!(player_name: "100% Player", division: "masters",
+                                  archetype: archetypes(:standings_marker))
+
+    get tournament_path(@tournament, player: "%")
+
+    assert_equal [ "100% Player" ], sheet_players
+  end
+
+  # The column is folded in Ruby, so the query must be too: SQLite's LOWER leaves É alone, and a
+  # query folded there would never meet "émile".
+  test "the player filter folds a non-ASCII capital the way the column was folded" do
+    @tournament.standings.create!(player_name: "Émile Zola", division: "masters",
+                                  archetype: archetypes(:standings_marker))
+
+    get tournament_path(@tournament, player: "ÉMILE")
+
+    assert_equal [ "Émile Zola" ], sheet_players
+  end
+
+  # Exact, as the owner decided and as Archetypes::DeckList reads it: a variant's rows are not the
+  # parent's. Without the child row this test could not tell an exact match from a folded one.
+  test "the archetype filter shows that archetype's rows and not its variants'" do
+    parent = archetypes(:standings_marker)
+    child = sheet_archetype("Marker Variant", parent: parent)
+    @tournament.standings.create!(player_name: "Variant Player", division: "masters", archetype: child)
+
+    get tournament_path(@tournament, archetype: parent.slug)
+
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+
+    get tournament_path(@tournament, archetype: child.slug)
+
+    assert_equal [ "Variant Player" ], sheet_players
+  end
+
+  test "the division filter shows one division" do
+    @tournament.standings.create!(player_name: "Junior Player", division: "junior",
+                                  archetype: archetypes(:standings_marker))
+
+    get tournament_path(@tournament, division: "junior")
+
+    assert_equal [ "Junior Player" ], sheet_players
+  end
+
+  test "the filters combine" do
+    other = sheet_archetype("Other Deck")
+    @tournament.standings.create!(player_name: "Ash Junior", division: "junior", archetype: other)
+    @tournament.standings.create!(player_name: "Ash Senior", division: "senior",
+                                  archetype: archetypes(:standings_marker))
+
+    get tournament_path(@tournament, player: "ash", archetype: "standings-marker", division: "masters")
+
+    assert_equal [ "Ash Ketchum" ], sheet_players
+  end
+
+  # A renamed archetype's old slug in a shared link, a hand-typed division: dropped, not refused,
+  # and the select says "All" — which is what the sheet then shows.
+  test "a filter value the page could not have offered is ignored" do
+    get tournament_path(@tournament, archetype: "no-such-archetype", division: "open")
+
+    assert_response :success
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+    assert_select "select[name=archetype] option[selected]", text: "All archetypes"
+    assert_select "a[data-card-filter-target=clear][hidden]"
+  end
+
+  # An archetype that exists but has no row at this event is as foreign to the page as an
+  # unknown one: the option list never offered it.
+  test "an archetype absent from this event is ignored rather than emptying the sheet" do
+    absent = sheet_archetype("Absent Deck")
+
+    get tournament_path(@tournament, archetype: absent.slug)
+
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+    assert_select "a[data-card-filter-target=clear][hidden]"
+  end
+
+  # Public URL: `?player[]=x` is an Array and `?player[a]=b` Parameters. to_s on either is a string
+  # nobody typed — `["x"]` — which would then be searched for and empty the sheet.
+  test "a non-scalar filter param is ignored rather than searched for" do
+    sign_out @user
+
+    get "#{tournament_path(@tournament)}?player[]=x&archetype[a]=b&division[]=masters"
+
+    assert_response :success
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+  end
+
+  test "the archetype options are the event's own, by name, with their slug as the value" do
+    other = sheet_archetype("Aardvark Deck")
+    @tournament.standings.create!(player_name: "Early", division: "masters", archetype: other)
+    sheet_archetype("Not At This Event")
+
+    get tournament_path(@tournament)
+
+    options = css_select("select[name=archetype] option").map { |o| [ o.text, o["value"] ] }
+    assert_equal [ [ "All archetypes", "" ], [ "Aardvark Deck", other.slug ],
+                   [ "Standings Marker", "standings-marker" ] ], options
+  end
+
+  # Inserted masters-first, so an order that only echoed the database would print it first; and
+  # all four values, so a list that dropped "open" or sorted it alphabetically fails too.
+  test "the division options are the event's own, in the sheet's order" do
+    archetype = archetypes(:standings_marker)
+    %w[open senior junior].each_with_index do |division, i|
+      @tournament.standings.create!(player_name: "D#{i}", division: division, archetype: archetype)
+    end
+
+    get tournament_path(@tournament)
+
+    assert_equal %w[junior senior masters open],
+      css_select("select[name=division] option").map { |o| o["value"] }.reject(&:empty?)
+  end
+
+  test "an event with a single division offers no division filter" do
+    get tournament_path(@tournament)
+
+    assert_select "select[name=division]", count: 0
+    assert_select "input[name=player]"
+  end
+
+  # Kept, it would light Clear up beside a bar where no control says anything is set.
+  test "a division filter on a one-division event is ignored, so Clear stays hidden" do
+    get tournament_path(@tournament, division: "masters")
+
+    assert_equal [ "Giovanni", "Ash Ketchum" ], sheet_players
+    assert_select "a[data-card-filter-target=clear][hidden]"
+  end
+
+  test "an event with no standings offers no filter at all" do
+    @tournament.standings.destroy_all
+
+    get tournament_path(@tournament)
+
+    assert_select "form.deck-filters", count: 0
+    assert_select "p.empty-state", text: "No standings recorded for this event yet."
+  end
+
+  # "No standings recorded for this event yet." would be false here: the event has two.
+  test "a filter that matches nothing says so, and not that the event has no standings" do
+    get tournament_path(@tournament, player: "nobody")
+
+    # Inside the frame: a frame request that answers without it shows "Content missing".
+    assert_select "turbo-frame##{Tournaments::ShowView::SHEET_FRAME_ID} p.empty-state",
+      text: "No standings match these filters."
+    assert_select "p.empty-state", text: /recorded/, count: 0
+    assert_select "form.deck-filters a[data-card-filter-target=clear]:not([hidden])"
+  end
+
+  test "the filtered sheet is paginated over the rows that match, and the pager keeps the filters" do
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE + 5, prefix: "Match")
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE, prefix: "Other")
+
+    get tournament_path(@tournament, player: "match")
+
+    assert_select ".cards-pagination-info", text: "Page 1 / 2"
+    assert_select ".cards-pagination-link[href=?]", tournament_path(@tournament, page: 2, player: "match")
+
+    get tournament_path(@tournament, player: "match", page: 99)
+
+    assert_select ".cards-pagination-info", text: "Page 2 / 2"
+    assert_equal 5, sheet_players.size
+  end
+
+  # The pager sits in a frame declared target="_top", so without naming the frame its links would
+  # leave it — a full page visit, the field's focus lost, which is what the frame exists to avoid.
+  test "the sheet's rows live in a frame that sends links out, and its pager links stay in it" do
+    fill_sheet(TournamentStanding::SHEET_PER_PAGE + 1)
+    frame = Tournaments::ShowView::SHEET_FRAME_ID
+
+    get tournament_path(@tournament)
+
+    assert_select "turbo-frame##{frame}[target=_top] .data-table-row", minimum: 1
+    assert_select "turbo-frame##{frame} .cards-pagination-link[data-turbo-frame=?][data-turbo-action=replace]", frame
+    assert_select "form.deck-filters[data-turbo-frame=?]", frame
+  end
+
+  test "the filter bar keeps what was asked, and shows Clear" do
+    get tournament_path(@tournament, player: "ash", archetype: "standings-marker")
+
+    assert_select "input[name=player][value=ash]"
+    assert_select "select[name=archetype] option[selected][value=standings-marker]"
+    assert_select "a[data-card-filter-target=clear]:not([hidden])"
+  end
+
+  # A filtered request must not grow with the sheet either. Its own test, since the two option
+  # queries and the filtered COUNT are new legs the unfiltered measurement already covers only
+  # with no filter applied.
+  test "a filtered sheet issues a constant number of queries regardless of how many standings" do
+    2.times { |i| record_standing(i) }
+    params = { player: "quiet", division: "masters" }
+
+    get tournament_path(@tournament, params) # warm the session
+
+    small = ActiveRecord::Base.uncached { count_queries { get tournament_path(@tournament, params) } }
+
+    (2..7).each { |i| record_standing(i) }
+
+    large = ActiveRecord::Base.uncached { count_queries { get tournament_path(@tournament, params) } }
+
+    assert_response :success
+    assert_equal 8, sheet_players.size
+    assert_equal small, large, "query count grew with the sheet: #{small} -> #{large}"
+  end
+
   private
+
+  def sheet_players
+    css_select("##{Tournaments::ShowView::SHEET_FRAME_ID} .data-table-row [data-label=Player]")
+      .map { |cell| cell.text.squish }
+  end
+
+  def sheet_archetype(name, parent: nil)
+    card = Card.create!(
+      name: name, set_name: "SF#{name.sum}", set_number: "1",
+      card_type: "Pokémon", hp: 60, rarity: "Common", type_symbol: "Colorless", retreat_cost: 1
+    )
+    Archetype.create!(primary_card: card, name: name, custom_name: "1", parent: parent)
+  end
 
   # What the online import writes, plus the two things that make the withholding visible: a
   # participation of the reader's own (so the header would otherwise offer to record another) and
