@@ -70,11 +70,12 @@ class Decks::ProxySheetExporter < ApplicationService
 
   private
 
-  # One entry per copy to print: Pokémon, Trainer, Energy, then name, then printing. Not quite the
+  # One entry per copy to print: Pokémon, Trainer, Energy, then name, then printing (set, then number
+  # read as a number, so 9 comes before 10). Not quite the
   # deck page's order, which also splits Trainers by subtype; a sheet is cut up anyway.
   def slots
     @deck.deck_cards.includes(:card).to_a
-         .sort_by { |dc| [ type_rank(dc.card), dc.card.name, dc.card.set_name.to_s, dc.card.set_number.to_s ] }
+         .sort_by { |dc| [ type_rank(dc.card), dc.card.name, dc.card.set_name.to_s, dc.card.set_number.to_i, dc.card.set_number.to_s ] }
          .flat_map { |dc| [ dc ] * copies(dc) }
   end
 

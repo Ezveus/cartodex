@@ -101,6 +101,16 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
     assert_equal expected.map { color_of(_1) }, colors_in_reading_order(pdf)
   end
 
+  test "two printings of one name in one set are ordered by number, as numbers" do
+    budew_asc = cards(:budew_asc)
+    budew_nine = cards(:budew_pre)
+    budew_nine.update_columns(set_name: budew_asc.set_name, set_number: "9")
+    with_art(budew_asc, quantity: 1, color: [ 0, 220, 220 ])
+    with_art(budew_nine, quantity: 1, color: [ 220, 0, 220 ])
+
+    assert_equal [ color_of(budew_nine), color_of(budew_asc) ], colors_in_reading_order(Decks::ProxySheetExporter.call(@deck))
+  end
+
   # --- copies --------------------------------------------------------------
 
   test "the whole-deck style prints every copy, whatever the collection backs" do
@@ -146,6 +156,11 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
   test "an empty deck has nothing to print" do
     error = assert_raises(Decks::ProxySheetExporter::NothingToPrint) { Decks::ProxySheetExporter.call(@deck) }
     assert_equal Decks::ProxySheetExporter::EMPTY_DECK, error.message
+  end
+
+  # A legal deck holds at most 60 cards, so 60 printings; the test below works at 2 for speed.
+  test "the cap is sixty printings" do
+    assert_equal 60, Decks::ProxySheetExporter::MAX_PRINTINGS
   end
 
   test "MAX_PRINTINGS counts distinct printings, not copies, and refuses only past it" do
@@ -261,6 +276,18 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
     # corner's edge, hence a pixel inside it and a threshold short of 255.
     assert art.getpoint(3, 3).all? { _1 >= 220 }, "the transparent corner is not white: #{art.getpoint(3, 3)}"
     assert art.getpoint(30, 40).all? { _1 <= 60 }, "the opaque body changed colour"
+  end
+
+  test "a JPEG art is drawn too" do
+    card = cards(:honedge)
+    @deck.deck_cards.create!(card: card, quantity: 1)
+    card.update_column(:image_url, "https://cdn.test/honedge.jpg")
+    @arts[card.image_url] = (Vips::Image.black(46, 64) + [ 120, 60, 30 ]).cast(:uchar).jpegsave_buffer
+
+    pdf = Decks::ProxySheetExporter.call(@deck)
+
+    assert_equal 1, image_placements(pdf).size
+    assert_empty placeholder_frames(pdf)
   end
 
   test "bytes that are not an image print a placeholder rather than failing the sheet" do
