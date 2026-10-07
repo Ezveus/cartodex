@@ -381,6 +381,30 @@ printed it would say "since 23 September" beside matches from the 17th; what is 
 
 **Frontend**: Hotwire (Turbo + Stimulus), Propshaft asset pipeline, importmap for JS. **All views use Phlex components** — see the `phlex-architecture` skill for conventions and patterns. Always use Phlex, never write view logic in ERB.
 
+**`/search` answers two ways, and the split is the Turbo-Frame header.** The ⌘K spotlight's form
+targets the `search_results` frame, so every keystroke's request carries it and gets the frame with
+no layout; any other GET — a Chromium browser's site search, configured from `/settings#search-engine`
+or discovered through `/opensearch.xml` and the layout's `<link rel="search">` — gets
+`Search::PageView` inside the layout. Both render `Search::ResultsList` over the same
+`search_results` call, which is what "the engine runs exactly the ⌘K search" rests on, and
+`SearchControllerTest` compares the two responses row by row. The page renders `ResultsList`,
+never `ResultsView`: the overlay on that page already holds the one `search_results` element.
+The settings page concatenates `%s` onto `search_url` — a URL helper given `q: "%s"` emits `%25s`,
+which no browser substitutes into. Chrome reads the OpenSearch link on the site's root only, and
+registers what it finds as an *inactive* shortcut. See
+`docs/superpowers/specs/2026-10-07-browser-search-engine-design.md`.
+
+**The one-time announcement is spent only by a page the member sees.**
+`users.search_engine_announced_at` is claimed by `User#claim_search_engine_announcement!` — an
+`UPDATE … WHERE … IS NULL`, so two tabs show it once, guarded by the in-memory value so an
+announced member's page views never write — and the claim is asked by `Ui::FlashMessages` through
+`SearchEngineAnnouncementHost`, which refuses a Turbo hover prefetch (`X-Sec-Purpose`), a browser
+prefetch or prerender (`Sec-Purpose`), a Turbo Frame request and any non-GET: each renders the
+layout without being shown. The concern is on both layout hosts, like `SearchOverlayHost`. **User
+fixtures carry the column set**, so no other test renders the alert; a test that wants it sets the
+column to nil. The alert is the first persistent flash (`data-flash-persistent-value`), since
+`flash_controller.js` removes every other one after five seconds and would take its link with it.
+
 **Link previews and the app icon.** Every page emits Open Graph and Twitter-card tags through `Ui::OgTags`, which `Layouts::ApplicationLayout` renders **unconditionally** — `OgPreviewHost#og_preview` never answers nil, so a page nobody thought about still previews as Cartodex rather than as a bare URL, from the committed `public/og-default.jpg`. Three surfaces replace that with a banner of their own by assigning `@og_payload`: a deck, an archetype and a card. `Og::*Payload` decides what a banner *says*, `Og::Renderer` draws it (the only file in the app that composes with libvips — `Decks::ProxySheetExporter` only re-encodes art), `Og::Cache` addresses the file. Six rules bite from outside their own files:
 
 - **`og_preview` needs two declarations**, `helper_method` in the concern *and* `register_value_helper` on `ApplicationComponent`, and the concern goes on `ApplicationController` **and** `Oauth::AuthorizationsController` — the layout's second host, which does not descend from the first. `oauth_consent_test.rb` is what catches the omission, as a 500 on the one page in the app that would have it.
