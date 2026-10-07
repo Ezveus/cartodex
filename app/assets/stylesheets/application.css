@@ -726,6 +726,35 @@ textarea.form-input {
   border: 1px solid var(--loss-bg);
 }
 
+/* An announcement rather than an outcome: persistent, so it carries its own close button, and the
+   text sits left of it rather than centred over it. */
+.flash-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  text-align: left;
+  background-color: var(--water-bg);
+  color: var(--water-strong);
+  border: 1px solid var(--water-bg);
+}
+
+.flash-info a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.flash-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* Form errors block */
 .form-errors {
   background-color: var(--loss-bg);
@@ -2549,6 +2578,31 @@ textarea.form-input {
   margin-left: auto;
 }
 
+.settings-steps {
+  max-width: 64ch;
+  margin: 0.5rem 0 1.5rem;
+  padding-left: 1.25rem;
+  line-height: 1.6;
+}
+
+.settings-steps code,
+.settings-section-lead kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+/* The announcement links straight here, and the navbar is sticky: without the margin the anchor
+   lands with the section's heading under the bar. */
+#search-engine {
+  scroll-margin-top: 6rem;
+}
+
+#search-engine h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
 /* The reveal block is the only moment the raw token is ever visible again —
    weighted as a callout (elevated, amber-ringed) rather than a neutral box. */
 .settings-reveal {
@@ -3814,6 +3868,20 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .spotlight-empty {
   padding: 0.75rem;
   color: var(--ink-500);
+}
+
+/* /search opened as a page (a browser search engine lands here): the spotlight's own list, laid out
+   in flow on the surface the floating panel would otherwise provide. */
+.search-page-hint {
+  color: var(--ink-500);
+  margin: 0 0 1rem;
+}
+
+.search-page-results {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: var(--e1);
+  overflow: hidden;
 }
 
 /* The same spotlight, in a dialog, for every page that has no field of its own. Anchored near the

@@ -157,6 +157,32 @@ class User < ApplicationRecord
     nil
   end
 
+  # The "use Cartodex as a search engine" announcement is shown while this is true. Rendering
+  # never changes it: the alert acknowledges itself from the browser once it is actually on screen
+  # (SearchEngineAnnouncementsController), because a response the server renders is not a page the
+  # member sees — Turbo prefetches on hover, keeps only the frame of a frame request, and throws a
+  # whole response away to reload the page when a tracked asset changed, which every deploy that
+  # touches the JavaScript does.
+  def search_engine_announcement_pending?
+    search_engine_announced_at.nil?
+  end
+
+  # Records the acknowledgement. The UPDATE is conditional, so two tabs acknowledging at once
+  # keep the first timestamp, and an acknowledged member costs no query at all.
+  #
+  # Best-effort like touch_api_token_usage: a busy lock leaves it pending, and the alert simply
+  # shows again on the next page.
+  def acknowledge_search_engine_announcement!
+    return unless search_engine_announcement_pending?
+
+    with_brief_write_wait do
+      self.class.where(id: id, search_engine_announced_at: nil)
+        .update_all(search_engine_announced_at: Time.current)
+    end
+  rescue ActiveRecord::StatementInvalid
+    nil
+  end
+
   private
 
   # Caps how long the usage stamp waits for SQLite's write lock. Everything else

@@ -136,4 +136,15 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#mcp-token dd", text: "Never"
   end
+
+  # A URL helper given q: "%s" escapes it to %25s, a template no browser substitutes into.
+  test "shows the browser search engine URL with a literal %s placeholder" do
+    get settings_path
+
+    assert_response :success
+    assert_select "#search-engine #search-engine-url", text: "http://www.example.com/search?q=%s"
+    assert_select "#search-engine button[data-clipboard-text-value=?]", "http://www.example.com/search?q=%s"
+    # Rewritten to "Ctrl K" off a Mac by search-overlay, like the navbar's own hint.
+    assert_select "#search-engine kbd[data-search-overlay-target=hint]"
+  end
 end

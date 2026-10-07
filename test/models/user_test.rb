@@ -279,4 +279,55 @@ class UserTest < ActiveSupport::TestCase
 
     assert_nil user.reload.api_token_last_used_at
   end
+
+  test "acknowledge_search_engine_announcement! records it, and a later call keeps the first time" do
+    user = User.create!(email: "announce@example.com", password: "password123")
+    assert user.search_engine_announcement_pending?
+
+    user.acknowledge_search_engine_announcement!
+    first = user.reload.search_engine_announced_at
+    assert_not_nil first
+    assert_not user.search_engine_announcement_pending?
+
+    travel 1.hour do
+      User.find(user.id).acknowledge_search_engine_announcement!
+    end
+    assert_equal first, user.reload.search_engine_announced_at
+  end
+
+  # Two tabs acknowledging at once load the same member twice, both still pending in memory: the
+  # conditional UPDATE is what keeps the second from overwriting the first.
+  test "acknowledge_search_engine_announcement! does not overwrite an acknowledgement made by another copy" do
+    user = User.create!(email: "announce-race@example.com", password: "password123")
+    other_tab = User.find(user.id)
+
+    user.acknowledge_search_engine_announcement!
+    first = User.find(user.id).search_engine_announced_at
+
+    travel 1.hour do
+      other_tab.acknowledge_search_engine_announcement!
+    end
+    assert_equal first, User.find(user.id).search_engine_announced_at
+  end
+
+  # A tab opened before the acknowledgement still sends its own DELETE when it is shown: once the
+  # member is acknowledged, that call must not cost a write.
+  test "acknowledge_search_engine_announcement! issues no query once acknowledged" do
+    user = users(:one)
+    assert_not user.search_engine_announcement_pending?
+
+    assert_equal 0, count_queries { user.acknowledge_search_engine_announcement! }
+  end
+
+  test "acknowledge_search_engine_announcement! leaves it pending rather than fail on a busy database" do
+    user = User.create!(email: "announce-busy@example.com", password: "password123")
+
+    user.define_singleton_method(:with_brief_write_wait) { |*| raise ActiveRecord::StatementTimeout, "database is locked" }
+    assert_nothing_raised { user.acknowledge_search_engine_announcement! }
+    user.singleton_class.remove_method(:with_brief_write_wait)
+
+    assert User.find(user.id).search_engine_announcement_pending?, "a busy lock must leave it for the next page"
+    user.acknowledge_search_engine_announcement!
+    assert_not user.reload.search_engine_announcement_pending?
+  end
 end

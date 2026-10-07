@@ -1,7 +1,11 @@
 one:
   email: user-one@example.com
   encrypted_password: password123
+  # Already announced, so the suite renders no announcement unless a test asks for one.
+  search_engine_announced_at: 2026-10-07 00:00:00
 
 two:
   email: user-two@example.com
   encrypted_password: password123
+  # Already announced, so the suite renders no announcement unless a test asks for one.
+  search_engine_announced_at: 2026-10-07 00:00:00

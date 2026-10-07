@@ -390,14 +390,12 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
   # Every public page advertises a preview image, including the ones nobody thought about: that is
   # the point of OgPreviewHost defaulting to the site payload rather than to nil.
   #
-  # /search is excluded, and named rather than quietly skipped — SearchController is `layout false`
-  # (search_controller.rb:9), so it renders no <head> at all and can carry no tags. Giving it a
-  # layout is a different change. Excluding it here is a decision; leaving it in the sweep and
-  # watching it fail would have been an oversight.
+  # /search is in the sweep since a browser's search engine opens it as a page: only the
+  # spotlight's Turbo Frame request still renders without the layout.
   test "every public HTML page advertises a preview image" do
     @deck.update!(shared: true)
 
-    public_gets.except("search").each do |label, path|
+    public_gets.each do |label, path|
       get path
       assert_response :success, label
       assert_select "meta[property='og:image']", 1, "#{label} advertises no og:image"

@@ -29,6 +29,9 @@ module Layouts
           link(rel: "icon", href: "/icon-192.png", sizes: "192x192", type: "image/png")
           link(rel: "icon", href: "/icon.svg", type: "image/svg+xml")
           link(rel: "apple-touch-icon", href: "/icon-512.png")
+          # What lets a browser offer Cartodex as a search engine. Chrome reads it on the root
+          # page only, which renders this layout like every other page — see OpensearchController.
+          link(rel: "search", type: "application/opensearchdescription+xml", title: "Cartodex", href: opensearch_path)
           stylesheet_link_tag :app, data_turbo_track: "reload"
           javascript_importmap_tags
         end
