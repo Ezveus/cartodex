@@ -123,6 +123,9 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     assert_select ".search-page-results .spotlight-listbox a[role=option]", text: /Ogerpon Toolbox/
     assert_select "turbo-frame#search_results", count: 1,
       msg: "only the overlay's frame: the page must not carry a second element with that id"
+    # The overlay renders the same rows once used, under the spotlight- prefix.
+    assert_select ".search-page-results [id^='spotlight-']", count: 0
+    assert_select ".search-page-results [role=group][aria-labelledby=search-page-group-decks]"
   end
 
   # The request: the engine runs EXACTLY the spotlight's search. Same rows, same order, same

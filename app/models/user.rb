@@ -157,24 +157,33 @@ class User < ApplicationRecord
     nil
   end
 
-  # True exactly once per member: the request that wins the conditional UPDATE is the one that
-  # shows the announcement, so two tabs opening at once show it once. The in-memory guard comes
-  # first because this runs on every page a member renders — an unconditional UPDATE would take
-  # SQLite's write lock on each of them, forever.
+  # The "use Cartodex as a search engine" announcement is shown while this is true. Rendering
+  # never changes it: the alert acknowledges itself from the browser once it is actually on screen
+  # (SearchEngineAnnouncementsController), because a response the server renders is not a page the
+  # member sees — Turbo prefetches on hover, keeps only the frame of a frame request, and throws a
+  # whole response away to reload the page when a tracked asset changed, which every deploy that
+  # touches the JavaScript does.
+  def search_engine_announcement_pending?
+    search_engine_announced_at.nil?
+  end
+
+  # True for the request that records the acknowledgement, false for any later one — the UPDATE is
+  # conditional, so two tabs acknowledging at once write once, and an acknowledged member costs no
+  # query at all.
   #
-  # Best-effort like touch_api_token_usage: a busy lock costs the announcement this page, not the
-  # page itself, and the next page tries again.
-  def claim_search_engine_announcement!
-    return false unless search_engine_announced_at.nil?
+  # Best-effort like touch_api_token_usage: a busy lock leaves it pending, and the alert simply
+  # shows again on the next page.
+  def acknowledge_search_engine_announcement!
+    return false unless search_engine_announcement_pending?
 
     now = Time.current
-    claimed = with_brief_write_wait do
+    acknowledged = with_brief_write_wait do
       self.class.where(id: id, search_engine_announced_at: nil)
         .update_all(search_engine_announced_at: now) == 1
     end
     self.search_engine_announced_at = now
     clear_attribute_change(:search_engine_announced_at)
-    claimed
+    acknowledged
   rescue ActiveRecord::StatementInvalid
     false
   end

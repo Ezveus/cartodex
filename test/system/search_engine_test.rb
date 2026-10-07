@@ -47,6 +47,24 @@ class SearchEngineTest < ApplicationSystemTestCase
     assert_no_selector ".flash-notice", wait: 0
   end
 
+  # The server never records it while rendering; the alert does, once it is on screen.
+  test "the announcement acknowledges itself once shown, and Back does not bring it back" do
+    @user.update_column(:search_engine_announced_at, nil)
+    visit dashboard_path
+
+    assert_selector "[data-testid=search-engine-announcement]"
+    Timeout.timeout(Capybara.default_max_wait_time) do
+      sleep 0.05 until @user.reload.search_engine_announced_at
+    end
+
+    click_on "Set it up in Settings"
+    assert_selector "#search-engine"
+    page.go_back
+
+    assert_selector "h1", text: /Welcome/
+    assert_no_selector "[data-testid=search-engine-announcement]", wait: 1
+  end
+
   test "the announcement can be dismissed" do
     @user.update_column(:search_engine_announced_at, nil)
     visit dashboard_path

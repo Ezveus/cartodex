@@ -388,22 +388,26 @@ or discovered through `/opensearch.xml` and the layout's `<link rel="search">` �
 `Search::PageView` inside the layout. Both render `Search::ResultsList` over the same
 `search_results` call, which is what "the engine runs exactly the ⌘K search" rests on, and
 `SearchControllerTest` compares the two responses row by row. The page renders `ResultsList`,
-never `ResultsView`: the overlay on that page already holds the one `search_results` element.
+never `ResultsView` — the overlay on that page already holds the one `search_results` element —
+and passes `id_prefix: "search-page"`, since the overlay's panel renders the same rows under
+`spotlight-` ids once used.
 The settings page concatenates `%s` onto `search_url` — a URL helper given `q: "%s"` emits `%25s`,
 which no browser substitutes into. Chrome reads the OpenSearch link on the site's root only, and
 registers what it finds as an *inactive* shortcut. See
 `docs/superpowers/specs/2026-10-07-browser-search-engine-design.md`.
 
-**The one-time announcement is spent only by a page the member sees.**
-`users.search_engine_announced_at` is claimed by `User#claim_search_engine_announcement!` — an
-`UPDATE … WHERE … IS NULL`, so two tabs show it once, guarded by the in-memory value so an
-announced member's page views never write — and the claim is asked by `Ui::FlashMessages` through
-`SearchEngineAnnouncementHost`, which refuses a Turbo hover prefetch (`X-Sec-Purpose`), a browser
-prefetch or prerender (`Sec-Purpose`), a Turbo Frame request and any non-GET: each renders the
-layout without being shown. The concern is on both layout hosts, like `SearchOverlayHost`. **User
-fixtures carry the column set**, so no other test renders the alert; a test that wants it sets the
-column to nil. The alert is the first persistent flash (`data-flash-persistent-value`), since
-`flash_controller.js` removes every other one after five seconds and would take its link with it.
+**The one-time announcement is spent by the browser, never by rendering.**
+`users.search_engine_announced_at` stays nil while `Ui::FlashMessages` shows the alert; the alert's
+`announcement_controller.js` sends `DELETE /search_engine_announcement` when it connects, and
+`User#acknowledge_search_engine_announcement!` writes it — an `UPDATE … WHERE … IS NULL`, guarded by
+the in-memory value so an acknowledged member's page views never write. A server-side claim was
+tried first and is wrong: besides prefetches and frame requests, Turbo **discards** a navigation's
+response and reloads in full when a tracked asset changed — which a deploy touching the JavaScript
+causes — so a claim made while rendering spent the alert on a page nobody saw (reproduced). The
+element is `data-turbo-temporary` so Back cannot resurrect it. **User fixtures carry the column
+set**, so no other test renders the alert; a test that wants it sets the column to nil. It is the
+first persistent flash (`data-flash-persistent-value`), since `flash_controller.js` removes every
+other one after five seconds and would take its link with it.
 
 **Link previews and the app icon.** Every page emits Open Graph and Twitter-card tags through `Ui::OgTags`, which `Layouts::ApplicationLayout` renders **unconditionally** — `OgPreviewHost#og_preview` never answers nil, so a page nobody thought about still previews as Cartodex rather than as a bare URL, from the committed `public/og-default.jpg`. Three surfaces replace that with a banner of their own by assigning `@og_payload`: a deck, an archetype and a card. `Og::*Payload` decides what a banner *says*, `Og::Renderer` draws it (the only file in the app that composes with libvips — `Decks::ProxySheetExporter` only re-encodes art), `Og::Cache` addresses the file. Six rules bite from outside their own files:
 

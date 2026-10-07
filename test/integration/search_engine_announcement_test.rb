@@ -1,7 +1,8 @@
 require "test_helper"
 
-# The one-time "use Cartodex as a search engine" alert: shown on the first page a member actually
-# sees, and claimed by that page only. See SearchEngineAnnouncementHost.
+# The one-time "use Cartodex as a search engine" alert. Rendering shows it and never spends it;
+# the alert spends it itself, from the browser, once it is on screen (announcement_controller.js).
+# See User#acknowledge_search_engine_announcement!.
 class SearchEngineAnnouncementTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
@@ -13,66 +14,61 @@ class SearchEngineAnnouncementTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
-  test "the first page shows the alert, links to the settings section and records it" do
+  test "a pending member's page shows the alert, wired to acknowledge itself" do
     get dashboard_path
 
     assert_response :success
-    assert_select "#{ANNOUNCEMENT}.flash-info[data-flash-persistent-value=true]" do
+    assert_select "#{ANNOUNCEMENT}.flash-info[data-flash-persistent-value=true][data-turbo-temporary]" do |alert|
+      assert_equal "flash announcement", alert.first["data-controller"]
+      assert_equal search_engine_announcement_path, alert.first["data-announcement-url-value"]
       assert_select "a[href=?]", settings_path(anchor: "search-engine")
       assert_select "button.flash-close[data-action='flash#dismiss']"
     end
-    assert_not_nil @user.reload.search_engine_announced_at
   end
 
-  test "the next page does not show it again" do
+  # Turbo prefetches on hover, keeps only the frame of a frame request and discards a whole
+  # response to reload the page after a deploy changed a tracked asset: a rendered page is not a
+  # seen page, so no rendering may spend the announcement.
+  test "rendering never spends it, whatever kind of request rendered" do
     get dashboard_path
-    get decks_path
-
-    assert_response :success
-    assert_select ANNOUNCEMENT, count: 0
-  end
-
-  # Turbo 8 prefetches a link on hover. That response is never shown unless the link is clicked,
-  # so claiming the alert there would spend it on a page nobody saw.
-  test "a hover prefetch neither shows nor spends it" do
     get decks_path, headers: { "X-Sec-Purpose" => "prefetch" }
-
-    assert_response :success
-    assert_select ANNOUNCEMENT, count: 0
-    assert_nil @user.reload.search_engine_announced_at
-  end
-
-  # Chrome's own prefetch and prerender (the root, from the omnibox) say so with Sec-Purpose.
-  test "a browser prefetch or prerender neither shows nor spends it" do
-    [ "prefetch", "prefetch;prerender", "prerender;prefetch" ].each do |purpose|
-      get dashboard_path, headers: { "Sec-Purpose" => purpose }
-
-      assert_select ANNOUNCEMENT, count: 0
-      assert_nil @user.reload.search_engine_announced_at, purpose
-    end
-  end
-
-  test "a HEAD request does not spend it" do
+    get decks_path, headers: { "Sec-Purpose" => "prefetch;prerender" }
+    get decks_path, headers: { "Turbo-Frame" => "decks" }
     head dashboard_path
 
     assert_nil @user.reload.search_engine_announced_at
+    get decks_path
+    assert_select ANNOUNCEMENT, count: 1, msg: "still pending, so still shown"
   end
 
-  # A refused form re-renders the whole layout with a 422: an error page, not an announcement.
-  test "a re-rendered form does not spend it" do
-    post decks_path, params: { deck: { name: "" } }
+  test "the acknowledgement records it, and the alert is gone from then on" do
+    delete search_engine_announcement_path
 
-    assert_response :unprocessable_content
-    assert_select "nav.navbar"
-    assert_nil @user.reload.search_engine_announced_at
+    assert_response :no_content
+    assert_not_nil @user.reload.search_engine_announced_at
+
+    get dashboard_path
+    assert_select ANNOUNCEMENT, count: 0
   end
 
-  # The layout renders whole for a frame request and Turbo keeps only the frame, so the alert
-  # would land in markup that is thrown away.
-  test "a Turbo Frame request neither shows nor spends it" do
-    get search_path(q: "ogerpon"), headers: { "Turbo-Frame" => Search::ResultsView::FRAME_ID }
-    get decks_path, headers: { "Turbo-Frame" => "decks" }
+  test "a second acknowledgement writes nothing" do
+    delete search_engine_announcement_path
+    first = @user.reload.search_engine_announced_at
 
+    travel 1.hour do
+      delete search_engine_announcement_path
+    end
+
+    assert_response :no_content
+    assert_equal first, @user.reload.search_engine_announced_at
+  end
+
+  test "the acknowledgement needs a session" do
+    sign_out @user
+
+    delete search_engine_announcement_path
+
+    assert_redirected_to new_user_session_path
     assert_nil @user.reload.search_engine_announced_at
   end
 
@@ -113,8 +109,8 @@ class SearchEngineAnnouncementTest < ActionDispatch::IntegrationTest
   end
 
   # Layouts::ApplicationLayout has two hosts, and the consent screen's controller descends from
-  # Doorkeeper's rather than ApplicationController: a helper missing there is a 500 on that page
-  # and nowhere else.
+  # Doorkeeper's rather than ApplicationController: anything the alert needs that only the first
+  # host provides is a 500 on that page and nowhere else.
   test "the OAuth consent screen renders it without error" do
     application = Doorkeeper::Application.create!(
       name: "Claude", redirect_uri: "https://claude.ai/api/mcp/auth_callback", scopes: "mcp:read mcp:write"

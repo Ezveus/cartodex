@@ -137,6 +137,7 @@ Rails.application.routes.draw do
   # Authenticated routes
   authenticate :user do
     resource :settings, only: [ :show ]
+    resource :search_engine_announcement, only: [ :destroy ]
     resource :mcp_token, only: [ :create, :destroy ]
     resources :connected_apps, only: [ :destroy ]
 

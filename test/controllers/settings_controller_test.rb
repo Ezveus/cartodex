@@ -144,5 +144,7 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#search-engine #search-engine-url", text: "http://www.example.com/search?q=%s"
     assert_select "#search-engine button[data-clipboard-text-value=?]", "http://www.example.com/search?q=%s"
+    # Rewritten to "Ctrl K" off a Mac by search-overlay, like the navbar's own hint.
+    assert_select "#search-engine kbd[data-search-overlay-target=hint]"
   end
 end

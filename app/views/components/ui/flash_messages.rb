@@ -10,7 +10,7 @@ module Ui
           message(flash[:alert], "flash-alert")
         end
 
-        search_engine_announcement if search_engine_announcement?
+        search_engine_announcement if user_signed_in? && current_user.search_engine_announcement_pending?
       end
     end
 
@@ -29,15 +29,22 @@ module Ui
       ) { text }
     end
 
-    # Shown once per member (SearchEngineAnnouncementHost decides, and records it). Persistent,
-    # unlike the other flashes: it carries a link, and a message that removes itself after five
-    # seconds takes the link with it before anyone has read the sentence.
+    # Shown until the browser says it was seen (announcement_controller.js), which it does on
+    # connect — so, once. Persistent, unlike the other flashes: it carries a link, and a message
+    # that removes itself after five seconds takes the link with it before anyone has read the
+    # sentence. Temporary in Turbo's sense: a page restored from the cache must not show it again.
     def search_engine_announcement
       div(
         class: "flash flash-info",
         role: "status",
         aria_live: "polite",
-        data: { controller: "flash", flash_persistent_value: "true", testid: "search-engine-announcement" }
+        data: {
+          controller: "flash announcement",
+          flash_persistent_value: "true",
+          announcement_url_value: search_engine_announcement_path,
+          turbo_temporary: true,
+          testid: "search-engine-announcement"
+        }
       ) do
         span do
           plain "New: search Cartodex straight from your browser's address bar. "

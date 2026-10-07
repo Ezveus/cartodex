@@ -2,8 +2,9 @@ module Search
   # One group of spotlight results: its header, its rows (rendered by the caller's block, since
   # each type has its own path and metadata) and the link to that type's index, pre-filtered.
   class ResultGroup < ApplicationComponent
-    def initialize(key:, label:, records:, total:, index_path:, see_all_label:)
+    def initialize(key:, label:, records:, total:, index_path:, see_all_label:, id_prefix: "spotlight")
       @key = key
+      @id_prefix = id_prefix
       @label = label
       @records = records
       @total = total
@@ -39,7 +40,7 @@ module Search
     end
 
     def header_id
-      "spotlight-group-#{@key}"
+      "#{@id_prefix}-group-#{@key}"
     end
 
     # "DECKS · 3" when everything fits, "DECKS · 5 of 12" when the cap truncated it.

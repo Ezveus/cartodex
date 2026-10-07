@@ -48,32 +48,35 @@ copyable — and short steps for Chrome (and Chromium browsers sharing its setti
 The `%s` is concatenated to `search_url`, never passed through a URL helper, which would escape it
 to `%25s` and hand the member a template no browser substitutes.
 
-### The announcement: one column, claimed once, only by a page that will show it
+### The announcement: one column, spent by the browser once it is on screen
 
 `users.search_engine_announced_at` (datetime, nullable). `nil` means "not announced yet", which is
 every member at deploy time and every account created afterwards — both are "the first session
 after the deploy" for that member.
 
-The alert is shown and the column written **in the same request, and only by a request that will
-actually display it**. Three kinds of request render the layout without the member seeing it, and
-each would burn the announcement silently:
+**Rendering never spends it.** The first version claimed the column while rendering, guarded
+against the responses known not to be shown (Turbo hover prefetch, browser prefetch/prerender,
+frame requests, non-GET). The adversarial review proved one more no guard can see: when a tracked
+asset changes, Turbo **discards** the response of a navigation and reloads the page in full — and
+this very deploy changes the importmap. A member whose tab stayed open across the deploy had the
+announcement claimed by a page that was thrown away, reproduced against a dev server (`UPDATE`
+logged on the first `GET /decks`, full reload, no alert, column set).
 
-- a **Turbo prefetch** (`X-Sec-Purpose: prefetch`): Turbo 8 prefetches every link on hover, and
-  nothing in this app disables it — hovering a navbar link would claim the alert in a response the
-  member never opens;
-- a **Turbo Frame request**: the controllers' layout is a Phlex lambda, so a frame request renders
-  the full layout and Turbo keeps only the frame;
-- anything not `GET`.
+So the server shows the alert while the column is nil, and the alert acknowledges itself:
+`announcement_controller.js` sends `DELETE /search_engine_announcement` when it connects, which
+only happens on a page in the DOM. Every discarded response is covered at once, by construction
+rather than by enumeration. Replayed after the change: discarded `GET /decks`, reload `GET /decks`,
+then the `DELETE` — and the alert on screen.
 
-The claim is an atomic `UPDATE … WHERE search_engine_announced_at IS NULL`, and the alert renders
-only when that update changed one row — two tabs opening at once show it once. It is guarded by the
-in-memory value first, so a member who has seen it costs no write: an unconditional UPDATE on every
-page render would take SQLite's single write lock on every page view, forever.
-
-The decision lives in a controller concern, `SearchEngineAnnouncementHost`, exposed as a helper
-and registered on `ApplicationComponent`, and is included by **both** layout hosts —
-`ApplicationController` and `Oauth::AuthorizationsController` — the same two-host rule as
-`SearchOverlayHost` and `OgPreviewHost`.
+- The write is `User#acknowledge_search_engine_announcement!`: an atomic
+  `UPDATE … WHERE search_engine_announced_at IS NULL`, so concurrent acknowledgements write once,
+  and an in-memory guard so an acknowledged member costs no query. A busy lock leaves it pending
+  (`with_brief_write_wait`, rescued), and the alert shows again on the next page.
+- The trade: at-least-once instead of at-most-once. Two tabs opened before either acknowledges
+  both show it; a failed acknowledgement shows it again. Both are better than an announcement
+  spent unseen.
+- The element is `data-turbo-temporary`, so a page restored from Turbo's cache (Back) neither
+  shows it again nor acknowledges twice.
 
 ### The alert itself
 
@@ -82,8 +85,12 @@ themselves after five seconds (`flash_controller.js`), which is right for "Deck 
 an announcement carrying a link: it carries `data-flash-persistent-value="true"`, which skips the
 timer, and a close button wired to `flash#dismiss`.
 
-It is marked seen when shown, not when clicked: "announce at the first session" is a one-time
-notice, not a nag.
+### Ids on the search page
+
+Once the overlay has searched on `/search`, its panel holds the same rows as the page. Both used
+to derive ids from `spotlight-…`, so every option id existed twice and the page's groups were
+labelled by the overlay's headers. `Search::ResultsList` takes an `id_prefix:` (default
+`spotlight`); the page passes `search-page`.
 
 ## Out of scope
 

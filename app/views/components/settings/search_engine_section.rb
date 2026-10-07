@@ -11,7 +11,8 @@ module Settings
         p(class: "settings-section-lead") do
           plain "Search your decks, cards, tournaments and archetypes from the address bar of " \
                 "Chrome, Vivaldi or any Chromium-based browser — the same search as "
-          kbd { "⌘K" }
+          # search-overlay rewrites every hint target to the platform's key: "Ctrl K" off a Mac.
+          kbd(data: { search_overlay_target: "hint" }) { "⌘K" }
           plain "."
         end
 

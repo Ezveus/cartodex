@@ -20,7 +20,7 @@ module Search
           end
         else
           p(class: "search-page-hint") { "Results for “#{@results.query}”" }
-          div(class: "search-page-results") { render ResultsList.new(results: @results) }
+          div(class: "search-page-results") { render ResultsList.new(results: @results, id_prefix: "search-page") }
         end
       end
     end

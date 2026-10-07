@@ -8,6 +8,10 @@ helper name, the flash markup and the fixtures.
 
 ## Contract
 
+> Superseded for the announcement: the render-time claim and `SearchEngineAnnouncementHost` below
+> were replaced after review by a browser-side acknowledgement — see the spec's announcement
+> section.
+
 - Column `users.search_engine_announced_at :datetime` (nullable, no default).
 - `User#claim_search_engine_announcement!` → `true` exactly once per user; returns `false` without
   issuing an UPDATE when the in-memory value is already set; atomic `update_all … WHERE IS NULL`.
