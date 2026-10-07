@@ -13,6 +13,7 @@ module Settings
         render Ui::PageHeader.new(title: "Settings")
         render Settings::McpTokenSection.new(user: @user, raw_token: @raw_token)
         render Settings::ConnectedAppsSection.new(user: @user)
+        render Settings::SearchEngineSection.new
       end
     end
   end

@@ -157,6 +157,28 @@ class User < ApplicationRecord
     nil
   end
 
+  # True exactly once per member: the request that wins the conditional UPDATE is the one that
+  # shows the announcement, so two tabs opening at once show it once. The in-memory guard comes
+  # first because this runs on every page a member renders — an unconditional UPDATE would take
+  # SQLite's write lock on each of them, forever.
+  #
+  # Best-effort like touch_api_token_usage: a busy lock costs the announcement this page, not the
+  # page itself, and the next page tries again.
+  def claim_search_engine_announcement!
+    return false unless search_engine_announced_at.nil?
+
+    now = Time.current
+    claimed = with_brief_write_wait do
+      self.class.where(id: id, search_engine_announced_at: nil)
+        .update_all(search_engine_announced_at: now) == 1
+    end
+    self.search_engine_announced_at = now
+    clear_attribute_change(:search_engine_announced_at)
+    claimed
+  rescue ActiveRecord::StatementInvalid
+    false
+  end
+
   private
 
   # Caps how long the usage stamp waits for SQLite's write lock. Everything else

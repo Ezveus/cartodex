@@ -44,6 +44,9 @@ Rails.application.routes.draw do
   # concern and keeps ApplicationController's before_action as its only gate.
   get "dashboard", to: "home#dashboard"
   get "search", to: "search#show"
+  # The OpenSearch description behind the layout's <link rel="search">. Public: a browser reads it
+  # before anybody signs in.
+  get "opensearch.xml", to: "opensearch#show", as: :opensearch, defaults: { format: :xml }
 
   resources :decks, only: [ :index, :show, :new, :create, :edit, :update, :destroy ] do
     get :matchups, on: :collection

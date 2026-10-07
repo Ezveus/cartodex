@@ -279,4 +279,50 @@ class UserTest < ActiveSupport::TestCase
 
     assert_nil user.reload.api_token_last_used_at
   end
+
+  test "claim_search_engine_announcement! is true exactly once" do
+    user = User.create!(email: "announce@example.com", password: "password123")
+
+    assert_nil user.search_engine_announced_at
+    assert user.claim_search_engine_announcement!
+    assert_not_nil user.reload.search_engine_announced_at
+    assert_not user.claim_search_engine_announcement!
+  end
+
+  # The win records itself on the instance, so the same request asking again costs nothing.
+  test "claim_search_engine_announcement! issues no query on the instance that just won" do
+    user = User.create!(email: "announce-twice@example.com", password: "password123")
+
+    assert user.claim_search_engine_announcement!
+    assert_equal 0, count_queries { assert_not user.claim_search_engine_announcement! }
+  end
+
+  # Two tabs opened at once load the same member twice, both still nil in memory: only one of
+  # them may show the announcement.
+  test "claim_search_engine_announcement! loses to a claim made by another copy of the member" do
+    user = User.create!(email: "announce-race@example.com", password: "password123")
+    other_tab = User.find(user.id)
+
+    assert user.claim_search_engine_announcement!
+    assert_not other_tab.claim_search_engine_announcement!
+  end
+
+  # This runs on every page a member renders, so once it has been shown it must cost nothing:
+  # an unconditional UPDATE would take SQLite's write lock on every page view.
+  test "claim_search_engine_announcement! issues no query once announced" do
+    user = users(:one)
+    assert_not_nil user.search_engine_announced_at
+
+    assert_equal 0, count_queries { assert_not user.claim_search_engine_announcement! }
+  end
+
+  test "claim_search_engine_announcement! gives the page up rather than fail on a busy database" do
+    user = User.create!(email: "announce-busy@example.com", password: "password123")
+
+    user.define_singleton_method(:with_brief_write_wait) { |*| raise ActiveRecord::StatementTimeout, "database is locked" }
+    assert_not user.claim_search_engine_announcement!
+    user.singleton_class.remove_method(:with_brief_write_wait)
+    assert_nil user.reload.search_engine_announced_at, "a busy page must leave it for the next one"
+    assert user.claim_search_engine_announcement!
+  end
 end

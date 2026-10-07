@@ -11,6 +11,7 @@ module Oauth
     # the only page in the app that would be, which is why oauth_consent_test.rb rendering this
     # screen through the layout is what catches it.
     include OgPreviewHost
+    include SearchEngineAnnouncementHost
 
     # Doorkeeper's controllers descend from ActionController::Base, so Rails'
     # layout lookup walks up to layouts/doorkeeper/application — the *gem's*
