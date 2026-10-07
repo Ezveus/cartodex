@@ -24,8 +24,9 @@ and the promotion of production data (PII) into the dev database, and a refused 
 ended a cleanup unfinished. Do not try them by hand. As soon as step 0 passes, hand over the one
 line `! /Users/matthieuciappara/Documents/perso/cartodex/bin/refresh-from-prod.sh NNN` with `NNN`
 filled in, and carry on with steps 1–2 meanwhile. The script refuses unless the main checkout's `HEAD` is
-`origin/master`, its schema dumps carry no uncommitted change and `bin/rails` boots, all checked
-before production is touched. It stops on the
+the commit production runs (read off the web container's image tag — master may be ahead of an
+undeployed merge), its schema dumps carry no uncommitted change and `bin/rails` boots, all checked
+before anything is written to production. It stops on the
 first failure and ends on the verifications of step 4 — read its output back rather than
 re-running them. **A run that stopped part-way is rerun as is**: it reuses the host's
 `post-pr-NNN` backup once sound, a local archive only when it is byte-identical to that backup,

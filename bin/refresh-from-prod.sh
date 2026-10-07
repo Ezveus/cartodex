@@ -3,7 +3,8 @@
 #   3. take a post-deploy backup on the host, check it, archive it locally, prune older host backups;
 #   4. make that backup the development database and verify it.
 # Usage: bin/refresh-from-prod.sh NNN   (NNN = the PR number)
-# Every local precondition is checked before production is touched, and the host is pruned only
+# Every precondition is checked before anything is written to production (the only one that
+# reaches it reads the deployed commit), and the host is pruned only
 # once the host copy answers `ok` to integrity_check and the local archive is byte-identical to it.
 # A run that stops part-way can be rerun as is: each step reuses what an earlier run left behind.
 set -euo pipefail
@@ -68,10 +69,25 @@ refuse_if_open() {
   fi
 }
 refuse_if_open
-# The schema check after db:migrate compares against HEAD, so HEAD must be what was deployed.
-git fetch -q origin master
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] \
-  || die "HEAD is not origin/master — check out and pull master first (the deploy ships origin/master)"
+# The schema check after db:migrate compares against HEAD, so HEAD must be what was deployed —
+# read off the running image, not assumed from origin/master: deploys are manual, and master can
+# be ahead of production. Kamal tags the image with the deployed commit's full SHA. Read-only.
+DEPLOYED=$(ssh "$HOST" bash -s <<'REMOTE'
+set -euo pipefail
+C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1)
+[ -n "$C" ] || { echo "ERROR: no running web container" >&2; exit 1; }
+docker inspect -f '{{.Config.Image}}' "$C"
+REMOTE
+)
+DEPLOYED=${DEPLOYED##*:}
+[[ "$DEPLOYED" =~ ^[0-9a-f]{40}$ ]] \
+  || die "production runs image tag '$DEPLOYED', not a commit SHA (deployed from an uncommitted tree?) — its schema is unknown"
+if [ "$(git rev-parse HEAD)" != "$DEPLOYED" ]; then
+  git fetch -q origin master
+  [ "$(git rev-parse origin/master)" = "$DEPLOYED" ] \
+    || die "production runs $DEPLOYED, origin/master is $(git rev-parse origin/master) — deploy master first, or wait for the deploy in progress"
+  die "production runs $DEPLOYED (origin/master), HEAD is $(git rev-parse HEAD) — check out and pull master first"
+fi
 # The schema check restores these files from HEAD; uncommitted work in them would be erased.
 for f in $SCHEMA_FILES; do
   git diff --quiet HEAD -- "$f" || die "$f has uncommitted changes — commit or set them aside first"
