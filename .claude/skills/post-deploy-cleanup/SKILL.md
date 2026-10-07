@@ -28,9 +28,12 @@ the commit production runs (read off the web container's image tag — master ma
 undeployed merge), its schema dumps carry no uncommitted change and `bin/rails` boots, all checked
 before anything is written to production. It stops on the
 first failure and ends on the verifications of step 4 — read its output back rather than
-re-running them. **A run that stopped part-way is rerun as is**: it reuses the host's
-`post-pr-NNN` backup once sound, a local archive only when it is byte-identical to that backup,
-and the dev archive an earlier run took; only a completed run refuses a second one. Earlier files
+re-running them. **A run that stopped part-way is rerun as is**: it takes the host's
+`post-pr-NNN` backup afresh every time (one an earlier run left may predate a later deploy), keeps
+a local archive only when it is byte-identical to that backup and sets an older one aside as
+`…-superseded-HHMMSS`, and keeps the dev archive only once production has been promoted over dev
+— until then dev is archived again, since it may have been written to since; only a completed run
+refuses a second one. Earlier files
 are found by PR number whatever their date, so a rerun after midnight still sees them, and two
 local files of one kind for one PR make it refuse until one is moved aside. Sections 3
 and 4 below describe what it does.
@@ -80,11 +83,13 @@ The backup is taken **now, after the deploy** — so it holds the deployed schem
 the PR:
 
 ```bash
-ssh root@cartodex.ezveus.eu 'C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1); docker exec $C sqlite3 /rails/storage/production.sqlite3 ".backup /rails/storage/post-pr-NNN.sqlite3"; docker exec $C sqlite3 /rails/storage/post-pr-NNN.sqlite3 "PRAGMA integrity_check;"; docker cp $C:/rails/storage/post-pr-NNN.sqlite3 /tmp/'
+ssh root@cartodex.ezveus.eu 'C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1); docker exec $C sqlite3 /rails/storage/production.sqlite3 ".backup /rails/storage/post-pr-NNN.sqlite3"; docker exec $C sqlite3 /rails/storage/post-pr-NNN.sqlite3 "PRAGMA integrity_check;"'
 ```
 
 - `integrity_check` must answer `ok`. Use `.backup`, never `cp` (WAL mode can tear a copy).
-- Archive locally as `~/Documents/perso/cartodex-backups/prod-YYYY-MM-DD-post-pr-NNN.sqlite3`.
+- Archive locally as `~/Documents/perso/cartodex-backups/prod-YYYY-MM-DD-post-pr-NNN.sqlite3`,
+  streamed out of the container (`docker exec $C cat …` over ssh), never staged in the host's
+  `/tmp`: a copy left there by a failed transfer is production data nothing ever deletes.
 - Only then delete every **older** backup in `/rails/storage/` (list it first; only
   `production*.sqlite3` must stay). Every backup is kept locally; only the host is pruned.
 
@@ -99,8 +104,11 @@ ssh root@cartodex.ezveus.eu 'C=$(docker ps -q --filter label=service=cartodex --
    every destructive task refuses it otherwise.
 4. `bin/rails db:migrate` — expected to be a no-op, since the backup is post-deploy. If it is
    not, the backup was taken from the wrong moment.
-5. Verify both ends agree on `MAX(version)` **and row counts** (cards, standings, archetypes,
-   decks, tournaments), plus `db:migrate:status` showing zero `down`.
+5. Verify both ends agree on `MAX(version)`, plus `db:migrate:status` showing zero `down` — a
+   disagreement stops the run. Row counts (cards, standings, archetypes, decks, tournaments) are
+   compared against production itself and **reported, not enforced**: rows written since the
+   backup are legitimate, and the backup is taken afresh on every run, so a gap larger than the
+   run's own minutes of traffic is a reason to look before trusting dev.
 
 Step 4 is never skipped: the script always runs it after step 3, even when dev already matched
 production.
@@ -114,4 +122,4 @@ production.
 | Promoting `./tmp/db-backup/` | Not the backup directory: a 2026-08-30 copy predating `tournament_standings` — destroys the imported sample |
 | Skipping `db:environment:set` | Every destructive task refuses the database |
 | Pruning the host before `integrity_check` answers `ok` | The only good backup may be the one just deleted |
-| Committing the `db/schema.rb` / `db/cable_schema.rb` rewrite after step 4's `db:migrate` | Same lines, reordered to prod's physical column order. For each of the two files, restore it with `git show HEAD:<file> > <file>` only when its sorted lines equal `HEAD`'s sorted lines; any other difference is a real change — leave the file alone and look at it |
+| Committing the `db/schema.rb` / `db/queue_schema.rb` / `db/cable_schema.rb` rewrite after step 4's `db:migrate` | Same lines, reordered to prod's physical column order. For each of the three files, restore it with `git show HEAD:<file> > <file>` only when its sorted lines equal `HEAD`'s sorted lines; any other difference is a real change — leave the file alone and look at it |

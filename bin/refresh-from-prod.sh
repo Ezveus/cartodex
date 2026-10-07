@@ -6,12 +6,15 @@
 # Every precondition is checked before anything is written to production (the only one that
 # reaches it reads the deployed commit), and the host is pruned only
 # once the host copy answers `ok` to integrity_check and the local archive is byte-identical to it.
-# A run that stops part-way can be rerun as is: each step reuses what an earlier run left behind.
+# A run that stops part-way can be rerun as is. The host backup is taken afresh on every run, since
+# one an earlier run left may predate a later deploy; a local archive is kept when byte-identical
+# to it, and the dev archive is kept once production has been promoted over dev.
 set -euo pipefail
 
 HOST=root@cartodex.ezveus.eu
 TABLES="cards tournament_standings archetypes decks tournaments"
-SCHEMA_FILES="db/schema.rb db/cable_schema.rb"
+# Every file db:migrate re-dumps in development: one per database development declares.
+SCHEMA_FILES="db/schema.rb db/queue_schema.rb db/cable_schema.rb"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
@@ -41,14 +44,19 @@ shopt -s nullglob
 PROD_ARCHIVE=$(earlier "$ARCHIVE_DIR"/prod-$D-post-pr-"$NNN".sqlite3)
 DEV_ARCHIVE=$(earlier "$ARCHIVE_DIR"/dev-$D-pre-pr-"$NNN".sqlite3)
 DONE_MARKER=$(earlier "$ARCHIVE_DIR"/.refreshed-$D-pr-"$NNN")
+PROMOTED_MARKER=$(earlier "$ARCHIVE_DIR"/.promoted-$D-pr-"$NNN")
 shopt -u nullglob
 PROD_ARCHIVE=${PROD_ARCHIVE:-$ARCHIVE_DIR/prod-$TODAY-post-pr-$NNN.sqlite3}
 # Named after the PR too: two deploys on one day mean two refreshes, and the second must not
 # collide with the first's archive.
 DEV_ARCHIVE=${DEV_ARCHIVE:-$ARCHIVE_DIR/dev-$TODAY-pre-pr-$NNN.sqlite3}
-# Written last, once every verification passed. Its absence beside DEV_ARCHIVE means an earlier
-# run stopped after archiving dev, and the run resumes rather than refusing.
+# Written last, once every verification passed. Its absence means an earlier run stopped part-way,
+# and the run resumes rather than refusing.
 DONE_MARKER=${DONE_MARKER:-$ARCHIVE_DIR/.refreshed-$TODAY-pr-$NNN}
+# Written just before production is copied over dev. Only its presence says dev no longer holds
+# what DEV_ARCHIVE must keep: an archive alone does not, since a run that stopped between the two
+# left dev in use, and it may have been written to since.
+PROMOTED_MARKER=${PROMOTED_MARKER:-$ARCHIVE_DIR/.promoted-$TODAY-pr-$NNN}
 DEV_DB=storage/development.sqlite3
 HOST_BACKUP="post-pr-$NNN.sqlite3"
 
@@ -100,51 +108,53 @@ fi
 echo "ok"
 
 step "3. Host backup $HOST_BACKUP, integrity_check"
-# An existing backup of that name was taken for this PR, after its deploy, by an earlier run that
-# stopped later: it is reused once sound, so a rerun never needs a hand-made rm on the host.
+# Taken afresh even when an earlier run left one of that name: nothing on the host says whether
+# that one predates a later deploy, or hours of traffic, and reusing it promoted exactly such a
+# copy into dev. A fresh one costs a .backup; a stale one costs a dev database that lags production.
 HOST_SHA=$(ssh "$HOST" bash -s -- "$HOST_BACKUP" <<'REMOTE'
 set -euo pipefail
 B=/rails/storage/$1
 C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1)
 [ -n "$C" ] || { echo "ERROR: no running web container" >&2; exit 1; }
-# Taken under a temporary name and renamed only once sound, so $B never exists partial: an
-# interrupted .backup would otherwise be reused, fail integrity_check, and stop every rerun.
-if docker exec "$C" test -e "$B"; then
-  echo "reusing $B, taken by an earlier run" >&2
-  T=$B
-else
-  docker exec "$C" rm -f "$B.part" "$B.part-journal"
-  docker exec "$C" sqlite3 /rails/storage/production.sqlite3 ".backup $B.part"
-  T=$B.part
-fi
-R=$(docker exec "$C" sqlite3 "$T" "PRAGMA integrity_check;" 2>&1 || true)
+# Taken under a temporary name and renamed only once sound, so $B never exists partial.
+docker exec "$C" rm -f "$B.part" "$B.part-journal"
+docker exec "$C" sqlite3 /rails/storage/production.sqlite3 ".backup $B.part"
+R=$(docker exec "$C" sqlite3 "$B.part" "PRAGMA integrity_check;" 2>&1 || true)
 [ "$R" = ok ] || { echo "ERROR: integrity_check on the host answered: $R" >&2; exit 1; }
-[ "$T" = "$B" ] || docker exec "$C" mv "$T" "$B"
+docker exec "$C" mv "$B.part" "$B"
 echo "integrity_check: ok" >&2
 docker exec "$C" sha256sum "$B" | cut -d' ' -f1
 REMOTE
 )
 
 step "3. Local archive $PROD_ARCHIVE"
-if [ -e "$PROD_ARCHIVE" ]; then
-  echo "already present, integrity_check: ok"
+if [ -e "$PROD_ARCHIVE" ] && [ "$(sha "$PROD_ARCHIVE")" = "$HOST_SHA" ]; then
+  echo "already present, identical to the host backup"
 else
-  # Fetched under a temporary name: an interrupted scp leaves a .part, never a truncated archive.
-  ssh "$HOST" bash -s -- "$HOST_BACKUP" <<'REMOTE'
+  # Streamed straight out of the container, never staged on the host: a copy left in the host's
+  # /tmp by a failed transfer is production data that nothing would ever delete. Fetched under a
+  # temporary name: an interrupted transfer leaves a .part, never a truncated archive.
+  ssh "$HOST" bash -s -- "$HOST_BACKUP" > "$PROD_ARCHIVE.part" <<'REMOTE' \
+    || die "transfer of $HOST_BACKUP interrupted — host left unpruned, rerun"
 set -euo pipefail
 C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1)
-docker cp "$C:/rails/storage/$1" "/tmp/$1"
+[ -n "$C" ] || { echo "ERROR: no running web container" >&2; exit 1; }
+docker exec "$C" cat "/rails/storage/$1"
 REMOTE
-  scp -q "$HOST:/tmp/$HOST_BACKUP" "$PROD_ARCHIVE.part"
-  ssh "$HOST" rm -f "/tmp/$HOST_BACKUP"
   R=$(integrity "$PROD_ARCHIVE.part")
   [ "$R" = ok ] || die "integrity_check on the fetched copy answered: $R — host left unpruned, rerun"
+  [ "$(sha "$PROD_ARCHIVE.part")" = "$HOST_SHA" ] \
+    || die "the fetched copy differs from the host's $HOST_BACKUP — host left unpruned, rerun"
+  if [ -e "$PROD_ARCHIVE" ]; then
+    # An earlier run's archive of an older backup. Every backup is kept locally, so it is set
+    # aside under a name the PR-number lookup above no longer matches, never overwritten.
+    SUPERSEDED=${PROD_ARCHIVE%.sqlite3}-superseded-$(date +%H%M%S).sqlite3
+    mv "$PROD_ARCHIVE" "$SUPERSEDED"
+    echo "earlier archive of an older backup kept as $SUPERSEDED"
+  fi
   mv "$PROD_ARCHIVE.part" "$PROD_ARCHIVE"
   echo "integrity_check: ok"
 fi
-# A reused archive must be the host backup, byte for byte: same name is not same content.
-[ "$(sha "$PROD_ARCHIVE")" = "$HOST_SHA" ] \
-  || die "$PROD_ARCHIVE differs from the host's $HOST_BACKUP — move it aside and rerun; host left unpruned"
 echo "identical to the host backup (sha256 $HOST_SHA)"
 
 step "3. Host prune (everything in /rails/storage but production* and $HOST_BACKUP)"
@@ -165,18 +175,22 @@ docker exec -e KEEP="$1" "$C" sh -c '
 REMOTE
 
 step "4. Archive the current dev database"
-if [ -e "$DEV_ARCHIVE" ]; then
-  # An earlier run archived dev and stopped later; what is in $DEV_DB now is its promoted copy.
-  echo "already archived by an earlier run: $DEV_ARCHIVE"
+if [ -e "$PROMOTED_MARKER" ]; then
+  # An earlier run promoted production over dev and stopped later: $DEV_DB holds production now,
+  # and archiving it would overwrite the only copy of what dev was.
+  echo "an earlier run already promoted production over $DEV_DB; dev is archived as $DEV_ARCHIVE"
 elif [ -e "$DEV_DB" ]; then
+  # Archived again even when an earlier run left DEV_ARCHIVE: that run stopped before the
+  # promotion, so $DEV_DB is still dev, and whatever was written to it since exists nowhere else.
   # .backup, not cp: a -wal beside the file may hold pages cp would leave behind. Written under a
-  # temporary name and checked before it takes the final one: a rerun reads the archive's presence
-  # as done, and the next step overwrites the only other copy of dev.
+  # temporary name and checked before it takes the final one: the next step overwrites the only
+  # other copy of dev.
+  [ ! -e "$DEV_ARCHIVE" ] || echo "replacing $DEV_ARCHIVE: an earlier run archived dev but never promoted over it"
   rm -f "$DEV_ARCHIVE.part"
   sqlite3 "$DEV_DB" ".backup '$DEV_ARCHIVE.part'"
   R=$(integrity "$DEV_ARCHIVE.part")
   [ "$R" = ok ] || die "integrity_check on the dev archive answered: $R — $DEV_DB left untouched, rerun"
-  mv "$DEV_ARCHIVE.part" "$DEV_ARCHIVE"
+  mv -f "$DEV_ARCHIVE.part" "$DEV_ARCHIVE"
   echo "$DEV_ARCHIVE, integrity_check: ok"
 else
   echo "no $DEV_DB, nothing to archive"
@@ -186,16 +200,26 @@ step "4. Promote the backup to $DEV_DB"
 # Again: the remote steps take minutes, and a process that opened dev meanwhile would keep writing
 # to its own -wal through the cp, losing those writes and reading pages that no longer exist.
 refuse_if_open
+# Before the cp, not after: once the cp has begun, $DEV_DB no longer holds what the archive must
+# keep, and a run stopped between the two would otherwise archive production over it on a rerun.
+touch "$PROMOTED_MARKER"
 cp "$PROD_ARCHIVE" "$DEV_DB"
 rm -f "$DEV_DB-wal" "$DEV_DB-shm"
 bin/rails db:environment:set RAILS_ENV=development
 
 # Every version, not MAX: a pending migration older than the latest leaves MAX where it was.
 versions() { sqlite3 "$1" "SELECT version FROM schema_migrations ORDER BY version;"; }
+# db:migrate re-dumps every schema file, and a run that stops before the step below would leave
+# them rewritten — which the preconditions then refuse on every rerun. Restoring from HEAD is safe
+# for the same reason it is below: the preconditions refused any uncommitted change in them.
+restore_schema_files() { for f in $SCHEMA_FILES; do git show "HEAD:$f" > "$f"; done; }
 BEFORE=$(versions "$DEV_DB")
-bin/rails db:migrate
+bin/rails db:migrate || { restore_schema_files; die "db:migrate failed — schema dumps restored from HEAD"; }
 APPLIED=$(comm -13 <(printf '%s\n' "$BEFORE") <(versions "$DEV_DB") | tr '\n' ' ')
-[ -z "$APPLIED" ] || die "db:migrate was not a no-op (applied ${APPLIED% }): the backup predates the deploy"
+if [ -n "$APPLIED" ]; then
+  restore_schema_files
+  die "db:migrate was not a no-op (applied ${APPLIED% }): the backup predates the deploy — schema dumps restored from HEAD"
+fi
 AFTER=$(sqlite3 "$DEV_DB" "SELECT MAX(version) FROM schema_migrations;")
 
 step "4. Schema dumps rewritten by db:migrate"
