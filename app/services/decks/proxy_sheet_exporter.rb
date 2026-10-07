@@ -9,6 +9,7 @@ require "vips"
 class Decks::ProxySheetExporter < ApplicationService
   class NothingToPrint < StandardError; end
   class TooManyPrintings < StandardError; end
+  class TooManyCopies < StandardError; end
 
   NOTHING_MISSING = "Every copy in this deck is backed by your collection: there are no proxies to print.".freeze
   EMPTY_DECK = "This deck has no cards to print.".freeze
@@ -30,16 +31,20 @@ class Decks::ProxySheetExporter < ApplicationService
   # A legal deck holds at most 60 distinct printings and the largest measured holds 37. The cap is
   # what bounds the number of outbound fetches one web request can make.
   MAX_PRINTINGS = 60
+  # DeckCard only validates quantity > 0, so without this a shared deck holding one card at 100000
+  # copies is 11112 pages built inside a web request. Two decks' worth (the largest measured holds
+  # 60 copies, the largest row 19) is 14 pages.
+  MAX_COPIES = 120
 
   # The images are fetched inside the web request, so they fail fast (Og::Renderer's numbers, for
   # the same reason) and in parallel: 37 serial fetches measured 2.3 s, 8 threads 0.5 s.
   FETCH_THREADS = 8
   ART_OPEN_TIMEOUT = 3
   ART_READ_TIMEOUT = 5
-  # The timeouts bound one attempt, not one image: Net::HTTP retries an idempotent GET once after a
-  # ReadTimeout, so a CDN that accepts and never answers costs 10 s an image (measured) — about 50 s
-  # of a Puma thread for a 37-printing deck. The deadline bounds the whole sheet instead: past it the
-  # request stops waiting, and whatever has not arrived prints as a placeholder. A healthy sheet's
+  # With Net::HTTP's own retry turned off (max_retries: 0 — it doubled these to 10 s an image when
+  # measured), one fetch lasts at most 8 s. The deadline bounds the whole sheet, which is up to eight
+  # rounds of fetches: past it the request stops waiting and late arts print as placeholders. A
+  # thread still fetching then finishes within one fetch's 8 s, on its own. A healthy sheet's
   # fetches take 0.5 s.
   FETCH_DEADLINE = 8
 
@@ -56,8 +61,15 @@ class Decks::ProxySheetExporter < ApplicationService
   end
 
   def call
-    slots = self.slots
-    raise NothingToPrint, (@missing_only && @deck.deck_cards.any? ? NOTHING_MISSING : EMPTY_DECK) if slots.empty?
+    # One read of the rows, fresh: the cap, the slots and the refusal all answer from it.
+    rows = @deck.deck_cards.includes(:card).to_a
+    total = rows.sum { |deck_card| copies(deck_card) }
+    if total > MAX_COPIES
+      raise TooManyCopies, "A proxy sheet prints at most #{MAX_COPIES} cards; this one would hold #{total}."
+    end
+
+    slots = slots(rows)
+    raise NothingToPrint, (@missing_only && rows.any? ? NOTHING_MISSING : EMPTY_DECK) if slots.empty?
 
     cards = slots.map(&:card).uniq
     if cards.size > MAX_PRINTINGS
@@ -73,10 +85,9 @@ class Decks::ProxySheetExporter < ApplicationService
   # One entry per copy to print: Pokémon, Trainer, Energy, then name, then printing (set, then number
   # read as a number, so 9 comes before 10). Not quite the
   # deck page's order, which also splits Trainers by subtype; a sheet is cut up anyway.
-  def slots
-    @deck.deck_cards.includes(:card).to_a
-         .sort_by { |dc| [ type_rank(dc.card), dc.card.name, dc.card.set_name.to_s, dc.card.set_number.to_i, dc.card.set_number.to_s ] }
-         .flat_map { |dc| [ dc ] * copies(dc) }
+  def slots(rows)
+    rows.sort_by { |dc| [ type_rank(dc.card), dc.card.name, dc.card.set_name.to_s, dc.card.set_number.to_i, dc.card.set_number.to_s ] }
+        .flat_map { |dc| [ dc ] * copies(dc) }
   end
 
   def type_rank(card)
@@ -117,18 +128,15 @@ class Decks::ProxySheetExporter < ApplicationService
     lock.synchronize { arts.dup }
   end
 
-  # The loader is named from the URL's extension, never sniffed — Og::Renderer#load_art explains
-  # why. Anything that is not an image, or not there, prints as a placeholder. The rescue is broad on
-  # purpose, unlike Og::Renderer's: HttpFetcher lets some Net::HTTP errors through (a malformed
-  # status line raises Net::HTTPBadResponse), and here one escaping image would fail the whole sheet
-  # rather than cost one card.
+  # The loader is named from the URL's extension, never sniffed — ArtLoader explains why. Anything
+  # that is not an image, or not there, prints as a placeholder. The rescue is broad on purpose,
+  # unlike Og::Renderer's: HttpFetcher lets some Net::HTTP errors through (a malformed status line
+  # raises Net::HTTPBadResponse), and here one escaping image would fail the whole sheet rather than
+  # cost one card.
   def fetch_art(url)
-    bytes = HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT, read_timeout: ART_READ_TIMEOUT)
-    image = case File.extname(URI.parse(url).path).downcase
-    when ".png" then Vips::Image.pngload_buffer(bytes)
-    when ".jpg", ".jpeg" then Vips::Image.jpegload_buffer(bytes)
-    else return nil
-    end
+    bytes = HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT, read_timeout: ART_READ_TIMEOUT, max_retries: 0)
+    # sRGB first, so that the three-band white below matches whatever the art arrived as.
+    image = ArtLoader.load(bytes, url).colourspace(:srgb)
     image = image.flatten(background: [ 255, 255, 255 ]) if image.has_alpha?
     image.jpegsave_buffer(Q: JPEG_QUALITY)
   rescue StandardError => e

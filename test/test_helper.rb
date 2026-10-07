@@ -55,14 +55,18 @@ module ActiveSupport
 
     # Swaps a constant for the duration of the block. Safe under this suite's parallelism, which
     # forks processes rather than threads.
+    # The original is read before the `begin`, so a misspelt name raises its own NameError rather
+    # than a second one from the restore.
     def with_constant(klass, name, value)
-      original = klass.const_get(name)
-      klass.send(:remove_const, name)
-      klass.const_set(name, value)
-      yield
-    ensure
-      klass.send(:remove_const, name)
-      klass.const_set(name, original)
+      original = klass.const_get(name, false)
+      begin
+        klass.send(:remove_const, name)
+        klass.const_set(name, value)
+        yield
+      ensure
+        klass.send(:remove_const, name) if klass.const_defined?(name, false)
+        klass.const_set(name, original)
+      end
     end
 
     # Grows the user's collection by FLAT_COST_EXTRA_CARDS: the "large" input of a

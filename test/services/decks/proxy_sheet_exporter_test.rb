@@ -179,16 +179,49 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
     end
   end
 
+  # DeckCard only validates quantity > 0, so without a cap one card at 100000 copies is 11112 pages.
+  test "refuses a sheet past MAX_COPIES cards, before fetching anything, and the cap is 120" do
+    assert_equal 120, Decks::ProxySheetExporter::MAX_COPIES
+
+    with_constant(Decks::ProxySheetExporter, :MAX_COPIES, 5) do
+      with_art(cards(:honedge), quantity: 3)
+      with_art(cards(:doublade), quantity: 2)
+
+      # Exactly the cap: printed.
+      assert_equal 5, image_placements(Decks::ProxySheetExporter.call(@deck)).size
+
+      @deck.deck_cards.find_by!(card: cards(:doublade)).update!(quantity: 3)
+      @fetched.clear
+
+      error = assert_raises(Decks::ProxySheetExporter::TooManyCopies) { Decks::ProxySheetExporter.call(@deck) }
+      assert_match(/at most 5 cards; this one would hold 6/, error.message)
+      assert_empty @fetched
+    end
+  end
+
+  # The cap counts what this sheet would print, so a physical deck mostly backed by the collection
+  # still gets its missing-copies sheet.
+  test "the copies cap counts the copies the style prints, not the deck's" do
+    @deck.update!(physical: true)
+    with_constant(Decks::ProxySheetExporter, :MAX_COPIES, 2) do
+      with_art(cards(:honedge), quantity: 4, owned_copies: 3)
+
+      assert_equal 1, image_placements(Decks::ProxySheetExporter.call(@deck, missing_only: true)).size
+      assert_raises(Decks::ProxySheetExporter::TooManyCopies) { Decks::ProxySheetExporter.call(@deck) }
+    end
+  end
+
   # --- fetching ------------------------------------------------------------
 
-  test "fetches each distinct printing once, with Og::Renderer's short timeouts" do
+  test "fetches each distinct printing once, with short timeouts and no retry" do
     with_art(cards(:honedge), quantity: 4)
     with_art(cards(:doublade), quantity: 3)
 
     Decks::ProxySheetExporter.call(@deck)
 
     assert_equal [ cards(:doublade).image_url, cards(:honedge).image_url ].sort, @fetched.map(&:first).sort
-    @fetched.each { |_url, options| assert_equal({ open_timeout: 3, read_timeout: 5 }, options) }
+    # No retry: Net::HTTP's own would make each of these 10 s on a hung CDN.
+    @fetched.each { |_url, options| assert_equal({ open_timeout: 3, read_timeout: 5, max_retries: 0 }, options) }
   end
 
   test "fetches in parallel, at most eight at a time" do
@@ -288,6 +321,21 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
 
     assert_equal 1, image_placements(pdf).size
     assert_empty placeholder_frames(pdf)
+  end
+
+  # The flatten's background is three bands, so the art is moved to sRGB first; a grey art then
+  # reaches Prawn as RGB like every other one.
+  test "a grey art with transparency is drawn as an RGB JPEG" do
+    grey = (Vips::Image.black(46, 64) + 90).cast(:uchar)
+    alpha = (Vips::Image.black(46, 64) + 255).cast(:uchar).draw_rect(0, 0, 0, 12, 12, fill: true)
+    with_art(cards(:honedge), quantity: 1, bytes: grey.bandjoin(alpha).pngsave_buffer)
+
+    pdf = Decks::ProxySheetExporter.call(@deck)
+
+    assert_equal 1, image_placements(pdf).size
+    art = embedded_images(pdf).values.sole
+    assert_equal 3, art.bands
+    assert art.getpoint(3, 3).all? { _1 >= 220 }, "the transparent corner is not white: #{art.getpoint(3, 3)}"
   end
 
   test "bytes that are not an image print a placeholder rather than failing the sheet" do

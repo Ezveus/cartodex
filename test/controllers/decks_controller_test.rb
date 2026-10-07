@@ -1237,6 +1237,16 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_match(/1 different printings/, flash[:alert])
   end
 
+  test "a sheet past the copies cap is refused with the reason" do
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: Decks::ProxySheetExporter::MAX_COPIES + 1)
+
+    get proxy_sheet_deck_path(@deck)
+
+    assert_redirected_to deck_path(@deck)
+    assert_match(/at most #{Decks::ProxySheetExporter::MAX_COPIES} cards/, flash[:alert])
+  end
+
   test "a stranger gets a shared deck's whole proxy sheet and never the missing one" do
     @deck.update!(shared: true, physical: true)
     @deck.deck_cards.destroy_all

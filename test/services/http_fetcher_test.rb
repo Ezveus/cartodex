@@ -1,4 +1,5 @@
 require "test_helper"
+require "socket"
 
 # HttpFetcher is the single choke point for every request this app makes to another site: the card
 # scraper, the set importer, the Limitless standings import and the public image proxy all go
@@ -8,6 +9,31 @@ class HttpFetcherTest < ActiveSupport::TestCase
   # standings import validates its Limitless deck id against /\A\d+\z/ before building one, and
   # that check is tested where it lives — but a caller that forgets is exactly what this is for,
   # and Net::HTTP must never be handed a scheme it was not meant to open.
+  # Net::HTTP retries an idempotent GET once on its own after a read timeout, so the read timeout
+  # bounds one attempt rather than one fetch. Measured against a host that accepts and never
+  # answers: two connections, twice the wait. `max_retries: 0` is what the image fetches inside a
+  # web request pass; the default stays Net::HTTP's, for the scrapers.
+  test "max_retries: 0 makes one attempt against a host that never answers; the default makes two" do
+    assert_equal 1, HttpFetcher::MAX_RETRIES
+
+    [ [ 0, 1 ], [ HttpFetcher::MAX_RETRIES, 2 ] ].each do |retries, expected_connections|
+      server = TCPServer.new("127.0.0.1", 0)
+      accepted = []
+      acceptor = Thread.new { loop { accepted << server.accept } }
+      url = "http://127.0.0.1:#{server.addr[1]}/art.png"
+
+      assert_raises(HttpFetcher::FetchError) do
+        HttpFetcher.call(url, open_timeout: 1, read_timeout: 0.2, max_retries: retries)
+      end
+
+      assert_equal expected_connections, accepted.size, "max_retries: #{retries}"
+    ensure
+      acceptor&.kill
+      accepted&.each(&:close)
+      server&.close
+    end
+  end
+
   test "refuses a URL that is not HTTP" do
     [ "ftp://example.com/x", "file:///etc/passwd", "javascript:alert(1)", "/decks/280/results" ].each do |url|
       error = assert_raises(HttpFetcher::FetchError, "#{url} should have been refused") { HttpFetcher.call(url) }

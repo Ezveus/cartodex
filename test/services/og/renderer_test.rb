@@ -267,6 +267,8 @@ class Og::RendererTest < ActiveSupport::TestCase
     @fetch_options.each do |options|
       assert_equal Og::Renderer::ART_OPEN_TIMEOUT, options[:open_timeout]
       assert_equal Og::Renderer::ART_READ_TIMEOUT, options[:read_timeout]
+      # Net::HTTP's own retry would double both on a host that accepts and never answers.
+      assert_equal 0, options[:max_retries]
     end
     assert_operator Og::Renderer::ART_OPEN_TIMEOUT, :<, HttpFetcher::OPEN_TIMEOUT
     assert_operator Og::Renderer::ART_READ_TIMEOUT, :<, HttpFetcher::READ_TIMEOUT

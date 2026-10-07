@@ -60,20 +60,27 @@ already in the production image and in CI for `Og::Renderer`.
 - **A member action of its own, `GET /decks/:id/proxy_sheet`**, not a third `style` of `#export`.
   It is the first export that makes outbound requests, and `rate_limit` is keyed by action: sharing
   `"decks-export"` would merge its budget with the clipboard exports. Its own limit,
-  `"decks-proxy-sheet"`, is 10/min per IP for visitors (a click, never a prefetch — the link carries
-  `data-turbo="false"`), and the owner is not throttled, like every other limit here. The missing
-  style is `?missing=1`.
+  `"decks-proxy-sheet"`, is 10/min (a click, never a prefetch — the link carries
+  `data-turbo="false"`) and, unlike the other limits on this controller, **exempts nobody**: keyed by
+  account when signed in, by address otherwise. A member looping on a shared deck would otherwise
+  stall the five Puma threads unthrottled (found in review). The refusal is a redirect to the deck
+  with an alert, since a bare 429 on a plain download leaves a blank page. The missing style is
+  `?missing=1`.
 - **The lookup is the existing unscoped shape**, `Deck.find_by!(key:)` then `authorize` on the next
   line — the deck-identity rule, sixth occurrence after `#show`, `#export`, `#odds`, `#duplicate`
   and `#compare`.
 - **At most `MAX_PRINTINGS = 60` distinct printings.** A legal deck cannot exceed 60, the largest
   measured is 37; beyond it the request is refused with an alert rather than fetching hundreds of
-  images inside a web request.
+  images inside a web request. **At most `MAX_COPIES = 120` copies**, counted in the style being
+  printed: `DeckCard` only validates `quantity > 0`, so one card at 100000 copies would otherwise be
+  11112 pages built in a request (found in review). The largest deck measured holds 60.
 - **Fetches use `Og::Renderer`'s short timeouts (3 s open, 5 s read) on a pool of 8 threads.** The
   threads touch no Active Record: URLs are read before the pool starts. Those timeouts bound one
   attempt, and Net::HTTP retries an idempotent GET once after a read timeout, so a hung CDN costs
-  10 s an image (measured in review) — ~50 s for a 37-printing deck. **`FETCH_DEADLINE = 8` s bounds
-  the whole sheet**: past it the request stops waiting and late arts print as placeholders.
+  10 s an image (measured in review) — ~50 s for a 37-printing deck. Each fetch passes
+  `max_retries: 0` to `HttpFetcher`, so one lasts at most 8 s, and **`FETCH_DEADLINE = 8` s bounds
+  the whole sheet** (up to eight rounds of fetches): past it the request stops waiting, late arts
+  print as placeholders, and a thread still fetching ends within one fetch.
 - **Any error fetching or decoding one image is that image's placeholder**, not the sheet's 500:
   `HttpFetcher` lets `Net::HTTPBadResponse` through, measured in review.
 - **A failed image prints a placeholder, not an error.** The slot gets a thin frame with the card's
