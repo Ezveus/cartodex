@@ -1,7 +1,7 @@
 module Decks
   # The deck page's Export menu, on the owner's page and on the public one. The five public
-  # items are identical in both; three more are the owner's alone, and a visitor's request for
-  # any of them 404s: the tournament PDF, which reads one of their tournament profiles
+  # items are identical in both; three more are the owner's alone, and a signed-in stranger's
+  # request for any of them 404s (a visitor's is sent to sign in): the tournament PDF, which reads one of their tournament profiles
   # (DeckPolicy#tournament_pdf?), and the Cardmarket wishlist and the proxy sheet netted of the
   # copies the deck already backs (#208), which read their collection
   # (DeckPolicy#cardmarket_missing?, #proxy_sheet_missing?).

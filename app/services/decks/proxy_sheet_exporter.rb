@@ -36,6 +36,12 @@ class Decks::ProxySheetExporter < ApplicationService
   FETCH_THREADS = 8
   ART_OPEN_TIMEOUT = 3
   ART_READ_TIMEOUT = 5
+  # The timeouts bound one attempt, not one image: Net::HTTP retries an idempotent GET once after a
+  # ReadTimeout, so a CDN that accepts and never answers costs 10 s an image (measured) — about 50 s
+  # of a Puma thread for a 37-printing deck. The deadline bounds the whole sheet instead: past it the
+  # request stops waiting, and whatever has not arrived prints as a placeholder. A healthy sheet's
+  # fetches take 0.5 s.
+  FETCH_DEADLINE = 8
 
   # Prawn decodes a PNG with transparency in pure Ruby to split its alpha (~63 ms an image, 2.35 s
   # for a 37-printing deck) and embeds a JPEG as it stands, so every art is re-encoded first.
@@ -64,7 +70,8 @@ class Decks::ProxySheetExporter < ApplicationService
 
   private
 
-  # One entry per copy to print, in the deck page's order.
+  # One entry per copy to print: Pokémon, Trainer, Energy, then name, then printing. Not quite the
+  # deck page's order, which also splits Trainers by subtype; a sheet is cut up anyway.
   def slots
     @deck.deck_cards.includes(:card).to_a
          .sort_by { |dc| [ type_rank(dc.card), dc.card.name, dc.card.set_name.to_s, dc.card.set_number.to_s ] }
@@ -84,26 +91,36 @@ class Decks::ProxySheetExporter < ApplicationService
   end
 
   # card id => JPEG bytes, or no key when the art could not be had. URLs are read before the
-  # threads start, so no thread touches Active Record.
+  # threads start, so no thread touches Active Record. A thread still waiting at the deadline is left
+  # to finish on its own — it holds a socket, not the request — and its answer is simply not read.
   def fetch_arts(cards)
     queue = Queue.new
     cards.each { |card| queue << [ card.id, card.image_url ] if card.image_url.present? }
     queue.close
 
-    Array.new([ FETCH_THREADS, queue.size ].min) do
+    arts = {}
+    lock = Mutex.new
+    stop = false
+    threads = Array.new([ FETCH_THREADS, queue.size ].min) do
       Thread.new do
-        arts = {}
-        while (id, url = queue.pop)
+        while !stop && (id, url = queue.pop)
           jpeg = fetch_art(url)
-          arts[id] = jpeg if jpeg
+          lock.synchronize { arts[id] = jpeg } if jpeg
         end
-        arts
       end
-    end.map(&:value).reduce({}, :merge)
+    end
+
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + FETCH_DEADLINE
+    threads.each { |thread| thread.join([ deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC), 0 ].max) }
+    stop = true
+    lock.synchronize { arts.dup }
   end
 
   # The loader is named from the URL's extension, never sniffed — Og::Renderer#load_art explains
-  # why. Anything that is not an image, or not there, prints as a placeholder.
+  # why. Anything that is not an image, or not there, prints as a placeholder. The rescue is broad on
+  # purpose, unlike Og::Renderer's: HttpFetcher lets some Net::HTTP errors through (a malformed
+  # status line raises Net::HTTPBadResponse), and here one escaping image would fail the whole sheet
+  # rather than cost one card.
   def fetch_art(url)
     bytes = HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT, read_timeout: ART_READ_TIMEOUT)
     image = case File.extname(URI.parse(url).path).downcase
@@ -113,7 +130,8 @@ class Decks::ProxySheetExporter < ApplicationService
     end
     image = image.flatten(background: [ 255, 255, 255 ]) if image.has_alpha?
     image.jpegsave_buffer(Q: JPEG_QUALITY)
-  rescue HttpFetcher::FetchError, Vips::Error, URI::InvalidURIError
+  rescue StandardError => e
+    Rails.logger.warn "Proxy sheet: no art for #{url} (#{e.class}: #{e.message})"
     nil
   end
 

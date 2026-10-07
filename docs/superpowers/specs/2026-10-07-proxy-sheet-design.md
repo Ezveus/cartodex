@@ -30,8 +30,8 @@ The image is stretched to the slot, not letterboxed: Limitless's art is 460 × 6
 slot 0.706, a 1.8 % distortion nobody can see — while a letterbox would leave a white strip inside a
 card that is being cut to its edge.
 
-Order is the deck page's: Pokémon, Trainer, Energy (`Decks::Comparator::TYPE_ORDER`), then name, then
-the printing, each copy repeated `quantity` times.
+Order is Pokémon, Trainer, Energy (`Decks::Comparator::TYPE_ORDER`), then name, then the printing,
+each copy repeated `quantity` times — close to the deck page's, which also splits Trainers by subtype.
 
 The PDF must be printed at **actual size** — any "fit to page" setting scales the cards. The menu
 item says so in its label's tooltip; nothing in a PDF can enforce it.
@@ -70,7 +70,12 @@ already in the production image and in CI for `Og::Renderer`.
   measured is 37; beyond it the request is refused with an alert rather than fetching hundreds of
   images inside a web request.
 - **Fetches use `Og::Renderer`'s short timeouts (3 s open, 5 s read) on a pool of 8 threads.** The
-  threads touch no Active Record: URLs are read before the pool starts.
+  threads touch no Active Record: URLs are read before the pool starts. Those timeouts bound one
+  attempt, and Net::HTTP retries an idempotent GET once after a read timeout, so a hung CDN costs
+  10 s an image (measured in review) — ~50 s for a 37-printing deck. **`FETCH_DEADLINE = 8` s bounds
+  the whole sheet**: past it the request stops waiting and late arts print as placeholders.
+- **Any error fetching or decoding one image is that image's placeholder**, not the sheet's 500:
+  `HttpFetcher` lets `Net::HTTPBadResponse` through, measured in review.
 - **A failed image prints a placeholder, not an error.** The slot gets a thin frame with the card's
   name and `SET NUMBER`, so the sheet is still usable and the reader sees which card failed before
   printing. A failed request (whole PDF refused) would waste the 36 images that did arrive.

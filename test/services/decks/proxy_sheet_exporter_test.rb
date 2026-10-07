@@ -210,6 +210,39 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
     assert_equal [ Thread.current ], threads.uniq
   end
 
+  # A hung CDN costs 10 s an image through Net::HTTP's own retry; the sheet must not wait for it.
+  test "a fetch still running at the deadline prints a placeholder instead of holding the request" do
+    with_art(cards(:honedge), quantity: 1)
+    slow = with_art(cards(:doublade), quantity: 1)
+    fast = @arts[cards(:honedge).image_url]
+    stub_fetch do |url|
+      sleep 3 if url == slow.image_url
+      fast
+    end
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    pdf = with_constant(Decks::ProxySheetExporter, :FETCH_DEADLINE, 0.3) { Decks::ProxySheetExporter.call(@deck) }
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.5, "the sheet waited for the hung fetch"
+    assert_equal 1, image_placements(pdf).size
+    assert_equal 1, placeholder_frames(pdf).size
+  end
+
+  # HttpFetcher maps timeouts and refused connections to FetchError but lets a malformed response
+  # through; inside a fetch thread that would re-raise from Thread#value and fail every card.
+  test "an error HttpFetcher does not map still costs one card, not the sheet" do
+    with_art(cards(:honedge), quantity: 1)
+    broken = with_art(cards(:doublade), quantity: 1)
+    fine = @arts[cards(:honedge).image_url]
+    stub_fetch { |url| url == broken.image_url ? raise(Net::HTTPBadResponse, "wrong status line") : fine }
+
+    pdf = Decks::ProxySheetExporter.call(@deck)
+
+    assert_equal 1, image_placements(pdf).size
+    assert_equal 1, placeholder_frames(pdf).size
+  end
+
   # --- conversion ----------------------------------------------------------
 
   # The real art is a palette PNG with a tRNS chunk, transparent at the rounded corners. Prawn
@@ -311,6 +344,10 @@ class Decks::ProxySheetExporterTest < ActiveSupport::TestCase
         assert grid_ys.any? { (_1 - y1).abs < 0.01 }, "a horizontal mark off every grid line: #{label}"
         assert [ x1, x2 ].max <= GRID_LEFT + 0.01 || [ x1, x2 ].min >= GRID_RIGHT - 0.01, "a mark crosses the cards: #{label}"
       end
+      # A mark that touches the grid shows on a card cut a hair inside its line.
+      nearest = (x1 - x2).abs < 0.01 ? [ y1, y2 ].map { |y| [ (y - GRID_BOTTOM).abs, (y - GRID_TOP).abs ].min }.min
+                                      : [ x1, x2 ].map { |x| [ (x - GRID_LEFT).abs, (x - GRID_RIGHT).abs ].min }.min
+      assert_operator nearest, :>=, 1 / 2.54 * 72 / 10, "a mark starts less than 1 mm from the grid: #{label}"
     end
   end
 

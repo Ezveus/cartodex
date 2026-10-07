@@ -1249,6 +1249,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     get proxy_sheet_deck_path(@deck)
     assert_response :success
     assert_equal "application/pdf", response.media_type
+
+    # Only "1" asks for the missing style; anything else is the whole sheet, not a refusal.
+    get proxy_sheet_deck_path(@deck, missing: "0")
+    assert_response :success
   end
 
   # The lookup is unscoped, so `authorize` has to come before anything that costs: a refused reader
