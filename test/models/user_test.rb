@@ -322,7 +322,9 @@ class UserTest < ActiveSupport::TestCase
     user.define_singleton_method(:with_brief_write_wait) { |*| raise ActiveRecord::StatementTimeout, "database is locked" }
     assert_not user.claim_search_engine_announcement!
     user.singleton_class.remove_method(:with_brief_write_wait)
-    assert_nil user.reload.search_engine_announced_at, "a busy page must leave it for the next one"
+    # Neither the row nor this instance may record a claim that did not happen.
+    assert_nil user.search_engine_announced_at, "a busy page must leave it for the next one"
+    assert_nil User.find(user.id).search_engine_announced_at
     assert user.claim_search_engine_announcement!
   end
 end

@@ -12,8 +12,13 @@ class OpensearchControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Cartodex", doc.at("ShortName").text
     url = doc.at("Url")
     assert_equal "text/html", url["type"]
+    assert_equal "get", url["method"], "the route answers GET only"
     # Literal braces: Nokogiri must not have escaped the placeholder the browser substitutes.
     assert_equal "http://www.example.com/search?q={searchTerms}", url["template"]
+
+    image = doc.at("Image").text
+    assert_equal "http://www.example.com/icon-32.png", image
+    assert_path_exists Rails.public_path.join(URI(image).path.delete_prefix("/"))
   end
 
   # Chrome ignores the autodiscovery link anywhere but the site's root.

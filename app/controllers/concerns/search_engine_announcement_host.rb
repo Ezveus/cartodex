@@ -25,9 +25,7 @@ module SearchEngineAnnouncementHost
   private
 
   def search_engine_announcement?
-    return @search_engine_announcement if defined?(@search_engine_announcement)
-
-    @search_engine_announcement = user_signed_in? &&
+    user_signed_in? &&
       request.get? &&
       !turbo_frame_request? &&
       !prefetch_request? &&

@@ -44,7 +44,7 @@ class SearchEngineAnnouncementTest < ActionDispatch::IntegrationTest
 
   # Chrome's own prefetch and prerender (the root, from the omnibox) say so with Sec-Purpose.
   test "a browser prefetch or prerender neither shows nor spends it" do
-    [ "prefetch", "prefetch;prerender" ].each do |purpose|
+    [ "prefetch", "prefetch;prerender", "prerender;prefetch" ].each do |purpose|
       get dashboard_path, headers: { "Sec-Purpose" => purpose }
 
       assert_select ANNOUNCEMENT, count: 0
