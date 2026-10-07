@@ -76,13 +76,19 @@ set -euo pipefail
 B=/rails/storage/$1
 C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1)
 [ -n "$C" ] || { echo "ERROR: no running web container" >&2; exit 1; }
+# Taken under a temporary name and renamed only once sound, so $B never exists partial: an
+# interrupted .backup would otherwise be reused, fail integrity_check, and stop every rerun.
 if docker exec "$C" test -e "$B"; then
   echo "reusing $B, taken by an earlier run" >&2
+  T=$B
 else
-  docker exec "$C" sqlite3 /rails/storage/production.sqlite3 ".backup $B"
+  docker exec "$C" rm -f "$B.part" "$B.part-journal"
+  docker exec "$C" sqlite3 /rails/storage/production.sqlite3 ".backup $B.part"
+  T=$B.part
 fi
-R=$(docker exec "$C" sqlite3 "$B" "PRAGMA integrity_check;" 2>&1 || true)
+R=$(docker exec "$C" sqlite3 "$T" "PRAGMA integrity_check;" 2>&1 || true)
 [ "$R" = ok ] || { echo "ERROR: integrity_check on the host answered: $R" >&2; exit 1; }
+[ "$T" = "$B" ] || docker exec "$C" mv "$T" "$B"
 echo "integrity_check: ok" >&2
 docker exec "$C" sha256sum "$B" | cut -d' ' -f1
 REMOTE
@@ -117,8 +123,11 @@ C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filte
 docker exec "$C" test -e "/rails/storage/$1" || { echo "ERROR: $1 vanished from the host, not pruning" >&2; exit 1; }
 docker exec -e KEEP="$1" "$C" sh -c '
   cd /rails/storage
-  for f in *.sqlite3; do
-    case "$f" in production*|"$KEEP") ;; *) echo "deleting $f"; rm -f -- "$f" "$f-wal" "$f-shm" ;; esac
+  # *.part too: a run interrupted mid-backup and never rerun for that PR leaves one, and nothing
+  # else would ever remove it. The .part of this run was renamed before the prune was reached.
+  for f in *.sqlite3 *.sqlite3.part; do
+    [ -e "$f" ] || continue
+    case "$f" in production*|"$KEEP") ;; *) echo "deleting $f"; rm -f -- "$f" "$f-wal" "$f-shm" "$f-journal" ;; esac
   done
   echo "left on the host:"; ls -la /rails/storage
 '
@@ -129,9 +138,15 @@ if [ -e "$DEV_ARCHIVE" ]; then
   # An earlier run archived dev and stopped later; what is in $DEV_DB now is its promoted copy.
   echo "already archived by an earlier run: $DEV_ARCHIVE"
 elif [ -e "$DEV_DB" ]; then
-  # .backup, not cp: a -wal beside the file may hold pages cp would leave behind.
-  sqlite3 "$DEV_DB" ".backup '$DEV_ARCHIVE'"
-  echo "$DEV_ARCHIVE"
+  # .backup, not cp: a -wal beside the file may hold pages cp would leave behind. Written under a
+  # temporary name and checked before it takes the final one: a rerun reads the archive's presence
+  # as done, and the next step overwrites the only other copy of dev.
+  rm -f "$DEV_ARCHIVE.part"
+  sqlite3 "$DEV_DB" ".backup '$DEV_ARCHIVE.part'"
+  R=$(integrity "$DEV_ARCHIVE.part")
+  [ "$R" = ok ] || die "integrity_check on the dev archive answered: $R — $DEV_DB left untouched, rerun"
+  mv "$DEV_ARCHIVE.part" "$DEV_ARCHIVE"
+  echo "$DEV_ARCHIVE, integrity_check: ok"
 else
   echo "no $DEV_DB, nothing to archive"
 fi
@@ -170,7 +185,10 @@ echo "migrations down: 0"
 COUNTS="SELECT MAX(version) FROM schema_migrations;"
 for t in $TABLES; do COUNTS+=" SELECT COUNT(*) FROM $t;"; done
 # Production itself, not the archive dev was just copied from: comparing those two is a tautology.
-PROD_COUNTS=$(ssh "$HOST" bash -s -- "$COUNTS" <<'REMOTE'
+# ssh joins its arguments into one string the remote shell re-parses, so the query's ( * ; must
+# be escaped once more; %q's backslashes parse the same under sh, dash, bash and zsh. The other
+# ssh calls pass only post-pr-NNN.sqlite3, digits checked above, which needs no quoting.
+PROD_COUNTS=$(ssh "$HOST" bash -s -- "$(printf %q "$COUNTS")" <<'REMOTE'
 set -euo pipefail
 C=$(docker ps -q --filter label=service=cartodex --filter label=role=web --filter status=running | head -1)
 docker exec "$C" sqlite3 /rails/storage/production.sqlite3 "$1"
