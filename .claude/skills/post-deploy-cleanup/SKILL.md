@@ -19,6 +19,16 @@ Run it after production has been checked — never right after the merge. Deploy
 (`gh workflow run ci.yml --ref master`); "deployed" means that run's `deploy` job succeeded —
 `gh run watch <run-id>`, or `gh run list --workflow ci.yml --event workflow_dispatch`.
 
+**Steps 3 and 4 are one script, and the user runs it.** Auto mode refuses the production backup
+and the promotion of production data (PII) into the dev database, and a refused attempt has
+ended a cleanup unfinished. Do not try them by hand. As soon as step 0 passes, hand over the one
+line `! /Users/matthieuciappara/Documents/perso/cartodex/bin/refresh-from-prod.sh NNN` with `NNN`
+filled in, and carry on with steps 1–2 meanwhile. The script checks its local preconditions
+before touching production, stops on the first failure, and ends on the verifications of step 4
+— read its output back rather than re-running them. It reuses a sound `prod-…-post-pr-NNN`
+archive already taken for this PR instead of retaking it. Sections 3 and 4 below describe what
+it does.
+
 ## 0. Verify production first
 
 `/up` is not enough. Read back out of the container:
@@ -75,8 +85,8 @@ ssh root@cartodex.ezveus.eu 'C=$(docker ps -q --filter label=service=cartodex --
 ## 4. Development database = that backup
 
 1. Stop `bin/dev`. Archive the current dev database as
-   `~/Documents/perso/cartodex-backups/dev-YYYY-MM-DD-pre-refresh.sqlite3` — the overwrite is not
-   reversible.
+   `~/Documents/perso/cartodex-backups/dev-YYYY-MM-DD-pre-pr-NNN.sqlite3` — the overwrite is not
+   reversible, and two deploys on one day mean two refreshes.
 2. Copy the backup over `storage/development.sqlite3` and delete any
    `storage/development.sqlite3-wal`/`-shm` left beside it.
 3. `bin/rails db:environment:set RAILS_ENV=development` — the dump is stamped `production` and
@@ -98,3 +108,4 @@ decide on counts, never on file size.
 | Promoting `./tmp/db-backup/` | Not the backup directory: a 2026-08-30 copy predating `tournament_standings` — destroys the imported sample |
 | Skipping `db:environment:set` | Every destructive task refuses the database |
 | Pruning the host before `integrity_check` answers `ok` | The only good backup may be the one just deleted |
+| Committing the `db/schema.rb` / `db/cable_schema.rb` rewrite after step 4's `db:migrate` | Same lines, reordered to prod's physical column order. For each of the two files, restore it with `git show HEAD:<file> > <file>` only when its sorted lines equal `HEAD`'s sorted lines; any other difference is a real change — leave the file alone and look at it |
