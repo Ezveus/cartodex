@@ -29,13 +29,25 @@ cd "$ROOT"
 
 TODAY=$(date +%F)
 ARCHIVE_DIR="$HOME/Documents/perso/cartodex-backups"
-PROD_ARCHIVE="$ARCHIVE_DIR/prod-$TODAY-post-pr-$NNN.sqlite3"
+# A file an earlier run left is found by PR number, whatever its date: a rerun after midnight must
+# still see it. Only a file that does not exist yet is named after today.
+D='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+earlier() {
+  [ $# -le 1 ] || die "several files for PR $NNN: $* — keep one, move the others aside"
+  echo "${1:-}"
+}
+shopt -s nullglob
+PROD_ARCHIVE=$(earlier "$ARCHIVE_DIR"/prod-$D-post-pr-"$NNN".sqlite3)
+DEV_ARCHIVE=$(earlier "$ARCHIVE_DIR"/dev-$D-pre-pr-"$NNN".sqlite3)
+DONE_MARKER=$(earlier "$ARCHIVE_DIR"/.refreshed-$D-pr-"$NNN")
+shopt -u nullglob
+PROD_ARCHIVE=${PROD_ARCHIVE:-$ARCHIVE_DIR/prod-$TODAY-post-pr-$NNN.sqlite3}
 # Named after the PR too: two deploys on one day mean two refreshes, and the second must not
 # collide with the first's archive.
-DEV_ARCHIVE="$ARCHIVE_DIR/dev-$TODAY-pre-pr-$NNN.sqlite3"
+DEV_ARCHIVE=${DEV_ARCHIVE:-$ARCHIVE_DIR/dev-$TODAY-pre-pr-$NNN.sqlite3}
 # Written last, once every verification passed. Its absence beside DEV_ARCHIVE means an earlier
 # run stopped after archiving dev, and the run resumes rather than refusing.
-DONE_MARKER="$ARCHIVE_DIR/.refreshed-$TODAY-pr-$NNN"
+DONE_MARKER=${DONE_MARKER:-$ARCHIVE_DIR/.refreshed-$TODAY-pr-$NNN}
 DEV_DB=storage/development.sqlite3
 HOST_BACKUP="post-pr-$NNN.sqlite3"
 
@@ -44,15 +56,18 @@ mkdir -p "$ARCHIVE_DIR"
 [ ! -e "$DONE_MARKER" ] || die "this PR's refresh already completed ($DONE_MARKER) — check the dev database by hand"
 # One lsof per file: given several, it exits 1 as soon as any of them is not open, which would
 # let a database held open without its -wal slip through.
-HOLDERS=""
-for f in "$DEV_DB" "$DEV_DB-wal" "$DEV_DB-shm"; do
-  [ -e "$f" ] || continue
-  HOLDERS+=$(lsof -t "$f" 2>/dev/null || true)$'\n'
-done
-HOLDERS=$(printf '%s' "$HOLDERS" | sort -u | tr '\n' ' ')
-if [ -n "${HOLDERS// /}" ]; then
-  die "$DEV_DB is open by PID ${HOLDERS% } (bin/dev or a console still running) — stop it first"
-fi
+refuse_if_open() {
+  local f holders=""
+  for f in "$DEV_DB" "$DEV_DB-wal" "$DEV_DB-shm"; do
+    [ -e "$f" ] || continue
+    holders+=$(lsof -t "$f" 2>/dev/null || true)$'\n'
+  done
+  holders=$(printf '%s' "$holders" | sort -u | tr '\n' ' ')
+  if [ -n "${holders// /}" ]; then
+    die "$DEV_DB is open by PID ${holders% } (bin/dev or a console still running) — stop it first"
+  fi
+}
+refuse_if_open
 # The schema check after db:migrate compares against HEAD, so HEAD must be what was deployed.
 git fetch -q origin master
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] \
@@ -152,24 +167,32 @@ else
 fi
 
 step "4. Promote the backup to $DEV_DB"
+# Again: the remote steps take minutes, and a process that opened dev meanwhile would keep writing
+# to its own -wal through the cp, losing those writes and reading pages that no longer exist.
+refuse_if_open
 cp "$PROD_ARCHIVE" "$DEV_DB"
 rm -f "$DEV_DB-wal" "$DEV_DB-shm"
 bin/rails db:environment:set RAILS_ENV=development
 
-version() { sqlite3 "$1" "SELECT MAX(version) FROM schema_migrations;"; }
-BEFORE=$(version "$DEV_DB")
+# Every version, not MAX: a pending migration older than the latest leaves MAX where it was.
+versions() { sqlite3 "$1" "SELECT version FROM schema_migrations ORDER BY version;"; }
+BEFORE=$(versions "$DEV_DB")
 bin/rails db:migrate
-AFTER=$(version "$DEV_DB")
-[ "$BEFORE" = "$AFTER" ] || die "db:migrate was not a no-op ($BEFORE -> $AFTER): the backup predates the deploy"
+APPLIED=$(comm -13 <(printf '%s\n' "$BEFORE") <(versions "$DEV_DB") | tr '\n' ' ')
+[ -z "$APPLIED" ] || die "db:migrate was not a no-op (applied ${APPLIED% }): the backup predates the deploy"
+AFTER=$(sqlite3 "$DEV_DB" "SELECT MAX(version) FROM schema_migrations;")
 
 step "4. Schema dumps rewritten by db:migrate"
 # db:migrate re-dumps the schema in prod's physical column order. Restore a file only when its
 # sorted lines equal HEAD's, i.e. the rewrite is a pure reordering; anything else is a real change.
 # Restoring is safe: the preconditions refused any uncommitted change in these files.
+# Each line is prefixed with its create_table before sorting: a column that moved from one table to
+# another sorts identically otherwise, and would be restored away as a mere reordering.
+by_table() { awk '/^  create_table "/ { split($0, q, "\""); t = q[2] } { print t "\t" $0 } /^  end$/ { t = "" }'; }
 for f in $SCHEMA_FILES; do
   if git diff --quiet -- "$f"; then
     echo "$f: unchanged"
-  elif diff <(git show "HEAD:$f" | sort) <(sort "$f") >/dev/null; then
+  elif diff <(git show "HEAD:$f" | by_table | sort) <(by_table < "$f" | sort) >/dev/null; then
     git show "HEAD:$f" > "$f"
     echo "$f: reordering only, restored from HEAD"
   else
@@ -178,7 +201,9 @@ for f in $SCHEMA_FILES; do
 done
 
 step "4. Verification"
-DOWN=$(bin/rails db:migrate:status | grep -cE '^[[:space:]]*down' || true)
+# Captured on its own: piped into grep, a failing status task read as zero migrations down.
+MIGRATE_STATUS=$(bin/rails db:migrate:status) || die "bin/rails db:migrate:status failed — migrations unverified"
+DOWN=$(grep -cE '^[[:space:]]*down' <<<"$MIGRATE_STATUS" || true)
 [ "$DOWN" = 0 ] || die "db:migrate:status shows $DOWN migration(s) down"
 echo "migrations down: 0"
 

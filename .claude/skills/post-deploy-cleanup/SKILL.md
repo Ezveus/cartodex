@@ -29,7 +29,9 @@ before production is touched. It stops on the
 first failure and ends on the verifications of step 4 — read its output back rather than
 re-running them. **A run that stopped part-way is rerun as is**: it reuses the host's
 `post-pr-NNN` backup once sound, a local archive only when it is byte-identical to that backup,
-and the dev archive an earlier run took; only a completed run refuses a second one. Sections 3
+and the dev archive an earlier run took; only a completed run refuses a second one. Earlier files
+are found by PR number whatever their date, so a rerun after midnight still sees them, and two
+local files of one kind for one PR make it refuse until one is moved aside. Sections 3
 and 4 below describe what it does.
 
 ## 0. Verify production first
@@ -99,8 +101,8 @@ ssh root@cartodex.ezveus.eu 'C=$(docker ps -q --filter label=service=cartodex --
 5. Verify both ends agree on `MAX(version)` **and row counts** (cards, standings, archetypes,
    decks, tournaments), plus `db:migrate:status` showing zero `down`.
 
-Step 4 is legitimately skipped when dev already matches production on those counts and version —
-decide on counts, never on file size.
+Step 4 is never skipped: the script always runs it after step 3, even when dev already matched
+production.
 
 ## Common mistakes
 
