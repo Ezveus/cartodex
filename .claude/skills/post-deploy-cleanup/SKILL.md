@@ -35,8 +35,13 @@ a local archive only when it is byte-identical to that backup and sets an older 
 — until then dev is archived again, since it may have been written to since; only a completed run
 refuses a second one. Earlier files
 are found by PR number whatever their date, so a rerun after midnight still sees them, and two
-local files of one kind for one PR make it refuse until one is moved aside. Sections 3
-and 4 below describe what it does.
+local files of one kind for one PR make it refuse until one is moved aside; an archive it writes
+always carries the date it was taken, even when it replaces an earlier day's. The one stop a rerun
+does not get past is a schema dump that differs from `HEAD` by more than line order: dev is then
+promoted but unverified, the rewrite is kept under `tmp/<file>.post-migrate-pr-NNN` and the dumps are
+restored, and every rerun stops there again until the difference is understood. It refuses while
+any development database — primary, queue or cable — is open, since `bin/dev`'s jobs process holds
+the queue database before anyone has loaded a page. Sections 3 and 4 below describe what it does.
 
 ## 0. Verify production first
 

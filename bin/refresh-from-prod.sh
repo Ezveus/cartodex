@@ -65,15 +65,20 @@ mkdir -p "$ARCHIVE_DIR"
 [ ! -e "$DONE_MARKER" ] || die "this PR's refresh already completed ($DONE_MARKER) — check the dev database by hand"
 # One lsof per file: given several, it exits 1 as soon as any of them is not open, which would
 # let a database held open without its -wal slip through.
+# Every development database, not only the primary: bin/dev's jobs process holds the queue database
+# from boot, while the web process opens the primary only on its first request — a bin/dev nobody
+# has browsed yet holds no primary file at all, and db:migrate below migrates all three.
 refuse_if_open() {
-  local f holders=""
-  for f in "$DEV_DB" "$DEV_DB-wal" "$DEV_DB-shm"; do
-    [ -e "$f" ] || continue
-    holders+=$(lsof -t "$f" 2>/dev/null || true)$'\n'
+  local db f holders=""
+  for db in "$DEV_DB" storage/development_queue.sqlite3 storage/development_cable.sqlite3; do
+    for f in "$db" "$db-wal" "$db-shm"; do
+      [ -e "$f" ] || continue
+      holders+=$(lsof -t "$f" 2>/dev/null || true)$'\n'
+    done
   done
-  holders=$(printf '%s' "$holders" | sort -u | tr '\n' ' ')
+  holders=$(printf '%s' "$holders" | sed '/^$/d' | sort -u | tr '\n' ' ')
   if [ -n "${holders// /}" ]; then
-    die "$DEV_DB is open by PID ${holders% } (bin/dev or a console still running) — stop it first"
+    die "a development database is open by PID ${holders% } (bin/dev, bin/jobs or a console still running) — stop it first"
   fi
 }
 refuse_if_open
@@ -152,8 +157,12 @@ REMOTE
     mv "$PROD_ARCHIVE" "$SUPERSEDED"
     echo "earlier archive of an older backup kept as $SUPERSEDED"
   fi
-  mv "$PROD_ARCHIVE.part" "$PROD_ARCHIVE"
-  echo "integrity_check: ok"
+  # Named after today, not after the archive it replaces: the name dates the backup, and this one
+  # was taken now — an earlier run's date on it would pass a later snapshot off as that day's.
+  NEW_PROD_ARCHIVE=$ARCHIVE_DIR/prod-$TODAY-post-pr-$NNN.sqlite3
+  mv "$PROD_ARCHIVE.part" "$NEW_PROD_ARCHIVE"
+  PROD_ARCHIVE=$NEW_PROD_ARCHIVE
+  echo "$PROD_ARCHIVE, integrity_check: ok"
 fi
 echo "identical to the host backup (sha256 $HOST_SHA)"
 
@@ -185,12 +194,18 @@ elif [ -e "$DEV_DB" ]; then
   # .backup, not cp: a -wal beside the file may hold pages cp would leave behind. Written under a
   # temporary name and checked before it takes the final one: the next step overwrites the only
   # other copy of dev.
-  [ ! -e "$DEV_ARCHIVE" ] || echo "replacing $DEV_ARCHIVE: an earlier run archived dev but never promoted over it"
-  rm -f "$DEV_ARCHIVE.part"
-  sqlite3 "$DEV_DB" ".backup '$DEV_ARCHIVE.part'"
-  R=$(integrity "$DEV_ARCHIVE.part")
+  # Named after today for the reason the prod archive is: the name dates what it holds.
+  NEW_DEV_ARCHIVE=$ARCHIVE_DIR/dev-$TODAY-pre-pr-$NNN.sqlite3
+  rm -f "$NEW_DEV_ARCHIVE.part"
+  sqlite3 "$DEV_DB" ".backup '$NEW_DEV_ARCHIVE.part'"
+  R=$(integrity "$NEW_DEV_ARCHIVE.part")
   [ "$R" = ok ] || die "integrity_check on the dev archive answered: $R — $DEV_DB left untouched, rerun"
-  mv -f "$DEV_ARCHIVE.part" "$DEV_ARCHIVE"
+  if [ -e "$DEV_ARCHIVE" ]; then
+    echo "replacing $DEV_ARCHIVE: an earlier run archived dev but never promoted over it"
+    rm -f "$DEV_ARCHIVE"
+  fi
+  mv -f "$NEW_DEV_ARCHIVE.part" "$NEW_DEV_ARCHIVE"
+  DEV_ARCHIVE=$NEW_DEV_ARCHIVE
   echo "$DEV_ARCHIVE, integrity_check: ok"
 else
   echo "no $DEV_DB, nothing to archive"
@@ -229,6 +244,7 @@ step "4. Schema dumps rewritten by db:migrate"
 # Each line is prefixed with its create_table before sorting: a column that moved from one table to
 # another sorts identically otherwise, and would be restored away as a mere reordering.
 by_table() { awk '/^  create_table "/ { split($0, q, "\""); t = q[2] } { print t "\t" $0 } /^  end$/ { t = "" }'; }
+KEPT=""
 for f in $SCHEMA_FILES; do
   if git diff --quiet -- "$f"; then
     echo "$f: unchanged"
@@ -236,9 +252,18 @@ for f in $SCHEMA_FILES; do
     git show "HEAD:$f" > "$f"
     echo "$f: reordering only, restored from HEAD"
   else
-    die "$f differs from HEAD by more than line order — left as is, inspect it"
+    # Set aside, then restored below like the two db:migrate stops above: left in place, the rewrite
+    # made every later run refuse on the uncommitted-changes precondition, this PR's rerun included.
+    mkdir -p tmp
+    cp "$f" "tmp/$(basename "$f").post-migrate-pr-$NNN"
+    KEPT+=" tmp/$(basename "$f").post-migrate-pr-$NNN"
+    echo "$f: differs from HEAD by more than line order"
   fi
 done
+if [ -n "$KEPT" ]; then
+  restore_schema_files
+  die "db:migrate's dump differs from HEAD by more than line order — dev is promoted but unverified. The rewrite is kept as$KEPT (diff it against HEAD) and the dumps are restored from HEAD. A rerun stops here again until that difference is understood"
+fi
 
 step "4. Verification"
 # Captured on its own: piped into grep, a failing status task read as zero migrations down.
