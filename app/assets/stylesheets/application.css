@@ -2578,8 +2578,6 @@ textarea.form-input {
   margin-left: auto;
 }
 
-/* The reveal block is the only moment the raw token is ever visible again —
-   weighted as a callout (elevated, amber-ringed) rather than a neutral box. */
 .settings-steps {
   max-width: 64ch;
   margin: 0.5rem 0 1.5rem;
@@ -2605,6 +2603,8 @@ textarea.form-input {
   font-size: 1rem;
 }
 
+/* The reveal block is the only moment the raw token is ever visible again —
+   weighted as a callout (elevated, amber-ringed) rather than a neutral box. */
 .settings-reveal {
   background: var(--surface);
   border: 2px solid var(--bolt);

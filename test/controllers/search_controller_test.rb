@@ -120,7 +120,7 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     assert_select "nav.navbar"
     assert_select "title", text: /ogerpon/
     assert_select ".search-page-hint", text: "Results for “ogerpon”"
-    assert_select ".search-page-results .spotlight-listbox a[role=option]", text: /Ogerpon Toolbox/
+    assert_select ".search-page-results .spotlight-listbox a.spotlight-option", text: /Ogerpon Toolbox/
     assert_select "turbo-frame#search_results", count: 1,
       msg: "only the overlay's frame: the page must not carry a second element with that id"
     # The overlay renders the same rows once used, under the spotlight- prefix.
@@ -137,10 +137,23 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     spotlight = css_select("a[role=option]").map { |a| [ a["href"], a.text.squish ] }
 
     get search_path(q: "ogerpon")
-    page = css_select(".search-page-results a[role=option]").map { |a| [ a["href"], a.text.squish ] }
+    page = css_select(".search-page-results a").map { |a| [ a["href"], a.text.squish ] }
 
     assert_operator spotlight.size, :>, 5
     assert_equal spotlight, page
+  end
+
+  # The listbox roles are only valid with the spotlight's combobox driving them. On the page
+  # nothing does: role="option" would take the rows out of a screen reader's links list while the
+  # arrow keys did nothing.
+  test "opened as a page, the results are plain links rather than a listbox nobody drives" do
+    get search_path(q: "ogerpon")
+
+    assert_select ".search-page-results a", minimum: 2
+    assert_select ".search-page-results [role=listbox]", count: 0
+    assert_select ".search-page-results [role=option]", count: 0
+    assert_select ".search-page-results [aria-selected]", count: 0
+    assert_select ".search-page-results a.spotlight-see-all[href=?]", decks_path(q: "ogerpon")
   end
 
   test "opened as a page with a too-short query, says how long it must be" do
@@ -164,7 +177,7 @@ class SearchControllerTest < ActionDispatch::IntegrationTest
     get search_path(q: "ogerpon")
 
     assert_response :success
-    assert_select ".search-page-results a[role=option]", text: /Teal Mask Ogerpon ex/
-    assert_select ".search-page-results a[role=option]", text: /Ogerpon Toolbox/, count: 0
+    assert_select ".search-page-results a", text: /Teal Mask Ogerpon ex/
+    assert_select ".search-page-results a", text: /Ogerpon Toolbox/, count: 0
   end
 end

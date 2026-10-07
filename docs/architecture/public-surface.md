@@ -72,4 +72,17 @@ for the same reason: spelled with the preloads on the lookup, a refused private 
 preload while an unknown key paid one query, which is an existence oracle by cost and by timing
 even though the two answers are byte-identical. A test pins the two query counts equal.
 
+**`/opensearch.xml` is public and sits outside `PubliclyReachable` on purpose.** A browser reads it
+before anybody signs in, so `OpensearchController` inherits `ActionController::Base` — no
+`authenticate_user!`, no Pundit, nothing to `authorize`, and no `allow_browser` gate — and its body
+is the same document for every caller: a name, a description, an icon and the `/search?q=` template.
+It reads no session and no row. Like `Oauth::MetadataController` it builds its URLs from the request,
+so with `config.hosts` unset in production a forged `Host` header is reflected — into a response
+marked `private`, to the client that forged it. It carries no `rate_limit`: it touches no database
+and renders a few hundred bytes. The `<link rel="search">` that points at it is in every page's
+`<head>`, because Chrome only honours it on the root. Its reason to exist is `SearchController#show`
+answering a non-frame GET as a whole page (`Search::PageView`) — the same `search_results` call
+behind the same 120/min visitor limit, and the same scoping: a visitor's decks group is still
+`Deck.none`. See `docs/superpowers/specs/2026-10-07-browser-search-engine-design.md`.
+
 **Deferred to #142, out of scope here:** author attribution on a shared deck, any public view of a deck's results or stats or of a collection (the tournament catalog and an event's page are public as of #148 — a member's *participation* in one is not), copying someone else's shared deck, comments/likes/counters, the sitemap and indexability half of the discovery paragraph (the Open Graph half shipped — see above), revoking a link once it has been shared, an MCP tool that shares or unshares a deck, and server-side byte caching for the image proxy (which would make its rate limiter unnecessary rather than merely bearable).

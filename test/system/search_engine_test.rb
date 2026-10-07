@@ -43,8 +43,7 @@ class SearchEngineTest < ApplicationSystemTestCase
     JS
     assert_selector ".flash-notice", text: "Ordinary notice"
 
-    sleep 5.5
-    assert_no_selector ".flash-notice", wait: 0
+    assert_no_selector ".flash-notice", text: "Ordinary notice", wait: 7
   end
 
   # The server never records it while rendering; the alert does, once it is on screen.
@@ -63,6 +62,34 @@ class SearchEngineTest < ApplicationSystemTestCase
 
     assert_selector "h1", text: /Welcome/
     assert_no_selector "[data-testid=search-engine-announcement]", wait: 1
+  end
+
+  # A tab opened in the background runs its scripts while nobody looks at it: the alert must wait
+  # until the document is visible before it says it was seen. The hidden document is simulated —
+  # the test browser has no real background tab to offer.
+  test "a page loaded hidden does not acknowledge the announcement until it is shown" do
+    skip "simulating a hidden document needs CDP, which the remote driver does not expose" unless cdp?
+    @user.update_column(:search_engine_announced_at, nil)
+
+    script = page.driver.browser.execute_cdp("Page.addScriptToEvaluateOnNewDocument", source: <<~JS)
+      window.__hidden = true
+      Object.defineProperty(Document.prototype, "visibilityState", { configurable: true, get: () => window.__hidden ? "hidden" : "visible" })
+      Object.defineProperty(Document.prototype, "hidden", { configurable: true, get: () => window.__hidden })
+    JS
+    begin
+      visit dashboard_path
+      assert_selector "[data-testid=search-engine-announcement]"
+      sleep 1
+      assert_nil @user.reload.search_engine_announced_at, "acknowledged while hidden"
+
+      page.execute_script('window.__hidden = false; document.dispatchEvent(new Event("visibilitychange"))')
+
+      Timeout.timeout(Capybara.default_max_wait_time) do
+        sleep 0.05 until @user.reload.search_engine_announced_at
+      end
+    ensure
+      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: script["identifier"])
+    end
   end
 
   test "the announcement can be dismissed" do

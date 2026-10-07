@@ -280,51 +280,54 @@ class UserTest < ActiveSupport::TestCase
     assert_nil user.reload.api_token_last_used_at
   end
 
-  test "acknowledge_search_engine_announcement! is true exactly once" do
+  test "acknowledge_search_engine_announcement! records it, and a later call keeps the first time" do
     user = User.create!(email: "announce@example.com", password: "password123")
+    assert user.search_engine_announcement_pending?
 
-    assert_nil user.search_engine_announced_at
-    assert user.acknowledge_search_engine_announcement!
-    assert_not_nil user.reload.search_engine_announced_at
-    assert_not user.acknowledge_search_engine_announcement!
+    user.acknowledge_search_engine_announcement!
+    first = user.reload.search_engine_announced_at
+    assert_not_nil first
+    assert_not user.search_engine_announcement_pending?
+
+    travel 1.hour do
+      User.find(user.id).acknowledge_search_engine_announcement!
+    end
+    assert_equal first, user.reload.search_engine_announced_at
   end
 
-  # The win records itself on the instance, so the same request asking again costs nothing.
-  test "acknowledge_search_engine_announcement! issues no query on the instance that just won" do
-    user = User.create!(email: "announce-twice@example.com", password: "password123")
-
-    assert user.acknowledge_search_engine_announcement!
-    assert_equal 0, count_queries { assert_not user.acknowledge_search_engine_announcement! }
-  end
-
-  # Two tabs opened at once load the same member twice, both still nil in memory: only one of
-  # them may show the announcement.
-  test "acknowledge_search_engine_announcement! loses to a claim made by another copy of the member" do
+  # Two tabs acknowledging at once load the same member twice, both still pending in memory: the
+  # conditional UPDATE is what keeps the second from overwriting the first.
+  test "acknowledge_search_engine_announcement! does not overwrite an acknowledgement made by another copy" do
     user = User.create!(email: "announce-race@example.com", password: "password123")
     other_tab = User.find(user.id)
 
-    assert user.acknowledge_search_engine_announcement!
-    assert_not other_tab.acknowledge_search_engine_announcement!
+    user.acknowledge_search_engine_announcement!
+    first = User.find(user.id).search_engine_announced_at
+
+    travel 1.hour do
+      other_tab.acknowledge_search_engine_announcement!
+    end
+    assert_equal first, User.find(user.id).search_engine_announced_at
   end
 
-  # This runs on every page a member renders, so once it has been shown it must cost nothing:
-  # an unconditional UPDATE would take SQLite's write lock on every page view.
-  test "acknowledge_search_engine_announcement! issues no query once announced" do
+  # A tab opened before the acknowledgement still sends its own DELETE when it is shown: once the
+  # member is acknowledged, that call must not cost a write.
+  test "acknowledge_search_engine_announcement! issues no query once acknowledged" do
     user = users(:one)
-    assert_not_nil user.search_engine_announced_at
+    assert_not user.search_engine_announcement_pending?
 
-    assert_equal 0, count_queries { assert_not user.acknowledge_search_engine_announcement! }
+    assert_equal 0, count_queries { user.acknowledge_search_engine_announcement! }
   end
 
-  test "acknowledge_search_engine_announcement! gives the page up rather than fail on a busy database" do
+  test "acknowledge_search_engine_announcement! leaves it pending rather than fail on a busy database" do
     user = User.create!(email: "announce-busy@example.com", password: "password123")
 
     user.define_singleton_method(:with_brief_write_wait) { |*| raise ActiveRecord::StatementTimeout, "database is locked" }
-    assert_not user.acknowledge_search_engine_announcement!
+    assert_nothing_raised { user.acknowledge_search_engine_announcement! }
     user.singleton_class.remove_method(:with_brief_write_wait)
-    # Neither the row nor this instance may record a claim that did not happen.
-    assert_nil user.search_engine_announced_at, "a busy page must leave it for the next one"
-    assert_nil User.find(user.id).search_engine_announced_at
-    assert user.acknowledge_search_engine_announcement!
+
+    assert User.find(user.id).search_engine_announcement_pending?, "a busy lock must leave it for the next page"
+    user.acknowledge_search_engine_announcement!
+    assert_not user.reload.search_engine_announcement_pending?
   end
 end

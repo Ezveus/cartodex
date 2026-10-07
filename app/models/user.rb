@@ -167,25 +167,20 @@ class User < ApplicationRecord
     search_engine_announced_at.nil?
   end
 
-  # True for the request that records the acknowledgement, false for any later one — the UPDATE is
-  # conditional, so two tabs acknowledging at once write once, and an acknowledged member costs no
-  # query at all.
+  # Records the acknowledgement. The UPDATE is conditional, so two tabs acknowledging at once
+  # keep the first timestamp, and an acknowledged member costs no query at all.
   #
   # Best-effort like touch_api_token_usage: a busy lock leaves it pending, and the alert simply
   # shows again on the next page.
   def acknowledge_search_engine_announcement!
-    return false unless search_engine_announcement_pending?
+    return unless search_engine_announcement_pending?
 
-    now = Time.current
-    acknowledged = with_brief_write_wait do
+    with_brief_write_wait do
       self.class.where(id: id, search_engine_announced_at: nil)
-        .update_all(search_engine_announced_at: now) == 1
+        .update_all(search_engine_announced_at: Time.current)
     end
-    self.search_engine_announced_at = now
-    clear_attribute_change(:search_engine_announced_at)
-    acknowledged
   rescue ActiveRecord::StatementInvalid
-    false
+    nil
   end
 
   private

@@ -1,8 +1,9 @@
 module Search
   # /search?q=… opened as a page — what a browser's search engine lands on. It renders the
   # spotlight's own ResultsList over the same results, so the two cannot answer differently: this
-  # is the panel without its frame. ResultsList rather than ResultsView because the overlay on
-  # this page already holds the one element carrying ResultsView::FRAME_ID.
+  # is the panel without its frame — and without the listbox semantics only the spotlight's
+  # combobox can drive. ResultsList rather than ResultsView because the overlay on this page
+  # already holds the one element carrying ResultsView::FRAME_ID.
   class PageView < ApplicationComponent
     def initialize(results:)
       @results = results
@@ -20,7 +21,7 @@ module Search
           end
         else
           p(class: "search-page-hint") { "Results for “#{@results.query}”" }
-          div(class: "search-page-results") { render ResultsList.new(results: @results, id_prefix: "search-page") }
+          div(class: "search-page-results") { render ResultsList.new(results: @results, id_prefix: "search-page", interactive: false) }
         end
       end
     end
