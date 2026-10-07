@@ -2,7 +2,7 @@ class DecksController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  publicly_reachable :show, :export, :shared, :odds, :compare
+  publicly_reachable :show, :export, :proxy_sheet, :shared, :odds, :compare
 
   SHARED_PER_PAGE = 24
 
@@ -33,6 +33,12 @@ class DecksController < ApplicationController
   # compare bar's button, a full page load preloading up to four whole decks. The bar builds the
   # address in JS, so no hover prefetch can reach it either.
   ODDS_RATE_LIMIT_TO = 30
+  #
+  # 10/min for the proxy sheet, a third of the export's: it is the one export that leaves the app,
+  # one fetch per distinct printing (up to Decks::ProxySheetExporter::MAX_PRINTINGS, 37 measured)
+  # and about 0.75 s of a Puma thread for a 60-card deck. Still a click — the menu link carries
+  # data-turbo="false", so nothing prefetches it — and nobody prints ten sheets a minute.
+  PROXY_SHEET_RATE_LIMIT_TO = 10
   COMPARE_RATE_LIMIT_TO = 30
   RATE_LIMIT_WITHIN = 1.minute
 
@@ -43,6 +49,10 @@ class DecksController < ApplicationController
   rate_limit to: EXPORT_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-export", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :export
+
+  rate_limit to: PROXY_SHEET_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-proxy-sheet", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :proxy_sheet
 
   rate_limit to: ODDS_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-odds", unless: -> { user_signed_in? },
@@ -262,6 +272,24 @@ class DecksController < ApplicationController
     else
       render json: { text: Decks::Exporter.call(deck) }
     end
+  end
+
+  # A PDF of the deck's cards at 6 x 8.5 cm, to print and sleeve. The whole deck for anybody who may
+  # export it; `missing=1` prints only the proxies of a physical deck, which reads the owner's
+  # collection and is theirs alone, as with the Cardmarket wishlist.
+  def proxy_sheet
+    @deck = Deck.find_by!(key: params[:id])
+    authorize @deck, :export?
+    missing_only = params[:missing] == "1"
+    authorize @deck, :proxy_sheet_missing? if missing_only
+
+    pdf = Decks::ProxySheetExporter.call(@deck, missing_only:)
+    send_data pdf, type: "application/pdf", disposition: "attachment",
+                   filename: "#{@deck.name.parameterize}-proxies.pdf"
+  rescue Decks::ProxySheetExporter::NothingToPrint => e
+    redirect_to deck_path(@deck), notice: e.message
+  rescue Decks::ProxySheetExporter::TooManyPrintings => e
+    redirect_to deck_path(@deck), alert: e.message
   end
 
   def new

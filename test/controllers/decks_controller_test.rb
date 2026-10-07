@@ -1189,6 +1189,129 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-clipboard-url-value=?]", missing, count: 0
   end
 
+  # --- proxy sheet -------------------------------------------------------------------------------
+  # The fixtures carry no image_url, so every slot is a placeholder and nothing reaches the network.
+
+  test "the proxy sheet downloads as a PDF named after the deck" do
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 4)
+
+    get proxy_sheet_deck_path(@deck)
+
+    assert_response :success
+    assert_equal "application/pdf", response.media_type
+    assert response.body.start_with?("%PDF")
+    assert_match(/attachment; filename="original-proxies\.pdf"/, response.headers["Content-Disposition"])
+  end
+
+  test "the missing proxy sheet tells the owner when every copy is already backed" do
+    @deck.update!(physical: true)
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
+
+    get proxy_sheet_deck_path(@deck, missing: "1")
+
+    assert_redirected_to deck_path(@deck)
+    assert_equal Decks::ProxySheetExporter::NOTHING_MISSING, flash[:notice]
+  end
+
+  test "an empty deck has no proxy sheet" do
+    @deck.deck_cards.destroy_all
+
+    get proxy_sheet_deck_path(@deck)
+
+    assert_redirected_to deck_path(@deck)
+    assert_equal Decks::ProxySheetExporter::EMPTY_DECK, flash[:notice]
+  end
+
+  test "a deck with too many printings is refused rather than fetched" do
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)
+
+    with_constant(Decks::ProxySheetExporter, :MAX_PRINTINGS, 1) do
+      get proxy_sheet_deck_path(@deck)
+    end
+
+    assert_redirected_to deck_path(@deck)
+    assert_match(/1 different printings/, flash[:alert])
+  end
+
+  test "a stranger gets a shared deck's whole proxy sheet and never the missing one" do
+    @deck.update!(shared: true, physical: true)
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 4, owned_copies: 3)
+    sign_in users(:two)
+
+    get proxy_sheet_deck_path(@deck, missing: "1")
+    assert_response :not_found
+
+    get proxy_sheet_deck_path(@deck)
+    assert_response :success
+    assert_equal "application/pdf", response.media_type
+  end
+
+  # The lookup is unscoped, so `authorize` has to come before anything that costs: a refused reader
+  # must not make the app fetch a single image on their behalf.
+  test "a stranger gets no proxy sheet of a private deck, and nothing is fetched for them" do
+    fetched = with_card_art(cards(:honedge))
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 1)
+    sign_in users(:two)
+
+    get proxy_sheet_deck_path(@deck)
+    assert_response :not_found
+
+    sign_out users(:two)
+    get proxy_sheet_deck_path(@deck)
+    assert_redirected_to new_user_session_path
+
+    assert_empty fetched
+  ensure
+    restore_http_fetcher
+  end
+
+  test "the proxy sheet draws the fetched art through the whole request" do
+    fetched = with_card_art(cards(:honedge))
+    @deck.deck_cards.destroy_all
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2)
+
+    get proxy_sheet_deck_path(@deck)
+
+    assert_response :success
+    assert_equal [ cards(:honedge).image_url ], fetched
+    assert_equal 2, response.body.scan(%r{cm\s*/I\d+ Do}).size, response.body.scan(%r{/I\d+ Do}).inspect
+  ensure
+    restore_http_fetcher
+  end
+
+  test "the export menu offers the proxy sheet in two styles to the owner of a physical deck only" do
+    whole = proxy_sheet_deck_path(@deck)
+    missing = proxy_sheet_deck_path(@deck, missing: "1")
+
+    @deck.update!(physical: true, shared: true)
+    get deck_path(@deck)
+
+    # A plain download: Turbo would fetch the PDF and try to render it as a page.
+    assert_select "a.dropdown-item[href=?][data-turbo=false]", missing, text: "Download proxy sheet (missing copies)"
+    assert_select "a.dropdown-item[href=?][data-turbo=false]", whole, text: "Download proxy sheet (whole deck)"
+
+    sign_out @user
+    get deck_path(@deck)
+
+    assert_select "a.dropdown-item[href=?][data-turbo=false]", whole, text: "Download proxy sheet"
+    assert_select "a[href=?]", missing, count: 0
+    # The size is only right at 100%, which is the one thing the PDF cannot enforce.
+    assert_select "a.dropdown-item[href=?][title*=?]", whole, "actual size"
+
+    sign_in @user
+    @deck.update!(physical: false)
+    get deck_path(@deck)
+
+    assert_select "a.dropdown-item[href=?][data-turbo=false]", whole, text: "Download proxy sheet"
+    assert_select "a[href=?]", missing, count: 0
+  end
+
   test "the export menu offers the owner the tournament PDF and a visitor everything else" do
     @deck.update!(shared: true)
 
@@ -1672,6 +1795,22 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  # Gives the card an art URL and stubs HttpFetcher to answer it with a small PNG, recording each
+  # URL asked for. Pair with restore_http_fetcher in an `ensure`.
+  def with_card_art(card)
+    require "vips"
+    card.update_column(:image_url, "https://cdn.test/#{card.set_name}_#{card.set_number}.png")
+    bytes = (Vips::Image.black(46, 64) + [ 120, 60, 30 ]).cast(:uchar).pngsave_buffer
+    fetched = []
+    @original_http_fetcher_call = HttpFetcher.method(:call)
+    HttpFetcher.define_singleton_method(:call) { |url, **| fetched << url; bytes }
+    fetched
+  end
+
+  def restore_http_fetcher
+    HttpFetcher.define_singleton_method(:call, @original_http_fetcher_call) if @original_http_fetcher_call
+  end
 
   # v1 won against Ogerpon; the list then changed, and v2 lost against the marker archetype.
   def two_versions_played

@@ -87,6 +87,37 @@ class DecksRateLimitTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The proxy sheet is the first export that fetches from another host, a few dozen images a
+  # request, so it has a budget of its own and a lower one than the clipboard exports.
+  test "throttles an anonymous proxy sheet on a budget of its own, but never a signed-in one" do
+    with_real_rate_limit_store do
+      limit = DecksController::PROXY_SHEET_RATE_LIMIT_TO
+      assert_operator limit, :<, DecksController::EXPORT_RATE_LIMIT_TO
+
+      limit.times do
+        get proxy_sheet_deck_path(@deck)
+        assert_response :success
+      end
+
+      get proxy_sheet_deck_path(@deck)
+      assert_response :too_many_requests
+
+      # A `name:` of its own: the export still has its whole budget. One export would not show it —
+      # a shared counter at 12 is still under 30 — so the whole budget is spent.
+      DecksController::EXPORT_RATE_LIMIT_TO.times do
+        get export_deck_path(@deck)
+        assert_response :success
+      end
+
+      sign_in users(:one)
+
+      (limit + 1).times do
+        get proxy_sheet_deck_path(@deck)
+        assert_response :success
+      end
+    end
+  end
+
   # #compare joined the public surface after #odds, with the same shape of budget: its own name, and
   # nothing spent by a signed-in reader.
   test "throttles an anonymous comparison on a budget of its own, but never a signed-in one" do

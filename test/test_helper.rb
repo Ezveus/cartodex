@@ -53,6 +53,18 @@ module ActiveSupport
       counter.log
     end
 
+    # Swaps a constant for the duration of the block. Safe under this suite's parallelism, which
+    # forks processes rather than threads.
+    def with_constant(klass, name, value)
+      original = klass.const_get(name)
+      klass.send(:remove_const, name)
+      klass.const_set(name, value)
+      yield
+    ensure
+      klass.send(:remove_const, name)
+      klass.const_set(name, original)
+    end
+
     # Grows the user's collection by FLAT_COST_EXTRA_CARDS: the "large" input of a
     # flat-cost test. Returns the cards added, so a caller can put them in a deck
     # too.
