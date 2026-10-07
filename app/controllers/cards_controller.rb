@@ -120,7 +120,8 @@ class CardsController < ApplicationController
     return head :not_found if card.image_url.blank?
 
     begin
-      body = HttpFetcher.call(card.image_url)
+      # No retry: Net::HTTP's own would double the wait on a hung CDN, inside a web request.
+      body = HttpFetcher.call(card.image_url, max_retries: 0)
     rescue HttpFetcher::FetchError => e
       Rails.logger.warn "Image proxy failed for card #{card.id}: #{e.message}"
       return head :bad_gateway

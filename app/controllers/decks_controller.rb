@@ -2,7 +2,7 @@ class DecksController < ApplicationController
   include Searchable
   include PubliclyReachable
 
-  publicly_reachable :show, :export, :shared, :odds, :compare
+  publicly_reachable :show, :export, :proxy_sheet, :shared, :odds, :compare
 
   SHARED_PER_PAGE = 24
 
@@ -33,6 +33,14 @@ class DecksController < ApplicationController
   # compare bar's button, a full page load preloading up to four whole decks. The bar builds the
   # address in JS, so no hover prefetch can reach it either.
   ODDS_RATE_LIMIT_TO = 30
+  #
+  # 10/min for the proxy sheet, a third of the export's: it is the one export that leaves the app,
+  # one fetch per distinct printing (up to Decks::ProxySheetExporter::MAX_PRINTINGS, 37 measured)
+  # and about 0.75 s of a Puma thread for a 60-card deck. Still a click — the menu link carries
+  # data-turbo="false", so nothing prefetches it — and nobody prints ten sheets a minute, owner
+  # included, which is why this one exempts nobody.
+  PROXY_SHEET_RATE_LIMIT_TO = 10
+  PROXY_SHEET_RATE_LIMITED = "Too many proxy sheets in a minute — try again shortly.".freeze
   COMPARE_RATE_LIMIT_TO = 30
   RATE_LIMIT_WITHIN = 1.minute
 
@@ -43,6 +51,16 @@ class DecksController < ApplicationController
   rate_limit to: EXPORT_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-export", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :export
+
+  # The one limit here that a session does not lift: each request fans out to the image CDN, and
+  # a member looping on somebody's shared deck stalls five Puma threads as surely as a visitor
+  # would. Keyed by account when signed in (a club's NAT is many members), by address otherwise.
+  # The refusal is a redirect with an alert, not the bare 429 the others answer: the menu link is a
+  # plain download, and there is no public/429.html, so a 429 would land the reader on a blank page.
+  rate_limit to: PROXY_SHEET_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "decks-proxy-sheet", store: RateLimitStore, only: :proxy_sheet,
+    by: -> { user_signed_in? ? "user:#{current_user.id}" : request.remote_ip },
+    with: -> { redirect_to deck_path(params[:id]), alert: PROXY_SHEET_RATE_LIMITED }
 
   rate_limit to: ODDS_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "decks-odds", unless: -> { user_signed_in? },
@@ -262,6 +280,24 @@ class DecksController < ApplicationController
     else
       render json: { text: Decks::Exporter.call(deck) }
     end
+  end
+
+  # A PDF of the deck's cards at 6 x 8.5 cm, to print and sleeve. The whole deck for anybody who may
+  # export it; `missing=1` prints only the proxies of a physical deck, which reads the owner's
+  # collection and is theirs alone, as with the Cardmarket wishlist.
+  def proxy_sheet
+    @deck = Deck.find_by!(key: params[:id])
+    authorize @deck, :export?
+    missing_only = params[:missing] == "1"
+    authorize @deck, :proxy_sheet_missing? if missing_only
+
+    pdf = Decks::ProxySheetExporter.call(@deck, missing_only:)
+    send_data pdf, type: "application/pdf", disposition: "attachment",
+                   filename: "#{@deck.name.parameterize}-proxies.pdf"
+  rescue Decks::ProxySheetExporter::NothingToPrint => e
+    redirect_to deck_path(@deck), notice: e.message
+  rescue Decks::ProxySheetExporter::TooManyPrintings, Decks::ProxySheetExporter::TooManyCopies => e
+    redirect_to deck_path(@deck), alert: e.message
   end
 
   def new

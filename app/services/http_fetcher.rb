@@ -36,10 +36,19 @@ class HttpFetcher < ApplicationService
   # for 120.4 s, with the request still succeeding (degraded to the artless banner) so that nothing
   # surfaced it. A per-IP request budget cannot bound that, because it counts requests rather than
   # thread-seconds.
-  def initialize(url, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT)
+  #
+  # The two timeouts bound one *attempt*. Net::HTTP retries an idempotent GET once on its own after a
+  # read timeout, so a host that accepts and never answers costs twice the read timeout plus the open
+  # one — measured at 10 s against 3 + 5. MAX_RETRIES is that default, kept for the scrapers, where a
+  # slow page an import would otherwise lose is worth the wait; the image fetches inside a web
+  # request (Og::Renderer, CardsController#image, Decks::ProxySheetExporter) pass 0.
+  MAX_RETRIES = 1
+
+  def initialize(url, open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT, max_retries: MAX_RETRIES)
     @url = url
     @open_timeout = open_timeout
     @read_timeout = read_timeout
+    @max_retries = max_retries
     @uri = URI.parse(url)
   rescue URI::InvalidURIError => e
     raise FetchError, "#{url.inspect} is not a URL (#{e.message})"
@@ -66,7 +75,8 @@ class HttpFetcher < ApplicationService
       @uri.hostname, @uri.port,
       use_ssl: @uri.scheme == "https",
       open_timeout: @open_timeout,
-      read_timeout: @read_timeout
+      read_timeout: @read_timeout,
+      max_retries: @max_retries
     ) { |http| http.request(Net::HTTP::Get.new(@uri, "User-Agent" => USER_AGENT)) }
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     # Rescued into FetchError rather than left to propagate, because every caller already handles

@@ -145,7 +145,7 @@ module Og
     # `Vips::Error: svgload_buffer: operation is blocked`, and the spike could not have caught it:
     # it ran without Rails. This re-enables exactly that one loader, and nothing else.
     #
-    # Safe here, and #load_art is what makes it so rather than a promise in a comment. The block
+    # Safe here, and ArtLoader is what makes it so rather than a promise in a comment. The block
     # protects untrusted *input*; the only SVG this process loads is the frame #svg builds from a
     # heredoc in this file, and every byte that arrives off the network goes to a loader named from
     # its URL's extension instead of one libvips picked by sniffing. Written the sniffing way — and
@@ -208,30 +208,15 @@ module Og
     # would otherwise be fetched over the network and then indexed off the end of
     # CARDS. The payload builders enforce MAX_ARTS; this enforces the drawing.
     # The loader is named, never sniffed, and that is the other half of what makes
-    # .allow_generated_svg! safe. `new_from_buffer(bytes, "")` lets libvips choose by inspecting
-    # the bytes, so once the SVG loader is unblocked the *CDN* decides which loader runs on its
-    # response — and librsvg is exactly the one upstream has not fuzzed. Measured through that
-    # path: a 16000x16000 SVG took 66.8 s and 1160 MB, and 25000x25000 never finished, wedging one
-    # of five Puma threads on a single unauthenticated request.
-    #
-    # Card arts are PNG or JPEG (Limitless serves `…_LG.png`), so the loader is picked from the
-    # URL's extension the way CardsController#image already picks a content type, and anything
-    # else is refused rather than guessed at. An unrecognised extension raises Vips::Error, which
-    # the rescue below turns into "one fewer card" like any other failed art.
+    # .allow_generated_svg! safe — ArtLoader says why, with the measurements. An unrecognised
+    # extension raises Vips::Error, which the rescue below turns into "one fewer card" like any
+    # other failed art.
     def fetch_arts
       Array(@payload.art_urls).first(CARDS.size).filter_map do |url|
-        load_art(HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT,
-                                      read_timeout: ART_READ_TIMEOUT), url)
+        ArtLoader.load(HttpFetcher.call(url, open_timeout: ART_OPEN_TIMEOUT,
+                                             read_timeout: ART_READ_TIMEOUT, max_retries: 0), url)
       rescue HttpFetcher::FetchError, Vips::Error
         nil
-      end
-    end
-
-    def load_art(bytes, url)
-      case File.extname(URI.parse(url).path).downcase
-      when ".jpg", ".jpeg" then Vips::Image.jpegload_buffer(bytes)
-      when ".png"          then Vips::Image.pngload_buffer(bytes)
-      else raise Vips::Error, "og: refusing to guess a loader for #{url}"
       end
     end
 

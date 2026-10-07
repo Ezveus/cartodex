@@ -401,4 +401,21 @@ class CardsControllerTest < ActionDispatch::IntegrationTest
   def label_card(label, card)
     label.assignments.create!(fingerprint: card.fingerprint, card: card, source: "imported")
   end
+
+  # The image proxy fetches inside a web request, so Net::HTTP's own retry — which doubles the wait
+  # on a host that accepts and never answers — is turned off, as for the other two image fetchers.
+  test "the image proxy fetches the art once, with no retry" do
+    card = cards(:honedge)
+    card.update_column(:image_url, "https://cdn.test/honedge.png")
+    calls = []
+    original = HttpFetcher.method(:call)
+    HttpFetcher.define_singleton_method(:call) { |url, **options| calls << [ url, options ]; "png-bytes" }
+
+    get image_card_path(card)
+
+    assert_response :success
+    assert_equal [ [ "https://cdn.test/honedge.png", { max_retries: 0 } ] ], calls
+  ensure
+    HttpFetcher.define_singleton_method(:call, original) if original
+  end
 end

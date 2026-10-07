@@ -236,6 +236,26 @@ class PublicAccessTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # A PDF, so not a row of public_gets (that sweep asserts an og:image in the page). Both halves.
+  test "a shared deck's proxy sheet downloads without a session, and authorizes with one" do
+    @deck.update!(shared: true)
+
+    get proxy_sheet_deck_path(@deck)
+    assert_response :success
+    assert_equal "application/pdf", response.media_type
+
+    get proxy_sheet_deck_path(@deck, missing: "1")
+    assert_redirected_to new_user_session_path
+
+    @deck.update!(shared: false)
+    get proxy_sheet_deck_path(@deck)
+    assert_redirected_to new_user_session_path
+
+    sign_in @user
+    get proxy_sheet_deck_path(@deck, missing: "1")
+    assert_response :success
+  end
+
   # The same signed-in half for #compare, which went public after #odds: its own deck mixed with
   # somebody's shared one, the comparison this action exists for.
   test "the comparison authorizes when a session is present" do

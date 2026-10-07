@@ -87,6 +87,48 @@ class DecksRateLimitTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The proxy sheet is the one export that fans out to the image CDN, so its limit has a budget of
+  # its own and, unlike every other one here, is not lifted by a session: a member looping on a
+  # shared deck costs the same threads as a visitor. Members are counted per account.
+  test "throttles the proxy sheet for everybody, on a budget of its own, per account once signed in" do
+    with_real_rate_limit_store do
+      limit = DecksController::PROXY_SHEET_RATE_LIMIT_TO
+      assert_equal 10, limit
+
+      limit.times do
+        get proxy_sheet_deck_path(@deck)
+        assert_response :success
+      end
+
+      # A redirect with a reason rather than the bare 429: the link is a plain download, and a
+      # body-less 429 leaves the reader on a blank page.
+      get proxy_sheet_deck_path(@deck)
+      assert_redirected_to deck_path(@deck)
+      assert_equal DecksController::PROXY_SHEET_RATE_LIMITED, flash[:alert]
+
+      # A `name:` of its own: the export still has its whole budget. One export would not show it —
+      # a shared counter at 12 is still under 30 — so the whole budget is spent.
+      DecksController::EXPORT_RATE_LIMIT_TO.times do
+        get export_deck_path(@deck)
+        assert_response :success
+      end
+
+      # The owner is limited too, on their own counter rather than their address's.
+      sign_in users(:one)
+      limit.times do
+        get proxy_sheet_deck_path(@deck)
+        assert_response :success
+      end
+      get proxy_sheet_deck_path(@deck)
+      assert_redirected_to deck_path(@deck)
+
+      # Another member behind the same address has a counter of their own.
+      sign_in users(:two)
+      get proxy_sheet_deck_path(@deck)
+      assert_response :success
+    end
+  end
+
   # #compare joined the public surface after #odds, with the same shape of budget: its own name, and
   # nothing spent by a signed-in reader.
   test "throttles an anonymous comparison on a budget of its own, but never a signed-in one" do
