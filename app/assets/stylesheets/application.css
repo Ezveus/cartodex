@@ -2594,6 +2594,12 @@ textarea.form-input {
   overflow-wrap: anywhere;
 }
 
+/* The announcement links straight here, and the navbar is sticky: without the margin the anchor
+   lands with the section's heading under the bar. */
+#search-engine {
+  scroll-margin-top: 6rem;
+}
+
 #search-engine h3 {
   margin: 1.25rem 0 0.5rem;
   font-size: 1rem;

@@ -21,6 +21,12 @@ class SearchEngineTest < ApplicationSystemTestCase
     click_on "Set it up in Settings"
 
     assert_selector "#search-engine h2", text: "Browser search engine"
+    # The navbar is sticky: landing on the anchor must not leave the heading under it.
+    heading_top, navbar_bottom = page.evaluate_script(<<~JS)
+      [document.querySelector("#search-engine h2").getBoundingClientRect().top,
+       document.querySelector(".navbar").getBoundingClientRect().bottom]
+    JS
+    assert_operator heading_top, :>=, navbar_bottom
     assert_selector "#search-engine-url", text: %r{/search\?q=%s\z}
     assert_no_selector "[data-testid=search-engine-announcement]", wait: 0
   end
