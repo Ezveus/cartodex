@@ -20,7 +20,15 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 # Never fails: a malformed file makes sqlite3 exit non-zero, and under set -e that would end the
 # run on sqlite's own message instead of the die that says what to do about it.
-integrity() { sqlite3 "$1" "PRAGMA integrity_check;" 2>&1 || true; }
+# The checked files are WAL databases, and macOS's sqlite3 keeps a WAL database's -wal and -shm
+# after it closes, so every check left two files beside the archive — under the .part name once
+# renamed, where nothing would ever look again. They are removed only once the -wal is empty: on
+# closing, sqlite3 checkpoints any frames it found into the file, and a -wal that still holds some
+# holds pages the file does not.
+integrity() {
+  sqlite3 "$1" "PRAGMA integrity_check;" 2>&1 || true
+  [ -s "$1-wal" ] || rm -f "$1-wal" "$1-shm"
+}
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
 NNN=${1:-}
