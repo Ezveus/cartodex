@@ -35,7 +35,19 @@ NNN=${1:-}
 [[ "$NNN" =~ ^[0-9]+$ ]] || die "usage: $0 PR_NUMBER"
 
 # Always the main checkout, even when launched from a worktree: that is where bin/dev runs.
-ROOT=$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
+# In a plain clone that is the common .git directory's parent. In a bare repository with one
+# sibling checkout per branch, the parent is the project root, which holds no storage/, so the
+# main checkout is the worktree that has master checked out. awk reads the whole listing rather
+# than exiting on the match: an early exit closes the pipe under git, which dies of SIGPIPE, and
+# pipefail then ends the script silently with 141 (measured from about 40 worktrees).
+COMMON=$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)
+if [ "$(git --git-dir="$COMMON" rev-parse --is-bare-repository)" = true ]; then
+  ROOT=$(git --git-dir="$COMMON" worktree list --porcelain \
+    | awk '/^worktree /{w=substr($0,10)} !found && $0=="branch refs/heads/master"{print w; found=1}')
+  [ -n "$ROOT" ] || die "no worktree of $COMMON has master checked out"
+else
+  ROOT=$(cd "$COMMON/.." && pwd)
+fi
 cd "$ROOT"
 [ -d storage ] || die "$ROOT/storage not found"
 
