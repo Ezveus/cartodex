@@ -10,10 +10,15 @@ export default class extends Controller {
   // checks document focus (and Safari user activation) when write() is called, and building the
   // image takes seconds — long enough to switch to the window the image is meant for, after which
   // a write issued once the blob exists fails with "Document is not focused".
+  //
+  // The no-op catch only marks the promise handled: buildImage can reject before write() attaches
+  // to it ("No cards to export" throws before its first await), which Chromium would report as an
+  // uncaught rejection beside the one withFeedback logs. write() still rejects with that error.
   async copy() {
     await this.withFeedback(async () => {
-      const item = new ClipboardItem({ "image/png": this.buildImage() })
-      await navigator.clipboard.write([item])
+      const image = this.buildImage()
+      image.catch(() => {})
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": image })])
     })
   }
 
