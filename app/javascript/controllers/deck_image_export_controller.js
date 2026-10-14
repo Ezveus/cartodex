@@ -6,10 +6,14 @@ const PADDING = 12
 const MAX_COLS = 10
 
 export default class extends Controller {
+  // The write is started synchronously in the click and handed a promise of the PNG: Chromium
+  // checks document focus (and Safari user activation) when write() is called, and building the
+  // image takes seconds — long enough to switch to the window the image is meant for, after which
+  // a write issued once the blob exists fails with "Document is not focused".
   async copy() {
     await this.withFeedback(async () => {
-      const blob = await this.buildImage()
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+      const item = new ClipboardItem({ "image/png": this.buildImage() })
+      await navigator.clipboard.write([item])
     })
   }
 
