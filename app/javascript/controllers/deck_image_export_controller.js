@@ -6,10 +6,19 @@ const PADDING = 12
 const MAX_COLS = 10
 
 export default class extends Controller {
+  // The write is started synchronously in the click and handed a promise of the PNG: Chromium
+  // checks document focus when write() is called (measured in Chromium 152), and building the
+  // image takes seconds — long enough to switch to the window the image is meant for, after which
+  // a write issued once the blob exists fails with "Document is not focused".
+  //
+  // The no-op catch only marks the promise handled: buildImage can reject before write() attaches
+  // to it ("No cards to export" throws before its first await), which Chromium would report as an
+  // uncaught rejection beside the error withFeedback logs. write() still rejects with that error.
   async copy() {
     await this.withFeedback(async () => {
-      const blob = await this.buildImage()
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+      const image = this.buildImage()
+      image.catch(() => {})
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": image })])
     })
   }
 
