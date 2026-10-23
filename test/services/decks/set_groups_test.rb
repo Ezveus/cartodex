@@ -82,7 +82,8 @@ module Decks
       # "ZZZ" sorts after "Unknown set" alphabetically: the trailing place is a rule, not the alphabet.
       sections = SetGroups.call([ row(nil, "1"), row("ZZZ", "1"), row("", "2") ])
 
-      assert_equal [ "ZZZ", SetGroups::UNKNOWN_CODE ], codes(sections)
+      assert_equal [ "ZZZ", "Unknown set" ], codes(sections)
+      assert_equal "Unknown set", sections.last.label
     end
 
     test "an undated linked set sorts after the dated ones and before every unlinked code, whatever its code" do
@@ -117,6 +118,17 @@ module Decks
       assert_equal [ "POR", "TWM" ], codes(sections)
       assert_nil sections.last.card_set
       assert_equal 0, queries
+    end
+
+    test "an unlinked card is not folded when two shown sets of two regions share its code" do
+      day = Date.new(2025, 1, 1)
+      intl = set("XYZ", name: "Intl Set", released: day, id: 1)
+      japan = set("XYZ", name: "Japan Set", released: day - 1, id: 2)
+
+      sections = SetGroups.call([ row("XYZ", "1", card_set: intl), row("XYZ", "2", card_set: japan), row("XYZ", "3") ])
+
+      assert_equal [ [ 1 ], [ 2 ], [ nil ] ], sections.map { |s| [ s.card_set&.id ] }
+      assert_equal [ "3" ], sections.last.deck_cards.map { |dc| dc.card.set_number }
     end
 
     test "number_key orders numbers without digits after the numeric ones and never raises" do

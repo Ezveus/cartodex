@@ -41,14 +41,15 @@ class DeckSetViewTest < ApplicationSystemTestCase
     por_heading = ".deck-set-section[data-set-code='POR'] h2"
     asc_heading = ".deck-set-section[data-set-code='ASC'] h2"
     assert_equal %w[POR ASC], all(".deck-set-section").map { |s| s["data-set-code"] }
-    assert_selector asc_heading, text: "Ascended Heroes (ASC) · 1 card"
+    assert_selector asc_heading, exact_text: "Ascended Heroes (ASC) · 1 card"
 
     within_quantity_of("Budew") { click_on "+" }
     assert_selector asc_heading, text: "Ascended Heroes (ASC) · 2 cards"
     assert_selector por_heading, text: "Perfect Order (POR) · 2 cards"
 
+    # exact_text: `text:` is a substring match, which "· 1 cards" would satisfy.
     within_quantity_of("Budew") { click_on "-" }
-    assert_selector asc_heading, text: "Ascended Heroes (ASC) · 1 card"
+    assert_selector asc_heading, exact_text: "Ascended Heroes (ASC) · 1 card"
 
     within_quantity_of("Budew") { click_on "-" }
     assert_selector asc_heading, text: "Ascended Heroes (ASC) · 0 cards"

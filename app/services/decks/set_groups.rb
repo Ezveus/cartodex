@@ -7,7 +7,8 @@ module Decks
   # Linked sets first, newest release first; an undated set after every dated one. Then the cards
   # with no `card_set` — imported before their set, or orphaned by `dependent: :nullify` — grouped
   # by `cards.set_name`, alphabetically. An unlinked card whose code is that of a set the deck
-  # already shows joins that set, so one set never reads as two sections.
+  # already shows joins that set, so one set never reads as two sections — unless two shown sets
+  # (of two regions) share the code.
   class SetGroups < ApplicationService
     Section = Struct.new(:card_set, :code, :deck_cards) do
       def label = card_set ? "#{card_set.name} (#{code})" : code
@@ -33,7 +34,10 @@ module Decks
 
     def call
       linked, unlinked = @deck_cards.partition { |dc| dc.card.card_set }
-      sets_by_code = linked.map { |dc| dc.card.card_set }.uniq.index_by(&:code)
+      # Codes are unique per region only, so a code two shown sets share names neither for sure:
+      # such a card stays in its own section rather than borrowing one region's name.
+      sets_by_code = linked.map { |dc| dc.card.card_set }.uniq.group_by(&:code)
+                           .filter_map { |code, sets| [ code, sets.first ] if sets.one? }.to_h
 
       folded, orphans = unlinked.partition { |dc| sets_by_code.key?(dc.card.set_name) }
       by_set = (linked + folded).group_by { |dc| dc.card.card_set || sets_by_code.fetch(dc.card.set_name) }
