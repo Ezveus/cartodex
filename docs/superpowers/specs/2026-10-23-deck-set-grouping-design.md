@@ -9,8 +9,8 @@ set (édition) they were printed in, instead of by card type.
 - **The owner's page only.** `Decks::PublicShowView` (visitors, shared decks, field lists) stays
   grouped by type and gains no control.
 - **No storage.** The choice is a URL parameter, `?group=set`. No column, no cookie, no
-  `sessionStorage`. Absent, or any other value, means grouping by type, rendered exactly as before
-  — the default page emits the same markup and runs the same queries it did.
+  `sessionStorage`. Absent, or any other value, means grouping by type, rendered as before
+  apart from the "Group by" control above the list — the default page adds no query.
 
 ## The control
 

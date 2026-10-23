@@ -148,8 +148,8 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the number of sets: #{small} -> #{large}"
   end
 
-  # The preload is the set view's alone: the default page runs exactly what it did.
-  test "the set view costs one statement more than the type view, and the type view none" do
+  # The preload is the set view's alone: `card_preloads(:type)` is empty, so the type view pays nothing for it.
+  test "the set view costs exactly one statement more than the type view" do
     fill_deck
     get deck_path(@deck)
 
