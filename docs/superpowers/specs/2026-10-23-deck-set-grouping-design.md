@@ -31,7 +31,10 @@ reads as disabled), and is told apart by `aria-current="page"` and a modifier cl
   One refinement: an unlinked card whose `set_name` equals the code of a set **already present
   in this deck** joins that set's section, so one set never shows as two sections (a deck can
   hold one linked and one unlinked POR printing). That costs no query — it only reads sets the
-  deck has loaded anyway.
+  deck has loaded anyway. It happens only when **exactly one** shown set carries the code:
+  `CardSet` codes are unique per region, so two shown sets of two regions sharing a code name
+  neither for sure, and the card keeps a section of its own rather than borrowing one region's
+  name (latent while every set is international; live once Japanese sets land, #111).
 - **Inside a section**, cards are ordered by set number, numerically where the number is numeric:
   the key is `(alphabetic prefix, integer part, rest)`, so `2 < 10 < 100` and the `GG1`-style
   numbers (100 printings in the catalogue) come after the purely numeric ones of their set and in
@@ -67,7 +70,8 @@ flat in the number of cards (a flat-cost test holds it).
 
 - Unlinked sections are ordered alphabetically by `set_name` (the owner only said "last").
 - A set with no `release_date` sorts after the dated ones, before the unlinked ones.
-- An unlinked card whose `set_name` matches the code of a set present in the deck joins that set.
+- An unlinked card whose `set_name` matches the code of exactly one set present in the deck joins
+  that set.
 - The heading of an unlinked group is the bare code.
 - The mode links point at the show page even from a full-page edit: they leave edit mode.
 
