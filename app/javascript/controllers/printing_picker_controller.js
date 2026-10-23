@@ -87,6 +87,13 @@ export default class extends Controller {
 
       // The deck's "Proxies" badge derives from this very split, and it lives outside this row.
       this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: data.deck.has_proxies } })
+
+      // Grouped by set, the card now belongs to another section and both headings' counts move.
+      // Re-rendering is the one way to place it that cannot disagree with Decks::SetGroups' order;
+      // the current URL carries ?group=set, and `replace` keeps Back where it was.
+      if (this.element.closest('[data-deck-group="set"]')) {
+        window.Turbo.visit(window.location.href, { action: "replace" })
+      }
     } finally {
       this.#busy = false
     }

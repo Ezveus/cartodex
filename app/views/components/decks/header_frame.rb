@@ -4,9 +4,13 @@ module Decks
 
     FRAME_ID = "deck-header".freeze
 
-    def initialize(deck:, editing: false)
+    # `group` is the owner page's list view (see Decks::ShowView::GROUPINGS). Only this frame is
+    # replaced on Edit, Save and Cancel, so the list keeps its view anyway; the form and Cancel carry
+    # it for the full-page case — the edit page opened in a tab of its own, and its 422 re-render.
+    def initialize(deck:, editing: false, group: :type)
       @deck = deck
       @editing = editing
+      @group = group
     end
 
     def view_template
@@ -33,7 +37,7 @@ module Decks
     end
 
     def edit_form
-      form_with(model: @deck, class: "deck-header-form") do |f|
+      form_with(model: @deck, url: deck_path(@deck, group: group_param), class: "deck-header-form") do |f|
         render Ui::FormErrors.new(resource: @deck)
 
         f.text_field :name, class: "form-input deck-header-name-input", autofocus: true, placeholder: "Deck name"
@@ -43,9 +47,12 @@ module Decks
 
         div(class: "deck-header-form-actions") do
           f.submit "Save", class: "btn btn-primary btn-sm"
-          link_to "Cancel", deck_path(@deck), class: "btn btn-secondary btn-sm", data: { turbo_frame: FRAME_ID }
+          link_to "Cancel", deck_path(@deck, group: group_param), class: "btn btn-secondary btn-sm", data: { turbo_frame: FRAME_ID }
         end
       end
     end
+
+    # Nil in the default view, which URL helpers drop: the type view's links stay what they were.
+    def group_param = (@group == :set ? "set" : nil)
   end
 end
