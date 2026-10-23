@@ -363,7 +363,9 @@ shown set of the same code only when exactly one shown set carries it, codes bei
 region. Two client paths depend on it: `deck_totals_controller.js` re-pluralises the heading's
 `sectionNoun`, and `printing_picker_controller.js` reloads the page after a swap inside
 `[data-deck-group="set"]`, since the card now belongs to another section — moving the row
-client-side would be a second, untested copy of the ordering. Edit, Cancel and the edit form carry
+client-side would be a second, untested copy of the ordering. That reload is a Turbo `replace`
+visit, which lands at the top of the page, so the controller scrolls the swapped row back into view
+on `turbo:load` (`DeckSetViewSwapScrollTest`, pinned to a 400px-tall window). Edit, Cancel and the edit form carry
 `group`; in place only the `deck-header` frame is replaced, so the list keeps its view anyway. See
 `docs/superpowers/specs/2026-10-23-deck-set-grouping-design.md`.
 

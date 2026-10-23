@@ -55,7 +55,7 @@ reads as disabled), and is told apart by `aria-current="page"` and a modifier cl
 |---|---|---|
 | Adding a card (search box) | yes | `card_search_controller.js` reloads `window.location.href` |
 | `+` / `−`, allocation stepper, removing a card | yes | in place, no navigation |
-| Printing swap | yes | in place in type mode; **in set mode the page reloads** (`window.location.href`), because the swapped card now belongs to another section and both headings' counts change |
+| Printing swap | yes | in place in type mode; **in set mode the page reloads** (`window.location.href`, then the swapped row is scrolled back into view), because the swapped card now belongs to another section and both headings' counts change |
 | Edit → Save / Cancel (header frame) | yes | only the `deck-header` Turbo Frame is replaced; the list is untouched. The Edit and Cancel links also carry `group=set`, so the same links opened in a new tab (a full page) keep it too, and `DecksController#edit` honours the parameter |
 | Log result, Share | yes | in place (modal / Turbo Stream) |
 | Proxy sheet refusals, the HTML fallback of Share, Versions/Results/Odds/Match stats links, Back to Decks | no | they leave the page or are non-Turbo fallbacks; they land on the default view |

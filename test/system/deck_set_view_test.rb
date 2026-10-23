@@ -112,3 +112,35 @@ class DeckSetViewTest < ApplicationSystemTestCase
     page.execute_script("document.querySelector('.deck-show-main').dataset.testMarker = '1'")
   end
 end
+
+# A replace visit lands at the top of the page, so on a deck taller than the window the swapped row
+# would sit below the fold. A short window makes the two-card deck such a deck.
+class DeckSetViewSwapScrollTest < ApplicationSystemTestCase
+  drive_at 1400, 400
+
+  setup do
+    @user = users(:one)
+    @deck = @user.decks.create!(name: "Set Watch", standard_pool: standard_pools(:twm_por))
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:honedge), quantity: 2)
+    login_as @user, scope: :user
+  end
+
+  test "a printing swap in the set view keeps the swapped row on screen" do
+    visit deck_path(@deck, group: "set")
+    row = find("li.deck-card-item", text: "ASC 16")
+    page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", row)
+    within(row) { click_on "ASC 16" }
+    within(".printing-picker-menu") { click_on "PRE 4" }
+
+    within(".deck-set-section[data-set-code='PRE']") { assert_text "Budew" }
+    pre_row = find(".deck-set-section[data-set-code='PRE'] li.deck-card-item")
+    # Not vacuous: at the top of the page the row is out of view.
+    assert_operator page.evaluate_script("window.scrollY"), :>, 0
+    top, bottom = page.evaluate_script(
+      "(r => [r.top, r.bottom])(arguments[0].getBoundingClientRect())", pre_row
+    )
+    assert_operator top, :>=, 0
+    assert_operator bottom, :<=, page.evaluate_script("window.innerHeight")
+  end
+end
