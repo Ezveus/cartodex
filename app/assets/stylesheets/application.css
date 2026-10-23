@@ -1632,6 +1632,36 @@ textarea.form-input {
   min-width: 0;
 }
 
+/* The deck page's "Group by Type · Set" control, drawn like .archetype-report-modes — the other
+   "Group by" in the app — and for the same reason a tab rather than a button: the current one
+   stays clickable and is told apart by weight and an underline as well as by colour. */
+.deck-group-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.deck-group-modes-label {
+  color: var(--ink-500);
+}
+
+.deck-group-mode {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  color: var(--ink-500);
+  text-decoration: none;
+}
+
+.deck-group-mode--current {
+  background: var(--paper);
+  color: var(--ink-800);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .deck-show-preview {
   width: 300px;
   flex-shrink: 0;
