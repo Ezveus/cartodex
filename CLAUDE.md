@@ -352,6 +352,23 @@ quietly, and nothing on the screen says so.
 
 **`/decks` order: most recently updated first, and `decks.updated_at` means the deck, its list and its results.** `DeckCard` and `DeckResult` both declare `belongs_to :deck, touch: true`. Before that, adding or requantifying a card left the deck's timestamp alone: 7 of the 47 owned decks in development carried a card newer than the deck by more than a minute, so sorting on the bare column sank exactly the decks being edited. `Og::DeckPayload#digest` once rejected this `touch` as too costly for the banner alone. It went in because of the sort, and every `DeckCard` writer acts on a deck the member named. `belongs_to`'s touch goes through `touch_later`, which folds every touch in one transaction into **one** `UPDATE decks`, so an import adds one statement inside `Decks::Fetcher`'s `BEGIN IMMEDIATE` and not sixty (a matched archetype's own `update!` is a second UPDATE, as it was before). `DeckCardTest` counts the statements for a bulk add. A reallocation touches both of its decks. Recording a result re-renders the banner once. `DecksController#share` writes through `update_column`, so sharing does not move the timestamp. `Deck.recently_updated` (`updated_at DESC, id DESC`) is the default. `Deck.alphabetical` (`LOWER(name)`, then `id`) is what `?sort=name` picks, and any other value falls back to the default. **The spotlight's deck group orders by `recently_updated` too, and that coupling is load-bearing**: its "See all N decks" link opens `/decks?q=` with no sort, and the first rows there have to be the rows it just showed. `DecksControllerTest` asserts that. The sort select sits in the filter bar, and `""` is its default value, so `card-filter`'s "any field set?" test shows **Clear** only once the member picks *Name*, and **Clear** resets the sort along with the filters.
 
+**The owner's deck page has a second view, `?group=set`, and it is a URL parameter on purpose.**
+`DecksController#deck_grouping` reads it in `owner_show`, `edit` and `update` only — never in
+`public_show`, whose page stays grouped by type — and `card_preloads` adds `card_set` in that view
+alone, so the default page's query count does not move (`test/controllers/deck_set_grouping_test.rb`
+asserts the set view costs exactly one statement more). The order is `Decks::SetGroups`'s alone:
+sets by `release_date` descending, undated after dated, then cards with no `card_set` grouped by
+`set_name`; cards by `number_key`, so `GG2 < GG10` after the numeric ones. An unlinked card joins a
+shown set of the same code only when exactly one shown set carries it, codes being unique per
+region. Two client paths depend on it: `deck_totals_controller.js` re-pluralises the heading's
+`sectionNoun`, and `printing_picker_controller.js` reloads the page after a swap inside
+`[data-deck-group="set"]`, since the card now belongs to another section — moving the row
+client-side would be a second, untested copy of the ordering. That reload is a Turbo `replace`
+visit, which lands at the top of the page, so the controller scrolls the swapped row back into view
+on `turbo:load` (`DeckSetViewSwapScrollTest`, pinned to a 400px-tall window). Edit, Cancel and the edit form carry
+`group`; in place only the `deck-header` frame is replaced, so the list keeps its view anyway. See
+`docs/superpowers/specs/2026-10-23-deck-set-grouping-design.md`.
+
 **Every result and every participation is filed on a `DeckVersion`, and nothing assigns one by
 default.** `deck_results.deck_version_id` and `tournament_entries.deck_version_id` are `NOT NULL`,
 and the only automatic assignment is a result inheriting its participation's version — so any new

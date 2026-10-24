@@ -317,7 +317,8 @@ class DecksController < ApplicationController
   end
 
   def edit
-    @deck = current_user.decks.includes(:archetype, deck_cards: :card, deck_results: [],
+    @group = deck_grouping
+    @deck = current_user.decks.includes(:archetype, deck_cards: { card: card_preloads(@group) }, deck_results: [],
                                        tournament_entries: [ :tournament, :tournament_profile ]).find_by!(key: params[:id])
     authorize @deck
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
@@ -329,6 +330,9 @@ class DecksController < ApplicationController
     # The re-rendered header carries the proxy badge, which reads the deck's cards.
     @deck = current_user.decks.includes(:deck_cards).find_by!(key: params[:id])
     authorize @deck
+    # The edit form posts to `deck_path(deck, group:)`, so a re-rendered form's Cancel link keeps
+    # the view the list behind it is in.
+    @group = deck_grouping
 
     if @deck.update(deck_params)
       @editing = false
@@ -391,6 +395,14 @@ class DecksController < ApplicationController
 
   private
 
+  # How the owner's page lists the cards: `?group=set` by set, anything else by card type. Read by
+  # the three actions that render Decks::ShowView or its header — never by public_show, whose page
+  # stays grouped by type and must not pay for a preload it does not read.
+  def deck_grouping = params[:group] == "set" ? :set : :type
+
+  # `card_set` only in the set view, so the default page runs exactly the queries it always did.
+  def card_preloads(group) = group == :set ? [ :card_set ] : []
+
   def unavailable_decks(count)
     count == 1 ? "One of the decks you picked is no longer available." : "#{count} of the decks you picked are no longer available."
   end
@@ -430,9 +442,10 @@ class DecksController < ApplicationController
     # with_standard_pool because the preview payload's subtitle names the pool through
     # Deck#format_label, and StandardPool#name reads *both* of its bounds — the scope exists
     # precisely so that is one preload rather than three queries per distinct pool.
+    @group = deck_grouping
     @deck = current_user.decks.with_standard_pool
                         .includes(archetype: [ :primary_card, :secondary_card ],
-                                  deck_cards: { card: :pokemon_subtype }, deck_results: [],
+                                  deck_cards: { card: [ :pokemon_subtype, *card_preloads(@group) ] }, deck_results: [],
                                   tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false

@@ -1,7 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["total", "sectionTotal", "sectionUnique"]
+  // sectionNoun is the set view's "card"/"cards" after its count; the type view's headings have none.
+  static targets = ["total", "sectionTotal", "sectionUnique", "sectionNoun"]
 
   updateTotals(event) {
     const { delta, removed } = event.detail
@@ -13,7 +14,11 @@ export default class extends Controller {
 
     const sectionTotal = section.querySelector('[data-deck-totals-target="sectionTotal"]')
     if (sectionTotal) {
-      sectionTotal.textContent = parseInt(sectionTotal.textContent) + delta
+      const total = parseInt(sectionTotal.textContent) + delta
+      sectionTotal.textContent = total
+
+      const sectionNoun = section.querySelector('[data-deck-totals-target="sectionNoun"]')
+      if (sectionNoun) sectionNoun.textContent = total === 1 ? "card" : "cards"
     }
 
     if (removed) {

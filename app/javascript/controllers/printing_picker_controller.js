@@ -87,6 +87,19 @@ export default class extends Controller {
 
       // The deck's "Proxies" badge derives from this very split, and it lives outside this row.
       this.dispatch("changed", { prefix: "deck-proxies", detail: { hasProxies: data.deck.has_proxies } })
+
+      // Grouped by set, the card now belongs to another section and both headings' counts move.
+      // Re-rendering is the one way to place it that cannot disagree with Decks::SetGroups' order;
+      // the current URL carries ?group=set, and `replace` keeps Back where it was.
+      // Turbo scrolls a replace visit to the top, which put the swapped row below the fold on any
+      // deck longer than a screen, so the row is brought back into view once the page has rendered.
+      if (this.element.closest('[data-deck-group="set"]')) {
+        document.addEventListener("turbo:load", () => {
+          document.querySelector(`li.deck-card-item[data-card-preview-card-id="${targetCardId}"]`)
+            ?.scrollIntoView({ block: "center" })
+        }, { once: true })
+        window.Turbo.visit(window.location.href, { action: "replace" })
+      }
     } finally {
       this.#busy = false
     }

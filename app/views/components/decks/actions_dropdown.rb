@@ -3,8 +3,11 @@ module Decks
     # `share` is false by default: this dropdown is also rendered on the decks index rows
     # (Decks::DeckCard), where no share-modal controller exists on the page, so a
     # share-modal#open button there would do nothing. Only the deck show page passes true.
-    def initialize(deck:, edit_frame: nil, size: :sm, share: false)
+    # `group` is carried on the Edit link only: the deck show page passes "set" in its set view so
+    # an Edit opened in a tab of its own keeps it. Nil elsewhere, which the URL helper drops.
+    def initialize(deck:, edit_frame: nil, size: :sm, share: false, group: nil)
       @deck = deck
+      @group = group
       @edit_frame = edit_frame
       @size = size
       @share = share
@@ -36,7 +39,7 @@ module Decks
     def edit_item
       link_opts = { class: "dropdown-item" }
       link_opts[:data] = { turbo_frame: @edit_frame } if @edit_frame
-      link_to "Edit", edit_deck_path(@deck), **link_opts
+      link_to "Edit", edit_deck_path(@deck, group: @group), **link_opts
     end
 
     # Owner-only without a check of its own: this dropdown is rendered only on the owner's deck

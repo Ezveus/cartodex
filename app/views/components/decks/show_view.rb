@@ -1,8 +1,13 @@
 module Decks
   class ShowView < ApplicationComponent
+    # The two ways the list is grouped, in the order the control offers them: the page's own default
+    # first. Carried by `?group=set`, never stored — see DecksController#deck_grouping.
+    GROUPINGS = [ [ :type, "Type" ], [ :set, "Set" ] ].freeze
+
     def initialize(deck:, editing: false, tournament_profiles: [], availability: {}, over_allocated_card_ids: [],
-                   swappable_card_ids: [])
+                   swappable_card_ids: [], group: :type)
       @deck = deck
+      @group = group
       @editing = editing
       @tournament_profiles = tournament_profiles
       @availability = availability
@@ -47,7 +52,7 @@ module Decks
 
     def header_section
       div(class: "deck-show-header") do
-        render Decks::HeaderFrame.new(deck: @deck, editing: @editing)
+        render Decks::HeaderFrame.new(deck: @deck, editing: @editing, group: @group)
         link_to "Back to Decks", decks_path, class: "btn btn-secondary"
       end
       nav(class: "deck-actions-bar") do
@@ -58,7 +63,8 @@ module Decks
         # of them is about games played while the other is about the list itself.
         link_to "Match stats", stats_deck_path(@deck), class: "btn btn-secondary btn-sm"
         link_to "Odds", odds_deck_path(@deck), class: "btn btn-secondary btn-sm"
-        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true)
+        render Decks::ActionsDropdown.new(deck: @deck, edit_frame: Decks::HeaderFrame::FRAME_ID, share: true,
+                                          group: group_param)
       end
     end
 
@@ -74,19 +80,61 @@ module Decks
       end
     end
 
-    def main_section
-      div(class: "deck-show-main") do
-        card_search
-        card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type }
+    def set_view? = @group == :set
 
-        if (group = card_groups["Pokémon"]).present?
-          card_type_section("Pokémon", group)
+    # Nil in the type view, which URL helpers and Phlex attributes both drop.
+    def group_param = (set_view? ? "set" : nil)
+
+    # `data-deck-group` is what printing_picker_controller.js reads to reload after a swap: in the
+    # set view the swapped card belongs to another section.
+    def main_section
+      div(class: "deck-show-main", data: { deck_group: group_param }) do
+        card_search
+        group_links
+        set_view? ? set_sections : type_sections
+      end
+    end
+
+    # The shape and rule of Archetypes::CardReport's mode links: the current view stays a link — a
+    # tab that cannot be clicked reads as disabled — told apart by aria-current and a modifier.
+    # Always the show page, even from a full-page edit.
+    def group_links
+      div(class: "deck-group-modes") do
+        span(class: "deck-group-modes-label") { "Group by" }
+        GROUPINGS.each do |mode, label|
+          current = mode == @group
+          a(href: deck_path(@deck, group: (mode == :set ? "set" : nil)),
+            class: [ "deck-group-mode", ("deck-group-mode--current" if current) ].compact.join(" "),
+            aria_current: ("page" if current)) { label }
         end
-        if (group = card_groups["Trainer"]).present?
-          trainer_section(group)
-        end
-        if (group = card_groups["Energy"]).present?
-          card_type_section("Energy", group)
+      end
+    end
+
+    def type_sections
+      card_groups = @deck.deck_cards.group_by { |dc| dc.card.card_type }
+
+      if (group = card_groups["Pokémon"]).present?
+        card_type_section("Pokémon", group)
+      end
+      if (group = card_groups["Trainer"]).present?
+        trainer_section(group)
+      end
+      if (group = card_groups["Energy"]).present?
+        card_type_section("Energy", group)
+      end
+    end
+
+    # Ordered by Decks::SetGroups, cards included, so card_list is handed `sort: false`.
+    def set_sections
+      Decks::SetGroups.call(@deck.deck_cards).each do |section|
+        div(class: "deck-section deck-set-section", data: { set_code: section.code }) do
+          h2 do
+            plain "#{section.label} · "
+            span(data: { deck_totals_target: "sectionTotal" }) { section.copies.to_s }
+            plain " "
+            span(data: { deck_totals_target: "sectionNoun" }) { section.copies == 1 ? "card" : "cards" }
+          end
+          card_list(section.deck_cards, sort: false)
         end
       end
     end
@@ -145,9 +193,10 @@ module Decks
       end
     end
 
-    def card_list(group)
+    def card_list(group, sort: true)
+      rows = sort ? group.sort_by { |dc| dc.card.name } : group
       ul(class: "deck-card-list") do
-        group.sort_by { |dc| dc.card.name }.each do |dc|
+        rows.each do |dc|
           availability = @availability[dc.card_id]
           max_owned = availability ? [ dc.quantity, availability.available ].min : 0
           render Decks::DeckCardItem.new(
