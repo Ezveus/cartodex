@@ -3,7 +3,9 @@ import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = ["input", "results"]
-  static values = { deckKey: String }
+  // The deck's cards endpoint, rendered by the server with the page's grouping on it, so that the
+  // answer carries rows in the view the page is showing.
+  static values = { url: String }
 
   connect() {
     this.timeout = null
@@ -29,7 +31,7 @@ export default class extends Controller {
 
   async add(event) {
     const cardId = event.currentTarget.dataset.cardId
-    const added = await requestJson(`/api/decks/${this.deckKeyValue}/cards`, {
+    const added = await requestJson(this.urlValue, {
       method: "POST",
       body: { deck_card: { card_id: cardId, quantity: 1 } },
       failure: "Couldn't add the card to this deck"
@@ -38,7 +40,9 @@ export default class extends Controller {
 
     this.inputTarget.value = ""
     this.resultsTarget.innerHTML = ""
-    window.Turbo.visit(window.location.href, { action: "replace" })
+    // deck_rows_controller.js places the rows; a reload would lose the reader's place and every
+    // open disclosure.
+    this.dispatch("added", { detail: added })
   }
 
   async #fetchResults(query) {
