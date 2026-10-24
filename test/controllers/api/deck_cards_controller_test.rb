@@ -305,6 +305,32 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "honedge_fp", nil, [] ], json.values_at("fingerprint_key", "fingerprint", "rows")
   end
 
+  # A body of the wrong shape is a malformed request, answered 400, never a NoMethodError 500.
+  test "create answers 400 to a deck_card that is not a hash" do
+    assert_no_difference "::DeckCard.count" do
+      post api_deck_cards_path(@deck), params: { deck_card: "x" }, as: :json
+    end
+    assert_response :bad_request
+  end
+
+  test "update answers 400 to a deck_card that is not a hash" do
+    @deck.deck_cards.create!(card: @card, quantity: 2)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: "x" }, as: :json
+
+    assert_response :bad_request
+    assert_equal 2, @deck.deck_cards.find_by!(card: @card).quantity
+  end
+
+  test "move answers 400 to a move that is not a hash" do
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    post move_api_deck_card_path(@deck, cards(:budew_pre)), params: { move: "x" }, as: :json
+
+    assert_response :bad_request
+    assert_equal 2, @deck.deck_cards.find_by!(card: cards(:budew_asc)).quantity
+  end
+
   # — ⇄ —
 
   test "move takes one copy off the source printing and lands it on this one" do

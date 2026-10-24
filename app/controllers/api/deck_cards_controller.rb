@@ -44,7 +44,7 @@ module Api
     # while the target need not be: landing on a printing the deck does not play is the point.
     def move
       to_card = Card.find(params[:id])
-      from_card = @deck.deck_cards.find_by!(card_id: params.require(:move).require(:from_card_id)).card
+      from_card = @deck.deck_cards.find_by!(card_id: params.expect(move: [ :from_card_id ])[:from_card_id]).card
       result = refusing { Decks::CopyMover.call(deck: @deck, from_card: from_card, to_card: to_card) }
       return if performed?
 
@@ -62,8 +62,10 @@ module Api
 
     private
 
+    # `expect` rather than `require.permit`: a body whose `deck_card` is not a hash is a 400, where
+    # `permit` on a String was a NoMethodError and a 500.
     def deck_card_params
-      params.require(:deck_card).permit(:card_id, :quantity, :owned_copies, :quantity_delta, :owned_copies_delta)
+      params.expect(deck_card: [ :card_id, :quantity, :owned_copies, :quantity_delta, :owned_copies_delta ])
     end
 
     # The deck page's steppers send a step (`*_delta`), which the setter resolves against the
