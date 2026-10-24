@@ -45,12 +45,13 @@ describe("card_search_controller", () => {
     expect(requests()).toEqual([])
   })
 
-  test("adds the card through its url, clears the search and hands the answer over without reloading", async () => {
+  // The POST is deck_rows_controller.js's to send: it is the one that knows whether a write is
+  // already in flight, and an add answered after an older stepper answer would be overwritten.
+  test("hands the add to the deck page as a request, clears the search and sends nothing itself", async () => {
     vi.useFakeTimers()
-    const reply = { fingerprint_key: "fp", rows: [], sections: [], deck: { has_proxies: false, total: 61 } }
-    stubFetch(jsonResponse([ { id: 99, name: "Pikachu", set_name: "SVI", set_number: "1", card_type: "Pokémon" } ]), jsonResponse(reply, { status: 201 }))
+    stubFetch(jsonResponse([ { id: 99, name: "Pikachu", set_name: "SVI", set_number: "1", card_type: "Pokémon" } ]))
     const { element } = await mount(fragment, { "card-search": CardSearchController })
-    const added = captureEvents(document, "card-search:added")
+    const adds = captureEvents(document, "card-search:add")
     const input = element.querySelector("input")
 
     type(input, "pika")
@@ -59,12 +60,12 @@ describe("card_search_controller", () => {
     element.querySelector(".card-search-add-btn").click()
     await settle()
 
-    expect(requests()[1]).toMatchObject({
+    expect(requests().map((request) => request.url)).toEqual([ "/api/cards?q=pika" ])
+    expect(adds.map((event) => event.detail)).toEqual([ {
       url: "/api/decks/k/cards?group=set",
-      method: "POST",
-      body: { deck_card: { card_id: "99", quantity: 1 } }
-    })
-    expect(added.map((event) => event.detail)).toEqual([ reply ])
+      body: { deck_card: { card_id: "99", quantity: 1 } },
+      failure: "Couldn't add the card to this deck"
+    } ])
     expect(input.value).toBe("")
     expect(element.querySelector("[data-card-search-target=results]").innerHTML).toBe("")
     expect(window.Turbo.visit).not.toHaveBeenCalled()

@@ -177,6 +177,9 @@ class DeckRowsInPlaceTest < ApplicationSystemTestCase
     find(".card-search-input").set(query)
     find(".card-search-result-item", text: set_label).find(".card-search-add-btn").click
     assert_no_selector ".card-search-result-item"
+    # The search clears itself as it hands the add over; the answer lands once the list is no
+    # longer busy.
+    assert_no_selector ".deck-sections[aria-busy]"
   end
 
   def top_sections

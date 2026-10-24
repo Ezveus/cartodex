@@ -17,7 +17,7 @@ module Decks
     def view_template
       div(class: "deck-show-container", data: {
         controller: "card-preview deck-rows disclosure result-modal tournament-pdf deck-proxies share-modal",
-        action: "card-search:added->deck-rows#added deck-proxies:changed->deck-proxies#toggle",
+        action: "card-search:add->deck-rows#add deck-proxies:changed->deck-proxies#toggle",
         result_modal_deck_key_value: @deck.key
       }) do
         header_section

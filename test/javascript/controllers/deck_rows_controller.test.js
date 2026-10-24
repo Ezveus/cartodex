@@ -53,9 +53,13 @@ function setSection(key, rows, { total = 0, noun = "cards" } = {}) {
   </div>`
 }
 
+const addButton = `<button class="card-search-add-btn" data-action="card-search#add" data-card-id="99">+</button>`
+const searchFragment = `<div data-controller="card-search" data-card-search-url-value="/api/decks/k/cards?group=type">
+  <input data-card-search-target="input" value="new"><div data-card-search-target="results">${addButton}</div></div>`
+
 function page(sections, { total = 10, extraControllers = "", extraActions = "", inner = "" } = {}) {
   return `<div class="deck-show-container" data-controller="deck-rows${extraControllers}"
-      data-action="card-search:added->deck-rows#added${extraActions}">
+      data-action="card-search:add->deck-rows#add${extraActions}">
     <span class="stat" data-deck-rows-target="total">${total}</span>
     ${inner}
     <div class="deck-sections" data-deck-rows-target="sections">${sections.join("")}</div>
@@ -87,7 +91,7 @@ function listOf(root, sectionKey) {
 }
 
 async function apply(rendered, data) {
-  await rendered.controller("deck-rows").added({ detail: data })
+  await rendered.controller("deck-rows").apply(data)
 }
 
 describe("deck_rows_controller", () => {
@@ -396,7 +400,7 @@ describe("deck_rows_controller", () => {
     expect(requests()).toMatchObject([ { url: "/api/decks/k/cards/1/collection_copy", method: "POST", body: undefined } ])
   })
 
-  test("applies the answer card search hands it, with no reload", async () => {
+  test("sends the add card search hands it and applies the answer, with no reload", async () => {
     const reply = answer({
       fingerprintKey: "fp-n",
       rows: [ { key: "fp-n", section: "pokemon", html: row("fp-n") } ],
@@ -404,19 +408,87 @@ describe("deck_rows_controller", () => {
       deck: { has_proxies: false, total: 11 }
     })
     stubFetch(jsonResponse(reply, { status: 201 }))
-    const search = `<div data-controller="card-search" data-card-search-url-value="/api/decks/k/cards?group=type">
-      <input data-card-search-target="input" value="new"><div data-card-search-target="results">
-      <button class="card-search-add-btn" data-action="card-search#add" data-card-id="99">+</button></div></div>`
     const { element } = await mount(
-      page([ typeSection("pokemon", [ row("fp-a") ]) ], { inner: search }),
+      page([ typeSection("pokemon", [ row("fp-a") ]) ], { inner: searchFragment }),
       { ...controllers, "card-search": CardSearchController }
     )
 
     element.querySelector(".card-search-add-btn").click()
     await settle()
 
+    expect(requests()).toMatchObject([ { url: "/api/decks/k/cards?group=type", method: "POST", body: { deck_card: { card_id: "99", quantity: 1 } } } ])
     expect(rowKeys(listOf(element, "pokemon"))).toEqual([ "fp-a", "fp-n" ])
     expect(element.querySelector('[data-deck-rows-target="total"]').textContent).toBe("11")
     expect(window.Turbo.visit).not.toHaveBeenCalled()
+  })
+
+  // Reproduced before the add went through here: a stepper's older answer landed after the add's
+  // and overwrote it — the heading said 3 over a row of 4, the total 18 against the server's 19.
+  test("a search add waits for the write in flight, then is sent and applied after it", async () => {
+    let release
+    const step = answer({
+      fingerprintKey: "fp-a",
+      rows: [ { key: "fp-a", section: "pokemon", html: row("fp-a", { label: "stepped" }) } ],
+      sections: [ { key: "pokemon", parent: null, total: 3, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ],
+      deck: { has_proxies: false, total: 18 }
+    })
+    const added = answer({
+      fingerprintKey: "fp-a",
+      rows: [ { key: "fp-a", section: "pokemon", html: row("fp-a", { label: "added" }) } ],
+      sections: [ { key: "pokemon", parent: null, total: 4, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ],
+      deck: { has_proxies: false, total: 19 }
+    })
+    stubFetch(() => new Promise((resolve) => { release = () => resolve(jsonResponse(step)) }), jsonResponse(added, { status: 201 }))
+    const { element } = await mount(
+      page([ typeSection("pokemon", [ row("fp-a") ], { total: 2, unique: 1 }) ], { inner: searchFragment }),
+      { ...controllers, "card-search": CardSearchController }
+    )
+    const sections = element.querySelector(".deck-sections")
+
+    element.querySelector('[data-row-key="fp-a"] button').click()
+    await settle()
+    // The stepper click, outside the search, closed its results: the member searches again.
+    element.querySelector("[data-card-search-target=results]").innerHTML = addButton
+    await settle()
+    element.querySelector(".card-search-add-btn").click()
+    await settle()
+
+    expect(requests()).toHaveLength(1)
+    expect(sections.getAttribute("aria-busy")).toBe("true")
+
+    release()
+    await settle()
+
+    expect(requests().map((request) => request.method)).toEqual([ "PATCH", "POST" ])
+    expect(element.querySelector('[data-row-key="fp-a"] .label').textContent).toBe("added")
+    expect(element.querySelector('[data-section-key="pokemon"] [data-section-total]').textContent).toBe("4")
+    expect(element.querySelector('[data-deck-rows-target="total"]').textContent).toBe("19")
+    expect(sections.hasAttribute("aria-busy")).toBe(false)
+  })
+
+  test("a stepper click while a search add is in flight is ignored, and the add is applied", async () => {
+    let release
+    const added = answer({
+      fingerprintKey: "fp-n",
+      rows: [ { key: "fp-n", section: "pokemon", html: row("fp-n") } ],
+      sections: [ { key: "pokemon", parent: null, total: 2, unique: 2, rows: [ "fp-a", "fp-n" ], html: typeSection("pokemon", []) } ],
+      deck: { has_proxies: false, total: 11 }
+    })
+    stubFetch(() => new Promise((resolve) => { release = () => resolve(jsonResponse(added, { status: 201 })) }))
+    const { element } = await mount(
+      page([ typeSection("pokemon", [ row("fp-a") ]) ], { inner: searchFragment }),
+      { ...controllers, "card-search": CardSearchController }
+    )
+
+    element.querySelector(".card-search-add-btn").click()
+    await settle()
+    element.querySelector('[data-row-key="fp-a"] button').click()
+    await settle()
+    expect(requests()).toHaveLength(1)
+    expect(element.querySelector(".deck-sections").getAttribute("aria-busy")).toBe("true")
+
+    release()
+    await settle()
+    expect(rowKeys(listOf(element, "pokemon"))).toEqual([ "fp-a", "fp-n" ])
   })
 })

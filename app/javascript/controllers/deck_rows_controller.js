@@ -12,26 +12,42 @@ import { requestJson } from "helpers/api"
 export default class extends Controller {
   static targets = ["total", "sections"]
 
+  // A second click before the answer would be computed by the server against a state the page
+  // has not shown yet, and the two answers could then land in either order: a stepper click while
+  // any write is in flight is dropped.
   async write({ params: { url, method, body, failure } }) {
-    // A second click before the answer would be computed by the server against a state the page
-    // has not shown yet, and the two answers could then land in either order.
-    if (this.busy) return
-    this.busy = true
+    if (this.inFlight) return
+
+    await this.#send({ url, method, body: body === "" ? undefined : body, failure })
+  }
+
+  // card_search_controller.js hands its add here rather than sending it, so that it cannot land
+  // around a stepper's answer: it is never dropped — the member asked for that card — but waits
+  // for whatever is in flight, adds queued before it included, and is then sent and applied.
+  async add({ detail: { url, body, failure } }) {
+    while (this.inFlight) await this.inFlight.catch(() => {})
+
+    await this.#send({ url, method: "POST", body, failure })
+  }
+
+  #send(request) {
+    const pending = this.#request(request)
+    this.inFlight = pending
+    return pending
+  }
+
+  async #request({ url, method, body, failure }) {
     // Says to assistive technology — and to the system tests, which must not read a row the answer
     // is about to replace — that the list is being rewritten.
     this.sectionsTarget.setAttribute("aria-busy", "true")
 
     try {
-      const data = await requestJson(url, { method, body: body === "" ? undefined : body, failure })
+      const data = await requestJson(url, { method, body, failure })
       if (data) this.apply(data)
     } finally {
-      this.busy = false
+      this.inFlight = null
       this.sectionsTarget.removeAttribute("aria-busy")
     }
-  }
-
-  added({ detail }) {
-    this.apply(detail)
   }
 
   apply(data) {

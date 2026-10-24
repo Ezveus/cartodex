@@ -29,20 +29,21 @@ export default class extends Controller {
     this.timeout = setTimeout(() => this.#fetchResults(query), 300)
   }
 
-  async add(event) {
+  // The write is deck_rows_controller.js's to send: it is the one that knows whether another write
+  // is in flight, and an add sent from here could land before an older stepper answer that then
+  // overwrote it. A reload would lose the reader's place and every open disclosure.
+  add(event) {
     const cardId = event.currentTarget.dataset.cardId
-    const added = await requestJson(this.urlValue, {
-      method: "POST",
-      body: { deck_card: { card_id: cardId, quantity: 1 } },
-      failure: "Couldn't add the card to this deck"
+    this.dispatch("add", {
+      detail: {
+        url: this.urlValue,
+        body: { deck_card: { card_id: cardId, quantity: 1 } },
+        failure: "Couldn't add the card to this deck"
+      }
     })
-    if (!added) return
 
     this.inputTarget.value = ""
     this.resultsTarget.innerHTML = ""
-    // deck_rows_controller.js places the rows; a reload would lose the reader's place and every
-    // open disclosure.
-    this.dispatch("added", { detail: added })
   }
 
   async #fetchResults(query) {

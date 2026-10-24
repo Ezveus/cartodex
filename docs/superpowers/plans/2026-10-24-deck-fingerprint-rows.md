@@ -124,7 +124,7 @@ anything else :type). Errors: ArgumentError / NotPhysicalError → 422 `{ errors
 ### DOM (lane B renders, lane C reads)
 
 Owner container `.deck-show-container`: `data-controller` gains `deck-rows disclosure`, loses
-`deck-totals`; actions `card-search:added->deck-rows#added deck-proxies:changed->deck-proxies#toggle`.
+`deck-totals`; actions `card-search:add->deck-rows#add deck-proxies:changed->deck-proxies#toggle`.
 The deck total stat value carries `data-deck-rows-target="total"`. Sections sit in
 `div.deck-sections[data-deck-rows-target="sections"]`.
 
@@ -171,9 +171,11 @@ the same classes, no `data-row-key`, no write button, no alloc, no owned note.
 - `disclosure_controller.js` — `toggle({ currentTarget })` flips `aria-expanded` and the
   `aria-controls` element's `hidden`.
 - `deck_rows_controller.js` — targets `total`, `sections`.
-  - `write({ params: { url, method, body, failure } })`: ignored while a write is in flight;
-    `requestJson`; on data → `apply(data)`.
-  - `added({ detail })` → `apply(detail)`.
+  - `write({ params: { url, method, body, failure } })`: ignored while a write (or an add) is in
+    flight; `requestJson`; on data → `apply(data)`.
+  - `add({ detail: { url, body, failure } })`: never dropped — waits for the request in flight (the
+    controller keeps its promise), then POSTs and applies, so an older stepper answer can never land
+    after it. `aria-busy` stays on the sections while either is in flight.
   - `apply(data)`: (1) remember the `aria-controls` of every expanded disclosure inside the rows it
     will replace, and the focused element's `data-focus-key`; (2) remove each
     `[data-row-key][data-fingerprint-key="<data.fingerprint_key>"]` whose key is not in `data.rows`;
@@ -186,9 +188,11 @@ the same classes, no `data-row-key`, no write button, no alloc, no owned note.
     (6) `total` target ← `data.deck.total`; dispatch `deck-proxies:changed` `{ hasProxies }`;
     (7) re-expand remembered disclosures present in the new rows, refocus the element with the
     remembered focus key when it exists and is enabled.
-- `card_search_controller.js` — `add` POSTs to its new `url` value (server-rendered, carries
-  `group`), clears the field, dispatches `card-search:added` with the answer as detail; no Turbo
-  visit. `deckKey` value removed.
+- `card_search_controller.js` — `add` sends nothing: it dispatches `card-search:add` with
+  `{ url, body: { deck_card: { card_id, quantity: 1 } }, failure }` (`url` is its server-rendered
+  value, carrying `group`) and clears the field and the results; no Turbo visit. `deckKey` value
+  removed. (It used to POST and dispatch `card-search:added` with the answer, which then applied
+  outside the busy guard: an older stepper answer could land after it and overwrite it.)
 - Deleted: `deck_card_quantity_controller.js`, `deck_card_owned_copies_controller.js`,
   `printing_picker_controller.js`, `deck_totals_controller.js`.
 
@@ -243,5 +247,6 @@ Each entry names a decision the existing suite would not notice, the test that h
   printings; DELETE answers 200 with `removed`, `fingerprint: null`, `rows: []` and the section gone;
   DELETE one of two → remaining quantity.
 - B9 set-section spans `[data-section-total]`, `[data-section-noun]`, keys `set-<id>`, `set-code-pal`.
-- C1 `card_search#add` → POST to `url` value, `card-search:added` with the reply, field cleared, no
-  `Turbo.visit`; fixture drops `deck-key`.
+- C1 `card_search#add` → no request, `card-search:add` with `{ url, body, failure }`, field cleared,
+  no `Turbo.visit`; fixture drops `deck-key`. `deck_rows#add` waits for a write in flight and applies
+  after it.

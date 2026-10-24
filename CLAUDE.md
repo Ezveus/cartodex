@@ -377,7 +377,9 @@ write in `Api::DeckCardsController` and `Api::DeckCardPrintingsController#update
 `DeckCardPayload#fingerprint_payload`**: the card's whole state, its rows rendered by the very
 components the page uses (`Decks::OwnerRow.for`), each row's section and that section's ordered keys,
 the empty shell of a section a new row needs, every section's counts and the deck's total and Proxies
-flag; `deck_rows_controller.js` only applies it. Each button carries its request (URL, method, body)
+flag; `deck_rows_controller.js` only applies it — and it alone sends: the card search hands its add
+over as a `card-search:add` request, which waits for the write in flight rather than landing around
+it, while a stepper click during any write is dropped. Each button carries its request (URL, method, body)
 as Stimulus action params with `disabled` decided by the server, so a JS change that adds arithmetic,
 a bound or an ordering is a second implementation of a server rule. The steppers send a **step**
 (`quantity_delta`/`owned_copies_delta`, ±1), never the count the page shows: the setters resolve it

@@ -333,14 +333,16 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   # deck_rows_controller.js is the one writer of the list: it sits on the container so that both
-  # the card search's answer and every row's button reach it, and it reads the deck total and the
+  # the card search's add — which it sends itself, after any write in flight — and every row's
+  # button reach it, and it reads the deck total and the
   # sections through its two targets.
   test "show wires the deck rows controller to the search, the total and the sections" do
     get deck_path(@deck)
 
     assert_response :success
     assert_select ".deck-show-container[data-controller~='deck-rows'][data-controller~='disclosure']" \
-                  "[data-action~='card-search:added->deck-rows#added']"
+                  "[data-action~='card-search:add->deck-rows#add']"
+    assert_select "[data-action~='card-search:added->deck-rows#added']", count: 0
     assert_select ".deck-show-container[data-controller~='deck-totals']", count: 0
     assert_select ".stat-value[data-deck-rows-target=total]", text: "1"
     assert_select "div.deck-sections[data-deck-rows-target=sections] > div.deck-section[data-section-key=pokemon]" do
