@@ -198,4 +198,39 @@ the same classes, no `data-row-key`, no write button, no alloc, no owned note.
 
 ## Tests per plan-adversary finding
 
-(filled after phase 3)
+Each entry names a decision the existing suite would not notice, the test that holds it, and its lane.
+
+- A1 increase claims free copies with `excluding_deck` — collection 3, row q1/o1, set 3 → o3; a second
+  physical deck backing 1 → o2. Delete `deck_card_quantity_setter_test.rb` "does not auto-bump reals".
+- A2 a decrease never claims — collection 3, row q4/o1, set 3 → o1.
+- A3 non-physical never claims — collection 3, row q1/o0, set 3 → o0.
+- A4 a new row counts as 0 — no row, collection 2, set 3 → q3/o2; non-physical → o0.
+- A5 setter inside `serialized_transaction` — the depth probe of `test/mcp/bulk_add_tools_test.rb:248`.
+- A6 MCP greedy — `SetDeckCardQuantityTool` q1/o1 (collection 3) → 3 reports 3 real.
+- A7 `CopyMover` refusals (same card, foreign fingerprint, blank fingerprint, absent source), source
+  destroyed at 0, proxy dropped first on the source, greedy on the target, non-physical o0.
+- A8 `CollectionCopyAdder` — no proxy → refused; free copy → refused, nothing written; over-allocated
+  printing → refused and collection unchanged; happy path collection +1 and o+1 in one transaction.
+- A9 `FingerprintStates` — tie on copies → `move_from` is the newer set; groups and order
+  (:deck, :owned, :other, catalogue order); `max_owned`, `can_add_to_collection`, `over_allocated`;
+  `deck_only` orders by set code then `number_key` (GG2 < GG10) and runs no query.
+- A10 `Layout` — type keys/order/Tool fold/name sort; set keys `set-<id>` and `set-code-<code>`.
+- B1 "unique" counts fingerprints — `budew_pre`×1 + `budew_asc`×2 + `honedge`×1 → "Pokémon (4 — 2 unique)"
+  on owner and public pages.
+- B2 one row per fingerprint / per printing — type view one `li.deck-fingerprint[data-fingerprint-key]`;
+  set view two `li.deck-printing-row[data-row-key^="printing:"]` in PRE and ASC sections.
+- B3 image-export contract — owner and public: `.deck-card-item` count 2, `.deck-card-qty` {1,2}, one
+  `.deck-card-total` "3" outside every `.deck-card-item`. (C: Vitest over `buildImage`'s collection
+  step on that markup → [1,2].)
+- B4 single-printing expansion does not repeat itself; toggle only where a reprint exists.
+- B5 public page carries none of `[data-action~="deck-rows#write"]`, `.deck-printing-owned`,
+  `.deck-printing-move`, `[data-row-key]`, `.deck-card-collect`, `.deck-card-alloc`; the owner's
+  request on the same deck carries each.
+- B6 public order set code then number vs owner catalogue order (POR budew reprint); visitor still 7 queries.
+- B7 flat cost with fingerprints holding ≥2 non-deck printings in different sets, owned and not.
+- B8 payload — `group=set` row keys/sections; type row key = fingerprint key; merging swap lists both
+  printings; DELETE answers 200 with `removed`, `fingerprint: null`, `rows: []` and the section gone;
+  DELETE one of two → remaining quantity.
+- B9 set-section spans `[data-section-total]`, `[data-section-noun]`, keys `set-<id>`, `set-code-pal`.
+- C1 `card_search#add` → POST to `url` value, `card-search:added` with the reply, field cleared, no
+  `Turbo.visit`; fixture drops `deck-key`.
