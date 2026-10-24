@@ -63,8 +63,9 @@ to write: mount a controller on a DOM fragment, answer its requests, read what i
   `console.error` and swallows, so a controller throwing in `connect()` or in a synchronous action
   would otherwise leave a green test over a dead controller. `mount` records those errors and the
   shared `afterEach` throws the first one.
-- **`stubFetch` is strict in both directions.** A request with no reply left, and a reply nobody
-  requested, both fail the test in `afterEach`. The first matters because `requestJson` catches a
+- **`stubFetch` is strict in both directions, and on by default.** A request with no reply left,
+  and a reply nobody requested, both fail the test in `afterEach`; every test starts with
+  `stubFetch()` called and nothing queued, so a test that never stubs is held to it too. The first matters because `requestJson` catches a
   rejected `fetch` and turns it into a flash, so an unexpected request would otherwise be invisible;
   the second because a test that queued a reply expected a request that never happened.
 - **Requests are answered with real `Response` objects** (Node 24's global), so `requestJson`'s
@@ -74,6 +75,10 @@ to write: mount a controller on a DOM fragment, answer its requests, read what i
 - **dependabot gains the npm ecosystem, and ignores `@hotwired/stimulus`.** Its version follows the
   gem: a bump starts as a bundler pull request, which the guard turns red until `package.json` is
   edited in that same pull request.
+
+- **The harness is proved from outside.** `harness.test.js` runs Vitest in a child process over
+  fixtures that fail only through the shared `afterEach`; a test calling `resetSupport()` itself
+  cannot tell whether `setup.js` calls it.
 
 ## Owner may reverse
 

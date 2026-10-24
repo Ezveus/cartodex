@@ -82,7 +82,10 @@ The shared `afterEach` fails the test, after the fact, when:
 - a controller threw — in `connect()`, `disconnect()`, an action, a value or target callback.
   Stimulus only logs these, so without this a dead controller passes;
 - a request arrived with no reply queued — `requestJson` would have turned it into a flash and a
-  `null`, invisible to the test;
+  `null`, invisible to the test. Every test starts with `stubFetch()` already called, so this holds
+  for a test that never stubs too;
 - a queued reply was never requested.
 
-`support.test.js` holds each of those to account.
+`support.test.js` checks each of those by calling `resetSupport()` itself; `harness.test.js` runs
+Vitest in a child process over `harness_fixtures/` to prove the shared `afterEach` really does. The
+fixtures fail on purpose and sit outside the `include` glob, which `config.test.js` asserts.

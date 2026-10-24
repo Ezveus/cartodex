@@ -3,10 +3,10 @@
 export const CSRF_TOKEN = "test-csrf-token"
 
 // The flashes helpers/flash.js wrote into #flash-messages, as { text, kind }, kind being
-// "notice" or "alert".
+// "notice" or "alert" — and null for any other class, which the stylesheet does not style.
 export function flashMessages() {
   return Array.from(document.querySelectorAll("#flash-messages > .flash"), (flash) => ({
     text: flash.textContent,
-    kind: flash.classList.contains("flash-alert") ? "alert" : "notice"
+    kind: flash.classList.contains("flash-alert") ? "alert" : flash.classList.contains("flash-notice") ? "notice" : null
   }))
 }

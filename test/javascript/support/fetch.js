@@ -12,7 +12,9 @@ import { state } from "./state.js"
 //   stubFetch(jsonResponse({ quantity: 2 }), jsonResponse({ errors: ["Nope"] }, { status: 422 }))
 //
 // Strict both ways: a request past the last reply, and a reply still queued when the test ends,
-// fail the test (see resetSupport). Returns the vi.fn, for assertions on the raw calls.
+// fail the test (see resetSupport). Every test starts with `stubFetch()` already called, no reply
+// queued, so a request from a test that never stubs fails too. Returns the vi.fn, for assertions
+// on the raw calls.
 export function stubFetch(...replies) {
   const fetchState = { queue: [ ...replies ], requests: [], unexpected: [] }
   state.fetch = fetchState

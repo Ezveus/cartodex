@@ -32,6 +32,15 @@ class JavascriptToolchainTest < ActiveSupport::TestCase
       "vendors — bump it in the same pull request as the gem"
   end
 
+  # Every package, not only Stimulus: a range lets the lock move under a `npm install` nobody
+  # reviewed, and the lock is the only record of what CI ran.
+  test "package.json pins every devDependency to an exact version, and has no runtime dependency" do
+    package_json.fetch("devDependencies").each do |name, version|
+      assert_match(/\A\d+\.\d+\.\d+\z/, version, "#{name} is pinned to #{version.inspect}, not an exact version")
+    end
+    assert_nil package_json["dependencies"], "package.json is dev/test only: importmap serves the app"
+  end
+
   # What `npm ci` installs is the lock's version, not package.json's; `npm ci` refuses a lock that
   # disagrees with package.json, but nothing stops a hand-edited package.json being committed
   # without regenerating the lock.
@@ -61,6 +70,22 @@ class JavascriptToolchainTest < ActiveSupport::TestCase
   test "the deploy waits for the JavaScript tests" do
     assert_includes workflow.dig("jobs", "deploy", "needs"), "test_js"
     assert_includes workflow.dig("jobs", "test_js", "steps").map { |step| step["run"] }, "npm test"
+  end
+
+  # Stimulus is left to the gem's bundler pull requests (see the guard above); everything else in
+  # package.json gets dependabot's npm pull requests like the gems and the actions do.
+  test "dependabot updates npm, except the Stimulus that follows the gem" do
+    updates = YAML.safe_load_file(Rails.root.join(".github/dependabot.yml")).fetch("updates")
+    npm = updates.find { |update| update["package-ecosystem"] == "npm" }
+
+    assert_not_nil npm, "dependabot.yml has no npm entry"
+    assert_equal [ "@hotwired/stimulus" ], npm.fetch("ignore", []).map { |rule| rule["dependency-name"] }
+    assert_equal %w[bundler github-actions npm], updates.map { |update| update["package-ecosystem"] }.sort
+  end
+
+  test "node_modules is ignored by git" do
+    assert system("git", "-C", Rails.root.to_s, "check-ignore", "-q", "node_modules/vitest/package.json"),
+      "node_modules/ is not in .gitignore"
   end
 
   private

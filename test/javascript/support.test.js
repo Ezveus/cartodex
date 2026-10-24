@@ -1,7 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { state, resetSupport } from "./support/state.js"
 import { captureEvents, jsonResponse, mount, stubFetch } from "./support"
+import { requestJson } from "helpers/api"
 
 // The harness has to fail the tests it exists to fail. Each case below provokes one failure and
 // calls resetSupport() itself — what the shared afterEach would do — to watch it throw.
@@ -70,5 +71,53 @@ describe("the test harness", () => {
     expect(document.querySelector('meta[name="csrf-token"]').content).toBe("test-csrf-token")
     expect(document.getElementById("flash-messages").children).toHaveLength(0)
     expect(window.Turbo.visit).not.toHaveBeenCalled()
+  })
+
+  test("fails a test whose controller made a request without the test ever stubbing fetch", async () => {
+    await requestJson("/api/x", { failure: "f" })
+
+    expectResetToThrow(/no reply queued: GET \/api\/x/)
+  })
+
+  test("gives each mount its own application, so neither connects the other's elements", async () => {
+    const connected = []
+    class Counted extends Controller {
+      connect() { connected.push(this.element) }
+      ping() { connected.push("ping") }
+    }
+    const fragment = `<button data-controller="counted" data-action="counted#ping"></button>`
+
+    const first = await mount(fragment, { counted: Counted })
+    const second = await mount(fragment, { counted: Counted })
+    first.element.click()
+
+    expect(connected).toEqual([ first.element, second.element, "ping" ])
+    expect(first.controller("counted")).not.toBe(second.controller("counted"))
+  })
+
+  test("never starts the production application", async () => {
+    await mount(`<div data-controller="tracked"></div>`, { tracked: class extends Controller {} })
+
+    expect(window.Stimulus).toBeUndefined()
+  })
+})
+
+// Two tests that must run in this order: the first leaves a stubbed global and a spy behind, the
+// second checks the configuration took both away (`unstubGlobals`, `restoreMocks`). innerWidth
+// rather than fetch, because setup.js stubs fetch afresh before every test anyway.
+describe("between tests", () => {
+  const originalWidth = window.innerWidth
+
+  test("a test may stub a global and spy on the console", () => {
+    vi.stubGlobal("innerWidth", originalWidth - 400)
+    vi.spyOn(console, "error")
+
+    expect(window.innerWidth).toBe(originalWidth - 400)
+    expect(vi.isMockFunction(console.error)).toBe(true)
+  })
+
+  test("the next one starts with neither", () => {
+    expect(window.innerWidth).toBe(originalWidth)
+    expect(vi.isMockFunction(console.error)).toBe(false)
   })
 })

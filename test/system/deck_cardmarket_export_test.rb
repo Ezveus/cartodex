@@ -3,7 +3,8 @@ require_relative "../support/deck_card_rows"
 
 # The one part of the missing-copies Cardmarket wishlist (#208) a request test cannot see: that the
 # clipboard button says "nothing to buy" in its own label instead of copying an empty list. The
-# notice reaches the screen only through clipboard_controller, and this repository has no JS tests.
+# notice reaches the screen only through clipboard_controller, which had no JS unit test when this
+# was written (test/javascript/ came later, with #235).
 #
 # The second half proves the answer is read at click time rather than baked into the page: the
 # menu is rendered once, and the steppers change what the deck backs underneath it.

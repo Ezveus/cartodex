@@ -8,6 +8,8 @@ describe("helpers/flash", () => {
     flashAlert("Refused")
 
     expect(flashMessages()).toEqual([ { text: "Saved", kind: "notice" }, { text: "Refused", kind: "alert" } ])
+    expect(Array.from(document.querySelectorAll("#flash-messages > *"), (element) => element.className))
+      .toEqual([ "flash flash-notice", "flash flash-alert" ])
     const flash = document.querySelector("#flash-messages > .flash")
     expect(flash.dataset.controller).toBe("flash")
     expect(flash.getAttribute("role")).toBe("status")
