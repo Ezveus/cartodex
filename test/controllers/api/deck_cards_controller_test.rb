@@ -212,6 +212,57 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
 
   # The search adds a card the deck has no section for yet: the answer carries that section's empty
   # shell and its parent's, and every section in page order so the browser can place them.
+  # Writing a Pokémon still moves nothing in the Trainer and Energy headings, but the answer says
+  # every section's counts: the page rewrites them all, and a section left out would keep whatever
+  # it last showed.
+  test "a write answers every section's counts, not only the sections it places a row in" do
+    @deck.deck_cards.create!(card: @card, quantity: 1)
+    @deck.deck_cards.create!(card: cards(:trainer_card), quantity: 2)
+    @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 4)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: 1 } }, as: :json
+
+    sections = JSON.parse(response.body)["sections"].index_by { |section| section["key"] }
+    assert_equal %w[pokemon trainer trainer-other energy], sections.keys
+    assert_equal [ 2, 1 ], sections["pokemon"].values_at("total", "unique")
+    assert_equal [ 2, 1, "trainer" ], sections["trainer-other"].values_at("total", "unique", "parent")
+    assert_equal [ 4, 1 ], sections["energy"].values_at("total", "unique")
+    assert_not sections["energy"].key?("html"), "a section holding no row of this answer carries no shell"
+  end
+
+  test "the answer's rows are the written card's alone, not its section's" do
+    @deck.deck_cards.create!(card: @card, quantity: 1)
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: 1 } }, as: :json
+
+    json = JSON.parse(response.body)
+    assert_equal [ "honedge_fp" ], json["rows"].map { |row| row["key"] }
+    assert_equal %w[doublade_fp honedge_fp], json["sections"].sole["rows"]
+  end
+
+  # The answer is read from a fresh load of the deck, its cards and their sets preloaded: the row it
+  # hands back is the very row a reload renders, and its cost does not grow with the deck.
+  test "the answer's row is the page's own row, at a cost that does not grow with the deck" do
+    @deck.deck_cards.create!(card: @card, quantity: 1)
+    write = -> { patch api_deck_card_path(@deck, @card, group: "set"), params: { deck_card: { quantity_delta: 1 } }, as: :json }
+
+    # The first request signs in from the test helper; every later one reads the user off the
+    # session, which costs a query of its own.
+    write.call
+    small = count_queries { write.call }
+    answered = JSON.parse(response.body)["rows"].sole["html"]
+    get deck_path(@deck, group: "set")
+    rendered = css_select("li[data-row-key='printing:#{@card.id}']").sole.to_html
+    assert_equal Nokogiri::HTML5.fragment(rendered).to_html, Nokogiri::HTML5.fragment(answered).to_html
+
+    [ cards(:doublade), cards(:trainer_card), cards(:basic_psychic_energy), cards(:froakie_cri),
+      cards(:bosss_orders_meg) ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+    large = count_queries { write.call }
+
+    assert_equal small, large
+  end
+
   test "adding a card the deck has no section for answers with its shell and the page order" do
     @deck.deck_cards.create!(card: @card, quantity: 1)
     @deck.deck_cards.create!(card: cards(:basic_psychic_energy), quantity: 1)
