@@ -106,8 +106,9 @@ price of nothing to repair.
 `Report` precomputes, per group, the whole curve over every reachable scenario — 54 points on a
 60-card deck — and each cell ships it in a `data-curve` attribute. `deck_odds_controller.js` picks
 an index out of it and formats the number. **There is no arithmetic in JavaScript**, and the reason
-is not taste: this repository has no JS test infrastructure, so a second implementation of the
-conditional hypergeometric would be held down by nothing whatsoever.
+is not taste: when this was built the repository had no JS test infrastructure, so a second
+implementation of the conditional hypergeometric would have been held down by nothing whatsoever.
+Vitest exists since #235; a JavaScript copy would now be testable, but still a second copy.
 
 Because `d` and `p` enter the formulas through their sum, **one curve indexed by `seen` serves all
 three steppers**. The prize columns are the exception and carry a seven-point curve indexed by
@@ -258,7 +259,7 @@ deck, which is where it is linked from.
   sampling error on every number and a far larger feature. The closed form is exact, and the honest
   caveat in `MethodNote` is cheaper than an inexact engine.
 - **Computing in JavaScript.** Instant combinations, and a second implementation of the mathematics
-  in a repository with no JS tests.
+  in a repository that then had no JS tests.
 - **Everything server-rendered, the steppers included.** Consistent with `/archetypes`, but a
   network round trip per notch kills the exploration the page exists for. Precomputed curves get
   both.

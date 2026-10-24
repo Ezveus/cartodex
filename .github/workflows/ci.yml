@@ -131,8 +131,29 @@ jobs:
           path: ${{ github.workspace }}/tmp/screenshots
           if-no-files-found: ignore
 
+  # Vitest + jsdom over the Stimulus controllers and helpers (test/javascript/). Node comes from
+  # mise.toml, the one declaration a developer's mise reads too; package.json is dev/test only.
+  test_js:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: mise.toml
+          cache: npm
+
+      - name: Install JavaScript test dependencies
+        run: npm ci
+
+      - name: Run JavaScript unit tests
+        run: npm test
+
   deploy:
-    needs: [ scan_ruby, scan_js, lint, test, system_test_mobile ]
+    needs: [ scan_ruby, scan_js, lint, test, system_test_mobile, test_js ]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     concurrency:

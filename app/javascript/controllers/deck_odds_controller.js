@@ -7,8 +7,9 @@ import { Controller } from "@hotwired/stimulus"
 // draws + prizes taken — for an accessibility cell, and prizes taken alone for a prize cell, which
 // asks about the prize block rather than about how much of the deck has been seen.
 //
-// A second implementation of the conditional hypergeometric here would be held down by nothing: the
-// repo has no JS test infrastructure, only system tests. Formatting is the one thing duplicated, and
+// A second implementation of the conditional hypergeometric here would have been held down by
+// nothing when this was written, before the repo had JS unit tests; it would still be a second copy
+// of mathematics Decks::Odds::Deal is proved against enumeration for. Formatting is the one thing duplicated, and
 // deliberately: `toFixed(2)` here against `format("%.2f")` in Decks::Odds::Formatting, over a number
 // that was rounded once, server-side, by Decks::Odds::Report.percent.
 export default class extends Controller {
