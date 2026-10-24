@@ -207,6 +207,24 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-printings-toggle", text: "2 printings"
   end
 
+  test "the owner's expansion lists the deck's printings, then the owned ones, then the others" do
+    budew = cards(:budew_asc)
+    por = reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    reprint(budew, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
+    @user.collections.create!(card: por, quantity: 1)
+    [ cards(:budew_pre), budew ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+
+    get deck_path(@deck)
+
+    assert_equal [ "ASC 16", "PRE 4", "POR 3" ], printing_labels("budew_shared")
+    assert_select "#deck-printings-budew_shared > li.deck-printing-row:nth-child(3) .deck-printing-owned",
+                  text: "1 owned · 1 free"
+    assert_select "#deck-printings-budew_shared > li.deck-printing-others:last-child" do
+      assert_select ".deck-printings-others-toggle", text: "Other printings (1)"
+      assert_select "#deck-printings-others-budew_shared .deck-card-set", text: "TWM 3"
+    end
+  end
+
   def printing_labels(key)
     css_select("#deck-printings-#{key} > li.deck-printing-row .deck-card-set").map { |node| node.text.squish }
   end

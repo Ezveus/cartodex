@@ -38,6 +38,19 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
 
   def section_codes = css_select(".deck-set-section").map { |s| s["data-set-code"] }
 
+  # Nothing on Card ties `set_name` to its linked set's code, and `Cards::Fetcher` takes the former
+  # from a URL segment: a linked section is coded by the set, which is what it is keyed and titled on.
+  test "a linked section is coded by its set even when the card's set_name says otherwise" do
+    @deck.deck_cards.create!(card: trainer("Odd code", set_name: "PORX", set_number: "1", card_set: card_sets(:por)),
+                             quantity: 1)
+
+    get deck_path(@deck, group: "set")
+
+    assert_select ".deck-set-section[data-section-key=?]", "set-#{card_sets(:por).id}" do |sections|
+      assert_equal "POR", sections.sole["data-set-code"]
+    end
+  end
+
   test "the set view lists sections newest set first, then unlinked codes, with copies in each heading" do
     fill_deck
 
