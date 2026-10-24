@@ -323,6 +323,7 @@ class DecksController < ApplicationController
     authorize @deck
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = true
+    @states = owner_states
     render :show
   end
 
@@ -449,22 +450,20 @@ class DecksController < ApplicationController
                                   tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
-    # Which rows get a printing picker at all. Not restricted to physical decks: a swap changes
-    # what every export prints, which is reason enough on a TCG Live deck.
-    @swappable_card_ids = Cards::Printings.swappable_card_ids(@deck.deck_cards.map(&:card))
+    @states = owner_states
 
-    if @deck.physical?
-      @availability = Allocations::Availability.for_cards(
-        user: current_user, cards: @deck.deck_cards.map(&:card), excluding_deck: @deck
-      )
-      @over_allocated_card_ids = Allocations::OverAllocations.call(user: current_user).map { |o| o[:card_id] }.to_set
-    else
-      @availability = {}
-      @over_allocated_card_ids = Set.new
-    end
 
     assign_og_payload
     render :show
+  end
+
+  # Every row of the owner's page, with every number its controls show or are bounded by: each
+  # printing of the deck's cards and the reader's availability of each. Not restricted to physical
+  # decks — an expanded row lists the printings the member owns on any deck, and a printing swap
+  # changes what every export prints. Built for the full-page edit too, which renders the same
+  # rows; it used to render them with no availability at all.
+  def owner_states
+    Decks::FingerprintStates.call(user: current_user, deck: @deck)
   end
 
   def public_show

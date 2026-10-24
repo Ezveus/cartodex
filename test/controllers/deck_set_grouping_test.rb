@@ -55,6 +55,43 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
     assert_select ".deck-show-main[data-deck-group=set]"
   end
 
+  # B9: the heading's two figures are what deck_rows_controller.js rewrites after a write, and the
+  # section key is how it finds the section — the set's id when the printing is linked to one, the
+  # code otherwise, since an unlinked code has no row to take an id from.
+  test "a set section carries its key and the spans the page rewrites in place" do
+    fill_deck
+
+    get deck_path(@deck, group: "set")
+
+    assert_select ".deck-set-section[data-set-code=POR][data-section-key=?]", "set-#{card_sets(:por).id}" do
+      assert_select "> h2 [data-section-total]", text: "4"
+      assert_select "> h2 [data-section-noun]", text: "cards"
+      assert_select "> ul.deck-card-list > li.deck-printing-row", count: 3
+    end
+    assert_select ".deck-set-section[data-set-code=ASC][data-section-key=?]", "set-#{card_sets(:asc).id}" do
+      assert_select "> h2 [data-section-noun]", text: "card"
+    end
+    assert_select ".deck-set-section[data-set-code=PAL][data-section-key=set-code-pal]"
+    assert_select ".deck-set-section[data-set-code=CRI][data-section-key=set-code-cri]"
+  end
+
+  # B2, set view: one row per printing, so a card played in two sets is a row in each, both
+  # answering to the card's fingerprint for the rows a write replaces.
+  test "the set view renders a card split across two sets as a row in each" do
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    get deck_path(@deck, group: "set")
+
+    rows = css_select("li.deck-printing-row[data-row-key^='printing:']")
+    assert_equal [ "printing:#{cards(:budew_asc).id}", "printing:#{cards(:budew_pre).id}" ], rows.map { |row| row["data-row-key"] }
+    assert_equal [ "budew_shared" ], rows.map { |row| row["data-fingerprint-key"] }.uniq
+    assert_select ".deck-set-section[data-section-key=?] li.deck-printing-row .deck-card-name", "set-#{card_sets(:asc).id}", text: "Budew"
+    assert_select ".deck-set-section[data-section-key=set-code-pre] li.deck-printing-row .deck-card-item .deck-card-qty", text: "1"
+    assert_select "li.deck-fingerprint", count: 0
+    assert_select ".deck-printings-toggle", count: 0
+  end
+
   test "the default view is the type view, its links carrying no group" do
     fill_deck
 
@@ -64,7 +101,7 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
     assert_select ".deck-set-section", 0
     assert_select "h2", text: "Pokémon (5 — 4 unique)"
     assert_select ".deck-show-main[data-deck-group]", 0
-    assert_select "[data-deck-totals-target=sectionNoun]", 0
+    assert_select "[data-section-noun]", 0
     assert_select "a[href=?]", edit_deck_path(@deck), text: "Edit"
     assert_mode_links current: "Type"
   end

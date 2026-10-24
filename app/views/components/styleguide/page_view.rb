@@ -50,7 +50,7 @@ module Styleguide
         navigation_section
         deck_card_section
         sharing_section
-        printing_picker_section
+        deck_row_section
         standard_pool_section
         metagame_section
         settings_section
@@ -357,27 +357,56 @@ module Styleguide
                shared: true, archetype: sg_sample_archetype)
     end
 
-    def printing_picker_section
-      sg_section("Composants", "Sélecteur d'impression",
-              "Ligne set/numéro d'une carte de deck, là où une autre impression existe. Le menu, rempli à " \
-              "l'ouverture depuis l'API, annote chaque impression et prévient avant que l'échange ne " \
-              "transforme des exemplaires réels en proxies.") do
-        div(class: "sg-printing-demo") do
-          div(class: "deck-card-printing") do
-            button(type: "button", class: "deck-card-set deck-card-set-swap", aria: { expanded: "true" }) { "ASC 16 ▾" }
-            ul(class: "printing-picker-menu") do
-              printing_option("ASC 16", "2 owned · 2 free", current: true)
-              printing_option("JTG 56", "0 owned", warning: "⚠ 2 real copies become proxies")
-              printing_option("PRE 4", "3 owned · 1 free · 1 already in deck")
-            end
+    # The real Decks::FingerprintRow, rendered expanded from hand-made state structs rather than a
+    # deck — Decks::FingerprintStates would need a user, a deck and the catalogue, and what this
+    # shows is presentation. The case is the one the row was built for: Boss's Orders split 2× MEG
+    # 114 + 1× PAL 172, a third printing owned at 0 copies and two more behind "Other printings".
+    def deck_row_section
+      sg_section("Composants", "Ligne de deck",
+              "Une ligne par carte, quel que soit le nombre d'impressions jouées. Dépliée : les " \
+              "impressions du deck, puis celles possédées à 0 exemplaire, puis les autres. ⇄ déplace " \
+              "un exemplaire vers cette impression depuis celle qui en compte le plus.") do
+        div(class: "sg-deck-row-demo") do
+          ul(class: "deck-card-list") do
+            render Decks::FingerprintRow.new(state: sg_deck_row_state, deck: sg_deck_row_deck, expanded: true)
           end
         end
       end
     end
 
-    # Rendered from the real component rather than from hand-written markup, unlike the
-    # printing picker above: that one needs data the API supplies at runtime, whereas this one
-    # needs only two pools and something that answers `persisted?`. Rendering the real thing is
+    def sg_deck_row_deck = Deck.new(key: "sg-deck-row", physical: true)
+
+    def sg_deck_row_state
+      cards = [ [ 9101, "MEG", "114" ], [ 9102, "PAL", "172" ], [ 9103, "PAL", "265" ],
+                [ 9104, "BRS", "132" ], [ 9105, "SVI", "248" ] ].map do |id, set_name, set_number|
+        Card.new(id: id, name: "Boss's Orders", card_type: "Trainer", subtype: "Supporter",
+                 set_name: set_name, set_number: set_number)
+      end
+      meg, pal, owned, *others = cards
+
+      printings = [
+        sg_printing(meg, :deck, quantity: 2, owned_copies: 2, owned: 2, available: 2, move_from: pal),
+        sg_printing(pal, :deck, quantity: 1, owned_copies: 0, owned: 0, available: 0, move_from: meg,
+                    can_add_to_collection: true),
+        sg_printing(owned, :owned, owned: 1, available: 1, move_from: meg),
+        *others.map { |card| sg_printing(card, :other, move_from: meg) }
+      ]
+      Decks::FingerprintStates::State.new(key: "sg-bosss-orders", name: "Boss's Orders", card_type: "Trainer",
+                                          subtype: "Supporter", display_card: meg, printings: printings)
+    end
+
+    def sg_printing(card, group, quantity: 0, owned_copies: 0, owned: 0, available: 0, move_from: nil,
+                    can_add_to_collection: false)
+      Decks::FingerprintStates::PrintingState.new(
+        card: card, group: group, quantity: quantity, owned_copies: owned_copies,
+        proxies: quantity - owned_copies, owned: owned, available: available,
+        max_owned: [ quantity, available ].min, over_allocated: false, move_from: move_from,
+        can_add_to_collection: can_add_to_collection
+      )
+    end
+
+    # Rendered from the real component rather than from hand-written markup: it needs only two
+    # pools and something that answers `persisted?`. Rendering the real thing is
     # what stops the styleguide drifting from it — and both branches are shown, because the
     # component chooses between them by comparing the pools' release dates and neither string
     # may name a record type.
@@ -527,20 +556,6 @@ module Styleguide
         def persisted? = true
         def standard_pool_id = standard_pool.id
       end.new(anchor)
-    end
-
-    def printing_option(set, counts, current: false, warning: nil)
-      li do
-        button(
-          type: "button",
-          class: [ "printing-option", ("printing-option-current" if current) ].compact.join(" "),
-          disabled: current
-        ) do
-          span(class: "printing-option-set") { set }
-          span(class: "printing-option-counts") { counts }
-          span(class: "printing-option-warning") { warning } if warning
-        end
-      end
     end
 
     # A 24-char placeholder in the shape of the real token (base58, no

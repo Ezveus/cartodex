@@ -18,7 +18,32 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".deck-card-alloc", /2 real/
-    assert_select "[data-controller~=deck-card-owned-copies]"
+    # The stepper's two buttons, each carrying the owned_copies it writes. 3 owned, none claimed
+    # elsewhere: the third real is still free, so + is enabled.
+    assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-minus-#{@card.id}]" \
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies: 1 } }.to_json
+    assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-plus-#{@card.id}]:not([disabled])" \
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies: 3 } }.to_json
+    assert_select ".deck-card-collect", count: 0
+  end
+
+  # "+ add to my collection and use it here" is offered only where it means one thing: a proxy to
+  # back and no free copy to back it with.
+  test "deck show offers to add a copy to the collection only when no free copy is left" do
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
+
+    get deck_path(deck)
+
+    assert_select "button.deck-card-collect[data-focus-key=collect-#{@card.id}][data-deck-rows-url-param=?]",
+                  collection_copy_api_deck_card_path(deck, @card), text: "+ add to my collection and use it here"
+    assert_select "[data-focus-key=real-plus-#{@card.id}][disabled]"
+
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    get deck_path(deck)
+
+    assert_select ".deck-card-collect", count: 0
+    assert_select "[data-focus-key=real-plus-#{@card.id}]:not([disabled])"
   end
 
   test "deck show flags an over-allocated card" do

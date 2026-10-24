@@ -69,6 +69,23 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ @pre.id ], @deck.deck_cards.reload.map(&:card_id)
   end
 
+  # B8: the swap answers like every other write. Both printings stay listed — the one left behind
+  # is now a printing the deck does not play, still one click of ⇄ or + away.
+  test "a merging swap answers with the card's state listing both printings, and its one row" do
+    @deck.deck_cards.create!(card: @asc, quantity: 2)
+    @deck.deck_cards.create!(card: @pre, quantity: 1)
+
+    patch api_deck_card_printing_path(@deck, @asc),
+      params: { printing: { card_id: @pre.id } }, as: :json
+
+    json = JSON.parse(response.body)
+    assert_equal "budew_shared", json["fingerprint_key"]
+    groups = json["fingerprint"]["printings"].to_h { |printing| [ printing["card_id"], printing["group"] ] }
+    assert_equal({ @pre.id => "deck", @asc.id => "other" }, groups)
+    assert_equal [ "budew_shared" ], json["rows"].map { |row| row["key"] }
+    assert_equal 3, json["deck"]["total"]
+  end
+
   test "update reports how many copies the stepper may still back" do
     @user.collections.find_by!(card: @pre).update!(quantity: 1)
     @deck.deck_cards.create!(card: @asc, quantity: 3)

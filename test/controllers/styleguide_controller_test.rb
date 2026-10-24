@@ -91,4 +91,24 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
         "the notice is shared by decks and tournaments, so it may not name either")
     end
   end
+
+  # The deck row replaced the printing picker, and its demo is built from hand-made state structs
+  # rather than from a deck: shown expanded, so every part of the row is on the page at once — the
+  # summary line, a sub-row per printing in the deck with its ⇄, an owned printing at 0 copies and
+  # the "Other printings" disclosure.
+  test "the deck row demo shows an expanded card with every kind of sub-row" do
+    get styleguide_path
+
+    assert_response :success
+    assert_select ".printing-picker-menu", count: 0
+    assert_select ".sg-deck-row-demo li.deck-fingerprint" do
+      assert_select ".deck-card-line .deck-card-total", text: "3"
+      assert_select ".deck-printings-toggle[aria-expanded=true]"
+      assert_select ".deck-printing-list:not([hidden]) > li.deck-printing-row .deck-card-item", count: 2
+      assert_select ".deck-printing-move", minimum: 2
+      assert_select ".deck-printing-owned", minimum: 3
+      assert_select ".deck-card-collect", count: 1
+      assert_select ".deck-printings-others-toggle[aria-expanded=false]"
+    end
+  end
 end
