@@ -43,8 +43,12 @@ components as the page, the placement of each row (its section and the ordered k
 section), the empty shell of any section a new row needs, every section's counts, and the deck's
 total and Proxies flag. Every button carries the request it sends (URL, method, body) as Stimulus
 action params rendered by the server, with `disabled` decided server-side, so
-`deck_rows_controller.js` computes no quantity, no bound and no order. Adding from search uses the
-same answer: no Turbo reload, whether the fingerprint is new or not.
+`deck_rows_controller.js` computes no quantity, no bound and no order. The steppers send a step
+(`quantity_delta` / `owned_copies_delta`, ±1) that the setter resolves inside its transaction, never
+the count the page shows: from a stale tab, an absolute "−" (page at 4, server at 1) arrived as an
+increase to 3 and claimed reals. Adding from search uses the same answer — no Turbo reload, whether the
+fingerprint is new or not — and is sent by `deck_rows_controller.js` itself, after the write in
+flight, so an older stepper answer can never land on top of it.
 
 **`?group=set`** stays one row per printing, each with a sub-row's controls and its name.
 
@@ -79,12 +83,14 @@ Each is evaluated on the motivating case: Boss's Orders, 3× MEG 114, wanted 1×
 5. **Only an increase claims free copies; a decrease never does.** *Alternative*: re-derive greedily
    on every write. On the case: ⇄ moves a proxy-or-real copy off MEG 114 (a proxy first) and backs
    PAL 172 with a free copy when there is one.
-6. **"+ add to my collection" is refused by the API when there is no proxy to back or a free copy
-   already exists** (the button is only rendered then). Allowing it with free copies would let one
+6. **"+ add to my collection" is refused by the API when there is no proxy to back, a free copy
+   already exists, or the printing is over-allocated** (the button is only rendered otherwise: on an
+   over-allocated printing the added copy would not be free for this deck). Allowing it with free copies would let one
    click claim several reals. On the case: offered on PAL 172 after ⇄ only when the member owns no
    free PAL 172.
 7. **The expand toggle exists only when the catalogue holds another printing**; a single-printing
-   row's expansion does not repeat the printing it already shows.
+   row's expansion does not repeat the printing it already shows. "N printings" always counts the
+   printings in the deck; the owner's toggle reads "All printings (M)", counting the catalogue.
 8. **The summary line of a multi-printing row previews the printing with the most copies.**
 9. **`GET …/printings` and `PATCH …/printing` stay** (no JS caller once the picker is gone; MCP calls
    the services) and `PATCH …/printing` now also answers the fingerprint payload.
