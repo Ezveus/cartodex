@@ -154,4 +154,14 @@ class Api::DeckCardPrintingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  # A body of the wrong shape is a malformed request, answered 400, never a NoMethodError 500.
+  test "update answers 400 to a printing that is not a hash" do
+    @deck.deck_cards.create!(card: @asc, quantity: 3)
+
+    patch api_deck_card_printing_path(@deck, @asc), params: { printing: "x" }, as: :json
+
+    assert_response :bad_request
+    assert_equal 3, @deck.deck_cards.find_by!(card: @asc).quantity
+  end
 end

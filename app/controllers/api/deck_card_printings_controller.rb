@@ -31,7 +31,7 @@ module Api
     end
 
     def printing_params
-      params.require(:printing).permit(:card_id)
+      params.expect(printing: [ :card_id ])
     end
 
     # Everything about the row that the new printing changes and deck_card_json does not carry —
