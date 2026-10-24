@@ -52,6 +52,24 @@ module Decks
       assert_equal %w[pokemon energy], sections.map(&:key)
     end
 
+    test "a deck of Supporters alone gets the group and that one subsection, no empty sibling" do
+      rows = [ row("Iono", type: "Trainer", subtype: "Supporter"), row("Arven", type: "Trainer", subtype: "Supporter") ]
+
+      sections = Layout.call(states: states(rows), group: :type)
+
+      assert_equal %w[trainer trainer-supporter], sections.map(&:key)
+      assert_equal %w[Arven Iono], sections.last.rows.map { |r| r.state.name }
+    end
+
+    # The key only breaks a tie between two cards sharing a name: here the keys sort the other way.
+    test "rows sort on the name before the key" do
+      rows = [ row("Abra", fingerprint: "zzz"), row("Zubat", fingerprint: "aaa") ]
+
+      sections = Layout.call(states: states(rows), group: :type)
+
+      assert_equal %w[zzz aaa], sections.sole.rows.map(&:key)
+    end
+
     test "a type row is one fingerprint, keyed on it, and counts toward unique once" do
       rows = [
         row("Budew", fingerprint: "budew", set_name: "PRE", set_number: "4"),
