@@ -39,6 +39,10 @@ module Decks
 
     def set_label(card) = "#{card.set_name} #{card.set_number}"
 
-    def printings_label(count) = "#{count} printings"
+    # One number, one meaning, on both pages: "N printings" counts the printings the deck plays, and
+    # the catalogue's count is always spelled "All printings (N)". The owner's toggle once printed
+    # the catalogue count as "4 printings" while the public row printed "2 printings" for one card.
+    def deck_printings_label(count) = "#{count} printings"
+    def all_printings_label(count) = "All printings (#{count})"
   end
 end

@@ -41,18 +41,20 @@ module Decks
     end
 
     # Previews the printing with the most copies (State#display_card). The total is
-    # `.deck-card-total`, never `.deck-card-qty`, so the image export does not count it again.
+    # `.deck-card-total`, never `.deck-card-qty`, so the image export does not count it again. Where
+    # a single line names its printing, this one says how many the deck plays.
     def summary_line
       deck_line(@state.display_card, item: false) do
         div(class: "deck-card-qty-controls") { span(class: "deck-card-total") { @state.quantity.to_s } }
         span(class: "deck-card-name") { @state.name }
+        span(class: "deck-card-set") { deck_printings_label(@state.in_deck.size) }
         printings_toggle
         allocation_summary if physical?
       end
     end
 
     def printings_toggle
-      disclosure_button(printings_label(@state.printings.size), controls: RowMarkup.printings_id(@state.key),
+      disclosure_button(all_printings_label(@state.printings.size), controls: RowMarkup.printings_id(@state.key),
                         css_class: "deck-printings-toggle", expanded: @expanded)
     end
 

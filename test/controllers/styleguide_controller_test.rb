@@ -103,7 +103,8 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
     assert_select ".printing-picker-menu", count: 0
     assert_select ".sg-deck-row-demo li.deck-fingerprint" do
       assert_select ".deck-card-line .deck-card-total", text: "3"
-      assert_select ".deck-printings-toggle[aria-expanded=true]"
+      assert_select ".deck-card-line .deck-card-set", text: "2 printings"
+      assert_select ".deck-printings-toggle[aria-expanded=true]", text: /\AAll printings \(\d+\)\z/
       assert_select ".deck-printing-list:not([hidden]) > li.deck-printing-row .deck-card-item", count: 2
       assert_select ".deck-printing-move", minimum: 2
       assert_select ".deck-printing-owned", count: 1

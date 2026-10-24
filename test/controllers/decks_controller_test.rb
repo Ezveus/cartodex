@@ -177,6 +177,36 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "ASC 16", "POR 3", "PRE 4" ], printing_labels("budew_shared")
   end
 
+  # "N printings" is always the count the deck plays; the catalogue's count is always "All
+  # printings (N)". The owner's toggle used to print the catalogue count as "4 printings" beside a
+  # public row printing "2 printings" for the same card.
+  test "a count of printings says whether it counts the deck's or the catalogue's" do
+    budew = cards(:budew_asc)
+    reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    reprint(budew, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
+    reprint(cards(:honedge), set_name: "ASC", set_number: "99", card_set: card_sets(:asc))
+    @deck.update!(shared: true)
+    [ cards(:budew_pre), budew ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+
+    get deck_path(@deck)
+
+    within_row = ->(key, &block) { assert_select("li.deck-fingerprint[data-fingerprint-key=#{key}]", &block) }
+    within_row.call("budew_shared") do
+      assert_select "> .deck-card-line .deck-card-set", text: "2 printings"
+      assert_select "> .deck-card-line .deck-printings-toggle", text: "All printings (4)"
+    end
+    within_row.call("honedge_fp") do
+      assert_select "> .deck-card-line .deck-card-set", text: "POR 56"
+      assert_select "> .deck-card-line .deck-printings-toggle", text: "All printings (2)"
+    end
+
+    sign_in users(:two)
+    get deck_path(@deck)
+
+    assert_select ".deck-printings-toggle", count: 1
+    assert_select ".deck-printings-toggle", text: "2 printings"
+  end
+
   def printing_labels(key)
     css_select("#deck-printings-#{key} > li.deck-printing-row .deck-card-set").map { |node| node.text.squish }
   end

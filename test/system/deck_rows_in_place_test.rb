@@ -99,9 +99,10 @@ class DeckRowsInPlaceTest < ApplicationSystemTestCase
     # Another printing of a card the deck holds joins its row rather than making a second one.
     add_from_search("Budew", "PRE 4")
     assert_equal %w[Budew Doublade Honedge], names_in("pokemon")
-    within(row_of("Budew")) do
+    within(line_of("Budew")) do
       assert_selector ".deck-card-total", exact_text: "2"
-      assert_button "2 printings"
+      assert_selector ".deck-card-set", exact_text: "2 printings"
+      assert_button "All printings (2)"
     end
     assert_selector section_heading("pokemon"), exact_text: "Pokémon (5 — 3 unique)"
     assert_equal "10", deck_total

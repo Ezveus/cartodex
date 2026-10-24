@@ -162,6 +162,9 @@ SET NUM"; owned note `span.deck-printing-owned` ("N owned · M free").
 Disclosures (both pages): `button[aria-expanded][aria-controls][data-action="disclosure#toggle"]`
 (`.deck-printings-toggle`, `.deck-printings-others-toggle`); the controlled element is `hidden` when
 collapsed. ids: `deck-printings-<key with ":" → "-">`, `deck-printings-others-<same>`.
+One number, one meaning: "N printings" always counts the printings the deck plays — the owner's
+multi-printing summary line prints it in `.deck-card-set`, the public toggle reads it — and the
+catalogue's count is always "All printings (N)", the owner's toggle.
 
 Public: container `data-controller` gains `disclosure`; rows by `Decks::PublicFingerprintRow` with
 the same classes, no `data-row-key`, no write button, no alloc, no owned note.

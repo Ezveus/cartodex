@@ -32,7 +32,7 @@ module Decks
       deck_line(@state.display_card, item: false) do
         div(class: "deck-card-qty-controls") { span(class: "deck-card-total") { @state.quantity.to_s } }
         span(class: "deck-card-name") { @state.name }
-        disclosure_button(printings_label(@state.printings.size), controls: RowMarkup.printings_id(@state.key),
+        disclosure_button(deck_printings_label(@state.printings.size), controls: RowMarkup.printings_id(@state.key),
                           css_class: "deck-printings-toggle")
       end
 
