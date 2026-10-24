@@ -36,19 +36,9 @@ module Decks
 
     private
 
-    # `cards.subtype` is a free scraped string: Cards::Fetcher#parse_subtype keeps whatever
-    # follows "Trainer - " on the page, and that has been "Tool" for every one of the 76 tools in
-    # the catalogue while this table only knew "Pokémon Tool" — so every Tool fell through to the
-    # "Other" heading below. Both spellings map to one label, and the grouping is done on the
-    # label rather than on the raw subtype so a deck holding both spellings gets one section
-    # rather than two identically titled ones.
-    TRAINER_SUBTYPE_LABELS = {
-      "Supporter" => "Supporter",
-      "Item" => "Item",
-      "Tool" => "Tool",
-      "Pokémon Tool" => "Tool",
-      "Stadium" => "Stadium"
-    }.freeze
+    # Held by Decks::Layout, which places every row of the page; why both Tool spellings share a
+    # label is written there.
+    TRAINER_SUBTYPE_LABELS = Decks::Layout::TRAINER_SUBTYPE_LABELS
 
     def header_section
       div(class: "deck-show-header") do
