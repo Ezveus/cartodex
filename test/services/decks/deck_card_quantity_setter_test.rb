@@ -70,6 +70,38 @@ module Decks
       assert_equal 0, dc.owned_copies
     end
 
+    # The physical deck's three reals would leave the Live deck nothing to claim, which is what the
+    # test above rests on; here every owned copy is free, so only the physical guard holds it at 0.
+    test "a non-physical deck claims nothing even with free copies" do
+      @deck.deck_cards.find_by!(card: @card).destroy!
+      deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
+      deck.deck_cards.create!(card: @card, quantity: 1, owned_copies: 0)
+
+      dc = Decks::DeckCardQuantitySetter.call(deck: deck, card: @card, quantity: 3)
+
+      assert_equal [ 3, 0 ], [ dc.quantity, dc.owned_copies ]
+    end
+
+    test "a non-integer quantity is refused with its own message, a Float included" do
+      error = assert_raises(ArgumentError) { Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, quantity: "abc") }
+      assert_equal "quantity must be an integer", error.message
+
+      error = assert_raises(ArgumentError) { Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, quantity: 2.0) }
+      assert_equal "quantity must be an integer", error.message
+      assert_equal [ 4, 3 ], @deck.deck_cards.find_by!(card: @card).then { |dc| [ dc.quantity, dc.owned_copies ] }
+    end
+
+    # The collection was lowered below what the deck backs: the deck is over-allocated, and an
+    # increase must leave its reals alone rather than re-derive them from what is now free.
+    test "an increase never demotes a real the collection no longer covers" do
+      @deck.deck_cards.find_by!(card: @card).update!(quantity: 2, owned_copies: 2)
+      @user.collections.find_by!(card: @card).update!(quantity: 1)
+
+      dc = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, quantity: 3)
+
+      assert_equal [ 3, 2 ], [ dc.quantity, dc.owned_copies ]
+    end
+
     test "a new row counts as an increase from 0" do
       @user.collections.find_by!(card: @card).update!(quantity: 2)
       @deck.deck_cards.find_by!(card: @card).destroy!

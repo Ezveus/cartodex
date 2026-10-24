@@ -102,6 +102,33 @@ module Decks
       assert_equal 0, result.to_deck_card.owned_copies
     end
 
+    test "the landed copy never demotes a real the collection no longer covers" do
+      @deck.deck_cards.create!(card: @pre, quantity: 1)
+      @deck.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 2)
+      @user.collections.find_by!(card: @asc).update!(quantity: 1)
+
+      result = CopyMover.call(deck: @deck, from_card: @pre, to_card: @asc)
+
+      assert_equal [ 3, 2 ], [ result.to_deck_card.quantity, result.to_deck_card.owned_copies ]
+    end
+
+    # The source is written before the target: a failure landing the copy must take the source's
+    # write back with it, or the deck loses a card.
+    test "a failure landing the copy rolls the source back" do
+      @deck.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 0)
+      original = Allocations::Availability.method(:for_cards)
+      Allocations::Availability.define_singleton_method(:for_cards) { |**| raise ActiveRecord::StatementInvalid, "busy" }
+
+      begin
+        assert_raises(ActiveRecord::StatementInvalid) { CopyMover.call(deck: @deck, from_card: @pre, to_card: @asc) }
+      ensure
+        Allocations::Availability.define_singleton_method(:for_cards, original)
+      end
+
+      assert_equal 2, @deck.deck_cards.find_by!(card: @pre).quantity
+      assert_nil @deck.deck_cards.find_by(card: @asc)
+    end
+
     test "never backs anything on a non-physical deck" do
       deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @pre, quantity: 2)
