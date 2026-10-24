@@ -30,11 +30,13 @@ module DeckCardRows
   end
 
   def printing_line(set_label)
+    settle_deck_rows
     find(".deck-sections .deck-card-set", exact_text: set_label).ancestor(".deck-card-line")
   end
 
   # The public page's rows carry no key, being written by nothing.
   def row_of(card_name)
+    settle_deck_rows
     find(".deck-sections [data-row-key], .deck-sections li.deck-fingerprint", text: card_name)
   end
 
@@ -64,5 +66,12 @@ module DeckCardRows
 
   def deck_total
     find("[data-deck-rows-target='total']").text
+  end
+
+  # A write in flight is about to replace the rows it touches, so an element found now would go
+  # stale under the assertion that follows: deck_rows_controller.js marks the list aria-busy until
+  # the answer is applied. A no-op on the public page, which has no writes.
+  def settle_deck_rows
+    assert_no_selector ".deck-sections[aria-busy='true']"
   end
 end

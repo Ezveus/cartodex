@@ -344,12 +344,14 @@ describe("deck_rows_controller", () => {
 
     element.querySelector('[data-row-key="fp-a"] button').click()
     await settle()
+    expect(element.querySelector(".deck-sections").getAttribute("aria-busy")).toBe("true")
     element.querySelector('[data-row-key="fp-a"] button').click()
     await settle()
     expect(requests()).toHaveLength(1)
 
     release()
     await settle()
+    expect(element.querySelector(".deck-sections").hasAttribute("aria-busy")).toBe(false)
     element.querySelector('[data-row-key="fp-a"] button').click()
     await settle()
     expect(requests()).toHaveLength(2)

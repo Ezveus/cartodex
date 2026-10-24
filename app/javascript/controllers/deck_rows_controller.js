@@ -17,12 +17,16 @@ export default class extends Controller {
     // has not shown yet, and the two answers could then land in either order.
     if (this.busy) return
     this.busy = true
+    // Says to assistive technology — and to the system tests, which must not read a row the answer
+    // is about to replace — that the list is being rewritten.
+    this.sectionsTarget.setAttribute("aria-busy", "true")
 
     try {
       const data = await requestJson(url, { method, body: body === "" ? undefined : body, failure })
       if (data) this.apply(data)
     } finally {
       this.busy = false
+      this.sectionsTarget.removeAttribute("aria-busy")
     }
   }
 
