@@ -61,9 +61,12 @@ describe("the test harness", () => {
   test("stops each application from watching the page", async () => {
     const connected = []
     class Watched extends Controller { connect() { connected.push(this.element) } }
-    const { element } = await mount(`<div></div>`, { watched: Watched })
+    const { application, element } = await mount(`<div></div>`, { watched: Watched })
 
     resetSupport()
+    // Registered again, because resetSupport unloaded it: only a stopped application can now miss
+    // the element below.
+    application.register("watched", Watched)
     element.insertAdjacentHTML("beforeend", `<div data-controller="watched"></div>`)
     await Promise.resolve()
 
