@@ -13,8 +13,11 @@ module Decks
     #
     # group: :deck (in the deck), :owned (not in the deck, at least one copy owned), :other.
     # max_owned is the real +'s bound; move_from is ⇄'s source; can_add_to_collection decides
-    # whether "+ add to my collection and use it here" is offered — the same refusals
-    # Decks::CollectionCopyAdder makes, short of the over-allocation it can only find by writing.
+    # whether "+ add to my collection and use it here" is offered — exactly when
+    # Decks::CollectionCopyAdder would accept it. One more copy is free for this deck iff the
+    # printing's committed reals do not exceed what is owned; beside "no free copy"
+    # (available <= owned_copies) that leaves committed == owned, so an over-allocated printing is
+    # refused here as the adder refuses it.
     PrintingState = Struct.new(:card, :deck_card, :group, :quantity, :owned_copies, :proxies,
                                :owned, :available, :max_owned, :over_allocated, :move_from,
                                :can_add_to_collection, keyword_init: true) do
@@ -109,14 +112,16 @@ module Decks
       quantity = deck_card&.quantity.to_i
       owned_copies = deck_card&.owned_copies.to_i
       group = if deck_card then :deck elsif counts.owned.positive? then :owned else :other end
+      over_allocated = physical && counts.committed > counts.owned
 
       PrintingState.new(
         card: card, deck_card: deck_card, group: group,
         quantity: quantity, owned_copies: owned_copies, proxies: quantity - owned_copies,
         owned: counts.owned, available: counts.available,
         max_owned: physical ? [ quantity, counts.available ].min : 0,
-        over_allocated: physical && counts.committed > counts.owned,
-        can_add_to_collection: physical && quantity > owned_copies && counts.available <= owned_copies
+        over_allocated: over_allocated,
+        can_add_to_collection: physical && !over_allocated && quantity > owned_copies &&
+          counts.available <= owned_copies
       )
     end
     private_class_method :owner_printing

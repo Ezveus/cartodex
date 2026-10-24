@@ -49,7 +49,9 @@ Decks::FingerprintStates
   # over_allocated: physical && availability.committed > availability.owned
   # move_from: the Card of the :deck printing with the most copies other than this one; ties → first
   #            in printing order; nil when there is none
-  # can_add_to_collection: physical && quantity > owned_copies && available <= owned_copies
+  # can_add_to_collection: physical && !over_allocated && quantity > owned_copies && available <= owned_copies
+  #   (exactly when CollectionCopyAdder accepts: the new copy is free for this deck iff committed <= owned,
+  #   which beside "no free copy" means committed == owned)
   State = Struct.new(:key, :name, :card_type, :subtype, :display_card, :printings, keyword_init: true)
   #   #in_deck (printings with group :deck), #quantity, #owned_copies, #proxies (sums over in_deck),
   #   #over_allocated?, #single? (in_deck.size == 1), #reprinted? (printings.size > 1 — on a

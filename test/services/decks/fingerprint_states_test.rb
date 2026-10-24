@@ -131,6 +131,22 @@ module Decks
       assert state.over_allocated?
     end
 
+    # One more copy only brings the collection back towards what other decks already back, so
+    # Decks::CollectionCopyAdder refuses it: the button must not be offered.
+    test "an over-allocated printing with a proxy and no free copy does not offer the collection add" do
+      @user.collections.find_by!(card: @asc).update!(quantity: 1)
+      other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
+      other.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 2)
+      @deck.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 0)
+
+      asc = printing(budew, @asc)
+
+      assert asc.over_allocated
+      assert_equal 0, asc.available
+      assert_not asc.can_add_to_collection
+      assert_raises(ArgumentError) { CollectionCopyAdder.call(deck: @deck, card: @asc) }
+    end
+
     test "a non-physical deck carries owned but nothing that would allocate" do
       deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
       deck.deck_cards.create!(card: @asc, quantity: 2)
