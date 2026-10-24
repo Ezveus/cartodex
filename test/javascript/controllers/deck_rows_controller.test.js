@@ -369,12 +369,17 @@ describe("deck_rows_controller", () => {
       deck: { has_proxies: true, total: 0 }
     })
     stubFetch(jsonResponse({ errors: [ "no proxy left to back" ] }, { status: 422 }), jsonResponse(reply))
-    const { element } = await mount(page([ typeSection("pokemon", [ row("fp-a") ], { total: 1, unique: 1 }) ], { total: 10 }), controllers)
+    const rendered = await mount(page([ typeSection("pokemon", [ row("fp-a") ], { total: 1, unique: 1 }) ], { total: 10 }), controllers)
+    const { element } = rendered
     const changes = captureEvents(document, "deck-proxies:changed")
+    // apply(null) would throw inside an async action, where Stimulus never sees it: the spy is what
+    // says it was not called.
+    const applied = vi.spyOn(rendered.controller("deck-rows"), "apply")
 
     element.querySelector('[data-row-key="fp-a"] button').click()
     await settle()
 
+    expect(applied).not.toHaveBeenCalled()
     expect(flashMessages()).toEqual([ { text: "no proxy left to back", kind: "alert" } ])
     expect(element.querySelector('[data-row-key="fp-a"]')).not.toBeNull()
     expect(sectionKeys(element)).toEqual([ "pokemon" ])
@@ -386,18 +391,117 @@ describe("deck_rows_controller", () => {
     expect(requests()).toHaveLength(2)
   })
 
-  test("sends no body when the button carries none", async () => {
-    stubFetch(jsonResponse(answer({ fingerprintKey: "fp-a", rows: [], sections: [] })))
-    const { element } = await mount(page([ typeSection("pokemon", [
-      `<li data-row-key="fp-a" data-fingerprint-key="fp-a"><button data-action="deck-rows#write"
+  // Stimulus hands an absent param over as undefined and an empty one as "" (JSON.parse("") throws,
+  // so the raw string comes back): neither may reach the server as a body, `""` included.
+  test("sends no body when the button carries none, or an empty one", async () => {
+    const fetch = stubFetch(
+      jsonResponse(answer({ fingerprintKey: "fp-a", rows: [], sections: [] })),
+      jsonResponse(answer({ fingerprintKey: "fp-a", rows: [], sections: [] }))
+    )
+    // Outside the rows, which the first answer takes away.
+    const buttons = `<button id="none" data-action="deck-rows#write"
         data-deck-rows-url-param="/api/decks/k/cards/1/collection_copy" data-deck-rows-method-param="POST"
-        data-deck-rows-failure-param="Couldn't add it">+ add</button></li>`
-    ]) ]), controllers)
+        data-deck-rows-failure-param="Couldn't add it">+ add</button><button id="empty" data-action="deck-rows#write"
+        data-deck-rows-url-param="/api/decks/k/cards/1/collection_copy" data-deck-rows-method-param="POST"
+        data-deck-rows-body-param="" data-deck-rows-failure-param="Couldn't add it">+ add</button>`
+    const { element } = await mount(page([ typeSection("pokemon", [ row("fp-a") ]) ], { inner: buttons }), controllers)
 
-    element.querySelector("button").click()
+    element.querySelector("#none").click()
+    await settle()
+    element.querySelector("#empty").click()
     await settle()
 
-    expect(requests()).toMatchObject([ { url: "/api/decks/k/cards/1/collection_copy", method: "POST", body: undefined } ])
+    expect(requests()).toMatchObject([ { url: "/api/decks/k/cards/1/collection_copy", method: "POST" }, { method: "POST" } ])
+    expect(fetch.mock.calls.map(([ , init ]) => init.body)).toEqual([ undefined, undefined ])
+  })
+
+  test("refuses an answer that places a row in a section it neither holds nor sends", async () => {
+    const rendered = await mount(page([ typeSection("pokemon", [ row("fp-a") ]) ]), controllers)
+
+    expect(() => rendered.controller("deck-rows").apply(answer({
+      fingerprintKey: "fp-e",
+      rows: [ { key: "fp-e", section: "energy", html: row("fp-e") } ],
+      sections: [ { key: "pokemon", parent: null, total: 1, unique: 1 }, { key: "energy", parent: null, total: 1, unique: 1 } ]
+    }))).toThrow('deck-rows: the answer places a row in section "energy" without its html')
+  })
+
+  test("removes the row of a fingerprint that left the deck from a section another card keeps", async () => {
+    const rendered = await mount(page([ typeSection("pokemon", [ row("fp-a"), row("fp-b") ], { total: 2, unique: 2 }) ]), controllers)
+    const kept = rendered.element.querySelector('[data-row-key="fp-a"]')
+
+    await apply(rendered, answer({
+      fingerprintKey: "fp-b",
+      rows: [],
+      sections: [ { key: "pokemon", parent: null, total: 1, unique: 1 } ]
+    }))
+
+    expect(rowKeys(listOf(rendered.element, "pokemon"))).toEqual([ "fp-a" ])
+    expect(rendered.element.querySelector('[data-row-key="fp-a"]')).toBe(kept)
+    expect(rendered.element.querySelector('[data-section-key="pokemon"] [data-section-total]').textContent).toBe("1")
+  })
+
+  // A type section's answer carries no noun, and a group's carries null counts: what an answer leaves
+  // out is not written, whatever span the heading holds.
+  test("writes only the counts the answer carries", async () => {
+    const heading = (key) => `<div class="deck-section" data-section-key="${key}">
+      <h2>${key} <span data-section-total>2</span> <span data-section-unique>2</span> <span data-section-noun>cards</span></h2>
+      <ul class="deck-card-list">${row(`fp-${key}`)}</ul></div>`
+    const rendered = await mount(page([ heading("pokemon"), heading("trainer") ]), controllers)
+
+    await apply(rendered, answer({
+      fingerprintKey: "fp-pokemon",
+      rows: [ { key: "fp-pokemon", section: "pokemon", html: row("fp-pokemon") } ],
+      sections: [
+        { key: "pokemon", parent: null, total: 4, unique: 3, rows: [ "fp-pokemon" ], html: heading("pokemon") },
+        { key: "trainer", parent: null, total: null, unique: null }
+      ]
+    }))
+
+    const spans = (key) => Array.from(rendered.element.querySelectorAll(`[data-section-key="${key}"] h2 span`), (span) => span.textContent)
+    expect(spans("pokemon")).toEqual([ "4", "3", "cards" ])
+    expect(spans("trainer")).toEqual([ "2", "2", "cards" ])
+  })
+
+  test("keeps a disclosure closed in a replaced row while reopening the one that was open", async () => {
+    const card = (label) => `<li class="deck-fingerprint" data-row-key="fp-a" data-fingerprint-key="fp-a">
+      <div class="deck-card-line"><span class="label">${label}</span>
+        <button class="deck-printings-toggle" aria-expanded="false" aria-controls="deck-printings-fp-a">▸</button></div>
+      <ul class="deck-printing-list" id="deck-printings-fp-a" hidden>
+        <li class="deck-printing-others">
+          <button class="deck-printings-others-toggle" aria-expanded="false" aria-controls="deck-printings-others-fp-a">Other</button>
+          <ul class="deck-printing-list" id="deck-printings-others-fp-a" hidden></ul>
+        </li>
+      </ul></li>`
+    const rendered = await mount(page([ typeSection("pokemon", [ card("old") ]) ]), controllers)
+    rendered.element.querySelector('[aria-controls="deck-printings-fp-a"]').setAttribute("aria-expanded", "true")
+    rendered.element.querySelector("#deck-printings-fp-a").hidden = false
+
+    await apply(rendered, answer({
+      fingerprintKey: "fp-a",
+      rows: [ { key: "fp-a", section: "pokemon", html: card("new") } ],
+      sections: [ { key: "pokemon", parent: null, total: 1, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ]
+    }))
+
+    expect(rendered.element.querySelector(".label").textContent).toBe("new")
+    expect(rendered.element.querySelector("#deck-printings-fp-a").hidden).toBe(false)
+    expect(rendered.element.querySelector('[aria-controls="deck-printings-others-fp-a"]').getAttribute("aria-expanded")).toBe("false")
+    expect(rendered.element.querySelector("#deck-printings-others-fp-a").hidden).toBe(true)
+  })
+
+  test("leaves the focus alone when it sits outside the deck list", async () => {
+    const reply = answer({
+      fingerprintKey: "fp-a",
+      rows: [ { key: "fp-a", section: "pokemon", html: row("fp-a", { label: "new" }) } ],
+      sections: [ { key: "pokemon", parent: null, total: 1, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ]
+    })
+    const rendered = await mount(page([ typeSection("pokemon", [ row("fp-a") ]) ]), controllers)
+    document.body.insertAdjacentHTML("beforeend", `<button id="elsewhere" data-focus-key="qty-plus-fp-a">elsewhere</button>`)
+    const elsewhere = document.getElementById("elsewhere")
+    elsewhere.focus()
+
+    await apply(rendered, reply)
+
+    expect(document.activeElement).toBe(elsewhere)
   })
 
   test("sends the add card search hands it and applies the answer, with no reload", async () => {

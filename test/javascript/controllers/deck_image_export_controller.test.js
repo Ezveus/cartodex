@@ -30,4 +30,21 @@ describe("deck_image_export_controller", () => {
       { url: "/cards/asc.png", quantity: 2 }
     ])
   })
+
+  test("skips an item with no art to draw and an item at no copies", () => {
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="deck-card-line deck-card-item"><span class="deck-card-qty">2</span></div>
+      <div class="deck-card-line deck-card-item" data-card-preview-url="/cards/zero.png"><span class="deck-card-qty">0</span></div>
+      <div class="deck-card-line deck-card-item" data-card-preview-url="/cards/one.png"><span class="deck-card-qty">1</span></div>`)
+
+    expect(collectCards(document)).toEqual([ { url: "/cards/one.png", quantity: 1 } ])
+  })
+
+  test("reads the items under the root it is given, and none outside it", () => {
+    document.body.insertAdjacentHTML("beforeend", `
+      <div id="outside" class="deck-card-line deck-card-item" data-card-preview-url="/cards/out.png"><span class="deck-card-qty">4</span></div>
+      <section id="root">${markup}</section>`)
+
+    expect(collectCards(document.getElementById("root")).map((card) => card.url)).toEqual([ "/cards/pre.png", "/cards/asc.png" ])
+  })
 })
