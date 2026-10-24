@@ -38,7 +38,7 @@ class CardAllocationTest < ActionDispatch::IntegrationTest
     rows = css_select(".card-allocation-deck")
     assert_equal [ "Blade A", "Blade B" ], rows.map { |row| row.at_css("a").text.strip }
     assert_equal [ deck_path(first), deck_path(second) ], rows.map { |row| row.at_css("a")["href"] }
-    assert_equal [ "2 copies", "1 copy" ], rows.map { |row| row.at_css(".card-allocation-deck-count").text.strip }
+    assert_equal [ "2 real copies", "1 real copy" ], rows.map { |row| row.at_css(".card-allocation-deck-count").text.strip }
     assert_select ".card-allocation-over", count: 0
   end
 
@@ -62,6 +62,8 @@ class CardAllocationTest < ActionDispatch::IntegrationTest
     get card_path(@card)
 
     assert_equal "3", stat("Available")
+    # Committed below owned: the excess is negative and must not be announced.
+    assert_select ".card-allocation-over", count: 0
     assert_select ".card-allocation-deck", count: 0
     assert_select ".card-allocation-empty", text: /No physical deck uses a real copy/
   end

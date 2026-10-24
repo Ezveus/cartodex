@@ -71,14 +71,11 @@ module Cards
         @decks.each do |deck|
           li(class: "card-allocation-deck") do
             link_to deck[:name], deck_path(deck[:key])
-            span(class: "card-allocation-deck-count") { copies(deck[:owned_copies]) }
+            # "real": the deck may play more copies than this, the rest as proxies.
+            span(class: "card-allocation-deck-count") { "#{deck[:owned_copies]} real #{'copy'.pluralize(deck[:owned_copies])}" }
           end
         end
       end
-    end
-
-    def copies(count)
-      "#{count} #{'copy'.pluralize(count)}"
     end
   end
 end

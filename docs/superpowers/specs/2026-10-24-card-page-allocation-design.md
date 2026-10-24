@@ -29,7 +29,13 @@ and which decks take them.
   edits one of them, and owned is their sum. One request per click buys a figure computed by the
   same `Availability` that computed it the first time.
 - **Owned is printed in the section too**, from `Availability` (summed over variants), so the three
-  numbers it prints are consistent with each other.
+  numbers it prints are consistent with each other. They are *not* always consistent with the
+  pre-existing "In collection" counter, which reads one arbitrary row (`find_by(card_id:)`): a member
+  holding a printing as two variant rows sees two owned figures. Latent today — nothing in `app/`
+  calls `Collections::VariantMover`, the only writer of a non-`unknown` variant, and the development
+  database holds no such pair — and left to the counter's owner rather than fixed here.
+- **A deck row says "real copies"**: `owned_copies`, not the deck's quantity, which may be larger
+  with the rest played as proxies.
 - **Visitors get nothing**: the section renders only for a signed-in reader and every query is
   scoped by `current_user`. A visitor's page issues no extra query.
 
