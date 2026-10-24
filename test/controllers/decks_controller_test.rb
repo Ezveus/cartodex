@@ -23,8 +23,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
   # The deck B5 renders for both readers: physical, Honedge backed by its one owned copy, and
   # Budew split across two printings with ASC 16 all proxies and no free ASC copy. That is what
-  # makes each owner control appear — the allocation stepper (physical), ⇄ and the owned note
-  # (a second printing in the deck), "+ add to my collection" (a proxy with no free copy) — so
+  # makes each owner control appear — the allocation stepper (physical), ⇄ (a second printing in
+  # the deck), "+ add to my collection" (a proxy with no free copy), and the owned note (a third
+  # Budew printing the owner owns and the deck does not play) — so
   # every absence asserted of the visitor's page is one the owner's page really renders.
   def shared_split_deck
     @deck.update!(shared: true, physical: true)
@@ -34,6 +35,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # Fixtures carry no image_url, and Phlex omits a nil data attribute, so the preview URL would
     # be missing on every row and the export assertions below would prove nothing.
     %i[honedge budew_asc budew_pre].each { |name| cards(name).update!(image_url: "https://example.test/#{name}.png") }
+    # After that update!, which re-runs compute_fingerprint: the twin must copy the fingerprint the
+    # two in-deck printings carry now, not the fixture's literal.
+    @user.collections.create!(card: reprint(cards(:budew_asc), set_name: "POR", set_number: "3"), quantity: 1)
   end
 
   OWNER_ONLY = {
@@ -984,7 +988,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     large = count_queries { get deck_path(deck) }
 
     assert_response :success
-    assert_select ".deck-printing-owned", minimum: 6
+    # One per owned printing outside the deck — never on the three in-deck printings, nor on the
+    # three nobody owns.
+    assert_select ".deck-printing-owned", count: 3
     assert_equal small, large, "query count grew with the printings outside the deck: #{small} -> #{large}"
   end
 

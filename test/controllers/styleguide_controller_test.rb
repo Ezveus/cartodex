@@ -106,7 +106,7 @@ class StyleguideControllerTest < ActionDispatch::IntegrationTest
       assert_select ".deck-printings-toggle[aria-expanded=true]"
       assert_select ".deck-printing-list:not([hidden]) > li.deck-printing-row .deck-card-item", count: 2
       assert_select ".deck-printing-move", minimum: 2
-      assert_select ".deck-printing-owned", minimum: 3
+      assert_select ".deck-printing-owned", count: 1
       assert_select ".deck-card-collect", count: 1
       assert_select ".deck-printings-others-toggle[aria-expanded=false]"
     end

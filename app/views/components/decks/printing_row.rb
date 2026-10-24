@@ -23,7 +23,7 @@ module Decks
           quantity_stepper(@printing)
           span(class: "deck-card-name") { card.name } if @show_name
           span(class: "deck-card-set") { set_label(card) }
-          span(class: "deck-printing-owned") { "#{@printing.owned} owned · #{@printing.available} free" }
+          owned_note if @printing.group == :owned
           move_button if @printing.move_from
           allocation_controls(@printing) if physical? && in_deck?
         end
@@ -33,6 +33,13 @@ module Decks
     private
 
     def card = @printing.card
+
+    # Only on a printing the member owns and the deck does not play: on an in-deck printing "free"
+    # would count the copies this very deck holds (true, and unreadable — its real/proxy label says
+    # it better), and on any other printing it would read "0 owned · 0 free".
+    def owned_note
+      span(class: "deck-printing-owned") { "#{@printing.owned} owned · #{@printing.available} free" }
+    end
 
     def in_deck? = @printing.group == :deck
 
