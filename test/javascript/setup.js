@@ -14,7 +14,7 @@ installBrowserStandIns(window)
 //   set_import_controller.js read with no null check — absent, the three controllers throw and
 //   requestJson reports every request as one that "didn't reach the server";
 // - an empty #flash-messages, which helpers/flash.js writes into and silently skips without;
-// - window.Turbo, with a mock `visit` (card_search_controller.js, printing_picker_controller.js).
+// - window.Turbo, with a mock `visit` (no controller calls it today; a test of one that does would read it here).
 //
 // fetch starts stubbed with no reply queued, so a test that never calls stubFetch still fails on
 // any request its controller makes — requestJson would otherwise swallow the failure into a flash.

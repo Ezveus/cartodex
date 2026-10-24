@@ -197,6 +197,22 @@ class CardTest < ActiveSupport::TestCase
     end
   end
 
+  test "fingerprint_key is the fingerprint when one is present" do
+    assert_equal "budew_shared", cards(:budew_pre).fingerprint_key
+    assert_equal cards(:budew_asc).fingerprint_key, cards(:budew_pre).fingerprint_key
+  end
+
+  # A blank fingerprint matches every other blank, so it falls back to the card's own id rather
+  # than collapsing every unfingerprinted card into one row.
+  test "fingerprint_key falls back to the card id when the fingerprint is blank" do
+    trainer = cards(:trainer_card)
+    assert_nil trainer.fingerprint
+    assert_equal "card:#{trainer.id}", trainer.fingerprint_key
+
+    trainer.fingerprint = ""
+    assert_equal "card:#{trainer.id}", trainer.fingerprint_key
+  end
+
   private
 
   def with_real_cache

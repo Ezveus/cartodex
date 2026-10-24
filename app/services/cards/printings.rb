@@ -9,23 +9,10 @@ module Cards
   # is simply not on the list.
   #
   # Given a deck, each entry also carries what that deck already holds of the printing and
-  # the real/proxy split a swap onto it would produce, so the picker can warn before the
-  # write rather than after. The projection is left nil when there is none to make: no deck,
+  # the real/proxy split a swap onto it would produce, so a caller (the MCP list_printings tool,
+  # GET …/printings) can warn before the write rather than after. The projection is left nil when there is none to make: no deck,
   # or a deck that consumes no collection.
   class Printings < ApplicationService
-    # Which of these cards have at least one other printing, as a Set of ids — what the deck page
-    # needs to decide which rows get a picker at all. One grouped query for the whole page: asking
-    # per row would be an N+1 the size of a decklist.
-    def self.swappable_card_ids(cards)
-      # `.presence`, not just a nil check: a blank fingerprint matches every other blank, which is
-      # why #printings and PrintingSwapper both refuse to treat it as an equivalence.
-      fingerprints = cards.filter_map { |card| card.fingerprint.presence }.uniq
-      return Set.new if fingerprints.empty?
-
-      reprinted = Card.where(fingerprint: fingerprints).group(:fingerprint).count.select { |_, n| n > 1 }
-      cards.select { |card| reprinted.key?(card.fingerprint) }.map(&:id).to_set
-    end
-
     def initialize(user:, card:, deck: nil)
       @user = user
       @card = card

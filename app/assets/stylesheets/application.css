@@ -1597,18 +1597,34 @@ textarea.form-input {
   padding: 0;
 }
 
-.deck-card-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
+/* A deck row is a card (li.deck-fingerprint) or, in the set view, a printing
+   (li.deck-printing-row); either one draws its controls on one .deck-card-line and may hold an
+   indented .deck-printing-list of sub-rows under it. The line, not the li, is the flex row, so a
+   row's sub-rows stack below it rather than beside it. */
+.deck-card-list > li {
   border-bottom: 1px solid var(--line);
 }
 
-.deck-card-qty {
+/* Wraps at every width, not only on a phone: beside the 300px preview the list column is narrower
+   than the window by far, and an expanded physical sub-row — stepper, set, owned note, ⇄, the
+   real/proxy stepper and "+ add to my collection…" — is wider than it even at 1400px. */
+.deck-card-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.deck-card-qty,
+.deck-card-total {
   font-weight: 600;
   min-width: 2rem;
   color: var(--primary-color);
+}
+
+.deck-card-total {
+  text-align: center;
 }
 
 .deck-card-name {
@@ -1675,11 +1691,11 @@ textarea.form-input {
   box-shadow: var(--e2);
 }
 
-.deck-card-item {
+.deck-card-line {
   cursor: pointer;
 }
 
-.deck-card-item:hover {
+.deck-card-line:hover {
   background-color: var(--water-bg);
 }
 
@@ -3484,14 +3500,14 @@ h1, h2, h3, h4 {
   color: var(--ink-900);
 }
 .stat-value, .admin-stat-value, .card-count, .deck-count, .deck-card-count,
-.card-collection-counter-qty, .collection-tile-qty, .deck-card-qty {
+.card-collection-counter-qty, .collection-tile-qty, .deck-card-qty, .deck-card-total {
   font-variant-numeric: tabular-nums;
 }
 .set-code, .card-grid-number, .deck-card-set, .card-search-result-set,
 .collection-tile-meta, .alt-printing-set, .cards-search-count, .cards-pagination-info {
   font-family: var(--font-mono);
 }
-.deck-card-qty { color: var(--ink-700); }
+.deck-card-qty, .deck-card-total { color: var(--ink-700); }
 
 /* — Section heading accents: ink instead of cartoon red — */
 .dashboard-card h2, .auth-container h1, .deck-item h2, .card-info-section h2,
@@ -3715,28 +3731,47 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .deck-card-alloc-label { min-width: 8ch; text-align: center; }
 .deck-card-warning { margin-left: 0.25rem; }
 
-/* — Printing picker: the set/number line of a deck row, where another printing exists — */
-.deck-card-printing { position: relative; display: inline-flex; }
-.deck-card-set-swap { padding: 0; border: 0; background: none; font: inherit; color: var(--ink-300); cursor: pointer; }
-.deck-card-set-swap:hover, .deck-card-set-swap[aria-expanded="true"] { color: var(--ink-700); text-decoration: underline; }
+.qty-btn:disabled { opacity: 0.35; cursor: default; }
+.qty-btn:disabled:hover { background: var(--surface); border-color: var(--border-color); color: var(--text-color); }
 
-.printing-picker-menu {
-  position: absolute; top: 100%; right: 0; z-index: 50;
-  min-width: 15rem; margin: 0.25rem 0 0; padding: 0.25rem; list-style: none;
-  max-height: 18rem; overflow-y: auto;
-  background: var(--surface); border-radius: 8px; box-shadow: var(--e2);
-  cursor: default;
+/* — The sub-rows of a deck row: one per printing, indented under the card they belong to — */
+.deck-printing-list {
+  list-style: none;
+  margin: 0 0 0.5rem 1.5rem;
+  padding: 0 0 0 0.75rem;
+  border-left: 2px solid var(--line);
 }
-.printing-option {
-  display: flex; flex-direction: column; gap: 0.1rem;
-  width: 100%; box-sizing: border-box; padding: 0.4rem 0.6rem;
-  border: 0; border-radius: 6px; background: none; text-align: left; font: inherit; cursor: pointer;
+.deck-printing-list .deck-card-line { padding: 0.3rem 0; font-size: 0.9rem; }
+.deck-printing-list > li + li { border-top: 1px dashed var(--line); }
+.deck-printing-list .deck-printing-list { margin: 0.25rem 0 0.25rem 0.5rem; }
+
+.deck-printings-toggle,
+.deck-printings-others-toggle {
+  padding: 0.1rem 0.5rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--paper); color: var(--ink-500);
+  font: inherit; font-size: 0.75rem; white-space: nowrap; cursor: pointer;
 }
-.printing-option:hover:not(:disabled) { background: var(--water-bg); }
-.printing-option-current { cursor: default; opacity: 0.65; }
-.printing-option-set { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-900); }
-.printing-option-counts { font-size: 0.7rem; color: var(--ink-500); }
-.printing-option-warning { font-size: 0.7rem; color: #8A6800; }
+.deck-printings-toggle::after,
+.deck-printings-others-toggle::after { content: " ▾"; }
+.deck-printings-toggle[aria-expanded="true"]::after,
+.deck-printings-others-toggle[aria-expanded="true"]::after { content: " ▴"; }
+.deck-printings-toggle:hover,
+.deck-printings-others-toggle:hover { border-color: var(--water); color: var(--ink-700); }
+.deck-printings-others-toggle { margin: 0.35rem 0; }
+
+.deck-printing-owned { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-500); white-space: nowrap; }
+.deck-printing-move {
+  width: 26px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--water-strong); font-size: 0.85rem; cursor: pointer;
+}
+.deck-printing-move:hover { background: var(--water-bg); border-color: var(--water); }
+
+.deck-card-collect {
+  padding: 0.1rem 0.5rem; border: 1px dashed var(--water); border-radius: 6px;
+  background: var(--water-bg); color: var(--water-strong);
+  font-family: var(--font-body); font-size: 0.7rem; cursor: pointer;
+}
+.deck-card-collect:hover { border-style: solid; }
 
 .collection-tile-alloc { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-500); margin: 0.25rem 0; }
 
@@ -3780,8 +3815,8 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 }
 
 /* In the app the panel floats out of the field; here it is forced open and there is nothing to
-   float over, so it lays out in flow instead. .sg-printing-demo reserves the room with a
-   min-height, which cannot work for this one — the panel is a child of the demo box and anchored
+   float over, so it lays out in flow instead. Reserving the room with a min-height, as
+   .sg-nav-demo does, cannot work for this one — the panel is a child of the demo box and anchored
    to its *bottom* edge, so every rem added pushed it further down the page and further over the
    section below it. Same classes either way, so the reference still can't drift on looks. */
 .sg-spotlight-demo .spotlight-panel {
@@ -3808,11 +3843,9 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   background: var(--ink-900);
 }
 
-/* The picker's menu is absolutely positioned, so the demo has to reserve the room it floats in —
-   enough for the narrowest screen, where each option's counts and warning wrap onto more lines. */
-.sg-printing-demo {
-  position: relative;
-  min-height: 13rem;
+/* The deck row lays out in flow, expanded, so the demo needs no room reserved — only the space the
+   deck page's section heading would otherwise put above the list. */
+.sg-deck-row-demo {
   margin-top: 1rem;
 }
 
@@ -3956,24 +3989,22 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 }
 
 /* — The deck row on a phone —
-   Every selector here is scoped to the deck list, and that is load-bearing twice over. The rules
-   these override live in the layer above at single-class specificity, and a media query adds none:
-   an unscoped copy of this block would win only by sitting later in the file, which the next
-   trailing layer — this file has grown three of them — would silently undo. And the picker's
-   re-anchoring below is written in terms of the deck row, so it must not reach the styleguide,
-   which renders the same component standalone inside a box sized to hold its menu. */
+   Every selector here is scoped to the deck list, and that is load-bearing: the rules these
+   override live in the layer above at single-class specificity, and a media query adds none — an
+   unscoped copy of this block would win only by sitting later in the file, which the next trailing
+   layer — this file has grown three of them — would silently undo. */
 @media (max-width: 768px) {
-  /* A deck row holds a quantity stepper, a name, a set/number and — on a physical deck — an
-     allocation stepper, on one flex line at every width. On a phone that is more than fits: the set
-     label and the real/proxy label each wrap mid-word and the last button falls off the edge. The
-     allocation stepper takes a line of its own instead.
+  /* A deck line holds a quantity stepper, a name, a set/number, the printings toggle and — on a
+     physical deck — an allocation stepper, on one flex line at every width. On a phone that is more
+     than fits: the labels wrap mid-word and the last button falls off the edge. The allocation
+     stepper takes a line of its own instead, and so does whatever follows it.
 
      Deterministically, not "when the browser runs out of room": how much room that is depends on
      how large the browser draws text, which is why this showed up on a phone and not in a headless
      Chrome at the same width. */
-  .deck-card-list .deck-card-item {
+  .deck-card-list .deck-card-line {
     flex-wrap: wrap;
-    position: relative; /* the printing picker's menu anchors to the row here — see below */
+    gap: 0.5rem 0.75rem;
   }
 
   .deck-card-list .deck-card-name {
@@ -3982,21 +4013,19 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 
   .deck-card-list .deck-card-alloc {
     flex-basis: 100%;
+    flex-wrap: wrap;
     margin-left: 0;
     justify-content: flex-end;
   }
 
-  /* Anchored to the set/number label — a narrow element sitting mid-row — a menu wide enough to
-     read hangs off the left of a phone screen. Dropping that anchor lets it resolve against the
-     row instead, where it fits by construction. */
-  .deck-card-list .deck-card-printing {
-    position: static;
+  /* Each indent costs width a 344px screen does not have to spare. */
+  .deck-card-list .deck-printing-list {
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
   }
 
-  .deck-card-list .printing-picker-menu {
-    left: 0;
-    right: 0;
-    min-width: 0;
+  .deck-card-list .deck-printing-owned {
+    white-space: normal;
   }
 }
 

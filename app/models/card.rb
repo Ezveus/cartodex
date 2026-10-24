@@ -103,6 +103,13 @@ class Card < ApplicationRecord
     "#{name} (#{set_name} #{set_number})"
   end
 
+  # "Same card, any printing" as a key that is never blank. A card with no fingerprint is its own
+  # key, on its id: a blank fingerprint matches every other blank, so keying on it would fold every
+  # unfingerprinted card into one. The deck page's rows and Decks::Comparator group on this.
+  def fingerprint_key
+    fingerprint.presence || "card:#{id}"
+  end
+
   # CSS class slug for this card's energy type, e.g. "fire" or "lightning".
   def type_slug
     type_symbol&.downcase

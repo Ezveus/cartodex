@@ -8,7 +8,7 @@ import { vi } from "vitest"
 // - <dialog>.showModal()/show()/close(): card_preview, search_overlay, result_modal,
 //   tournament_pdf and share_modal open their dialogs this way. The stand-ins move `open` and fire
 //   `close` the way a browser does; there is no top layer, no backdrop and no focus trap to test.
-// - Element#scrollIntoView: dashboard_search and printing_picker. A no-op — jsdom lays nothing out.
+// - Element#scrollIntoView: dashboard_search. A no-op — jsdom lays nothing out.
 export function installBrowserStandIns(window) {
   const dialog = window.HTMLDialogElement.prototype
 

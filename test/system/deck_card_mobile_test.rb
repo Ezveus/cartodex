@@ -2,8 +2,8 @@ require "application_system_test_case"
 require_relative "../support/deck_card_rows"
 
 # Below 768px the card preview stops being a hover pane and becomes a full-screen <dialog>, opened
-# by a click handler on the whole deck row — and the quantity and allocation steppers sit inside
-# that row. `card-preview#open` early-returns above the breakpoint, so the desktop half of the sweep
+# by a click handler on the whole deck line — and the quantity and allocation steppers, the
+# printings toggle and ⇄ sit inside that line. `card-preview#open` early-returns above the breakpoint, so the desktop half of the sweep
 # swallows the same bubbled click silently and cannot see any of this.
 #
 # The sweep runs every other test on both sides; this file pins 390px because it is about the phone
@@ -40,17 +40,34 @@ class DeckCardMobileTest < ApplicationSystemTestCase
     assert_no_selector "dialog.card-preview-modal"
   end
 
-  # The two steppers happen to be <button>s, but this codebase mostly writes clickable controls as a
+  # The printings toggle and ⇄ sit on the same lines, and both carry an action: a tap on either is
+  # the control's, never the viewer's.
+  test "opening the printings and moving a copy do not open the viewer" do
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    visit deck_path(@deck)
+
+    expand_printings_of("Budew")
+    assert_no_selector "dialog.card-preview-modal"
+
+    within(row_of("Budew")) { click_on "Other printings (1)" }
+    within_printing("PRE 4") { find("button.deck-printing-move").click }
+
+    within(row_of("Budew")) { assert_selector ".deck-card-total", exact_text: "2" }
+    assert_no_selector "dialog.card-preview-modal"
+  end
+
+  # The steppers happen to be <button>s, but this codebase mostly writes clickable controls as a
   # <div> or <span> carrying data-action (archetype_picker_controller.js:141,
-  # result_modal_controller.js:140, card_select_controller.js:53) — and #99 means to put a
-  # printing picker on this row's set/number span. A guard that only knew native interactive
+  # result_modal_controller.js:140, card_select_controller.js:53) — and #99 once put a printing
+  # picker on this row's set/number span. A guard that only knew native interactive
   # elements would let that one through and reopen this bug, so the rule is about carrying an
-  # action, not about the tag. Simulated here rather than waiting for #99 to ship it.
+  # action, not about the tag. Simulated here, since no such control is on the row today.
   test "a tap on a data-action control in the row does not open the viewer" do
     visit deck_path(@deck)
 
     within(row_of("Honedge")) do
-      page.execute_script("arguments[0].dataset.action = 'click->printing-picker#open'", find(".deck-card-set"))
+      page.execute_script("arguments[0].dataset.action = 'click->deck-card-control#open'", find(".deck-card-set"))
       find(".deck-card-set").click
     end
 

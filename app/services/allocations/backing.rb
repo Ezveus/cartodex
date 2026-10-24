@@ -1,8 +1,10 @@
 module Allocations
   # How many of a deck row's copies are backed by owned cards, under the app's one backing rule.
   #
-  # Three callers apply it: Decks::CardAdder on an add, Decks::PrintingSwapper on a printing swap,
-  # and Cards::Printings when it projects that swap for the picker. It lives here, next to
+  # Every write that lands a copy applies it — Decks::CardAdder on an add,
+  # Decks::DeckCardQuantitySetter on an increase, Decks::CopyMover on ⇄, Decks::PrintingSwapper on
+  # a swap, Decks::CollectionCopyAdder on "add to my collection and use it here" — and
+  # Cards::Printings when it projects a swap for its callers. It lives here, next to
   # Availability, because it is a property of the allocation model rather than of any one write —
   # and because a projection that disagreed with the write would warn the user about the wrong
   # thing.

@@ -2,8 +2,8 @@ require "application_system_test_case"
 require_relative "../support/deck_card_rows"
 
 # The set view's server rendering is held by the controller test of the same name (test/controllers/deck_set_grouping_test.rb). What only a browser sees: the
-# heading count a stepper keeps true in place, and the reload a printing swap needs in this view,
-# since the swapped card now belongs to another section.
+# heading count a stepper keeps true in place, and ⇄ moving a card from one set's section to
+# another's in place, since the moved copy now belongs to another set.
 class DeckSetViewTest < ApplicationSystemTestCase
   include DeckCardRows
 
@@ -51,43 +51,56 @@ class DeckSetViewTest < ApplicationSystemTestCase
     within_quantity_of("Budew") { click_on "-" }
     assert_selector asc_heading, exact_text: "Ascended Heroes (ASC) · 1 card"
 
+    # The last copy takes its row with it, and the section it emptied.
     within_quantity_of("Budew") { click_on "-" }
-    assert_selector asc_heading, text: "Ascended Heroes (ASC) · 0 cards"
+    assert_no_selector ".deck-set-section[data-set-code='ASC']"
+    assert_no_selector ".deck-sections [data-row-key]", text: "Budew"
     assert_selector por_heading, text: "Perfect Order (POR) · 2 cards"
+    assert_equal "2", deck_total
   end
 
-  test "a printing swap in the set view reloads, moving the card to its new set's section" do
+  # A set-view row is one printing, so ⇄ is offered between the printings the deck holds. The copy
+  # it moves lands in the other printing's section, and the one it empties goes.
+  test "⇄ in the set view moves the copy into its set's section, in place" do
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+
     visit decks_path
     visit deck_path(@deck, group: "set")
-    within(".deck-set-section[data-set-code='ASC']") { assert_text "Budew" }
-    mark_rendered_list
-
-    within("li.deck-card-item", text: "ASC 16") { click_on "ASC 16" }
-    within(".printing-picker-menu") { click_on "PRE 4" }
+    assert_equal %w[POR ASC PRE], all(".deck-set-section").map { |s| s["data-set-code"] }
+    mark_page
 
     within(".deck-set-section[data-set-code='PRE']") do
-      assert_selector "h2", text: "PRE · 1 card"
-      assert_text "Budew"
+      find("button.deck-printing-move[title='Move one copy here from ASC 16']").click
     end
+
+    within(".deck-set-section[data-set-code='PRE']") do
+      assert_selector "h2", exact_text: "PRE · 2 cards"
+      assert_selector ".deck-card-qty", exact_text: "2"
+    end
+    # The source printing emptied, and its section went with it.
     assert_no_selector ".deck-set-section[data-set-code='ASC']"
-    assert_no_selector ".deck-show-main[data-test-marker]"
+    assert_equal %w[POR PRE], all(".deck-set-section").map { |s| s["data-set-code"] }
+    assert_equal "4", deck_total
+    assert_page_not_reloaded
     assert_current_path deck_path(@deck, group: "set")
 
-    # `replace`: the reload took the place of the page it re-rendered rather than stacking on it.
+    # Nothing stacked on the history: back is the page before the deck.
     go_back
     assert_current_path decks_path
   end
 
-  test "a printing swap in the type view stays in place" do
+  test "⇄ in the type view stays in place" do
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+
     visit deck_path(@deck)
-    mark_rendered_list
+    mark_page
 
-    within("li.deck-card-item", text: "ASC 16") { click_on "ASC 16" }
-    within(".printing-picker-menu") { click_on "PRE 4" }
+    expand_printings_of("Budew")
+    within_printing("PRE 4") { find("button.deck-printing-move").click }
 
-    assert_selector "li.deck-card-item .deck-card-set", text: "PRE 4"
-    # Checked after the swap's own effect, so the request has landed; a reload would have dropped it.
-    assert_selector ".deck-show-main[data-test-marker]"
+    within_printing("PRE 4") { assert_selector ".deck-card-qty", exact_text: "2" }
+    # Checked after the move's own effect, so the request has landed; a reload would have dropped it.
+    assert_page_not_reloaded
   end
 
   test "editing the header leaves the list in the set view" do
@@ -103,40 +116,40 @@ class DeckSetViewTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Set Watch Renamed"
     assert_selector ".deck-set-section[data-set-code='ASC']"
   end
-
-  private
-
-  # A Turbo visit swaps the body without reloading the window, so a window global would survive it;
-  # an attribute on the rendered list does not.
-  def mark_rendered_list
-    page.execute_script("document.querySelector('.deck-show-main').dataset.testMarker = '1'")
-  end
 end
 
-# A replace visit lands at the top of the page, so on a deck taller than the window the swapped row
-# would sit below the fold. A short window makes the two-card deck such a deck.
+# The move used to reload the set view, and a reload lands at the top of the page, so on a deck
+# taller than the window the moved row sat below the fold. In place, it stays on screen.
+# A short window makes the three-card deck such a deck.
 class DeckSetViewSwapScrollTest < ApplicationSystemTestCase
+  include DeckCardRows
+
   drive_at 1400, 400
 
   setup do
     @user = users(:one)
     @deck = @user.decks.create!(name: "Set Watch", standard_pool: standard_pools(:twm_por))
     @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 2)
     login_as @user, scope: :user
   end
 
-  test "a printing swap in the set view keeps the swapped row on screen" do
+  test "⇄ in the set view leaves the page where the member was" do
     visit deck_path(@deck, group: "set")
-    row = find("li.deck-card-item", text: "ASC 16")
+    row = find(".deck-set-section[data-set-code='PRE'] li.deck-printing-row")
     page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", row)
-    within(row) { click_on "ASC 16" }
-    within(".printing-picker-menu") { click_on "PRE 4" }
-
-    within(".deck-set-section[data-set-code='PRE']") { assert_text "Budew" }
-    pre_row = find(".deck-set-section[data-set-code='PRE'] li.deck-card-item")
     # Not vacuous: at the top of the page the row is out of view.
-    assert_operator page.evaluate_script("window.scrollY"), :>, 0
+    scrolled = page.evaluate_script("window.scrollY")
+    assert_operator scrolled, :>, 0
+
+    within(row) { find("button.deck-printing-move").click }
+
+    within(".deck-set-section[data-set-code='PRE']") { assert_selector ".deck-card-qty", exact_text: "2" }
+    # Not the same offset: the ASC section above it emptied and went, and the browser's scroll
+    # anchoring keeps the row where it was on screen rather than the page where it was.
+    assert_operator page.evaluate_script("window.scrollY"), :>, 0, "the page jumped to the top"
+    pre_row = find(".deck-set-section[data-set-code='PRE'] li.deck-printing-row")
     top, bottom = page.evaluate_script(
       "(r => [r.top, r.bottom])(arguments[0].getBoundingClientRect())", pre_row
     )

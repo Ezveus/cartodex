@@ -111,6 +111,22 @@ class WriteToolsTest < ActiveSupport::TestCase
     assert_nil physical.deck_cards.find_by(card: @card)
   end
 
+  test "SetDeckCardQuantityTool claims free copies on an increase and reports them" do
+    @user.collections.find_by!(card: @card).update!(quantity: 3)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    physical.deck_cards.create!(card: @card, quantity: 1, owned_copies: 1)
+
+    response = SetDeckCardQuantityTool.call(deck_key: physical.key, card_id: @card.id, quantity: 3, server_context: @context)
+
+    assert_equal 3, physical.deck_cards.find_by(card: @card).owned_copies
+    assert_match(/total 3 \(3 real\)/, response_text(response))
+  end
+
+  test "SetDeckCardQuantityTool describes the greedy increase and the proxy-first decrease" do
+    assert_match(/increase.*claims/i, SetDeckCardQuantityTool.description)
+    assert_match(/decrease.*proxies first/i, SetDeckCardQuantityTool.description)
+  end
+
   test "SetDeckCardQuantityTool returns a clean error for non-integer quantity" do
     physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     physical.deck_cards.create!(card: @card, quantity: 2)

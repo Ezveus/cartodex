@@ -2,8 +2,8 @@ module Decks
   # A shared deck, as anybody but its owner sees it: the decklist and the exports.
   #
   # A separate file rather than a flag on Decks::ShowView, which carries ten owner-only
-  # affordances (inline editing, card search, result logging, allocation steppers, printing
-  # pickers, the tournament PDF, the actions dropdown…). Guarding each of them would put ten
+  # affordances (inline editing, card search, result logging, quantity and allocation steppers,
+  # ⇄, the tournament PDF, the actions dropdown…). Guarding each of them would put ten
   # conditions in the app's largest component, and one forgotten condition is a collection
   # leak to a stranger. This view cannot leak what it does not contain.
   class PublicShowView < ApplicationComponent
@@ -21,7 +21,8 @@ module Decks
 
     def view_template
       compare = Decks::CompareBar.controller_data
-      div(class: "deck-show-container", data: compare.merge(controller: "card-preview #{compare[:controller]}")) do
+      div(class: "deck-show-container",
+          data: compare.merge(controller: "card-preview disclosure #{compare[:controller]}")) do
         header_section
         stats_section
         div(class: "deck-show-content") do
@@ -90,65 +91,18 @@ module Decks
       end
     end
 
-    # The same section markup as Decks::ShowView — `.deck-section`, `.deck-section-group`,
-    # `.deck-subsection` and their headings are what the stylesheet styles — so the public page
-    # reads like the owner's, Trainers split by subtype included. Duplicated rather than shared:
-    # ShowView's card_list is where the owner controls come from, and this file must not import
-    # it. The labels are the one thing borrowed, since they are data rather than markup.
+    # The same sections and the same row classes as Decks::ShowView — the stylesheet styles them
+    # and the image export reads them — placed by the same Decks::Layout, so the public page reads
+    # like the owner's, Trainers split by subtype and a card in two printings one row. The rows are
+    # Decks::PublicFingerprintRow's, which hold no control, and the states are `deck_only`: built
+    # from the deck's own cards, they read neither the collection nor `card_sets` and cost no query.
     def main_section
       div(class: "deck-show-main") do
-        groups = @deck.deck_cards.group_by { |deck_card| deck_card.card.card_type }
-
-        card_type_section("Pokémon", groups["Pokémon"]) if groups["Pokémon"].present?
-        trainer_section(groups["Trainer"]) if groups["Trainer"].present?
-        card_type_section("Energy", groups["Energy"]) if groups["Energy"].present?
-      end
-    end
-
-    def card_type_section(type, group)
-      div(class: "deck-section") do
-        h2 { heading_text(type, group) }
-        card_list(group)
-      end
-    end
-
-    def trainer_section(group)
-      div(class: "deck-section-group") do
-        h2 { "Trainer" }
-        # Grouped on the label, not the raw subtype, for the reason Decks::ShowView is: two
-        # spellings of the tool bucket reach this table, and iterating its keys would draw two
-        # sections both titled "Tool".
-        labels = Decks::ShowView::TRAINER_SUBTYPE_LABELS
-        subtype_groups = group.group_by { |deck_card| labels.fetch(deck_card.card.subtype.to_s, "Other") }
-
-        labels.values.uniq.each do |label|
-          subgroup = subtype_groups.delete(label)
-          trainer_subtype_section(label, subgroup) if subgroup.present?
-        end
-
-        other = subtype_groups.values.flatten
-        trainer_subtype_section("Other", other) if other.present?
-      end
-    end
-
-    def trainer_subtype_section(label, group)
-      div(class: "deck-section deck-subsection") do
-        h3 { heading_text(label, group) }
-        card_list(group)
-      end
-    end
-
-    # Plain text where ShowView wraps the numbers in deck-totals targets: nothing on this page
-    # can change a quantity, so there is nothing to keep in sync.
-    def heading_text(label, group)
-      "#{label} (#{group.sum(&:quantity)} — #{group.size} unique)"
-    end
-
-    def card_list(group)
-      ul(class: "deck-card-list") do
-        group.sort_by { |deck_card| deck_card.card.name }.each do |deck_card|
-          render Decks::PublicDeckCardItem.new(deck_card: deck_card)
-        end
+        states = Decks::FingerprintStates.deck_only(@deck.deck_cards)
+        render Decks::DeckSections.new(
+          sections: Decks::Layout.call(states: states, group: :type),
+          row: ->(row) { Decks::PublicFingerprintRow.new(state: row.state) }
+        )
       end
     end
 
