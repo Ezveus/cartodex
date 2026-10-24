@@ -6,7 +6,7 @@ import { state } from "./state.js"
 //
 // - a Response — jsonResponse(…) and emptyResponse(…) build the usual ones;
 // - an Error, which the request rejects with: networkError() is what a browser throws offline;
-// - a function of the request ({ url, method, headers, body }) returning either of the above,
+// - a function of the request ({ url, method, headers, credentials, body }) returning either of the above,
 //   for a reply that depends on what was sent.
 //
 //   stubFetch(jsonResponse({ quantity: 2 }), jsonResponse({ errors: ["Nope"] }, { status: 422 }))
@@ -24,6 +24,7 @@ export function stubFetch(...replies) {
       url: String(url),
       method: init.method ?? "GET",
       headers: { ...init.headers },
+      credentials: init.credentials,
       body: parseBody(init.body)
     }
     fetchState.requests.push(request)
@@ -43,7 +44,8 @@ export function stubFetch(...replies) {
   return mock
 }
 
-// Every request the current stub received, in order, with a JSON body already parsed.
+// Every request the current stub received, in order, as { url, method, headers, credentials,
+// body }, a JSON body already parsed and any other body left as sent.
 export function requests() {
   return state.fetch?.requests ?? []
 }

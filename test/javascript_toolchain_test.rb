@@ -88,6 +88,14 @@ class JavascriptToolchainTest < ActiveSupport::TestCase
       "node_modules/ is not in .gitignore"
   end
 
+  # Vitest cannot guard its own `include`: a narrower glob stops collecting the very test that would
+  # complain (measured: `*/*.test.js` ran 3 of 7 files, green, exit 0). config.test.js proves every
+  # file matches this glob; this pins the glob from outside it.
+  test "vitest collects every test under test/javascript" do
+    assert_equal [ "test/javascript/**/*.test.js" ],
+      File.read(Rails.root.join("vitest.config.js"))[/^\s*include:\s*\[(.*)\]/, 1].to_s.scan(/"([^"]+)"/).flatten
+  end
+
   private
     def package_json
       JSON.parse(File.read(Rails.root.join("package.json")))

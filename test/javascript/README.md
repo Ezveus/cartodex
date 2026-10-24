@@ -65,8 +65,8 @@ test("adds a copy", async () => {
 - **`stubFetch(...replies)`** answers requests in order. A reply is a `Response`
   (`jsonResponse(body, { status })`, `emptyResponse(204)`, or `new Response(...)` for anything
   else), an `Error` (`networkError()`, what a browser throws offline), or a function of the request
-  returning either. `requests()` lists what was sent as `{ url, method, headers, body }`, the body
-  parsed from JSON. Real `Response` objects mean `helpers/api.js`'s `requestJson` runs unmodified —
+  returning either. `requests()` lists what was sent as `{ url, method, headers, credentials, body }`,
+  a JSON body parsed and any other left as sent. Real `Response` objects mean `helpers/api.js`'s `requestJson` runs unmodified —
   prefer this to mocking `requestJson`. To replace `requestJson` itself, `vi.mock("helpers/api", …)`
   works through the same alias.
 - **`captureEvents(target, type)`** returns an array that fills with every `type` event reaching
@@ -85,6 +85,11 @@ The shared `afterEach` fails the test, after the fact, when:
   `null`, invisible to the test. Every test starts with `stubFetch()` already called, so this holds
   for a test that never stubs too;
 - a queued reply was never requested.
+
+An exception escaping an async action after its first `await` — Stimulus drops that promise, so
+`handleError` never sees it — is not attributed to a test: Vitest prints it under "Unhandled
+Rejection" and exits 1 with every test green. `npm test` and CI fail on it all the same; read the
+error section, not only the test count.
 
 `support.test.js` checks each of those by calling `resetSupport()` itself; `harness.test.js` runs
 Vitest in a child process over `harness_fixtures/` to prove the shared `afterEach` really does. The

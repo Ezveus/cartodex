@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 import { describe, expect, test, vi } from "vitest"
 import { state, resetSupport } from "./support/state.js"
-import { captureEvents, jsonResponse, mount, stubFetch } from "./support"
+import { captureEvents, flashMessages, jsonResponse, mount, requests, stubFetch } from "./support"
 import { requestJson } from "helpers/api"
 
 // The harness has to fail the tests it exists to fail. Each case below provokes one failure and
@@ -23,7 +23,7 @@ describe("the test harness", () => {
   test("fails a test whose controller threw in connect(), which Stimulus would only log", async () => {
     await mount(`<div data-controller="failing"></div>`, { failing: Failing })
 
-    expectResetToThrow(/boom in connect/)
+    expectResetToThrow(/^Error connecting controller: boom in connect$/)
   })
 
   test("fails a test whose controller threw in an action", async () => {
@@ -31,7 +31,7 @@ describe("the test harness", () => {
 
     element.click()
 
-    expectResetToThrow(/boom in action/)
+    expectResetToThrow(/^Error invoking action "click->clicking#fail": boom in action$/)
   })
 
   test("fails a test that made a request it queued no reply for", async () => {
@@ -56,6 +56,39 @@ describe("the test harness", () => {
 
     expect(disconnected).toEqual([ element ])
     expect(state.applications).toEqual([])
+  })
+
+  test("stops each application from watching the page", async () => {
+    const connected = []
+    class Watched extends Controller { connect() { connected.push(this.element) } }
+    const { element } = await mount(`<div></div>`, { watched: Watched })
+
+    resetSupport()
+    element.insertAdjacentHTML("beforeend", `<div data-controller="watched"></div>`)
+    await Promise.resolve()
+
+    expect(connected).toEqual([])
+  })
+
+  test("records a JSON body parsed and any other body as sent", async () => {
+    stubFetch(jsonResponse({}), jsonResponse({}))
+
+    await fetch("/a", { method: "POST", body: JSON.stringify({ n: 1 }) })
+    await fetch("/b", { method: "POST", body: "plain text" })
+
+    expect(requests().map((request) => request.body)).toEqual([ { n: 1 }, "plain text" ])
+  })
+
+  test("answers with a reply built from the request", async () => {
+    stubFetch((request) => jsonResponse({ echo: request.url }))
+
+    expect(await (await fetch("/api/echo")).json()).toEqual({ echo: "/api/echo" })
+  })
+
+  test("reports a flash of no known kind as kind null", () => {
+    document.getElementById("flash-messages").innerHTML = `<div class="flash flash-success">Odd</div>`
+
+    expect(flashMessages()).toEqual([ { text: "Odd", kind: null } ])
   })
 
   test("stops listening once the test is over", () => {

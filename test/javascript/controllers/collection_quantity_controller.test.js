@@ -70,7 +70,7 @@ describe("collection_quantity_controller", () => {
     expect(flashMessages()).toEqual([ { text: "Added to collection (5 copies)", kind: "notice" } ])
   })
 
-  test("changes nothing and announces nothing when the server refuses", async () => {
+  test("changes nothing and announces nothing when an increment is refused", async () => {
     stubFetch(jsonResponse({ errors: [ "Card must exist" ] }, { status: 422 }))
     const { element } = await mount(cardPageCounter(2), controllers)
     const changes = captureEvents(document, "collection-quantity:changed")
@@ -81,6 +81,37 @@ describe("collection_quantity_controller", () => {
     expect(element.querySelector("[data-collection-quantity-target=qty]").textContent).toBe("2")
     expect(changes).toEqual([])
     expect(flashMessages()).toEqual([ { text: "Card must exist", kind: "alert" } ])
+  })
+
+  test("keeps the quantity when a decrement is refused", async () => {
+    stubFetch(jsonResponse({ errors: [ "Quantity is invalid" ] }, { status: 422 }))
+    const { element } = await mount(cardPageCounter(3), controllers)
+    const changes = captureEvents(document, "collection-quantity:changed")
+
+    click(element, "Decrement")
+    await settle()
+
+    expect(element.querySelector("[data-collection-quantity-target=qty]").textContent).toBe("3")
+    expect(changes).toEqual([])
+    expect(flashMessages()).toEqual([ { text: "Quantity is invalid", kind: "alert" } ])
+  })
+
+  test("keeps the row when a removal is refused", async () => {
+    stubFetch(new Response(null, { status: 500 }))
+    const { element } = await mount(`
+      <ul>
+        <li data-controller="collection-quantity" data-collection-quantity-card-id-value="9" data-collection-quantity-quantity-value="4">
+          <button data-action="collection-quantity#remove">Remove</button>
+        </li>
+      </ul>`, controllers)
+    const changes = captureEvents(element, "collection-quantity:changed")
+
+    click(element, "Remove")
+    await settle()
+
+    expect(element.querySelector("li")).not.toBeNull()
+    expect(changes).toEqual([])
+    expect(flashMessages()).toEqual([ { text: "Couldn't remove this card from your collection (HTTP 500)", kind: "alert" } ])
   })
 
   test("decrements through a PATCH while more than one copy is held", async () => {

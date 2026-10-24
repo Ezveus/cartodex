@@ -20,8 +20,9 @@ describe("helpers/flash", () => {
     flashAlert("Offline")
     flashAlert("Offline")
     flashAlert("Still offline")
+    flashAlert("offline")
 
-    expect(flashMessages().map((flash) => flash.text)).toEqual([ "Offline", "Still offline" ])
+    expect(flashMessages().map((flash) => flash.text)).toEqual([ "Offline", "Still offline", "offline" ])
   })
 
   test("does nothing, and does not throw, on a page without #flash-messages", () => {

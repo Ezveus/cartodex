@@ -13,6 +13,7 @@ describe("requestJson", () => {
       url: "/api/collections",
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF_TOKEN },
+      credentials: "same-origin",
       body: { card_id: 7 }
     } ])
     expect(flashMessages()).toEqual([])
@@ -68,7 +69,15 @@ describe("requestJson", () => {
 
     const data = await requestJson("/x", { method: "PATCH", failure: "Couldn't", handOver: [ 409 ] })
 
-    expect(data).toMatchObject({ status: 409, body: {} })
+    expect(data).toBeInstanceOf(HandedOver)
+    expect(data.status).toBe(409)
+    expect(data.body).toEqual({})
+  })
+
+  test("returns a listed status as the answer it is when it is a success", async () => {
+    stubFetch(jsonResponse({ quantity: 1 }, { status: 201 }))
+
+    expect(await requestJson("/x", { method: "POST", failure: "Couldn't", handOver: [ 201 ] })).toEqual({ quantity: 1 })
   })
 
   test("flashes a refusal it was not asked to hand over", async () => {

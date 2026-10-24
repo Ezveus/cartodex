@@ -39,7 +39,7 @@ describe("the shared afterEach", () => {
   })
 
   test.each([
-    [ "a controller throws in connect", /fixture: boom in connect/ ],
+    [ "a controller throws in connect", /Error connecting controller: fixture: boom in connect/ ],
     [ "a controller throws in an action", /fixture: boom in action/ ],
     [ "a request is made without ever calling stubFetch", /no reply queued: GET \/api\/unstubbed/ ],
     [ "a request outruns the queued replies", /no reply queued: POST \/api\/second/ ],
