@@ -6,9 +6,9 @@ require "test_helper"
 # not be compared with CI's. Nothing about that was visible — no command failed, no file
 # complained, and the two spellings of the same fact simply answered different questions.
 #
-# `.ruby-version` is the reference, and the reason is itself one of the declarations: all six
-# jobs in `.github/workflows/ci.yml` say `ruby-version: .ruby-version`, so whatever that file
-# holds is the version the five gates and the deploy actually run under. Which is why the
+# `.ruby-version` is the reference, and the reason is itself one of the declarations: every job
+# in `.github/workflows/ci.yml` that installs Ruby says `ruby-version: .ruby-version`, so
+# whatever that file holds is the version the five Ruby gates and the deploy actually run under. Which is why the
 # workflow is checked too — pin one job to a literal and every other assertion here would go on
 # passing while the gates ran on something else, the exact silent failure this test exists to
 # stop.

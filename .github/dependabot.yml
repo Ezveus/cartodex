@@ -10,3 +10,13 @@ updates:
   schedule:
     interval: daily
   open-pull-requests-limit: 10
+- package-ecosystem: npm
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+    # Follows the Stimulus the stimulus-rails gem vendors (test/javascript_toolchain_test.rb): a
+    # bump starts as the bundler pull request for the gem, which that test turns red until
+    # package.json is edited in the same pull request.
+    - dependency-name: "@hotwired/stimulus"
