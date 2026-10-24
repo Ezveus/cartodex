@@ -61,6 +61,82 @@ module Decks
       assert state.reprinted?
     end
 
+    test "printings of one group run newest set first" do
+      por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
+      twm = reprint(set: card_sets(:twm), set_name: "TWM", set_number: "9")
+      @deck.deck_cards.create!(card: @pre, quantity: 1)
+
+      state = budew
+
+      assert_equal [ @pre, por, @asc, twm ].map(&:id), state.printings.map { |p| p.card.id }
+      assert_equal %i[deck other other other], state.printings.map(&:group)
+    end
+
+    # Ruby's sort_by is not stable, and on arrays this short it only shows from about twenty
+    # elements: this arrangement of groups is one it reorders when the catalogue index is not part
+    # of the key.
+    test "each group keeps the catalogue order, however many printings there are" do
+      groups = %i[deck owned other deck owned other deck owned other other other deck other deck deck deck
+                  deck other other deck]
+      twm = groups.each_with_index.map do |group, index|
+        card = reprint(set: card_sets(:twm), set_name: "TWM", set_number: (101 + index).to_s)
+        @deck.deck_cards.create!(card: card, quantity: 1) if group == :deck
+        @user.collections.create!(card: card, quantity: 1) if group == :owned
+        card
+      end
+      catalogue = [ @asc, *twm, @pre ]
+
+      state = budew
+
+      expected = %i[deck owned other].flat_map do |group|
+        catalogue.select { |card| printing(state, card).group == group }
+      end
+      assert_equal expected.map(&:id), state.printings.map { |p| p.card.id }
+    end
+
+    test "the display card is the in-deck printing with the most copies, wherever it sorts" do
+      @deck.deck_cards.create!(card: @asc, quantity: 1)
+      @deck.deck_cards.create!(card: @pre, quantity: 3)
+
+      state = budew
+
+      assert_equal @pre, state.display_card
+      assert_equal @pre, printing(state, @asc).move_from
+      assert_equal @asc, printing(state, @pre).move_from
+    end
+
+    test "max_owned is capped by the row's quantity" do
+      @user.collections.find_by!(card: @asc).update!(quantity: 3)
+      @deck.deck_cards.create!(card: @asc, quantity: 1, owned_copies: 0)
+
+      asc = printing(budew, @asc)
+
+      assert_equal 3, asc.available
+      assert_equal 1, asc.max_owned
+    end
+
+    test "a printing whose committed reals equal what is owned is not over-allocated" do
+      @user.collections.find_by!(card: @asc).update!(quantity: 2)
+      @deck.deck_cards.create!(card: @asc, quantity: 1, owned_copies: 1)
+      other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
+      other.deck_cards.create!(card: @asc, quantity: 1, owned_copies: 1)
+
+      state = budew
+
+      assert_not printing(state, @asc).over_allocated
+      assert_not state.over_allocated?
+    end
+
+    test "a fully backed row with no free copy does not offer the collection add" do
+      @user.collections.find_by!(card: @asc).update!(quantity: 2)
+      @deck.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 2)
+
+      asc = printing(budew, @asc)
+
+      assert_equal [ 2, 2, 0 ], [ asc.available, asc.owned_copies, asc.proxies ], "nothing free beyond its own reals"
+      assert_not asc.can_add_to_collection
+    end
+
     test "a printing owned at 0 copies is not in the owned group" do
       reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
       @deck.deck_cards.create!(card: @asc, quantity: 1)
@@ -162,6 +238,31 @@ module Decks
       assert_equal 0, asc.max_owned
       assert_not asc.can_add_to_collection
       assert_not asc.over_allocated
+    end
+
+    # Every allocation field on a non-physical deck is held by the physical guard alone: ASC has
+    # three free copies (max_owned would be 2), and PRE is backed twice over by a physical deck while
+    # one copy is owned (over_allocated, and a proxy with nothing free would offer the add).
+    test "a non-physical deck allocates nothing even with free copies and an over-committed printing" do
+      deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
+      deck.deck_cards.create!(card: @asc, quantity: 2)
+      deck.deck_cards.create!(card: @pre, quantity: 1)
+      @user.collections.find_by!(card: @asc).update!(quantity: 3)
+      @user.collections.find_by!(card: @pre).update!(quantity: 1)
+      @deck.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 2)
+
+      state = budew(deck)
+      asc = printing(state, @asc)
+      pre = printing(state, @pre)
+
+      assert_equal [ 3, 0 ], [ asc.available, asc.max_owned ]
+      assert_equal 0, pre.available
+      [ asc, pre ].each do |p|
+        assert_not p.over_allocated, "#{p.card.set_name} over_allocated"
+        assert_not p.can_add_to_collection, "#{p.card.set_name} can_add_to_collection"
+        assert_equal 0, p.max_owned
+      end
+      assert_not state.over_allocated?
     end
 
     test "as_json carries the payload's fingerprint shape" do

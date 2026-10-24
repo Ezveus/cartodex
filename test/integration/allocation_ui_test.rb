@@ -46,6 +46,24 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
     assert_select "[data-focus-key=real-plus-#{@card.id}]:not([disabled])"
   end
 
+  # A non-physical deck consumes no collection: no split, no stepper, no collection add — even on a
+  # printing that is all proxies with nothing free, which on a physical deck offers the add.
+  test "a non-physical deck never offers the allocation controls nor the collection add" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    physical.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+    live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
+    live.deck_cards.create!(card: @card, quantity: 2)
+
+    get deck_path(live)
+
+    assert_response :success
+    assert_select "[data-focus-key=qty-plus-#{@card.id}]", count: 1
+    assert_select ".deck-card-alloc", count: 0
+    assert_select ".deck-card-collect", count: 0
+    assert_select ".deck-card-warning", count: 0
+  end
+
   test "deck show flags an over-allocated card" do
     @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
     deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
