@@ -4668,3 +4668,32 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
 .odds-combo-error {
   color: var(--loss);
 }
+
+/* Cards::AllocationSection — the reader's copies of one printing. The stat wrapper groups a
+   dt/dd pair without breaking .card-info-list's two-column grid. */
+.card-allocation-stat { display: contents; }
+
+/* Styled by the shared .over-allocation-banner; only its spacing differs inside a section. */
+.card-allocation-over { margin: 1rem 0 0; }
+
+.card-allocation-empty {
+  margin: 1rem 0 0;
+  color: var(--ink-500);
+}
+
+.card-allocation-decks {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.card-allocation-deck {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.card-allocation-deck a { min-width: 0; overflow-wrap: anywhere; }
+.card-allocation-deck-count { flex-shrink: 0; color: var(--ink-500); }

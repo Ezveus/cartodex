@@ -109,6 +109,13 @@ class CardsController < ApplicationController
                          .where.not(id: @card.id)
                          .order(:set_name)
     @collection_quantity = current_user&.collections&.find_by(card_id: @card.id)&.quantity.to_i
+    if current_user
+      # This printing only, as the allocation model counts it. A visitor costs none of these.
+      @allocation = Allocations::Availability.call(user: current_user, card: @card)
+      @committing_decks = Allocations::PhysicalDecksByCard.call(
+        user: current_user, card_ids: [ @card.id ], holding: :holding_real_copies
+      ).fetch(@card.id, [])
+    end
     # :pokemon_subtype is already in the includes above and the payload reads only the card's own
     # columns, so this is free. Unconditional: the catalog is public, CardPolicy#og_image? is true.
     @og_payload = Og::CardPayload.call(@card)
