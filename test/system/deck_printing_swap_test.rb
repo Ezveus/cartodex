@@ -169,4 +169,30 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
       assert_no_selector ".deck-printing-move", visible: :all
     end
   end
+  # The public page may not read `card_sets`, so it lists a card's printings by set code where the
+  # owner's follows the catalogue, newest set first: POR (2026-01-16) is newer than ASC while "ASC"
+  # sorts first. POR is added first, so neither order is the rows' own.
+  test "a visitor reads a card's printings by set code, the owner by release" do
+    por = Card.create!(name: @asc.name, card_type: "Pokémon", hp: @asc.hp, type_symbol: @asc.type_symbol,
+                       retreat_cost: @asc.retreat_cost, stage: @asc.stage, card_set: card_sets(:por),
+                       set_name: "POR", set_number: "3", rarity: "Common")
+    por.update_column(:fingerprint, @asc.fingerprint)
+    @deck.deck_cards.create!(card: por, quantity: 2)
+    @deck.deck_cards.create!(card: @asc, quantity: 1)
+    @deck.update!(shared: true)
+
+    visit deck_path(@deck)
+    expand_printings_of("Budew")
+    assert_equal [ "POR 3", "ASC 16" ], visible_printings
+
+    logout(:user)
+    visit deck_path(@deck)
+    within(line_of("Budew")) { click_on "2 printings" }
+    assert_equal [ "ASC 16", "POR 3" ], visible_printings
+  end
+
+  def visible_printings
+    find("#deck-printings-budew_shared", visible: true)
+      .all(":scope > li.deck-printing-row .deck-card-set").map(&:text)
+  end
 end
