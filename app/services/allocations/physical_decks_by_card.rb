@@ -1,6 +1,7 @@
 module Allocations
   # Which of a user's physical decks hold given cards, as a Hash of card id =>
-  # [{ id:, key:, name: }], in one query whatever the card count. The over-allocation
+  # [{ id:, key:, name:, owned_copies: }] ordered by deck name, in one query
+  # whatever the card count. The over-allocation
   # report asks this twice with two different conditions — which decks hold real
   # copies, and which decks still have proxy slots to convert — and both used to
   # be answered one card at a time, an N+1 over the over-allocated cards.
@@ -31,16 +32,20 @@ module Allocations
                   .joins(:deck_cards)
                   .where(deck_cards: { card_id: @card_ids })
                   .where(@condition)
-                  .distinct
-                  .pluck("deck_cards.card_id", "decks.id", "decks.key", "decks.name")
+                  .order(Arel.sql("LOWER(decks.name)"), "decks.id")
+                  .pluck("deck_cards.card_id", "decks.id", "decks.key", "decks.name", "deck_cards.owned_copies")
 
       # Both identifiers, on purpose: `key` addresses the deck in a link, `id` is what the
       # reallocation form's from_deck_id/to_deck_id selects carry — those reference a row
       # rather than a page. This hash is also what ListOverAllocationsTool serialises to
       # MCP clients, so the key added here is what makes reallocate_owned_copies callable
-      # from the report (see Task 4).
+      # from the report (see Task 4). `owned_copies` is what the card page prints beside each deck.
+      # No DISTINCT: (deck_id, card_id) is UNIQUE on deck_cards, so the join yields one row per
+      # deck and card already.
       rows.group_by(&:first).transform_values do |group|
-        group.map { |(_card_id, deck_id, deck_key, deck_name)| { id: deck_id, key: deck_key, name: deck_name } }
+        group.map do |(_card_id, deck_id, deck_key, deck_name, owned_copies)|
+          { id: deck_id, key: deck_key, name: deck_name, owned_copies: owned_copies }
+        end
       end
     end
   end

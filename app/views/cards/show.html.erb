@@ -1,1 +1,1 @@
-<%= render Cards::ShowView.new(card: @card, alt_printings: @alt_printings, collection_quantity: @collection_quantity, signed_in: user_signed_in?) %>
+<%= render Cards::ShowView.new(card: @card, alt_printings: @alt_printings, collection_quantity: @collection_quantity, signed_in: user_signed_in?, allocation: @allocation, committing_decks: @committing_decks) %>

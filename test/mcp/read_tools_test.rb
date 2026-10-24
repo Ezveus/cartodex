@@ -406,6 +406,19 @@ class ReadToolsTest < ActiveSupport::TestCase
     assert report.first["decks"].all? { |d| d["key"].present? }, "a named deck had no key"
   end
 
+  # The hash PhysicalDecksByCard builds is serialised as is, so a key added for the card page
+  # reaches MCP clients too. owned_copies is deliberate there: it says how many copies each deck
+  # would have to give back.
+  test "list_over_allocations names each deck's committed copies alongside its identity" do
+    over_allocate(cards(:honedge), owned: 1, committed: 2)
+
+    response = ListOverAllocationsTool.call(server_context: @context)
+
+    deck = payload(response).first["decks"].first
+    assert_equal %w[id key name owned_copies], deck.keys.sort
+    assert_equal 2, deck["owned_copies"]
+  end
+
   def pool_of_its_own(index)
     set = CardSet.create!(code: "M#{index}", name: "Mcp Set #{index}", release_date: Date.new(2025, 1, 1))
     StandardPool.create!(

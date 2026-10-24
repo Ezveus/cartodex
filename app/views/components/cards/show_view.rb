@@ -1,7 +1,9 @@
 module Cards
   class ShowView < ApplicationComponent
-    def initialize(card:, alt_printings:, collection_quantity: 0, signed_in: false)
+    def initialize(card:, alt_printings:, collection_quantity: 0, signed_in: false, allocation: nil, committing_decks: [])
       @card = card
+      @allocation = allocation
+      @committing_decks = committing_decks
       @alt_printings = alt_printings
       @collection_quantity = collection_quantity
       @signed_in = signed_in
@@ -19,6 +21,7 @@ module Cards
         div(class: "card-show-content") do
           card_image
           div(class: "card-show-details") do
+            render Cards::AllocationSection.new(card: @card, allocation: @allocation, decks: @committing_decks) if @allocation
             info_section
             abilities_section
             attacks_section
