@@ -2,7 +2,7 @@
 
 ## Request
 
-Issue #235. The repository has no JavaScript test infrastructure: 39 Stimulus controllers and two
+Issue #235. The repository has no JavaScript test infrastructure: 38 Stimulus controllers and two
 helpers are exercised only through system tests, and `/decks/:id/odds` kept all of its arithmetic
 server-side for that reason alone. The deck builder rework (#236) moves real behaviour into
 Stimulus controllers and is built on this setup, so the setup has to make a controller test cheap
@@ -15,7 +15,7 @@ to write: mount a controller on a DOM fragment, answer its requests, read what i
   The banner lives in the sibling `stimulus.js` of the same gem (`Stimulus 3.2.2`, line 6, after
   three Sprockets `//= link` directives), so the guard reads that file.
 - The npm `@hotwired/stimulus@3.2.2` `dist/stimulus.js` is code-identical to the gem's `stimulus.js`
-  once its four Sprockets lines are stripped — `diff` reports a single line, the banner, which
+  once its first four lines (three Sprockets directives and a blank line) are stripped — `diff` reports a single line, the banner, which
   upstream left at `Stimulus 3.2.1` in the 3.2.2 npm release. The installed package's own banner is
   therefore not a usable version source; `package-lock.json` is.
 - Node: 24.22.1 is the newest release of the active LTS line (Krypton, 2026-10-20); 26.x is still
@@ -53,12 +53,19 @@ to write: mount a controller on a DOM fragment, answer its requests, read what i
   `*_test.rb`, and Propshaft and importmap only read `app/`, so the files reach neither.
 - **Each test starts from the page skeleton controllers assume**: a fresh
   `<meta name="csrf-token">` (read without a null check by `helpers/api.js`,
-  `collection_controller.js`, `decks_controller.js`), an empty `#flash-messages` (written by
-  `helpers/flash.js`, which silently does nothing without it), and `window.Turbo = { visit: vi.fn() }`
-  (read by `card_search_controller.js` and `printing_picker_controller.js`). `window.Stimulus` is
-  not set; nothing outside `controllers/application.js` reads it.
+  `collection_controller.js`, `decks_controller.js`, `set_import_controller.js`), an empty
+  `#flash-messages` (written by `helpers/flash.js`, which silently does nothing without it), and
+  `window.Turbo = { visit: vi.fn() }` (read by `card_search_controller.js` and
+  `printing_picker_controller.js`). `window.Stimulus` is not set; nothing outside
+  `controllers/application.js` reads it. After each test, storage, the URL, fake timers and a
+  stubbed clipboard are reset — jsdom keeps one window per file.
+- **Stand-ins for what jsdom lacks**: `<dialog>` `showModal`/`show`/`close` (five controllers) and
+  `Element#scrollIntoView` (two) are installed once as stateless functions; `navigator.clipboard`
+  stays undefined, as on a non-secure origin, until a test calls `stubClipboard()`.
 - **`mount` starts a private Stimulus `Application`** registering only the controllers it is given,
   never `controllers/application.js` (which starts on import and is the production singleton).
+- **`mount` refuses a fragment in which a given identifier never connected** — a misspelt
+  `data-controller` would otherwise make every negative assertion pass.
 - **A controller's error fails the test.** Stimulus' `Application#handleError` logs to
   `console.error` and swallows, so a controller throwing in `connect()` or in a synchronous action
   would otherwise leave a green test over a dead controller. `mount` records those errors and the
@@ -97,5 +104,6 @@ to write: mount a controller on a DOM fragment, answer its requests, read what i
 ## Out of scope
 
 Rewriting any controller; testing every existing controller. Covered here: `helpers/api.js`,
-`helpers/flash.js` and `collection_quantity_controller.js` (a `requestJson` round trip, values,
-targets, both of its dispatch paths and its flash).
+`helpers/flash.js`, `collection_quantity_controller.js` (a `requestJson` round trip, values,
+targets, both of its dispatch paths and its flash) and `card_search_controller.js` (its debounce,
+the worked fake-timer example).

@@ -14,14 +14,12 @@ class JavascriptToolchainTest < ActiveSupport::TestCase
   # unminified `stimulus.js` the same gem release ships beside it. Read from the gem Bundler
   # actually loaded, so the reference follows Gemfile.lock rather than a number written here.
   # The npm package's own banner is no substitute: the 3.2.2 release on npm still says 3.2.1.
-  VENDORED = begin
-    path = File.join(Gem.loaded_specs.fetch("stimulus-rails").full_gem_path, "app/assets/javascripts/stimulus.js")
-    File.read(path)[/^Stimulus (\d+\.\d+\.\d+)$/, 1]
-  end
+  VENDORED_PATH = File.join(Gem.loaded_specs.fetch("stimulus-rails").full_gem_path, "app/assets/javascripts/stimulus.js")
+  VENDORED = (File.read(VENDORED_PATH)[/^Stimulus (\d+\.\d+\.\d+)$/, 1] if File.exist?(VENDORED_PATH))
 
   test "the stimulus-rails gem vendors a Stimulus whose version can be read" do
     assert_match(/\A\d+\.\d+\.\d+\z/, VENDORED.to_s,
-      "no `Stimulus x.y.z` banner in stimulus-rails' stimulus.js — the gem changed its layout, " \
+      "no `Stimulus x.y.z` banner in #{VENDORED_PATH} — the gem changed its layout, " \
       "and this test has to learn where the version lives now")
   end
 

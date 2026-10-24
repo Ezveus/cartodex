@@ -1,4 +1,5 @@
 import { Application } from "@hotwired/stimulus"
+import { vi } from "vitest"
 import { state } from "./state.js"
 
 // Puts `html` in the page and starts a Stimulus application on it with only the controllers
@@ -9,7 +10,8 @@ import { state } from "./state.js"
 //     { "collection-quantity": CollectionQuantityController }
 //   )
 //
-// Every controller in the fragment has connected when the promise resolves. The application is
+// Every controller in the fragment has connected when the promise resolves, and each identifier
+// given must have connected at least once, or mount throws. The application is
 // a private one, never controllers/application.js (the production singleton, which starts on
 // import), and it is stopped after the test, every controller disconnecting. Each call gets its
 // own container, so a test may mount twice without one application connecting the other's
@@ -29,6 +31,14 @@ export async function mount(html, controllers = {}) {
   state.applications.push({ application, identifiers: Object.keys(controllers) })
   await application.start()
 
+  // A misspelt data-controller connects nothing, and every assertion that something did not
+  // happen then passes on a dead fixture.
+  for (const identifier of Object.keys(controllers)) {
+    if (!application.controllers.some((controller) => controller.identifier === identifier)) {
+      throw new Error(`mount: no element in the fragment connected "${identifier}" — check its data-controller`)
+    }
+  }
+
   return {
     application,
     element: container.firstElementChild,
@@ -43,6 +53,12 @@ export async function mount(html, controllers = {}) {
 // requestJson round trip queues (fetch, then response.json()) and a few macrotasks besides.
 // A test holding the controller can await the action itself instead:
 // `await controller("collection-quantity").increment()`.
+//
+// Under vi.useFakeTimers() it flushes the same way without moving the clock, so a debounce has
+// to be passed explicitly: `await vi.advanceTimersByTimeAsync(300)`, then `await settle()`.
 export async function settle() {
-  for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setTimeout(resolve, 0))
+  for (let turn = 0; turn < 5; turn++) {
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0)
+    else await new Promise((resolve) => setTimeout(resolve, 0))
+  }
 }

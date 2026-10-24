@@ -58,6 +58,18 @@ describe("collection_quantity_controller", () => {
     expect(flashMessages()).toEqual([ { text: "Added to collection (1 copy)", kind: "notice" } ])
   })
 
+  // `added` says the card was not in the collection before this click — what collection_list
+  // reads to add a row — and not that the collection now holds exactly one copy.
+  test("announces an addition from zero even when the server answers several copies", async () => {
+    stubFetch(jsonResponse({ quantity: 3 }))
+    const { controller } = await mount(cardPageCounter(0), controllers)
+    const changes = captureEvents(document, "collection-quantity:changed")
+
+    await controller("collection-quantity").increment()
+
+    expect(changes.map((event) => event.detail)).toEqual([ { delta: 3, removed: false, added: true } ])
+  })
+
   test("takes the quantity the server answers, not one more than it showed", async () => {
     stubFetch(jsonResponse({ quantity: 5 }))
     const { element, controller } = await mount(cardPageCounter(2), controllers)

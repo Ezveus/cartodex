@@ -72,23 +72,60 @@ test("adds a copy", async () => {
 - **`captureEvents(target, type)`** returns an array that fills with every `type` event reaching
   `target`. `this.dispatch("changed")` from controller `foo` is `foo:changed` and bubbles, so
   `document` sees it.
+- **`mount` throws** when an identifier you passed connected nowhere in the fragment — a misspelt
+  `data-controller` would otherwise leave a dead fixture under passing negative assertions.
+- **`stubClipboard()`** gives `navigator.clipboard` (`writeText`, `write`, both `vi.fn`) and a
+  `ClipboardItem` for one test; without it the clipboard is undefined, as on a non-secure origin.
 - **`flashMessages()`** returns `[{ text, kind }]` from `#flash-messages`, `kind` being `notice` or
   `alert`.
+
+## Debounces and other timers
+
+Nine controllers wait on `setTimeout`, most of them a 300 ms debounce. Use fake timers, move the
+clock past the wait, then let the request finish — `controllers/card_search_controller.test.js` is
+the worked example:
+
+```js
+vi.useFakeTimers()
+stubFetch(jsonResponse([]))
+const { element } = await mount(fragment, { "card-search": CardSearchController })
+
+type(input, "pika")                       // sets value, dispatches "input"
+await vi.advanceTimersByTimeAsync(300)
+await settle()
+```
+
+`settle()` works under fake timers without moving the clock. Real timers come back after each test.
+
+## What jsdom does not have
+
+`setup.js` installs stand-ins for `<dialog>`'s `showModal()`, `show()` and `close()` — they move
+`open`, set `returnValue` and fire `close` — and a no-op `Element#scrollIntoView`
+(`support/browser.js`). There is no layout, top layer or focus trap: a test asserts that a dialog
+opened, not how it looks. Anything else missing surfaces as a controller error naming it; add the
+stand-in there.
+
+## Isolation
+
+jsdom keeps one window per test file. After each test the document, `window.Turbo`, the fetch
+stub, `sessionStorage`, `localStorage`, the URL, fake timers and a stubbed clipboard are all reset,
+and stubbed globals and spies are restored.
 
 ## What fails a test besides its assertions
 
 The shared `afterEach` fails the test, after the fact, when:
 
-- a controller threw — in `connect()`, `disconnect()`, an action, a value or target callback.
-  Stimulus only logs these, so without this a dead controller passes;
+- a controller threw in `connect()`, `disconnect()` or a synchronous action. Stimulus only logs
+  these, so without this a dead controller passes;
 - a request arrived with no reply queued — `requestJson` would have turned it into a flash and a
   `null`, invisible to the test. Every test starts with `stubFetch()` already called, so this holds
   for a test that never stubs too;
 - a queued reply was never requested.
 
-An exception escaping an async action after its first `await` — Stimulus drops that promise, so
-`handleError` never sees it — is not attributed to a test: Vitest prints it under "Unhandled
-Rejection" and exits 1 with every test green. `npm test` and CI fail on it all the same; read the
+Two kinds of exception are not attributed to a test: one escaping an async action after its first
+`await` (Stimulus drops that promise), and one thrown by a value or target callback (Stimulus
+rethrows it from a MutationObserver). Vitest prints them under "Unhandled Errors" and exits 1 with
+every test green. `npm test` and CI fail on it all the same; read the
 error section, not only the test count.
 
 `support.test.js` checks each of those by calling `resetSupport()` itself; `harness.test.js` runs

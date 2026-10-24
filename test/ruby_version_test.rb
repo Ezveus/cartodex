@@ -31,7 +31,7 @@ class RubyVersionTest < ActiveSupport::TestCase
   # What makes `.ruby-version` the reference at all. Checked as a set rather than a count, so a
   # job added or removed does not need editing here, but a job pinned to a literal version — or
   # to a matrix — fails.
-  test "every CI job installs Ruby from .ruby-version" do
+  test "every CI job that installs Ruby installs it from .ruby-version" do
     declared = scan(".github/workflows/ci.yml", /^\s*ruby-version:\s*(\S+)/)
 
     assert_not_empty declared, "no job in ci.yml declares a ruby-version"
@@ -45,7 +45,7 @@ class RubyVersionTest < ActiveSupport::TestCase
     assert_equal REFERENCE, declared_in("mise.toml", /^ruby\s*=\s*"([^"]+)"/)
   end
 
-  # The production image's tag. Wrong here and the deploy runs a Ruby the five gates never saw.
+  # The production image's tag. Wrong here and the deploy runs a Ruby the five Ruby gates never saw.
   test "the production Dockerfile builds on the reference version" do
     assert_equal REFERENCE, declared_in("Dockerfile", /^ARG RUBY_VERSION=(.+)$/)
   end

@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 import { describe, expect, test, vi } from "vitest"
 import { state, resetSupport } from "./support/state.js"
-import { captureEvents, flashMessages, jsonResponse, mount, requests, stubFetch } from "./support"
+import { captureEvents, flashMessages, jsonResponse, mount, requests, settle, stubClipboard, stubFetch } from "./support"
 import { requestJson } from "helpers/api"
 
 // The harness has to fail the tests it exists to fail. Each case below provokes one failure and
@@ -61,16 +61,17 @@ describe("the test harness", () => {
   test("stops each application from watching the page", async () => {
     const connected = []
     class Watched extends Controller { connect() { connected.push(this.element) } }
-    const { application, element } = await mount(`<div></div>`, { watched: Watched })
+    const { application, element } = await mount(`<div data-controller="watched"></div>`, { watched: Watched })
 
     resetSupport()
     // Registered again, because resetSupport unloaded it: only a stopped application can now miss
-    // the element below.
+    // the element inserted below. (It reconnects the element it already knew, which is not the
+    // question.)
     application.register("watched", Watched)
     element.insertAdjacentHTML("beforeend", `<div data-controller="watched"></div>`)
     await Promise.resolve()
 
-    expect(connected).toEqual([])
+    expect(connected).not.toContain(element.firstElementChild)
   })
 
   test("records a JSON body parsed and any other body as sent", async () => {
@@ -92,6 +93,47 @@ describe("the test harness", () => {
     document.getElementById("flash-messages").innerHTML = `<div class="flash flash-success">Odd</div>`
 
     expect(flashMessages()).toEqual([ { text: "Odd", kind: null } ])
+  })
+
+  test("refuses a fragment in which a given controller never connected", async () => {
+    await expect(mount(`<div data-controller="colection-quantity"></div>`, { "collection-quantity": class extends Controller {} }))
+      .rejects.toThrow('mount: no element in the fragment connected "collection-quantity"')
+  })
+
+  test("lets settle() flush a round trip under fake timers without moving the clock", async () => {
+    vi.useFakeTimers()
+    stubFetch(jsonResponse({ n: 1 }))
+    let answer
+    requestJson("/api/n", { failure: "f" }).then((data) => { answer = data })
+    let fired = false
+    setTimeout(() => { fired = true }, 300)
+
+    await settle()
+
+    expect(answer).toEqual({ n: 1 })
+    expect(fired).toBe(false)
+  })
+
+  test("opens and closes a dialog the way a browser does", () => {
+    document.body.insertAdjacentHTML("beforeend", "<dialog></dialog>")
+    const dialog = document.querySelector("dialog")
+    const closes = captureEvents(dialog, "close")
+
+    dialog.showModal()
+    expect(dialog.open).toBe(true)
+    dialog.close("done")
+
+    expect(dialog.open).toBe(false)
+    expect(dialog.returnValue).toBe("done")
+    expect(closes).toHaveLength(1)
+  })
+
+  test("stubs the clipboard for one test", async () => {
+    const clipboard = stubClipboard()
+
+    await navigator.clipboard.writeText("4 Pikachu")
+
+    expect(clipboard.writeText).toHaveBeenCalledWith("4 Pikachu")
   })
 
   test("stops listening once the test is over", () => {
@@ -155,5 +197,26 @@ describe("between tests", () => {
   test("the next one starts with neither", () => {
     expect(window.innerWidth).toBe(originalWidth)
     expect(vi.isMockFunction(console.error)).toBe(false)
+  })
+})
+
+// The same, for what jsdom keeps in its one window per file.
+describe("between tests, the window", () => {
+  const initialUrl = window.location.href
+
+  test("a test may write storage, move the URL, fake the clock and stub the clipboard", () => {
+    sessionStorage.setItem("deck-compare", "[\"abc\"]")
+    localStorage.setItem("k", "v")
+    history.replaceState(null, "", "/decks?filter=leak")
+    vi.useFakeTimers()
+    stubClipboard()
+  })
+
+  test("the next one starts with none of it", () => {
+    expect(sessionStorage.getItem("deck-compare")).toBeNull()
+    expect(localStorage.getItem("k")).toBeNull()
+    expect(window.location.href).toBe(initialUrl)
+    expect(vi.isFakeTimers()).toBe(false)
+    expect(navigator.clipboard).toBeUndefined()
   })
 })
