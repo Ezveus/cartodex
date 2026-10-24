@@ -1605,10 +1605,14 @@ textarea.form-input {
   border-bottom: 1px solid var(--line);
 }
 
+/* Wraps at every width, not only on a phone: beside the 300px preview the list column is narrower
+   than the window by far, and an expanded physical sub-row — stepper, set, owned note, ⇄, the
+   real/proxy stepper and "+ add to my collection…" — is wider than it even at 1400px. */
 .deck-card-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   padding: 0.5rem 0;
 }
 
