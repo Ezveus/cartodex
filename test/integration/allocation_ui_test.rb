@@ -18,12 +18,12 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".deck-card-alloc", /2 real/
-    # The stepper's two buttons, each carrying the owned_copies it writes. 3 owned, none claimed
+    # The stepper's two buttons, each carrying the step it sends. 3 owned, none claimed
     # elsewhere: the third real is still free, so + is enabled.
     assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-minus-#{@card.id}]" \
-                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies: 1 } }.to_json
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: -1 } }.to_json
     assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-plus-#{@card.id}]:not([disabled])" \
-                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies: 3 } }.to_json
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: 1 } }.to_json
     assert_select ".deck-card-collect", count: 0
   end
 

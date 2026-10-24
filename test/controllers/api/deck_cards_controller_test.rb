@@ -64,6 +64,48 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_nil @deck.deck_cards.find_by(card: @card)
   end
 
+  # The deck page's steppers send a step, resolved against the stored row: a stale tab's "−" must
+  # not reach the setter as an absolute value that reads as an increase.
+  test "update quantity_delta steps from the stored quantity" do
+    @deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: -1 } }, as: :json
+
+    assert_response :success
+    assert_equal [ 1, 0 ], JSON.parse(response.body).values_at("quantity", "owned_copies"),
+                 "a step down drops a proxy and claims nothing"
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: -1 } }, as: :json
+
+    assert JSON.parse(response.body)["removed"]
+    assert_nil @deck.deck_cards.find_by(card: @card)
+  end
+
+  test "update quantity_delta + claims greedily from the stored value" do
+    @deck.deck_cards.create!(card: @card, quantity: 1, owned_copies: 0)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: 1 } }, as: :json
+
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert_equal [ 2, 2 ], json.values_at("quantity", "owned_copies")
+  end
+
+  test "update owned_copies_delta steps from the stored real count, and is refused past its bound" do
+    @deck.deck_cards.create!(card: @card, quantity: 3, owned_copies: 0)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { owned_copies_delta: 1 } }, as: :json
+
+    assert_response :success
+    assert_equal 1, JSON.parse(response.body)["owned_copies"]
+
+    @deck.deck_cards.find_by!(card: @card).update!(owned_copies: 0)
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { owned_copies_delta: -1 } }, as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal 0, @deck.deck_cards.find_by!(card: @card).owned_copies
+  end
+
   # The deck page edits cards in place, so a write that flips the deck's proxy state has to say so
   # in its own response — nothing else will tell the header before the next full load.
 

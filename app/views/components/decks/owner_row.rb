@@ -40,21 +40,22 @@ module Decks
       button(type: "button", disabled: disabled, data: data, **attributes) { text }
     end
 
-    # A disabled − still carries a request, never one for a negative count.
+    # The steppers send a step rather than the count the page shows, so a stale tab cannot send a
+    # "−" that the server reads as an increase; the server resolves it against the stored row.
     def quantity_stepper(printing)
       card = printing.card
       quantity = printing.quantity
 
       div(class: "deck-card-qty-controls") do
-        quantity_button("-", "qty-minus", card, [ quantity - 1, 0 ].max, disabled: quantity.zero?)
+        quantity_button("-", "qty-minus", card, -1, disabled: quantity.zero?)
         span(class: "deck-card-qty") { quantity.to_s }
-        quantity_button("+", "qty-plus", card, quantity + 1)
+        quantity_button("+", "qty-plus", card, 1)
       end
     end
 
-    def quantity_button(text, focus, card, quantity, disabled: false)
+    def quantity_button(text, focus, card, delta, disabled: false)
       write_button(text, class: "qty-btn", focus_key: "#{focus}-#{card.id}", url: card_url(card), method: "PATCH",
-                   body: { deck_card: { quantity: quantity } }, failure: "Couldn't change the number of copies",
+                   body: { deck_card: { quantity_delta: delta } }, failure: "Couldn't change the number of copies",
                    disabled: disabled)
     end
 
@@ -65,17 +66,17 @@ module Decks
       owned_copies = printing.owned_copies
 
       div(class: "deck-card-alloc") do
-        real_button("−", "real-minus", card, [ owned_copies - 1, 0 ].max, disabled: owned_copies.zero?)
+        real_button("−", "real-minus", card, -1, disabled: owned_copies.zero?)
         span(class: "deck-card-alloc-label") { alloc_label(owned_copies, printing.proxies) }
-        real_button("+", "real-plus", card, owned_copies + 1, disabled: owned_copies >= printing.max_owned)
+        real_button("+", "real-plus", card, 1, disabled: owned_copies >= printing.max_owned)
         collect_button(card) if printing.can_add_to_collection
         over_allocated_marker if printing.over_allocated
       end
     end
 
-    def real_button(text, focus, card, owned_copies, disabled:)
+    def real_button(text, focus, card, delta, disabled:)
       write_button(text, class: "qty-btn", focus_key: "#{focus}-#{card.id}", url: card_url(card), method: "PATCH",
-                   body: { deck_card: { owned_copies: owned_copies } }, failure: "Couldn't change the real copies",
+                   body: { deck_card: { owned_copies_delta: delta } }, failure: "Couldn't change the real copies",
                    disabled: disabled)
     end
 

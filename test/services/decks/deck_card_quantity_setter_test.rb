@@ -90,6 +90,64 @@ module Decks
       assert_equal 0, dc.owned_copies
     end
 
+    # — delta: the deck page's steppers. The step is resolved against the row the transaction
+    # reads, so a stale tab cannot turn a − into an increase. —
+
+    test "a delta moves the quantity from the stored row, not from what a page last showed" do
+      dc = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: -1)
+
+      assert_equal 3, dc.quantity
+      assert_equal 3, dc.owned_copies
+    end
+
+    # The row read 4 when the tab rendered; another tab has since brought it to 1 with 0 real. An
+    # absolute "−" would send 3 and claim reals as an increase; the delta reaches 0 and claims
+    # nothing.
+    test "a stale − removes the last copy instead of claiming reals" do
+      @deck.deck_cards.find_by!(card: @card).update!(quantity: 1, owned_copies: 0)
+
+      result = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: -1)
+
+      assert_nil result
+      assert_nil @deck.deck_cards.find_by(card: @card)
+    end
+
+    test "a stale + claims greedily from the stored value" do
+      @deck.deck_cards.find_by!(card: @card).update!(quantity: 1, owned_copies: 0)
+
+      dc = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: 1)
+
+      assert_equal 2, dc.quantity
+      assert_equal 2, dc.owned_copies, "3 owned and none committed elsewhere"
+    end
+
+    test "a delta on a card the deck does not hold starts from 0" do
+      @deck.deck_cards.find_by!(card: @card).destroy!
+
+      assert_nil Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: -1)
+      dc = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: 1)
+
+      assert_equal [ 1, 1 ], [ dc.quantity, dc.owned_copies ]
+    end
+
+    test "a negative delta drops proxies first and never claims" do
+      @deck.deck_cards.find_by!(card: @card).update!(quantity: 4, owned_copies: 1)
+
+      dc = Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: -1)
+
+      assert_equal [ 3, 1 ], [ dc.quantity, dc.owned_copies ]
+    end
+
+    test "exactly one of quantity and delta" do
+      assert_raises(ArgumentError) { Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card) }
+      assert_raises(ArgumentError) do
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, quantity: 2, delta: 1)
+      end
+      error = assert_raises(ArgumentError) { Decks::DeckCardQuantitySetter.call(deck: @deck, card: @card, delta: 1.0) }
+      assert_equal "delta must be an integer", error.message
+      assert_equal [ 4, 3 ], @deck.deck_cards.find_by!(card: @card).then { |dc| [ dc.quantity, dc.owned_copies ] }
+    end
+
     # The availability read and the write must sit under one write lock, or two concurrent
     # increases each see the same free copy and both claim it. Depth rather than "BEGIN IMMEDIATE
     # was issued", for the reason test/mcp/bulk_add_tools_test.rb gives: under fixtures the

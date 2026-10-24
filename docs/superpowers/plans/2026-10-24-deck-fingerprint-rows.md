@@ -12,8 +12,10 @@ Spec: `docs/superpowers/specs/2026-10-24-deck-fingerprint-rows-design.md`. Issue
 ### Services (lane A)
 
 ```ruby
-Decks::DeckCardQuantitySetter.call(deck:, card:, quantity:)   # signature unchanged
+Decks::DeckCardQuantitySetter.call(deck:, card:, quantity: nil, delta: nil)   # exactly one of quantity:/delta:
 # - inside serialized_transaction
+# - delta: new quantity = the stored row's quantity (0 when there is none) + delta, read inside the
+#   transaction — the deck page's steppers send it, so a stale tab cannot turn a − into an increase
 # - quantity <= 0 → destroy, nil (unchanged)
 # - physical deck and quantity > previous quantity (a new row counts as 0) →
 #     owned_copies = Allocations::Backing.greedy(quantity:, current_owned:, available: Availability(excluding_deck).available)
@@ -28,6 +30,10 @@ Decks::CopyMover.call(deck:, from_card:, to_card:) # → Decks::CopyMover::Resul
 #   physical ? Backing.greedy(quantity:, current_owned:, available: Availability(to_card, excluding_deck).available) : 0
 #   Availability is read AFTER the source write (a freed real of the source is another printing,
 #   so it never changes the target's pool, but read after anyway).
+
+Decks::OwnedCopiesSetter.call(deck:, card:, owned_copies: nil, delta: nil)   # exactly one of owned_copies:/delta:
+# - delta: new owned = the stored owned_copies + delta, read inside the transaction; same bounds
+#   (0..min(quantity, available)) and refusals as an absolute value
 
 Decks::CollectionCopyAdder.call(deck:, card:) # → DeckCard
 # - Decks::OwnedCopiesSetter::NotPhysicalError on a non-physical deck
@@ -141,7 +147,10 @@ Every row has one `div.deck-card-line` (layout, `data-card-preview-url`, `data-c
 that printing's count. A multi-printing summary line holds `span.deck-card-total` instead.
 
 Write buttons: `button[data-action="deck-rows#write"]` with params `data-deck-rows-url-param`,
-`-method-param`, `-body-param` (JSON), `-failure-param`, and `data-focus-key`
+`-method-param`, `-body-param` (JSON), `-failure-param`, and `data-focus-key`. The steppers' bodies are
+steps — `{deck_card: {quantity_delta: ±1}}`, `{deck_card: {owned_copies_delta: ±1}}` — which
+`Api::DeckCardsController#update` hands to the setters' `delta:`; it still takes `quantity` and
+`owned_copies` (the API's other callers, the MCP tool). Each button also carries `data-focus-key`
 (`qty-minus-<id>`, `qty-plus-<id>`, `real-minus-<id>`, `real-plus-<id>`, `move-<id>`, `collect-<id>`);
 `disabled` when the action is impossible (quantity `−` at 0, real `−` at 0, real `+` at
 `max_owned`). Classes: quantity stepper `.deck-card-qty-controls .qty-btn`; allocation

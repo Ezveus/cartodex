@@ -379,7 +379,11 @@ components the page uses (`Decks::OwnerRow.for`), each row's section and that se
 the empty shell of a section a new row needs, every section's counts and the deck's total and Proxies
 flag; `deck_rows_controller.js` only applies it. Each button carries its request (URL, method, body)
 as Stimulus action params with `disabled` decided by the server, so a JS change that adds arithmetic,
-a bound or an ordering is a second implementation of a server rule. **`.deck-card-item` marks exactly
+a bound or an ordering is a second implementation of a server rule. The steppers send a **step**
+(`quantity_delta`/`owned_copies_delta`, ±1), never the count the page shows: the setters resolve it
+against the row they read inside their own `serialized_transaction`, because an absolute value from a
+stale tab turned a "−" into an increase that claimed reals. `quantity`/`owned_copies` stay accepted for
+the API's other callers and the MCP tool. **`.deck-card-item` marks exactly
 one in-deck printing** and holds that printing's `.deck-card-qty`; a multi-printing summary prints its
 total in `.deck-card-total`, because `deck_image_export_controller.js` (`collectCards`) reads every
 `.deck-card-item` and would otherwise draw the card twice. The public page builds its rows with

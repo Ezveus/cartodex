@@ -384,8 +384,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-archetype-picker-deck-key-value=?]", @deck.key
   end
 
-  # Every write button carries the whole request it sends, and the browser computes nothing: the
-  # next quantity, the next real count and whether a step is possible at all are decided here.
+  # Every write button carries the whole request it sends, and the browser computes nothing. A
+  # stepper sends a step, never an absolute value: the server resolves it against the stored row,
+  # so a stale tab cannot send a "−" that reads as an increase. Whether a step is possible at all is
+  # decided here.
   test "each write button carries its request, and the impossible ones are disabled" do
     honedge = cards(:honedge)
     @deck.update!(physical: true)
@@ -397,17 +399,19 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     minus = css_select("[data-focus-key=qty-minus-#{honedge.id}]").sole
     assert_equal "deck-rows#write", minus["data-action"]
     assert_equal "PATCH", minus["data-deck-rows-method-param"]
-    assert_equal({ "deck_card" => { "quantity" => 0 } }, JSON.parse(minus["data-deck-rows-body-param"]))
+    assert_equal({ "deck_card" => { "quantity_delta" => -1 } }, JSON.parse(minus["data-deck-rows-body-param"]))
     assert minus["data-deck-rows-failure-param"].present?
     assert_nil minus["disabled"]
 
     plus = css_select("[data-focus-key=qty-plus-#{honedge.id}]").sole
-    assert_equal({ "deck_card" => { "quantity" => 2 } }, JSON.parse(plus["data-deck-rows-body-param"]))
+    assert_equal({ "deck_card" => { "quantity_delta" => 1 } }, JSON.parse(plus["data-deck-rows-body-param"]))
 
     real_minus = css_select("[data-focus-key=real-minus-#{honedge.id}]").sole
-    assert_equal({ "deck_card" => { "owned_copies" => 0 } }, JSON.parse(real_minus["data-deck-rows-body-param"]))
+    assert_equal({ "deck_card" => { "owned_copies_delta" => -1 } }, JSON.parse(real_minus["data-deck-rows-body-param"]))
     assert_nil real_minus["disabled"]
-    assert css_select("[data-focus-key=real-plus-#{honedge.id}]").sole["disabled"], "real + is at max_owned"
+    real_plus = css_select("[data-focus-key=real-plus-#{honedge.id}]").sole
+    assert_equal({ "deck_card" => { "owned_copies_delta" => 1 } }, JSON.parse(real_plus["data-deck-rows-body-param"]))
+    assert real_plus["disabled"], "real + is at max_owned"
     assert_select ".deck-card-alloc-label", text: "1 real · 0 proxy"
 
     # In the set view every write asks for the set view's answer.

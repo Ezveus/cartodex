@@ -25,13 +25,7 @@ module Api
 
     def update
       card = Card.find(params[:id])
-      deck_card = refusing do
-        if deck_card_params.key?(:owned_copies)
-          Decks::OwnedCopiesSetter.call(deck: @deck, card: card, owned_copies: deck_card_params[:owned_copies].to_i)
-        else
-          Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, quantity: deck_card_params[:quantity].to_i)
-        end
-      end
+      deck_card = refusing { write_update(card, deck_card_params) }
       return if performed?
 
       render json: written(deck_card).merge(fingerprint_payload(card))
@@ -69,7 +63,21 @@ module Api
     private
 
     def deck_card_params
-      params.require(:deck_card).permit(:card_id, :quantity, :owned_copies)
+      params.require(:deck_card).permit(:card_id, :quantity, :owned_copies, :quantity_delta, :owned_copies_delta)
+    end
+
+    # The deck page's steppers send a step (`*_delta`), which the setter resolves against the
+    # stored row; an absolute count is still taken from the API's other callers.
+    def write_update(card, attributes)
+      if attributes.key?(:owned_copies_delta)
+        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, delta: attributes[:owned_copies_delta].to_i)
+      elsif attributes.key?(:owned_copies)
+        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, owned_copies: attributes[:owned_copies].to_i)
+      elsif attributes.key?(:quantity_delta)
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, delta: attributes[:quantity_delta].to_i)
+      else
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, quantity: attributes[:quantity].to_i)
+      end
     end
 
     # `removed` is what tells the caller the row no longer exists.
