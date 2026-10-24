@@ -51,14 +51,14 @@ module Allocations
       user = users(:one)
       card = cards(:honedge)
       user.collections.find_or_create_by!(card: card).update!(quantity: 1)
-      [ "b deck", "A deck" ].each do |name|
+      [ "C deck", "b deck" ].each do |name|
         user.decks.create!(name: name, physical: true, standard_pool: standard_pools(:twm_por))
             .deck_cards.create!(card: card, quantity: 1, owned_copies: 1)
       end
 
       entry = Allocations::OverAllocations.call(user: user).find { |e| e[:card_id] == card.id }
 
-      assert_equal [ "A deck", "b deck" ], entry[:decks].map { |d| d[:name] }
+      assert_equal [ "b deck", "C deck" ], entry[:decks].map { |d| d[:name] }
     end
 
     # The point of the batching: the cost must not grow with the number of
