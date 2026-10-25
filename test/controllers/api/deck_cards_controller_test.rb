@@ -531,6 +531,20 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "honedge_fp" ], json["rows"].map { |row| row["key"] }
   end
 
+  # An add adds: a negative quantity went through Decks::CardAdder and took copies away (201, 3 → 2),
+  # and 0 reached the model as a quantity of 0.
+  test "create refuses a quantity below 1 and writes nothing" do
+    @deck.deck_cards.create!(card: @card, quantity: 3)
+
+    [ -1, 0 ].each do |quantity|
+      post api_deck_cards_path(@deck), params: { deck_card: { card_id: @card.id, quantity: quantity } }, as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal [ "quantity must be an integer between 1 and 9999" ], JSON.parse(response.body)["errors"]
+    end
+    assert_equal 3, @deck.deck_cards.find_by!(card: @card).quantity
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do

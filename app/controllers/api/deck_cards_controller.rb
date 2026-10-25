@@ -11,6 +11,9 @@ module Api
     # A count or a step the API takes. Far past any deck, and far inside the 8-byte integer column,
     # whose overflow raised a 500 from `save!`.
     COUNT_RANGE = -9_999..9_999
+    # An add only adds: Decks::CardAdder sums what it is given, so a negative quantity took copies
+    # away under a 201.
+    ADD_RANGE = 1..COUNT_RANGE.max
 
     def index
       deck_cards = @deck.deck_cards.includes(:card)
@@ -20,7 +23,7 @@ module Api
     def create
       card = Card.find(deck_card_params[:card_id])
       deck_card = refusing(card) do
-        Decks::CardAdder.call(deck: @deck, card: card, quantity: count_param(deck_card_params, :quantity))
+        Decks::CardAdder.call(deck: @deck, card: card, quantity: count_param(deck_card_params, :quantity, range: ADD_RANGE))
       end
       return if performed?
 
@@ -103,11 +106,11 @@ module Api
     # An Integer from JSON, or the decimal string a form posts; anything else is refused (a 422
     # through `refusing`) rather than read by `to_i`, which took 1.5 as 1, "abc" and a missing
     # value as 0 — and a missing `quantity` as "remove the card".
-    def count_param(attributes, key)
+    def count_param(attributes, key, range: COUNT_RANGE)
       value = attributes[key]
       value = Integer(value, 10) if value.is_a?(String) && value.match?(/\A[+-]?\d+\z/)
-      unless value.is_a?(Integer) && COUNT_RANGE.cover?(value)
-        raise ArgumentError, "#{key} must be an integer between #{COUNT_RANGE.min} and #{COUNT_RANGE.max}"
+      unless value.is_a?(Integer) && range.cover?(value)
+        raise ArgumentError, "#{key} must be an integer between #{range.min} and #{range.max}"
       end
 
       value
