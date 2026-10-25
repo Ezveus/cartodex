@@ -19,7 +19,7 @@ module Api
 
     def create
       card = Card.find(deck_card_params[:card_id])
-      deck_card = refusing do
+      deck_card = refusing(card) do
         Decks::CardAdder.call(deck: @deck, card: card, quantity: count_param(deck_card_params, :quantity))
       end
       return if performed?
@@ -31,7 +31,7 @@ module Api
 
     def update
       card = Card.find(params[:id])
-      deck_card = refusing { write_update(card, deck_card_params) }
+      deck_card = refusing(card) { write_update(card, deck_card_params) }
       return if performed?
 
       render json: written(deck_card).merge(fingerprint_payload(card))
@@ -51,7 +51,7 @@ module Api
     def move
       to_card = Card.find(params[:id])
       from_card = @deck.deck_cards.find_by!(card_id: params.expect(move: [ :from_card_id ])[:from_card_id]).card
-      result = refusing { Decks::CopyMover.call(deck: @deck, from_card: from_card, to_card: to_card) }
+      result = refusing(to_card) { Decks::CopyMover.call(deck: @deck, from_card: from_card, to_card: to_card) }
       return if performed?
 
       render json: deck_card_json(result.to_deck_card).merge(fingerprint_payload(to_card))
@@ -74,7 +74,7 @@ module Api
     # "+ add to my collection and use it here".
     def collection_copy
       card = Card.find(params[:id])
-      deck_card = refusing { Decks::CollectionCopyAdder.call(deck: @deck, card: card) }
+      deck_card = refusing(card) { Decks::CollectionCopyAdder.call(deck: @deck, card: card) }
       return if performed?
 
       render json: deck_card_json(deck_card).merge(fingerprint_payload(card))

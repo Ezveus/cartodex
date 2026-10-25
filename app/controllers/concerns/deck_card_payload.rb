@@ -13,10 +13,15 @@ module DeckCardPayload
   # real count the collection cannot back, a ⇄ between cards that are not one, a deck that is not
   # physical. Scoped to the write and not to the action, so that an ArgumentError raised while
   # rendering the answer is a bug that surfaces rather than a refusal the member is shown.
-  def refusing
+  #
+  # The refusal carries `card`'s fresh fingerprint_payload beside its reason: a write refused is
+  # usually a page gone stale — another tab, another deck claiming the copies — and the page redraws
+  # from the payload, so it does not keep offering the step the server has just refused. The write's
+  # transaction rolled back, so the payload is the state the refusal was decided against.
+  def refusing(card)
     yield
   rescue ArgumentError, Decks::OwnedCopiesSetter::NotPhysicalError => e
-    render json: { errors: [ e.message ] }, status: :unprocessable_entity
+    render json: { errors: [ e.message ] }.merge(fingerprint_payload(card)), status: :unprocessable_entity
     nil
   end
 

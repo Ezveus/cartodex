@@ -16,7 +16,7 @@ module Api
 
     def update
       target = Card.find(printing_params[:card_id])
-      result = refusing { Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target) }
+      result = refusing(@card) { Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target) }
       return if performed?
 
       deck_card = result.deck_card

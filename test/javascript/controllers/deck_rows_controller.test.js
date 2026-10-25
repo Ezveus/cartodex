@@ -392,6 +392,44 @@ describe("deck_rows_controller", () => {
     expect(requests()).toHaveLength(2)
   })
 
+  // A refusal is usually a stale page: the server sends the card's fresh state beside its reason,
+  // and the row is redrawn from it so it stops offering the step that was just refused.
+  test("a refusal carrying the card's payload flashes its reason and applies the payload", async () => {
+    const refused = {
+      errors: [ "owned_copies must be between 0 and 1" ],
+      ...answer({
+        fingerprintKey: "fp-a",
+        rows: [ { key: "fp-a", section: "pokemon", html: row("fp-a", { label: "fresh", disabled: true }) } ],
+        sections: [ { key: "pokemon", parent: null, total: 3, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ],
+        deck: { has_proxies: true, total: 3 }
+      })
+    }
+    stubFetch(jsonResponse(refused, { status: 422 }))
+    const { element } = await mount(page([ typeSection("pokemon", [ row("fp-a") ], { total: 1, unique: 1 }) ], { total: 10 }), controllers)
+    const changes = captureEvents(document, "deck-proxies:changed")
+
+    element.querySelector('[data-row-key="fp-a"] button').click()
+    await settle()
+
+    expect(flashMessages()).toEqual([ { text: "owned_copies must be between 0 and 1", kind: "alert" } ])
+    expect(element.querySelector('[data-row-key="fp-a"] .label').textContent).toBe("fresh")
+    expect(element.querySelector('[data-row-key="fp-a"] button').disabled).toBe(true)
+    expect(element.querySelector('[data-deck-rows-target="total"]').textContent).toBe("3")
+    expect(changes.map((event) => event.detail)).toEqual([ { hasProxies: true } ])
+    expect(element.querySelector(".deck-sections").hasAttribute("aria-busy")).toBe(false)
+  })
+
+  test("a refusal with neither reason nor payload names the action and the status", async () => {
+    stubFetch(jsonResponse({}, { status: 422 }))
+    const { element } = await mount(page([ typeSection("pokemon", [ row("fp-a") ]) ]), controllers)
+
+    element.querySelector('[data-row-key="fp-a"] button').click()
+    await settle()
+
+    expect(flashMessages()).toEqual([ { text: "Couldn't update the card (HTTP 422)", kind: "alert" } ])
+    expect(element.querySelector('[data-row-key="fp-a"] .label').textContent).toBe("fp-a")
+  })
+
   // Stimulus hands an absent param over as undefined and an empty one as "" (JSON.parse("") throws,
   // so the raw string comes back): neither may reach the server as a body, `""` included.
   test("sends no body when the button carries none, or an empty one", async () => {

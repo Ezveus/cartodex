@@ -478,6 +478,40 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_not @deck.deck_cards.exists?(card: @card)
   end
 
+  # A refusal usually means the page is stale — another tab, or another deck claiming the copies —
+  # so it answers the card's fresh state beside the reason, and the page redraws from it rather than
+  # keeping an enabled real + and a collection offer the server has just refused.
+  test "a refused write answers its reason and the card's fresh payload" do
+    @deck.deck_cards.create!(card: @card, quantity: 3, owned_copies: 1)
+    # Another deck claims the two free copies after the page rendered its real + enabled.
+    other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
+    other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { owned_copies_delta: 1 } }, as: :json
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_equal [ "owned_copies must be between 0 and 1" ], json["errors"]
+    assert_equal "honedge_fp", json["fingerprint_key"]
+    printing = json["fingerprint"]["printings"].sole
+    assert_equal [ 1, 1, 1 ], printing.values_at("owned_copies", "available", "max_owned")
+    html = Nokogiri::HTML5.fragment(json["rows"].sole["html"])
+    assert html.at_css("[data-focus-key=real-plus-#{@card.id}][disabled]"), "the fresh row disables the real +"
+    assert_equal({ "has_proxies" => true, "total" => 3 }, json["deck"])
+  end
+
+  test "a refused collection add answers the card's fresh payload too" do
+    asc = cards(:budew_asc)
+    @deck.deck_cards.create!(card: asc, quantity: 1, owned_copies: 1)
+
+    post collection_copy_api_deck_card_path(@deck, asc), as: :json
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_equal [ "no proxy left to back" ], json["errors"]
+    assert_equal [ "budew_shared" ], json["rows"].map { |row| row["key"] }
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do

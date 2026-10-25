@@ -48,7 +48,9 @@ action params rendered by the server, with `disabled` decided server-side, so
 `deck_rows_controller.js` computes no quantity, no bound and no order. The steppers send a step
 (`quantity_delta` / `owned_copies_delta`, ±1) that the setter resolves inside its transaction, never
 the count the page shows: from a stale tab, an absolute "−" (page at 4, server at 1) arrived as an
-increase to 3 and claimed reals. Adding from search uses the same answer — no Turbo reload, whether the
+increase to 3 and claimed reals. A refused write (422) answers the card's fresh payload beside its reason,
+and the page flashes the reason and applies the payload: a refusal is usually a stale page, and
+without it the row kept offering the step just refused (an enabled real +, the collection offer). Adding from search uses the same answer — no Turbo reload, whether the
 fingerprint is new or not — and is sent by `deck_rows_controller.js` itself, after the write in
 flight, so an older stepper answer can never land on top of it.
 

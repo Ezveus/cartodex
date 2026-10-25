@@ -1,5 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
-import { requestJson } from "helpers/api"
+import { HandedOver, requestJson } from "helpers/api"
+import { flashAlert } from "helpers/flash"
 
 // Applies the server's answer to a deck write: the fingerprint's rows, their sections, every
 // section's counts and the deck's total. It decides nothing — no quantity, no bound, no order.
@@ -74,12 +75,22 @@ export default class extends Controller {
     this.sectionsTarget.setAttribute("aria-busy", "true")
 
     try {
-      const data = await requestJson(url, { method, body, failure })
-      if (data) this.apply(data)
+      const data = await requestJson(url, { method, body, failure, handOver: [ 422 ] })
+      if (data instanceof HandedOver) this.#refused(data.body, failure)
+      else if (data) this.apply(data)
     } finally {
       this.inFlight = null
       this.sectionsTarget.removeAttribute("aria-busy")
     }
+  }
+
+  // A 422 is a refusal, often of a step the page offered from a stale state. The server sends the
+  // card's fresh payload beside its reason when the refusal concerns a card: the reason is flashed
+  // and the payload applied, so the row stops offering what was just refused.
+  #refused(body, failure) {
+    const errors = Array.isArray(body.errors) ? body.errors : []
+    flashAlert(errors.length ? errors.join(", ") : `${failure} (HTTP 422)`)
+    if (body.fingerprint_key !== undefined) this.apply(body)
   }
 
   apply(data) {
