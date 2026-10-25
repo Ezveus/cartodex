@@ -17,7 +17,7 @@ module Decks
     def self.for(row, deck:, group:, others: :lazy)
       if row.printing
         PrintingRow.new(printing: row.printing, state: row.state, deck: deck, group: group,
-                        row_key: row.key, show_name: true)
+                        row_key: row.key, show_name: true, others: others)
       else
         FingerprintRow.new(state: row.state, deck: deck, group: group, others: others)
       end
@@ -94,5 +94,29 @@ module Decks
     end
 
     def alloc_label(owned_copies, proxies) = "#{owned_copies} real · #{proxies} proxy"
+
+    # "Other printings (N)": the card's printings neither played nor owned, at the end of an
+    # expansion — `lazy`, its count and the request deck_rows_controller.js sends on its first open
+    # (`data-deck-rows-pending` marks the list still to fetch); otherwise rendered whole. The count
+    # needs no query of its own: FingerprintStates has read every printing already. `card` names
+    # the list on the endpoint and, with `source`, is the printing every ⇄ in it moves from.
+    def other_printings(state, id_key:, card:, lazy:, source: nil)
+      count = OtherPrintingRows.printings(state).size
+      return if count.zero?
+
+      fetch = {
+        action: "deck-rows#others",
+        deck_rows_url_param: other_printings_api_deck_card_path(@deck, card, group: group_param),
+        deck_rows_failure_param: "Couldn't load the other printings"
+      }
+      li(class: "deck-printing-others") do
+        disclosure_button("Other printings (#{count})", controls: RowMarkup.others_id(id_key),
+                          css_class: "deck-printings-others-toggle", fetch: (fetch if lazy))
+        ul(class: "deck-printing-list", id: RowMarkup.others_id(id_key), hidden: true,
+           data: (lazy ? { deck_rows_pending: true } : nil)) do
+          render OtherPrintingRows.new(state: state, deck: @deck, group: @group, source: source) unless lazy
+        end
+      end
+    end
   end
 end

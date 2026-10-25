@@ -78,34 +78,9 @@ module Decks
 
       ul(class: "deck-printing-list", id: RowMarkup.printings_id(@state.key), hidden: !@expanded) do
         (in_deck + by_group.fetch(:owned, [])).each { |printing| sub_row(printing) }
-        others
+        # Any printing of the card names its list; the display card is one the deck plays.
+        other_printings(@state, id_key: @state.key, card: @state.display_card, lazy: @others == :lazy)
       end
-    end
-
-    # The count needs no query of its own: FingerprintStates has read every printing already, for
-    # ⇄ and "All printings (M)". `data-deck-rows-pending` marks a list still to be fetched.
-    def others
-      count = OtherPrintingRows.printings(@state).size
-      return if count.zero?
-
-      lazy = @others == :lazy
-      li(class: "deck-printing-others") do
-        disclosure_button("Other printings (#{count})", controls: RowMarkup.others_id(@state.key),
-                          css_class: "deck-printings-others-toggle", fetch: (fetch_params if lazy))
-        ul(class: "deck-printing-list", id: RowMarkup.others_id(@state.key), hidden: true,
-           data: (lazy ? { deck_rows_pending: true } : nil)) do
-          render OtherPrintingRows.new(state: @state, deck: @deck) unless lazy
-        end
-      end
-    end
-
-    # Any printing of the card names its list; the display card is one the deck plays.
-    def fetch_params
-      {
-        action: "deck-rows#others",
-        deck_rows_url_param: other_printings_api_deck_card_path(@deck, @state.display_card),
-        deck_rows_failure_param: "Couldn't load the other printings"
-      }
     end
 
     def sub_row(printing)

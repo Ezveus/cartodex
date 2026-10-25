@@ -708,6 +708,48 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the printings rendered: #{small} -> #{large}"
   end
 
+  # The set view's list hangs off one printing's row: its ⇄ moves from that printing, and its
+  # writes ask for set-view rows back.
+  test "other_printings for the set view moves from the printing in the URL and answers set rows" do
+    asc = budew_with_other_printings
+    pre = cards(:budew_pre)
+    @deck.deck_cards.create!(card: pre, quantity: 3)
+
+    get other_printings_api_deck_card_path(@deck, asc, group: "set"), as: :json
+
+    assert_response :success
+    rows = Nokogiri::HTML5.fragment(JSON.parse(response.body)["html"]).element_children
+    por = Card.find_by!(set_name: "POR", set_number: "3")
+    assert_equal [ "POR 3" ], rows.map { |row| row.at_css(".deck-card-set").text }
+    move = rows.sole.at_css("button.deck-printing-move")
+    assert_equal "Move one copy here from ASC 16", move["title"], "PRE holds more, but this is ASC's row"
+    assert_equal move_api_deck_card_path(@deck, por, group: "set"), move["data-deck-rows-url-param"]
+  end
+
+  # A set-view row names an in-deck printing; one a write elsewhere took out of the deck has no
+  # copy to move.
+  test "other_printings for the set view 404s on a printing the deck no longer plays" do
+    budew_with_other_printings
+
+    get other_printings_api_deck_card_path(@deck, cards(:budew_pre), group: "set"), as: :json
+
+    assert_response :not_found
+  end
+
+  test "a set-view write renders the row's expansion whole" do
+    asc = budew_with_other_printings
+
+    patch api_deck_card_path(@deck, asc, group: "set"), params: { deck_card: { quantity_delta: 1 } }, as: :json
+
+    assert_response :success
+    html = Nokogiri::HTML5.fragment(JSON.parse(response.body)["rows"].sole["html"])
+    expansion = html.at_css("ul#deck-printings-printing-#{asc.id}")
+    assert_equal [ "TWM 3" ], expansion.css("> li.deck-printing-row .deck-card-set").map(&:text)
+    others = html.at_css("ul#deck-printings-others-printing-#{asc.id}")
+    assert_equal [ "POR 3", "PRE 4" ], others.css("> li.deck-printing-row .deck-card-set").map(&:text)
+    assert_nil others["data-deck-rows-pending"]
+  end
+
   # A write re-renders the whole card's row, and the page puts back every disclosure that was open
   # in it: the answer renders the owned printings as the page does, and the other printings outright
   # rather than pending, so a list the member had opened comes back open and current, and one never

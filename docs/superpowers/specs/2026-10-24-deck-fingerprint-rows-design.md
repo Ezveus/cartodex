@@ -54,7 +54,15 @@ without it the row kept offering the step just refused (an enabled real +, the c
 fingerprint is new or not — and is sent by `deck_rows_controller.js` itself, after the write in
 flight, so an older stepper answer can never land on top of it.
 
-**`?group=set`** stays one row per printing, each with a sub-row's controls and its name.
+**`?group=set`** stays one row per printing, each with a sub-row's controls and its name. Each row
+is also where its printing changes, as the printing picker was on master: when the card holds a
+printing outside the deck, the row carries "All printings (M)" and expands onto the owned ones, then
+"Other printings (N)" fetched through `GET …/other_printings?group=set`. Every ⇄ in that expansion
+moves one copy off the row's own printing (the URL's card, which must be in the deck), not by
+decision 2's rule: the member opened this printing's row to change it, and with two printings in the
+deck the rule could take the copy from the other. The moved copy lands in its set's section, created
+from the answer's shell when new, and the source row and section update or go — the same payload
+every set-view write answers, with the row's expansion rendered whole.
 
 **Public page:** the same fingerprint rows, the total and each printing's count behind a disclosure;
 no stepper, no real/proxy, no collection data. It builds its rows with `FingerprintStates.deck_only`,

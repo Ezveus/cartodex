@@ -62,14 +62,20 @@ module Api
     # which the page fetches the first time the list is opened rather than rendering them hidden
     # in every row. Keyed on the fingerprint, so any printing of the card names the list; a card
     # the deck plays in no printing is a 404, like every card this API is asked about.
+    #
+    # `?group=set` is a set-view row's list: it hangs off that row's printing, which every ⇄ in it
+    # moves from (Decks::PrintingRow), so the printing in the URL has to be one the deck plays.
     def other_printings
       card = Card.find(params[:id])
       deck = current_user.decks.includes(deck_cards: :card).find(@deck.id)
       state = Decks::FingerprintStates.call(user: current_user, deck: deck)[card.fingerprint_key]
+      set_view = params[:group] == "set"
       raise ActiveRecord::RecordNotFound unless state
+      raise ActiveRecord::RecordNotFound if set_view && deck.deck_cards.none? { |row| row.card_id == card.id }
 
-      html = render_to_string(Decks::OtherPrintingRows.new(state: state, deck: deck), layout: false)
-      render json: { fingerprint_key: state.key, html: html }
+      rows = Decks::OtherPrintingRows.new(state: state, deck: deck, group: set_view ? :set : :type,
+                                          source: (card if set_view))
+      render json: { fingerprint_key: state.key, html: render_to_string(rows, layout: false) }
     end
 
     # "+ add to my collection and use it here".

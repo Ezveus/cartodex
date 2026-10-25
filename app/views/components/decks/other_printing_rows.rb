@@ -9,14 +9,18 @@ module Decks
   class OtherPrintingRows < ApplicationComponent
     def self.printings(state) = state.printings.select { |printing| printing.group == :other }
 
-    def initialize(state:, deck:)
+    # `group` and `source` are the set view's: its writes ask for set-view rows back, and its ⇄ moves
+    # from the row the list hangs off (Decks::PrintingRow).
+    def initialize(state:, deck:, group: :type, source: nil)
       @state = state
       @deck = deck
+      @group = group
+      @source = source
     end
 
     def view_template
       self.class.printings(@state).each do |printing|
-        render PrintingRow.new(printing: printing, state: @state, deck: @deck)
+        render PrintingRow.new(printing: printing, state: @state, deck: @deck, group: @group, source: @source)
       end
     end
   end

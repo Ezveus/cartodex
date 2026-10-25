@@ -59,6 +59,42 @@ class DeckSetViewTest < ApplicationSystemTestCase
     assert_equal "2", deck_total
   end
 
+  # A card held in one printing changes printing from its own row, as it did with the printing
+  # picker: expand, open "Other printings" (fetched), ⇄ — and the moved copy gets its set's section.
+  test "a single-printing card changes printing from its set-view row" do
+    meg = cards(:bosss_orders_meg)
+    pal = cards(:trainer_card)
+    pal.update_column(:fingerprint, meg.fingerprint)
+    @deck.deck_cards.create!(card: meg, quantity: 3)
+
+    visit deck_path(@deck, group: "set")
+    assert_no_selector ".deck-set-section[data-set-code='PAL']"
+    total = deck_total
+    mark_page
+
+    within(".deck-set-section[data-set-code='MEG']") do
+      find(".deck-printings-toggle").click
+      assert_selector "ul.deck-printing-list[data-deck-rows-pending]", visible: :all
+      click_on "Other printings (1)"
+      find("button.deck-printing-move[title='Move one copy here from MEG 114']").click
+    end
+
+    within(".deck-set-section[data-set-code='PAL']") do
+      assert_selector "h2", exact_text: "PAL · 1 card"
+      assert_selector "li[data-row-key='printing:#{pal.id}'] .deck-card-qty", exact_text: "1"
+    end
+    within(".deck-set-section[data-set-code='MEG']") do
+      assert_selector "h2", text: "· 2 cards"
+      assert_selector "li[data-row-key='printing:#{meg.id}'] > .deck-card-line .deck-card-qty", exact_text: "2"
+    end
+    assert_equal total, deck_total
+    assert_page_not_reloaded
+    assert_current_path deck_path(@deck, group: "set")
+
+    rows = @deck.deck_cards.reload.index_by(&:card_id)
+    assert_equal [ 2, 1 ], [ rows.fetch(meg.id).quantity, rows.fetch(pal.id).quantity ]
+  end
+
   # A set-view row is one printing, so ⇄ is offered between the printings the deck holds. The copy
   # it moves lands in the other printing's section, and the one it empties goes.
   test "⇄ in the set view moves the copy into its set's section, in place" do

@@ -105,6 +105,64 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
     assert_select ".deck-printings-toggle", count: 0
   end
 
+  def reprint(card, set_name:, set_number:, card_set: nil)
+    Card.create!(
+      name: card.name, card_type: card.card_type, hp: card.hp, type_symbol: card.type_symbol,
+      retreat_cost: card.retreat_cost, stage: card.stage, card_set: card_set,
+      set_name: set_name, set_number: set_number, rarity: "Common"
+    ).tap { |twin| twin.update_column(:fingerprint, card.fingerprint) }
+  end
+
+  # The set view is one row per printing, and a printing's row is where its printing changes: it
+  # expands onto the card's owned printings outside the deck, then "Other printings", fetched — and
+  # every ⇄ in it moves a copy off this row's own printing, the one the member opened.
+  test "a set-view row expands onto the owned printings, then the fetched others, each ⇄ taking from it" do
+    asc = cards(:budew_asc)
+    por = reprint(asc, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    @user.collections.create!(card: por, quantity: 1)
+    @deck.deck_cards.create!(card: asc, quantity: 2)
+    row_key = "printing:#{asc.id}"
+
+    get deck_path(@deck, group: "set")
+
+    assert_select "li.deck-printing-row[data-row-key=?]", row_key do
+      assert_select "> .deck-card-line .deck-printings-toggle[aria-expanded=false][aria-controls=?]",
+                    "deck-printings-printing-#{asc.id}", text: "All printings (3)"
+      assert_select "> ul#deck-printings-printing-#{asc.id}[hidden]" do
+        assert_select "> li.deck-printing-row:not([data-row-key])", count: 1 do
+          assert_select ".deck-card-set", text: "POR 3"
+          assert_select ".deck-printing-owned", text: "1 owned · 1 free"
+          assert_select "button.deck-printing-move[title='Move one copy here from ASC 16']" \
+                        "[data-deck-rows-url-param=?]", move_api_deck_card_path(@deck, por, group: "set")
+        end
+        assert_select "> li.deck-printing-others" do
+          assert_select ".deck-printings-others-toggle[data-deck-rows-url-param=?]",
+                        other_printings_api_deck_card_path(@deck, asc, group: "set"), text: "Other printings (1)"
+          assert_select "ul#deck-printings-others-printing-#{asc.id}[data-deck-rows-pending]:empty"
+        end
+      end
+    end
+  end
+
+  # With two printings in the deck the type view's rule — the other in-deck printing — would make the
+  # ⇄ under ASC's row move a copy off PRE. In the set view each row's expansion moves off itself.
+  test "each set-view row's ⇄ moves from that row's printing" do
+    asc = cards(:budew_asc)
+    por = reprint(asc, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    @user.collections.create!(card: por, quantity: 1)
+    @deck.deck_cards.create!(card: asc, quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 3)
+
+    get deck_path(@deck, group: "set")
+
+    { asc => "ASC 16", cards(:budew_pre) => "PRE 4" }.each do |card, label|
+      assert_select "#deck-printings-printing-#{card.id} button.deck-printing-move[data-focus-key=move-#{por.id}]" do |buttons|
+        assert_equal "Move one copy here from #{label}", buttons.sole["title"]
+        assert_equal({ "move" => { "from_card_id" => card.id } }, JSON.parse(buttons.sole["data-deck-rows-body-param"]))
+      end
+    end
+  end
+
   test "the default view is the type view, its links carrying no group" do
     fill_deck
 
