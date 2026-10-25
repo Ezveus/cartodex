@@ -445,6 +445,39 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ 2, 1 ], JSON.parse(response.body).values_at("owned_copies", "proxies")
   end
 
+  # A count is read as an integer or refused: `to_i` took 1.5 as 1 and "abc" as 0 (a 200 that did
+  # something nobody asked for), and 10**20 reached the integer column and raised a 500.
+  test "a step or a count that is not a sane integer is refused and writes nothing" do
+    @deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 1)
+
+    %i[quantity_delta owned_copies_delta quantity owned_copies].each do |key|
+      [ 10**20, -10**20, 1.5, "1.5", "abc", "", nil, true, [ 1 ] ].each do |value|
+        patch api_deck_card_path(@deck, @card), params: { deck_card: { key => value } }, as: :json
+
+        assert_includes [ 400, 422 ], response.status, "#{key}: #{value.inspect} answered #{response.status}"
+      end
+    end
+    assert_equal [ 2, 1 ], @deck.deck_cards.find_by!(card: @card).values_at(:quantity, :owned_copies)
+  end
+
+  test "a count sent as a decimal string, as a form posts it, is still taken" do
+    @deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 1)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { quantity_delta: "-1" } }
+
+    assert_response :success
+    assert_equal 1, @deck.deck_cards.find_by!(card: @card).quantity
+  end
+
+  test "create refuses a quantity that is not a sane integer" do
+    [ 10**20, 1.5, "abc" ].each do |value|
+      post api_deck_cards_path(@deck), params: { deck_card: { card_id: @card.id, quantity: value } }, as: :json
+
+      assert_includes [ 400, 422 ], response.status, "#{value.inspect} answered #{response.status}"
+    end
+    assert_not @deck.deck_cards.exists?(card: @card)
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do

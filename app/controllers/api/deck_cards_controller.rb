@@ -8,6 +8,10 @@ module Api
     before_action :authenticate_user!
     before_action :set_deck
 
+    # A count or a step the API takes. Far past any deck, and far inside the 8-byte integer column,
+    # whose overflow raised a 500 from `save!`.
+    COUNT_RANGE = -9_999..9_999
+
     def index
       deck_cards = @deck.deck_cards.includes(:card)
       render json: deck_cards.map { |dc| deck_card_json(dc) }
@@ -15,7 +19,9 @@ module Api
 
     def create
       card = Card.find(deck_card_params[:card_id])
-      deck_card = refusing { Decks::CardAdder.call(deck: @deck, card: card, quantity: deck_card_params[:quantity].to_i) }
+      deck_card = refusing do
+        Decks::CardAdder.call(deck: @deck, card: card, quantity: count_param(deck_card_params, :quantity))
+      end
       return if performed?
 
       render json: deck_card_json(deck_card).merge(fingerprint_payload(card)), status: :created
@@ -86,14 +92,27 @@ module Api
     # stored row; an absolute count is still taken from the API's other callers.
     def write_update(card, attributes)
       if attributes.key?(:owned_copies_delta)
-        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, delta: attributes[:owned_copies_delta].to_i)
+        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, delta: count_param(attributes, :owned_copies_delta))
       elsif attributes.key?(:owned_copies)
-        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, owned_copies: attributes[:owned_copies].to_i)
+        Decks::OwnedCopiesSetter.call(deck: @deck, card: card, owned_copies: count_param(attributes, :owned_copies))
       elsif attributes.key?(:quantity_delta)
-        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, delta: attributes[:quantity_delta].to_i)
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, delta: count_param(attributes, :quantity_delta))
       else
-        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, quantity: attributes[:quantity].to_i)
+        Decks::DeckCardQuantitySetter.call(deck: @deck, card: card, quantity: count_param(attributes, :quantity))
       end
+    end
+
+    # An Integer from JSON, or the decimal string a form posts; anything else is refused (a 422
+    # through `refusing`) rather than read by `to_i`, which took 1.5 as 1, "abc" and a missing
+    # value as 0 — and a missing `quantity` as "remove the card".
+    def count_param(attributes, key)
+      value = attributes[key]
+      value = Integer(value, 10) if value.is_a?(String) && value.match?(/\A[+-]?\d+\z/)
+      unless value.is_a?(Integer) && COUNT_RANGE.cover?(value)
+        raise ArgumentError, "#{key} must be an integer between #{COUNT_RANGE.min} and #{COUNT_RANGE.max}"
+      end
+
+      value
     end
 
     # `removed` is what tells the caller the row no longer exists.
