@@ -433,6 +433,18 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # The page leaves an over-allocated row's real "−" enabled, so the API has to take it: 3 real
+  # with 1 owned used to answer 422 at every step.
+  test "a real − on an over-allocated row is accepted" do
+    @user.collections.find_by!(card: @card).update!(quantity: 1)
+    @deck.deck_cards.create!(card: @card, quantity: 3).update_column(:owned_copies, 3)
+
+    patch api_deck_card_path(@deck, @card), params: { deck_card: { owned_copies_delta: -1 } }, as: :json
+
+    assert_response :success
+    assert_equal [ 2, 1 ], JSON.parse(response.body).values_at("owned_copies", "proxies")
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do

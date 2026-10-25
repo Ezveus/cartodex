@@ -21,13 +21,33 @@ module Decks
       end
     end
 
+    # From 0 real, so that 3 is an increase: holding 3 already is an over-allocation the collection
+    # made, which the setter tolerates (see below), not one it creates.
     test "rejects exceeding availability (cannot create over-allocation)" do
+      @deck_card.update!(owned_copies: 0)
       other = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
       other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2) # only 1 free for @deck
 
-      assert_raises(ArgumentError) do
+      error = assert_raises(ArgumentError) do
         Decks::OwnedCopiesSetter.call(deck: @deck, card: @card, owned_copies: 3)
       end
+      assert_equal "owned_copies must be between 0 and 1", error.message
+      assert_equal 0, @deck_card.reload.owned_copies
+    end
+
+    # 3 owned, this deck backing 3 and another 2: over-allocated, 1 free for this deck. Lowering the
+    # real count only gives a commitment back, so it is never bounded by availability — the bound
+    # that used to leave a "−" refused at every step down to 1.
+    test "an over-allocated row steps its reals down, by delta or by a lower count" do
+      other = @user.decks.create!(name: "B", physical: true, standard_pool: standard_pools(:twm_por))
+      other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+
+      assert_equal 2, Decks::OwnedCopiesSetter.call(deck: @deck, card: @card, delta: -1).owned_copies
+      assert_equal 2, Decks::OwnedCopiesSetter.call(deck: @deck, card: @card, owned_copies: 2).owned_copies, "no change"
+      assert_equal 1, Decks::OwnedCopiesSetter.call(deck: @deck, card: @card, owned_copies: 1).owned_copies
+
+      error = assert_raises(ArgumentError) { Decks::OwnedCopiesSetter.call(deck: @deck, card: @card, delta: 1) }
+      assert_equal "owned_copies must be between 0 and 1", error.message, "an increase stays bounded"
     end
 
     test "a delta moves the real count from the stored row" do

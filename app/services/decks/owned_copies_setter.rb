@@ -1,7 +1,10 @@
 module Decks
   # Sets the real (owned-backed) copy count of an existing card in a physical
-  # deck. The new value is bounded by the deck_card's total and by availability,
+  # deck. An increase is bounded by the deck_card's total and by availability,
   # so an edit can never create over-allocation (only a collection decrease can).
+  # A decrease — or no change — is bounded by 0 alone: it only gives a commitment
+  # back, and bounding it by availability left the "−" of an over-allocated row
+  # refused at every step (3 real backed by 1 free copy could never come down).
   #
   # Either `owned_copies:` (an absolute count) or `delta:` (the deck page's step), never both. A
   # step is resolved against the row read inside the transaction, so a stale tab's "−" is refused
@@ -25,7 +28,8 @@ module Decks
         deck_card = @deck.deck_cards.find_by!(card: @card)
         owned_copies = @delta.nil? ? @owned_copies : deck_card.owned_copies.to_i + @delta
         max_owned = [ deck_card.quantity, availability.available ].min
-        unless owned_copies.is_a?(Integer) && owned_copies.between?(0, max_owned)
+        unless owned_copies.is_a?(Integer) && owned_copies >= 0 &&
+               (owned_copies <= deck_card.owned_copies.to_i || owned_copies <= max_owned)
           raise ArgumentError, "owned_copies must be between 0 and #{max_owned}"
         end
 
