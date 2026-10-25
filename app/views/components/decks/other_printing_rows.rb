@@ -1,13 +1,13 @@
 module Decks
-  # The printings of a card that the deck does not play — the ones the member owns first, then the
-  # rest, each in catalogue order (FingerprintStates' order) — as the sub-rows of the card's
-  # "Other printings" list.
+  # The printings of a card that the deck does not play and the member does not own (the :other
+  # group, in catalogue order) as the sub-rows of the card's "Other printings" list. The owned ones
+  # are not here: Decks::FingerprintRow renders them in the expansion itself.
   #
   # Two callers, one markup: a write's answer renders them inside the row it re-renders
   # (Decks::FingerprintRow with `others: :rendered`), and Api::DeckCardsController#other_printings
   # renders them alone for the page, which fetches them the first time the list is opened.
   class OtherPrintingRows < ApplicationComponent
-    def self.printings(state) = state.printings.reject { |printing| printing.group == :deck }
+    def self.printings(state) = state.printings.select { |printing| printing.group == :other }
 
     def initialize(state:, deck:)
       @state = state

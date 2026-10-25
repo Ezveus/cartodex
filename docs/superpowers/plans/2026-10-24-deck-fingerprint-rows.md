@@ -3,7 +3,8 @@
 Spec: `docs/superpowers/specs/2026-10-24-deck-fingerprint-rows-design.md`. Issue #236.
 
 **Amended after the owner's review** (the spec's decisions 1, 2 and 6 say why): the printings a row
-does not play — owned or not — sit behind one "Other printings (N)" disclosure that the page renders
+neither plays nor owns (`:other`) sit behind the "Other printings (N)" disclosure — owned ones stay
+rendered in the expansion — that the page renders
 empty (`ul[data-deck-rows-pending]`, toggle `data-action="disclosure#toggle deck-rows#others"` with
 `url`/`failure` params) and fetches on first open from `GET /api/decks/:deck_id/cards/:id/other_printings`
 → `{ fingerprint_key, html }` (`Decks::OtherPrintingRows`); a write's row renders that list whole.

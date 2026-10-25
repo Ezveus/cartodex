@@ -507,7 +507,9 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     asc
   end
 
-  test "other_printings answers the sub-rows of the printings the deck does not play, owned ones first" do
+  # The owned TWM 3 is rendered with the page, in the expansion itself: the answer is only the
+  # printings nobody holds — neither in the deck nor in the collection.
+  test "other_printings answers the sub-rows of the printings neither in the deck nor owned" do
     asc = budew_with_other_printings
 
     get other_printings_api_deck_card_path(@deck, asc), as: :json
@@ -518,8 +520,8 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     html = Nokogiri::HTML5.fragment(json["html"])
     rows = html.element_children
     assert rows.all? { |node| node.matches?("li.deck-printing-row") }, "the answer is the sub-rows alone"
-    assert_equal [ "TWM 3", "POR 3", "PRE 4" ], rows.map { |row| row.at_css(".deck-card-set").text }
-    assert_equal [ "1 owned · 1 free" ], html.css(".deck-printing-owned").map(&:text)
+    assert_equal [ "POR 3", "PRE 4" ], rows.map { |row| row.at_css(".deck-card-set").text }
+    assert_empty html.css(".deck-printing-owned")
     assert_empty html.css("[data-row-key]"), "a sub-row is no row of its own"
     rows.each do |row|
       assert_equal "Move one copy here from ASC 16", row.at_css("button.deck-printing-move")["title"]
@@ -559,8 +561,8 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
-  # Every printing outside the deck in a set of its own, half of them owned: a per-printing read of
-  # `card_set` or of the collection would issue distinct SQL per row.
+  # Every printing outside the deck in a set of its own, half of them owned (and so not in the
+  # answer): a per-printing read of `card_set` or of the collection would issue distinct SQL per row.
   test "other_printings costs the same however many printings it renders" do
     asc = budew_with_other_printings
     get other_printings_api_deck_card_path(@deck, asc), as: :json
@@ -573,13 +575,14 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     end
     large = count_queries { get other_printings_api_deck_card_path(@deck, asc), as: :json }
 
-    assert_equal 7, Nokogiri::HTML5.fragment(JSON.parse(response.body)["html"]).css("li.deck-printing-row").size
+    assert_equal 4, Nokogiri::HTML5.fragment(JSON.parse(response.body)["html"]).css("li.deck-printing-row").size
     assert_equal small, large, "query count grew with the printings rendered: #{small} -> #{large}"
   end
 
   # A write re-renders the whole card's row, and the page puts back every disclosure that was open
-  # in it: the answer renders the other printings outright, so a list the member had opened comes
-  # back open and current, and one never opened needs no fetch later.
+  # in it: the answer renders the owned printings as the page does, and the other printings outright
+  # rather than pending, so a list the member had opened comes back open and current, and one never
+  # opened needs no fetch later.
   test "a write's row renders the other printings rather than leaving them to be fetched" do
     asc = budew_with_other_printings
 
@@ -587,11 +590,13 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     html = Nokogiri::HTML5.fragment(JSON.parse(response.body)["rows"].sole["html"])
+    expansion = html.at_css("ul#deck-printings-budew_shared")
+    assert_equal [ "TWM 3" ], expansion.css("> li.deck-printing-row .deck-card-set").map(&:text)
     list = html.at_css("ul#deck-printings-others-budew_shared[hidden]")
-    assert_equal [ "TWM 3", "POR 3", "PRE 4" ], list.css("> li.deck-printing-row .deck-card-set").map(&:text)
+    assert_equal [ "POR 3", "PRE 4" ], list.css("> li.deck-printing-row .deck-card-set").map(&:text)
     assert_nil list["data-deck-rows-pending"]
     toggle = html.at_css(".deck-printings-others-toggle")
-    assert_equal "Other printings (3)", toggle.text
+    assert_equal "Other printings (2)", toggle.text
     assert_equal "disclosure#toggle", toggle["data-action"], "nothing left to fetch"
   end
 end

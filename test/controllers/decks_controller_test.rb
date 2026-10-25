@@ -24,9 +24,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # The deck B5 renders for both readers: physical, Honedge backed by its one owned copy, and
   # Budew split across two printings with ASC 16 all proxies and no free ASC copy. That is what
   # makes each owner control appear — the allocation stepper (physical), ⇄ (a second printing in
-  # the deck), "+ add to my collection" (a proxy, not over-allocated), and the "Other printings"
-  # disclosure that fetches the rest (a third Budew printing the owner owns and the deck does not
-  # play) — so every absence asserted of the visitor's page is one the owner's page really renders.
+  # the deck), "+ add to my collection" (ASC 16 plays proxies; AllocationUiTest holds when the
+  # button is and is not offered), the owned note (POR 3, owned and not played) and the "Other
+  # printings" disclosure that fetches the rest (TWM 9, neither) — so every absence asserted of the
+  # visitor's page is one the owner's page really renders.
   def shared_split_deck
     @deck.update!(shared: true, physical: true)
     @deck.deck_cards.find_by!(card: cards(:honedge)).update!(owned_copies: 1)
@@ -38,10 +39,12 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # After that update!, which re-runs compute_fingerprint: the twin must copy the fingerprint the
     # two in-deck printings carry now, not the fixture's literal.
     @user.collections.create!(card: reprint(cards(:budew_asc), set_name: "POR", set_number: "3"), quantity: 1)
+    reprint(cards(:budew_asc), set_name: "TWM", set_number: "9")
   end
 
   OWNER_ONLY = {
-    write: "[data-action~='deck-rows#write']", others: "[data-action~='deck-rows#others']",
+    write: "[data-action~='deck-rows#write']", owned_note: ".deck-printing-owned",
+    others: "[data-action~='deck-rows#others']",
     move: ".deck-printing-move", row_key: "[data-row-key]", collect: ".deck-card-collect",
     alloc: ".deck-card-alloc"
   }.freeze
@@ -210,9 +213,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select ".deck-printings-toggle", text: "2 printings"
   end
 
-  # The printings the deck does not play — owned or not — wait behind one disclosure, fetched the
-  # first time it opens: the page renders its count and the request it sends, not the sub-rows.
-  test "the owner's expansion lists the deck's printings, then the disclosure fetching the rest" do
+  # The printings the deck plays, then those the member owns, are rendered with the page; the rest
+  # wait behind one disclosure, fetched the first time it opens: the page renders its count and the
+  # request it sends, not the sub-rows.
+  test "the owner's expansion lists the deck's printings, the owned ones, then the disclosure fetching the rest" do
     budew = cards(:budew_asc)
     por = reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
     reprint(budew, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
@@ -221,12 +225,13 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     get deck_path(@deck)
 
-    assert_equal [ "ASC 16", "PRE 4" ], printing_labels("budew_shared")
-    assert_select ".deck-printing-owned", count: 0
+    assert_equal [ "ASC 16", "PRE 4", "POR 3" ], printing_labels("budew_shared")
+    assert_select "#deck-printings-budew_shared > li.deck-printing-row:nth-child(3) .deck-printing-owned",
+                  text: "1 owned · 1 free"
     assert_select "#deck-printings-budew_shared > li.deck-printing-others:last-child" do
       assert_select ".deck-printings-others-toggle[aria-expanded=false][aria-controls=deck-printings-others-budew_shared]" \
                     "[data-action='disclosure#toggle deck-rows#others'][data-deck-rows-url-param=?]",
-                    other_printings_api_deck_card_path(@deck, budew), text: "Other printings (2)"
+                    other_printings_api_deck_card_path(@deck, budew), text: "Other printings (1)"
       assert_select "ul#deck-printings-others-budew_shared[hidden][data-deck-rows-pending]:empty"
     end
   end
@@ -1023,12 +1028,12 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
   end
 
-  # B7: the printings a row's card holds outside the deck are fetched when opened, so the page
-  # renders none of them — only their count, which FingerprintStates already reads. Every reprint
-  # here sits in a set of its own and half of them are owned, so a per-printing read of `card_set`
-  # or of the collection would issue distinct SQL per row, which the query cache cannot hide. The
-  # literal is what the page cost when it still rendered every one of them: fetching them later
-  # must not have moved it.
+  # B7: an expanded row renders the printings the member owns outside the deck — each naming its
+  # set and reading its availability — and leaves the rest to be fetched when opened, rendering only
+  # their count, which FingerprintStates already reads. Every reprint here sits in a set of its own
+  # and half of them are owned, so a per-printing read of `card_set` or of the collection would issue
+  # distinct SQL per row, which the query cache cannot hide. The literal is what the page cost when
+  # it still rendered every one of them: fetching the unowned ones later must not have moved it.
   test "show costs the same however many printings outside the deck its rows expand into" do
     deck = @user.decks.create!(name: "Reprinted", physical: true, standard_pool: standard_pools(:twm_por))
     index = 0
@@ -1050,8 +1055,11 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     large = count_queries { get deck_path(deck) }
 
     assert_response :success
-    assert_select ".deck-printing-row", count: 0
-    assert_select ".deck-printings-others-toggle", text: "Other printings (2)", count: 3
+    # One per owned printing outside the deck — never on the three in-deck printings, nor on the
+    # three nobody owns, which the page does not render.
+    assert_select ".deck-printing-owned", count: 3
+    assert_select ".deck-printing-row", count: 3
+    assert_select ".deck-printings-others-toggle", text: "Other printings (1)", count: 3
     assert_equal 15, small
     assert_equal small, large, "query count grew with the printings outside the deck: #{small} -> #{large}"
   end

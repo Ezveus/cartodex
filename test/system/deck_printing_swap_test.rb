@@ -34,8 +34,13 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
     mark_page
 
     expand_printings_of("Boss's Orders")
-    # PAL 172 is not in the deck, so it waits behind "Other printings", fetched on this first open.
-    within(row_of("Boss's Orders")) { click_on "Other printings (1)" }
+    # PAL 172 is neither played nor owned, so it waits behind "Other printings": the page holds the
+    # list empty until its first open fetches it.
+    within(row_of("Boss's Orders")) do
+      assert_selector "ul.deck-printing-list[data-deck-rows-pending]", visible: :all
+      assert_no_selector ".deck-printing-row", visible: :all
+      click_on "Other printings (1)"
+    end
     within_printing("PAL 172") { find("button.deck-printing-move[title='Move one copy here from MEG 114']").click }
 
     within(row_of("Boss's Orders")) do
@@ -118,8 +123,8 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
 
     visit deck_path(@deck)
     expand_printings_of("Budew")
-    # Owned but not played, so behind "Other printings" with the rest, fetched on this first open.
-    within(row_of("Budew")) { click_on "Other printings (1)" }
+    # Owned, so it is offered in the list itself rather than behind "Other printings".
+    within(row_of("Budew")) { assert_no_selector ".deck-printings-others-toggle" }
     within_printing("PRE 4") do
       assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free"
       find("button.deck-printing-move").click
@@ -146,24 +151,20 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
   # The list is fetched once, then a write re-renders the whole row with it: it has to come back
   # open, and current — the ⇄ in it still a working control, not the copy the fetch returned.
   test "a write keeps the fetched other printings open and working" do
-    @user.collections.find_by!(card: @pre).update!(quantity: 4)
     @deck.deck_cards.create!(card: @asc, quantity: 2)
 
     visit deck_path(@deck)
     mark_page
     expand_printings_of("Budew")
     within(row_of("Budew")) { click_on "Other printings (1)" }
-    within_printing("PRE 4") { assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free" }
+    within_printing("PRE 4") { assert_selector "button.deck-printing-move" }
 
     within_quantity_of("Budew") { click_on "+" }
 
     within(line_of("Budew")) { assert_selector ".deck-card-qty", exact_text: "3" }
     within(row_of("Budew")) { assert_selector ".deck-printings-others-toggle[aria-expanded='true']" }
-    within_printing("PRE 4") do
-      assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free"
-      find("button.deck-printing-move[title='Move one copy here from ASC 16']").click
-    end
-    within_printing("PRE 4") { assert_selector ".deck-card-alloc-label", exact_text: "1 real · 0 proxy" }
+    within_printing("PRE 4") { find("button.deck-printing-move[title='Move one copy here from ASC 16']").click }
+    within_printing("PRE 4") { assert_selector ".deck-card-alloc-label", exact_text: "0 real · 1 proxy" }
     within_printing("ASC 16") { assert_selector ".deck-card-qty", exact_text: "2" }
     assert_page_not_reloaded
   end

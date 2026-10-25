@@ -51,7 +51,7 @@ module Api
       render json: deck_card_json(result.to_deck_card).merge(fingerprint_payload(to_card))
     end
 
-    # The sub-rows of a card's "Other printings" — every printing of it the deck does not play —
+    # The sub-rows of a card's "Other printings" — every printing of it neither played nor owned —
     # which the page fetches the first time the list is opened rather than rendering them hidden
     # in every row. Keyed on the fingerprint, so any printing of the card names the list; a card
     # the deck plays in no printing is a 404, like every card this API is asked about.

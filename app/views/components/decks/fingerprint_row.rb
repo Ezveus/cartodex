@@ -5,12 +5,14 @@ module Decks
   # Held in one printing, the line is that printing, steppers included. Held in several, the line
   # sums them — the total and "N real · M proxy" — and the steppers live in the sub-rows. Either
   # way the row expands, when the catalogue holds another printing, into the printings in the deck,
-  # then "Other printings (N)" for every printing it does not play, owned or not; a single printing
-  # is not repeated there, since the line already is it.
+  # then those the member owns at 0 copies, then "Other printings (N)" for the rest — neither played
+  # nor owned; a single printing is not repeated there, since the line already is it.
   #
   # `others` says how that last list is drawn. The page renders it `:lazy` — its count and the
   # request that fetches it, which deck_rows_controller.js sends the first time it is opened — so a
   # card held in a dozen printings does not cost a dozen hidden sub-rows on every row of the page.
+  # The owned ones are rendered with the page either way: they are the printings the member can
+  # actually move a real copy to, so the expansion shows them without a second click.
   # A write's answer renders it `:rendered`: that row replaces one whose list the member may have
   # opened, and deck_rows_controller.js re-opens it, so it has to come back whole and current rather
   # than empty or as the stale copy the first fetch returned.
@@ -71,10 +73,11 @@ module Decks
     end
 
     def printing_list
-      in_deck = @state.single? ? [] : @state.in_deck
+      by_group = @state.printings.group_by(&:group)
+      in_deck = @state.single? ? [] : by_group.fetch(:deck, [])
 
       ul(class: "deck-printing-list", id: RowMarkup.printings_id(@state.key), hidden: !@expanded) do
-        in_deck.each { |printing| sub_row(printing) }
+        (in_deck + by_group.fetch(:owned, [])).each { |printing| sub_row(printing) }
         others
       end
     end
