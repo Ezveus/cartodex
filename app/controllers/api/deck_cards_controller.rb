@@ -51,6 +51,20 @@ module Api
       render json: deck_card_json(result.to_deck_card).merge(fingerprint_payload(to_card))
     end
 
+    # The sub-rows of a card's "Other printings" — every printing of it the deck does not play —
+    # which the page fetches the first time the list is opened rather than rendering them hidden
+    # in every row. Keyed on the fingerprint, so any printing of the card names the list; a card
+    # the deck plays in no printing is a 404, like every card this API is asked about.
+    def other_printings
+      card = Card.find(params[:id])
+      deck = current_user.decks.includes(deck_cards: :card).find(@deck.id)
+      state = Decks::FingerprintStates.call(user: current_user, deck: deck)[card.fingerprint_key]
+      raise ActiveRecord::RecordNotFound unless state
+
+      html = render_to_string(Decks::OtherPrintingRows.new(state: state, deck: deck), layout: false)
+      render json: { fingerprint_key: state.key, html: html }
+    end
+
     # "+ add to my collection and use it here".
     def collection_copy
       card = Card.find(params[:id])

@@ -23,7 +23,9 @@ module DeckCardPayload
   # Everything deck_rows_controller.js needs after a write to `card`, so that it computes nothing:
   # the card's whole state (every printing, with the numbers its controls show and are bounded
   # by), its rows rendered by the components the page renders them with, where each goes, every
-  # section's counts, and the deck's total and Proxies flag. The shape is the frozen contract in
+  # section's counts, and the deck's total and Proxies flag. A row carries its "Other printings"
+  # rendered, where the page fetches them on first open: the row replaces one whose list the member
+  # may have opened, and it must come back open and current (Decks::FingerprintRow). The shape is the frozen contract in
   # docs/superpowers/plans/2026-10-24-deck-fingerprint-rows.md ("API").
   #
   # Read from a fresh load of the deck: the write went through a service that may have loaded the
@@ -49,7 +51,7 @@ module DeckCardPayload
 
   def rows_json(section, key, deck, group)
     section.rows.select { |row| row.state.key == key }.map do |row|
-      html = render_to_string(Decks::OwnerRow.for(row, deck: deck, group: group), layout: false)
+      html = render_to_string(Decks::OwnerRow.for(row, deck: deck, group: group, others: :rendered), layout: false)
       { key: row.key, section: section.key, html: html }
     end
   end

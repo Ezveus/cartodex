@@ -5,18 +5,23 @@ module Decks
   # Held in one printing, the line is that printing, steppers included. Held in several, the line
   # sums them — the total and "N real · M proxy" — and the steppers live in the sub-rows. Either
   # way the row expands, when the catalogue holds another printing, into the printings in the deck,
-  # then those the member owns at 0 copies, then "Other printings (N)" for the rest; a single
-  # printing is not repeated there, since the line already is it.
+  # then "Other printings (N)" for every printing it does not play, owned or not; a single printing
+  # is not repeated there, since the line already is it.
   #
-  # Every printing is rendered with the page, the others hidden, rather than fetched when opened:
-  # one render path and no endpoint of its own, for a few hundred bytes a printing.
+  # `others` says how that last list is drawn. The page renders it `:lazy` — its count and the
+  # request that fetches it, which deck_rows_controller.js sends the first time it is opened — so a
+  # card held in a dozen printings does not cost a dozen hidden sub-rows on every row of the page.
+  # A write's answer renders it `:rendered`: that row replaces one whose list the member may have
+  # opened, and deck_rows_controller.js re-opens it, so it has to come back whole and current rather
+  # than empty or as the stale copy the first fetch returned.
   class FingerprintRow < OwnerRow
     # `expanded` is the styleguide's: the page always renders a row closed.
-    def initialize(state:, deck:, group: :type, expanded: false)
+    def initialize(state:, deck:, group: :type, expanded: false, others: :lazy)
       @state = state
       @deck = deck
       @group = group
       @expanded = expanded
+      @others = others
     end
 
     def view_template
@@ -66,25 +71,38 @@ module Decks
     end
 
     def printing_list
-      by_group = @state.printings.group_by(&:group)
-      in_deck = @state.single? ? [] : by_group.fetch(:deck, [])
+      in_deck = @state.single? ? [] : @state.in_deck
 
       ul(class: "deck-printing-list", id: RowMarkup.printings_id(@state.key), hidden: !@expanded) do
-        (in_deck + by_group.fetch(:owned, [])).each { |printing| sub_row(printing) }
-        others(by_group.fetch(:other, []))
+        in_deck.each { |printing| sub_row(printing) }
+        others
       end
     end
 
-    def others(printings)
-      return if printings.empty?
+    # The count needs no query of its own: FingerprintStates has read every printing already, for
+    # ⇄ and "All printings (M)". `data-deck-rows-pending` marks a list still to be fetched.
+    def others
+      count = OtherPrintingRows.printings(@state).size
+      return if count.zero?
 
+      lazy = @others == :lazy
       li(class: "deck-printing-others") do
-        disclosure_button("Other printings (#{printings.size})", controls: RowMarkup.others_id(@state.key),
-                          css_class: "deck-printings-others-toggle")
-        ul(class: "deck-printing-list", id: RowMarkup.others_id(@state.key), hidden: true) do
-          printings.each { |printing| sub_row(printing) }
+        disclosure_button("Other printings (#{count})", controls: RowMarkup.others_id(@state.key),
+                          css_class: "deck-printings-others-toggle", fetch: (fetch_params if lazy))
+        ul(class: "deck-printing-list", id: RowMarkup.others_id(@state.key), hidden: true,
+           data: (lazy ? { deck_rows_pending: true } : nil)) do
+          render OtherPrintingRows.new(state: @state, deck: @deck) unless lazy
         end
       end
+    end
+
+    # Any printing of the card names its list; the display card is one the deck plays.
+    def fetch_params
+      {
+        action: "deck-rows#others",
+        deck_rows_url_param: other_printings_api_deck_card_path(@deck, @state.display_card),
+        deck_rows_failure_param: "Couldn't load the other printings"
+      }
     end
 
     def sub_row(printing)

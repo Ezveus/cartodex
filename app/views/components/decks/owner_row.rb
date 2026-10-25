@@ -11,13 +11,15 @@ module Decks
     include RowMarkup
 
     # The component a row of Decks::Layout is drawn with: a type-view row is a whole card, a
-    # set-view row one printing of it, named since no row above it names the card.
-    def self.for(row, deck:, group:)
+    # set-view row one printing of it, named since no row above it names the card. `others` is
+    # Decks::FingerprintRow's: the page leaves the other printings to be fetched, a write's answer
+    # renders them.
+    def self.for(row, deck:, group:, others: :lazy)
       if row.printing
         PrintingRow.new(printing: row.printing, state: row.state, deck: deck, group: group,
                         row_key: row.key, show_name: true)
       else
-        FingerprintRow.new(state: row.state, deck: deck, group: group)
+        FingerprintRow.new(state: row.state, deck: deck, group: group, others: others)
       end
     end
 

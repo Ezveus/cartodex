@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import DeckRowsController from "controllers/deck_rows_controller"
 import CardSearchController from "controllers/card_search_controller"
+import DisclosureController from "controllers/disclosure_controller"
 import { captureEvents, flashMessages, jsonResponse, mount, requests, settle, stubFetch } from "../support"
 
 // Hand-written markup following the DOM contract of
@@ -594,5 +595,144 @@ describe("deck_rows_controller", () => {
     release()
     await settle()
     expect(rowKeys(listOf(element, "pokemon"))).toEqual([ "fp-a", "fp-n" ])
+  })
+})
+
+// The "Other printings" list as the page renders it (`pending`: its count and the request that
+// fetches it, the list empty) or as a write's answer renders it (the sub-rows already inside).
+function othersRow(key, { pending = true, label = key, items = "" } = {}) {
+  const id = `deck-printings-others-${key}`
+  const fetch = pending
+    ? ` data-action="disclosure#toggle deck-rows#others" data-deck-rows-url-param="/api/decks/k/cards/1/other_printings"
+        data-deck-rows-failure-param="Couldn't load the other printings"`
+    : ` data-action="disclosure#toggle"`
+  return `<li class="deck-fingerprint" data-row-key="${key}" data-fingerprint-key="${key}">
+    <div class="deck-card-line"><span class="label">${label}</span>${writeButton(`qty-plus-${key}`)}</div>
+    <ul class="deck-printing-list" id="deck-printings-${key}">
+      <li class="deck-printing-others">
+        <button class="deck-printings-others-toggle" aria-expanded="false" aria-controls="${id}"${fetch}>Other printings (2)</button>
+        <ul class="deck-printing-list" id="${id}" hidden${pending ? " data-deck-rows-pending" : ""}>${items}</ul>
+      </li>
+    </ul>
+  </li>`
+}
+
+const subRows = `<li class="deck-printing-row"><span class="deck-card-set">TWM 3</span></li>
+  <li class="deck-printing-row"><span class="deck-card-set">POR 3</span></li>`
+
+const withDisclosure = { ...controllers, disclosure: DisclosureController }
+
+async function mountOthers(rows = [ othersRow("fp-a") ]) {
+  return mount(page([ typeSection("pokemon", rows) ], { extraControllers: " disclosure" }), withDisclosure)
+}
+
+function setLabels(root) {
+  return Array.from(root.querySelectorAll("#deck-printings-others-fp-a > li.deck-printing-row .deck-card-set"), (node) => node.textContent)
+}
+
+describe("deck_rows_controller — other printings, fetched on first open", () => {
+  test("fetches the list the first time it opens, inserts the server's sub-rows, and never again", async () => {
+    stubFetch(jsonResponse({ fingerprint_key: "fp-a", html: subRows }))
+    const { element } = await mountOthers()
+    const toggle = element.querySelector(".deck-printings-others-toggle")
+    const list = element.querySelector("#deck-printings-others-fp-a")
+
+    toggle.click()
+    await settle()
+
+    expect(requests()).toMatchObject([ { url: "/api/decks/k/cards/1/other_printings", method: "GET", body: undefined } ])
+    expect(setLabels(element)).toEqual([ "TWM 3", "POR 3" ])
+    expect(list.hidden).toBe(false)
+    expect(list.hasAttribute("data-deck-rows-pending")).toBe(false)
+    expect(list.hasAttribute("aria-busy")).toBe(false)
+
+    toggle.click()
+    await settle()
+    toggle.click()
+    await settle()
+
+    expect(requests()).toHaveLength(1)
+    expect(list.hidden).toBe(false)
+    expect(setLabels(element)).toEqual([ "TWM 3", "POR 3" ])
+    expect(flashMessages()).toEqual([])
+  })
+
+  // Closing it again while the answer is on its way must not send a second request either.
+  test("sends one request when the list is closed and reopened before the answer", async () => {
+    let release
+    stubFetch(() => new Promise((resolve) => { release = () => resolve(jsonResponse({ fingerprint_key: "fp-a", html: subRows })) }))
+    const { element } = await mountOthers()
+    const toggle = element.querySelector(".deck-printings-others-toggle")
+
+    toggle.click()
+    await settle()
+    expect(element.querySelector("#deck-printings-others-fp-a").getAttribute("aria-busy")).toBe("true")
+    toggle.click()
+    toggle.click()
+    await settle()
+    release()
+    await settle()
+
+    expect(requests()).toHaveLength(1)
+    expect(setLabels(element)).toEqual([ "TWM 3", "POR 3" ])
+  })
+
+  test("a list a write's answer rendered whole is never fetched", async () => {
+    const { element } = await mountOthers([ othersRow("fp-a", { pending: false, items: subRows }) ])
+
+    element.querySelector(".deck-printings-others-toggle").click()
+    await settle()
+
+    expect(requests()).toEqual([])
+    expect(setLabels(element)).toEqual([ "TWM 3", "POR 3" ])
+  })
+
+  test("a failed fetch flashes, closes the list again, and the next open retries", async () => {
+    stubFetch(jsonResponse({ errors: [ "Not found" ] }, { status: 404 }), jsonResponse({ fingerprint_key: "fp-a", html: subRows }))
+    const { element } = await mountOthers()
+    const toggle = element.querySelector(".deck-printings-others-toggle")
+    const list = element.querySelector("#deck-printings-others-fp-a")
+
+    toggle.click()
+    await settle()
+
+    expect(flashMessages()).toEqual([ { text: "Not found", kind: "alert" } ])
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(list.hidden).toBe(true)
+    expect(list.hasAttribute("data-deck-rows-pending")).toBe(true)
+    expect(list.hasAttribute("aria-busy")).toBe(false)
+    expect(setLabels(element)).toEqual([])
+
+    toggle.click()
+    await settle()
+
+    expect(requests()).toHaveLength(2)
+    expect(setLabels(element)).toEqual([ "TWM 3", "POR 3" ])
+    expect(list.hidden).toBe(false)
+  })
+
+  // A write answered while the fetch was in flight re-rendered the row with its list whole and
+  // current; the fetched one, computed before the write, has nowhere left to go.
+  test("drops a fetched list whose row a write replaced in the meantime", async () => {
+    let release
+    stubFetch(() => new Promise((resolve) => { release = () => resolve(jsonResponse({ fingerprint_key: "fp-a", html: subRows })) }))
+    const rendered = await mountOthers()
+    const { element } = rendered
+    element.querySelector(".deck-printings-others-toggle").click()
+    await settle()
+
+    const fresh = `<li class="deck-printing-row"><span class="deck-card-set">TWM 3</span></li>`
+    await apply(rendered, answer({
+      fingerprintKey: "fp-a",
+      rows: [ { key: "fp-a", section: "pokemon", html: othersRow("fp-a", { pending: false, label: "after", items: fresh }) } ],
+      sections: [ { key: "pokemon", parent: null, total: 1, unique: 1, rows: [ "fp-a" ], html: typeSection("pokemon", []) } ]
+    }))
+    release()
+    await settle()
+
+    expect(element.querySelector(".label").textContent).toBe("after")
+    expect(setLabels(element)).toEqual([ "TWM 3" ])
+    expect(element.querySelector("#deck-printings-others-fp-a").hidden).toBe(false)
+    expect(element.querySelectorAll("#deck-printings-others-fp-a")).toHaveLength(1)
   })
 })

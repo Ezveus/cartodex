@@ -21,8 +21,9 @@ binding; this file records how it is built and the choices it left open.
 the `Decks::Comparator` rule, now a model method both read). A row with one printing in the deck
 carries that printing's steppers; a row with several shows the total and the summed
 "N real · M proxy", and the steppers sit in its sub-rows. The row expands, when the catalogue holds
-another printing, into: the printings in the deck, then printings the member owns at 0 copies, then
-an "Other printings (N)" disclosure for the rest. Each sub-row carries the quantity stepper, the
+another printing, into: the printings in the deck, then an "Other printings (N)" disclosure for
+every printing it does not play — the ones the member owns first, then the rest — fetched the first
+time it opens (see decision 1). Each sub-row carries the quantity stepper, the
 real/proxy stepper (physical decks), and **⇄**, which moves one copy into that printing from the
 in-deck printing holding the most proxies (then the most copies), named in its tooltip.
 
@@ -66,10 +67,27 @@ once and never the total twice.
 
 Each is evaluated on the motivating case: Boss's Orders, 3× MEG 114, wanted 1× PAL 172 + 2× MEG 114.
 
-1. **"Other printings" are rendered with the page, hidden**, rather than fetched when opened. One
-   render path and no extra endpoint; the cost is HTML for printings nobody opens (a printing
-   sub-row is a few hundred bytes). *Lazy*: the same clicks plus one request on first open. On the
-   case: identical — expand, open "Other printings" if PAL 172 is not owned, ⇄ on PAL 172.
+1. **"Other printings" are fetched on first open** — every printing the row's card holds outside
+   the deck, owned or not, behind one disclosure. *Reversed by the owner*: the first build rendered
+   them with the page, hidden, and listed the owned ones in the expansion itself. The page now
+   renders the disclosure alone: its count ("Other printings (N)", beside "All printings (M)" on
+   the row's toggle) costs no query, FingerprintStates having read every printing already for ⇄ and
+   M, and the owner page's query count is unchanged (15 on the B7 test's deck before and after).
+   Opening it the first time, `deck_rows_controller.js#others` fetches
+   `GET /api/decks/:deck_id/cards/:id/other_printings` — owner-only and deck-scoped like every
+   `Api::DeckCards*` action (another member's deck is a 404, a visitor a 401), keyed on the card's
+   fingerprint so any printing of it names the list — inserts the server-rendered sub-rows
+   (`Decks::OtherPrintingRows`) and never fetches again; a failure flashes the server's reason and
+   closes the list, so the next open retries. **A write's answer renders the list whole**: the row
+   it re-renders replaces one whose list the member may have opened, and the page re-opens every
+   disclosure that was open, so the list comes back open with fresh ⇄ and + states, and one never
+   opened needs no fetch later. That was weighed against refetching after the write (a second
+   request per write and a window where the opened list is empty) and against telling the server
+   which lists are open (state the server would have to trust); one fingerprint's printings are a
+   few hundred bytes each in an answer that already carries the row. A fetch answered after a write
+   replaced its row lands in the list that row took out of the page, never over the newer one. On
+   the case: expand, open "Other printings", ⇄ on PAL 172 → 2× MEG 114 + 1× PAL 172 — whether the
+   member owns PAL 172 or not, which is one click more than before when they do.
 2. **⇄'s source is the other in-deck printing with the most proxies; a tie goes to the one with the
    most copies, then to the first in catalogue order** (newest set first, the `Cards::Printings`
    order). *Reversed by the owner*: the first build took the most copies, which could move a real
@@ -107,4 +125,4 @@ Each is evaluated on the motivating case: Boss's Orders, 3× MEG 114, wanted 1×
 ## Out of scope
 
 Decreasing the collection from the deck page (stays on the card and collection pages); a move tool
-for MCP; lazy rendering (see 1).
+for MCP.

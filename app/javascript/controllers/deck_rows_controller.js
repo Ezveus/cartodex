@@ -30,6 +30,38 @@ export default class extends Controller {
     await this.#send({ url, method: "POST", body, failure })
   }
 
+  // The "Other printings" list arrives empty, marked data-deck-rows-pending, and its toggle runs
+  // this beside disclosure#toggle: the first open fetches the sub-rows the server renders and puts
+  // them in, and nothing is fetched again — a write's answer re-renders the row with that list
+  // whole (Decks::FingerprintRow), which is what keeps an opened list current. Not behind the
+  // write guard: it writes nothing, and an answer whose row a write replaced meanwhile lands in the
+  // list that row took out of the page, never over the newer one. A failure closes the list again,
+  // so the next open retries.
+  async others({ currentTarget: toggle, params: { url, failure } }) {
+    const list = document.getElementById(toggle.getAttribute("aria-controls"))
+    // A pending list is closed unless its fetch is in flight, so this click opened it.
+    if (!list?.hasAttribute("data-deck-rows-pending") || list.hasAttribute("aria-busy")) return
+
+    list.setAttribute("aria-busy", "true")
+    let data
+    try {
+      data = await requestJson(url, { failure })
+    } finally {
+      list.removeAttribute("aria-busy")
+    }
+
+    if (!data) {
+      toggle.setAttribute("aria-expanded", "false")
+      list.hidden = true
+      return
+    }
+
+    const template = document.createElement("template")
+    template.innerHTML = data.html.trim()
+    list.replaceChildren(template.content)
+    list.removeAttribute("data-deck-rows-pending")
+  }
+
   #send(request) {
     const pending = this.#request(request)
     this.inFlight = pending

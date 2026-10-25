@@ -219,10 +219,12 @@ Rails.application.routes.draw do
         resources :cards, only: [ :index, :create, :update, :destroy ], controller: "deck_cards" do
           # ⇄ (one copy from another printing onto this one) and "+ add to my collection and use
           # it here": both are about the printing in the URL, and neither is a quantity or a real
-          # count the existing PATCH could carry.
+          # count the existing PATCH could carry. `other_printings` reads the sub-rows of the
+          # card's "Other printings", which the deck page fetches the first time it opens them.
           member do
             post :move
             post :collection_copy
+            get :other_printings
           end
           # Swapping a slot to another printing changes the very id that identifies it, so it
           # gets its own action rather than another branch in deck_cards#update.

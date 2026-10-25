@@ -34,7 +34,7 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
     mark_page
 
     expand_printings_of("Boss's Orders")
-    # PAL 172 is not owned, so it waits behind "Other printings" rather than in the list itself.
+    # PAL 172 is not in the deck, so it waits behind "Other printings", fetched on this first open.
     within(row_of("Boss's Orders")) { click_on "Other printings (1)" }
     within_printing("PAL 172") { find("button.deck-printing-move[title='Move one copy here from MEG 114']").click }
 
@@ -118,7 +118,8 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
 
     visit deck_path(@deck)
     expand_printings_of("Budew")
-    # Owned, so it is offered in the list itself rather than behind "Other printings".
+    # Owned but not played, so behind "Other printings" with the rest, fetched on this first open.
+    within(row_of("Budew")) { click_on "Other printings (1)" }
     within_printing("PRE 4") do
       assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free"
       find("button.deck-printing-move").click
@@ -140,6 +141,31 @@ class DeckPrintingSwapTest < ApplicationSystemTestCase
     assert_equal [ @asc.id, @pre.id ].sort, rows.keys.sort, "no row was created for another printing"
     assert_equal [ 1, 0 ], rows.fetch(@asc.id).values_at(:quantity, :owned_copies)
     assert_equal [ 2, 1 ], rows.fetch(@pre.id).values_at(:quantity, :owned_copies)
+  end
+
+  # The list is fetched once, then a write re-renders the whole row with it: it has to come back
+  # open, and current — the ⇄ in it still a working control, not the copy the fetch returned.
+  test "a write keeps the fetched other printings open and working" do
+    @user.collections.find_by!(card: @pre).update!(quantity: 4)
+    @deck.deck_cards.create!(card: @asc, quantity: 2)
+
+    visit deck_path(@deck)
+    mark_page
+    expand_printings_of("Budew")
+    within(row_of("Budew")) { click_on "Other printings (1)" }
+    within_printing("PRE 4") { assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free" }
+
+    within_quantity_of("Budew") { click_on "+" }
+
+    within(line_of("Budew")) { assert_selector ".deck-card-qty", exact_text: "3" }
+    within(row_of("Budew")) { assert_selector ".deck-printings-others-toggle[aria-expanded='true']" }
+    within_printing("PRE 4") do
+      assert_selector ".deck-printing-owned", exact_text: "4 owned · 4 free"
+      find("button.deck-printing-move[title='Move one copy here from ASC 16']").click
+    end
+    within_printing("PRE 4") { assert_selector ".deck-card-alloc-label", exact_text: "1 real · 0 proxy" }
+    within_printing("ASC 16") { assert_selector ".deck-card-qty", exact_text: "2" }
+    assert_page_not_reloaded
   end
 
   # The disclosure is a native button, so the keyboard opens it with no handler of its own — and

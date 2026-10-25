@@ -29,11 +29,17 @@ module Decks
 
     # The state lives in the markup alone, for disclosure_controller.js and for
     # deck_rows_controller.js, which re-opens what was open after it swaps a row.
-    def disclosure_button(text, controls:, css_class:, expanded: false)
+    #
+    # `fetch` adds a second action and its params beside the toggle: the "Other printings" list,
+    # fetched on its first open.
+    def disclosure_button(text, controls:, css_class:, expanded: false, fetch: nil)
+      data = { action: "disclosure#toggle" }
+      data = data.merge(fetch, action: "disclosure#toggle #{fetch[:action]}") if fetch
+
       button(
         type: "button", class: css_class,
         aria: { expanded: expanded.to_s, controls: controls },
-        data: { action: "disclosure#toggle" }
+        data: data
       ) { text }
     end
 

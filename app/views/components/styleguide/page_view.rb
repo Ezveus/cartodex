@@ -360,15 +360,18 @@ module Styleguide
     # The real Decks::FingerprintRow, rendered expanded from hand-made state structs rather than a
     # deck — Decks::FingerprintStates would need a user, a deck and the catalogue, and what this
     # shows is presentation. The case is the one the row was built for: Boss's Orders split 2× MEG
-    # 114 + 1× PAL 172, a third printing owned at 0 copies and two more behind "Other printings".
+    # 114 + 1× PAL 172, then behind "Other printings" a third printing owned at 0 copies and two
+    # more. That list is rendered here (`others: :rendered`), there being no deck to fetch it from.
     def deck_row_section
       sg_section("Composants", "Ligne de deck",
               "Une ligne par carte, quel que soit le nombre d'impressions jouées. Dépliée : les " \
-              "impressions du deck, puis celles possédées à 0 exemplaire, puis les autres. ⇄ déplace " \
-              "un exemplaire vers cette impression depuis celle qui en compte le plus.") do
+              "impressions du deck, puis « Other printings » — celles possédées à 0 exemplaire, puis " \
+              "les autres —, que la page charge à la première ouverture. ⇄ déplace un exemplaire vers " \
+              "cette impression depuis celle qui compte le plus de proxys.") do
         div(class: "sg-deck-row-demo") do
           ul(class: "deck-card-list") do
-            render Decks::FingerprintRow.new(state: sg_deck_row_state, deck: sg_deck_row_deck, expanded: true)
+            render Decks::FingerprintRow.new(state: sg_deck_row_state, deck: sg_deck_row_deck, expanded: true,
+                                             others: :rendered)
           end
         end
       end

@@ -486,4 +486,112 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  # — "Other printings", fetched the first time the page opens them —
+
+  def reprint(card, set_name:, set_number:, card_set: nil)
+    Card.create!(
+      name: card.name, card_type: card.card_type, hp: card.hp, type_symbol: card.type_symbol,
+      retreat_cost: card.retreat_cost, stage: card.stage, card_set: card_set,
+      set_name: set_name, set_number: set_number, rarity: "Common"
+    ).tap { |twin| twin.update_column(:fingerprint, card.fingerprint) }
+  end
+
+  # ASC 16 is in the deck; TWM 3 is owned; POR 3 (2026) and PRE 4 (no imported set) are neither.
+  def budew_with_other_printings
+    asc = cards(:budew_asc)
+    twm = reprint(asc, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
+    reprint(asc, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    @user.collections.create!(card: twm, quantity: 1)
+    @deck.deck_cards.create!(card: asc, quantity: 2)
+    asc
+  end
+
+  test "other_printings answers the sub-rows of the printings the deck does not play, owned ones first" do
+    asc = budew_with_other_printings
+
+    get other_printings_api_deck_card_path(@deck, asc), as: :json
+
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert_equal "budew_shared", json["fingerprint_key"]
+    html = Nokogiri::HTML5.fragment(json["html"])
+    rows = html.element_children
+    assert rows.all? { |node| node.matches?("li.deck-printing-row") }, "the answer is the sub-rows alone"
+    assert_equal [ "TWM 3", "POR 3", "PRE 4" ], rows.map { |row| row.at_css(".deck-card-set").text }
+    assert_equal [ "1 owned · 1 free" ], html.css(".deck-printing-owned").map(&:text)
+    assert_empty html.css("[data-row-key]"), "a sub-row is no row of its own"
+    rows.each do |row|
+      assert_equal "Move one copy here from ASC 16", row.at_css("button.deck-printing-move")["title"]
+      # A printing the deck does not play has no copy to take away.
+      assert row.at_css("[data-focus-key^=qty-minus-][disabled]")
+    end
+  end
+
+  # Keyed on the card's fingerprint, so any printing of it names the list — the page sends its row's
+  # display card, which a write elsewhere may have taken out of the deck since.
+  test "other_printings answers for any printing of a card the deck plays" do
+    budew_with_other_printings
+
+    get other_printings_api_deck_card_path(@deck, cards(:budew_pre)), as: :json
+
+    assert_response :success
+    assert_equal "budew_shared", JSON.parse(response.body)["fingerprint_key"]
+  end
+
+  test "other_printings 404s on a card the deck does not play in any printing" do
+    budew_with_other_printings
+
+    get other_printings_api_deck_card_path(@deck, cards(:doublade)), as: :json
+
+    assert_response :not_found
+  end
+
+  test "other_printings 404s on another member's deck, and a visitor is refused" do
+    theirs = users(:two).decks.create!(name: "Theirs", standard_pool: standard_pools(:twm_por))
+    theirs.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    get other_printings_api_deck_card_path(theirs, cards(:budew_asc)), as: :json
+    assert_response :not_found
+
+    sign_out @user
+    get other_printings_api_deck_card_path(theirs, cards(:budew_asc)), as: :json
+    assert_response :unauthorized
+  end
+
+  # Every printing outside the deck in a set of its own, half of them owned: a per-printing read of
+  # `card_set` or of the collection would issue distinct SQL per row.
+  test "other_printings costs the same however many printings it renders" do
+    asc = budew_with_other_printings
+    get other_printings_api_deck_card_path(@deck, asc), as: :json
+    small = count_queries { get other_printings_api_deck_card_path(@deck, asc), as: :json }
+
+    4.times do |index|
+      set = CardSet.create!(code: "RP#{index}", name: "Reprint #{index}", release_date: Date.new(2020, 1, index + 1))
+      twin = reprint(asc, set_name: set.code, set_number: index.to_s, card_set: set)
+      @user.collections.create!(card: twin, quantity: 1) if index.even?
+    end
+    large = count_queries { get other_printings_api_deck_card_path(@deck, asc), as: :json }
+
+    assert_equal 7, Nokogiri::HTML5.fragment(JSON.parse(response.body)["html"]).css("li.deck-printing-row").size
+    assert_equal small, large, "query count grew with the printings rendered: #{small} -> #{large}"
+  end
+
+  # A write re-renders the whole card's row, and the page puts back every disclosure that was open
+  # in it: the answer renders the other printings outright, so a list the member had opened comes
+  # back open and current, and one never opened needs no fetch later.
+  test "a write's row renders the other printings rather than leaving them to be fetched" do
+    asc = budew_with_other_printings
+
+    patch api_deck_card_path(@deck, asc), params: { deck_card: { quantity_delta: 1 } }, as: :json
+
+    assert_response :success
+    html = Nokogiri::HTML5.fragment(JSON.parse(response.body)["rows"].sole["html"])
+    list = html.at_css("ul#deck-printings-others-budew_shared[hidden]")
+    assert_equal [ "TWM 3", "POR 3", "PRE 4" ], list.css("> li.deck-printing-row .deck-card-set").map(&:text)
+    assert_nil list["data-deck-rows-pending"]
+    toggle = html.at_css(".deck-printings-others-toggle")
+    assert_equal "Other printings (3)", toggle.text
+    assert_equal "disclosure#toggle", toggle["data-action"], "nothing left to fetch"
+  end
 end
