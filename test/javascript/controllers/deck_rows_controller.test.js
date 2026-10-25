@@ -599,10 +599,12 @@ describe("deck_rows_controller", () => {
 })
 
 // The "Other printings" list as the page renders it (`pending`: its count and the request that
-// fetches it, the list empty) or as a write's answer renders it (the sub-rows already inside).
-function othersRow(key, { pending = true, label = key, items = "" } = {}) {
+// fetches it, the list empty) or as a write's answer renders it (the sub-rows already inside, the
+// toggle a plain disclosure). `fetchAction` keeps the fetching action on a list that is not
+// pending, which no server render produces: it is what shows that the pending mark alone decides.
+function othersRow(key, { pending = true, fetchAction = pending, label = key, items = "" } = {}) {
   const id = `deck-printings-others-${key}`
-  const fetch = pending
+  const fetch = fetchAction
     ? ` data-action="disclosure#toggle deck-rows#others" data-deck-rows-url-param="/api/decks/k/cards/1/other_printings"
         data-deck-rows-failure-param="Couldn't load the other printings"`
     : ` data-action="disclosure#toggle"`
@@ -678,7 +680,7 @@ describe("deck_rows_controller — other printings, fetched on first open", () =
   })
 
   test("a list a write's answer rendered whole is never fetched", async () => {
-    const { element } = await mountOthers([ othersRow("fp-a", { pending: false, items: subRows }) ])
+    const { element } = await mountOthers([ othersRow("fp-a", { pending: false, fetchAction: true, items: subRows }) ])
 
     element.querySelector(".deck-printings-others-toggle").click()
     await settle()

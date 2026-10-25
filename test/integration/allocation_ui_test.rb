@@ -53,6 +53,24 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
     assert_select ".deck-card-collect", count: 0
   end
 
+  # Other decks back more reals than are owned: one more copy would only bring the collection back
+  # towards what they hold, so Decks::CollectionCopyAdder refuses it and the page must not offer it,
+  # though the row plays proxies and the deck is physical.
+  test "deck show never offers the collection add on an over-allocated printing" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
+    other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
+
+    get deck_path(deck)
+
+    assert_response :success
+    assert_select ".deck-card-alloc .deck-card-warning", text: "⚠ over-allocated"
+    assert_select ".deck-card-alloc-label", text: "0 real · 2 proxy"
+    assert_select ".deck-card-collect", count: 0
+  end
+
   # A non-physical deck consumes no collection: no split, no stepper, no collection add — even on a
   # printing that is all proxies with nothing free, which on a physical deck offers the add.
   test "a non-physical deck never offers the allocation controls nor the collection add" do
