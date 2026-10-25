@@ -91,7 +91,15 @@ module Api
 
     # The deck page's steppers send a step (`*_delta`), which the setter resolves against the
     # stored row; an absolute count is still taken from the API's other callers.
+    #
+    # Exactly one of the four counts: given two, the precedence below used one and dropped the other
+    # without a word, whichever the caller meant.
     def write_update(card, attributes)
+      given = %i[owned_copies_delta owned_copies quantity_delta quantity].select { |key| attributes.key?(key) }
+      if given.size > 1
+        raise ArgumentError, "give exactly one of quantity, quantity_delta, owned_copies and owned_copies_delta"
+      end
+
       if attributes.key?(:owned_copies_delta)
         Decks::OwnedCopiesSetter.call(deck: @deck, card: card, delta: count_param(attributes, :owned_copies_delta))
       elsif attributes.key?(:owned_copies)

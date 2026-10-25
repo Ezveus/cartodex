@@ -545,6 +545,23 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 3, @deck.deck_cards.find_by!(card: @card).quantity
   end
 
+  # Each pair used to be resolved by taking the step and dropping the count without a word.
+  test "a write carrying two counts is refused rather than resolved by precedence" do
+    @deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 1)
+
+    [
+      { quantity_delta: 1, quantity: 1 },
+      { owned_copies_delta: -1, owned_copies: 0 },
+      { quantity: 3, owned_copies: 0 }
+    ].each do |attributes|
+      patch api_deck_card_path(@deck, @card), params: { deck_card: attributes }, as: :json
+
+      assert_response :unprocessable_entity, attributes.inspect
+      assert_match(/exactly one of/, JSON.parse(response.body)["errors"].sole)
+    end
+    assert_equal [ 2, 1 ], @deck.deck_cards.find_by!(card: @card).values_at(:quantity, :owned_copies)
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do
