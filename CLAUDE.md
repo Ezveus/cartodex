@@ -363,7 +363,11 @@ sets by `release_date` descending, undated after dated, then cards with no `card
 shown set of the same code only when exactly one shown set carries it, codes being unique per
 region. The page and every write's answer read that order through `Decks::Layout`, so a row a
 write adds lands where a reload would put it and the browser holds no copy of the ordering; the
-set view stays one row per printing. A ⇄ there used to reload the page and land at its top; in place
+set view stays one row per printing. Each such row is also where its printing changes, as the old
+printing picker was: it expands onto the card's owned printings outside the deck, then the fetched
+"Other printings" (`GET …/other_printings?group=set`), and every ⇄ in that expansion moves a copy off
+the row's own printing — not by `FingerprintStates`' rule, which with two printings in the deck could
+name the other one. A ⇄ there used to reload the page and land at its top; in place
 it leaves the reader where they were (`DeckSetViewSwapScrollTest`, pinned to a 400px-tall window). Edit, Cancel and the edit form carry
 `group`; in place only the `deck-header` frame is replaced, so the list keeps its view anyway. See
 `docs/superpowers/specs/2026-10-23-deck-set-grouping-design.md`.
@@ -371,7 +375,7 @@ it leaves the reader where they were (`DeckSetViewSwapScrollTest`, pinned to a 4
 **One deck row per card, and the browser computes nothing** (issue #236). The owner's and the
 public deck pages list one row per `Card#fingerprint_key` (the fingerprint, or `card:<id>` when it is
 blank — the `Decks::Comparator` rule), expandable into one sub-row per printing; `?group=set` stays
-one row per printing. Four rules bite from outside the feature. **Every number a control shows or is
+one row per printing, each expanding onto the printings it can change to. Four rules bite from outside the feature. **Every number a control shows or is
 bounded by comes from `Decks::FingerprintStates`**: `max_owned` was once computed at render and kept
 by the browser, which is how the real `+` refused silently after a quantity `+` until a reload. **Every
 write in `Api::DeckCardsController` and `Api::DeckCardPrintingsController#update` answers
@@ -389,7 +393,11 @@ stale tab turned a "−" into an increase that claimed reals. `quantity`/`owned_
 the API's other callers and the MCP tools, and every count is read strictly — an Integer, or the
 decimal string a form posts, within `COUNT_RANGE` (±9999), else a 422: `to_i` had read 1.5 as 1,
 "abc" as 0 and a missing `quantity` as "remove the card", and 10**20 overflowed the column into a 500.
-**A refusal carries the payload too**: `DeckCardPayload#refusing` answers the 422 with the reason
+An add takes 1..9999 (`Decks::CardAdder` sums what it is given, so a negative add took copies away
+under a 201), and a PATCH takes exactly one of the four counts — given two, the controller's
+precedence used one and dropped the other without a word.
+**A refusal carries the payload too**: `DeckCardPayload#refusing` — which takes a model's
+`RecordInvalid` as one more refusal, with the record's messages — answers the 422 with the reason
 *and* the card's fresh `fingerprint_payload`, read after the write's transaction rolled back, because a
 refusal is usually a stale page and without it the row kept offering the step just refused. Two more
 writes ride on member routes beside the PATCH — `POST …/cards/:id/move` (⇄, `Decks::CopyMover`, one
