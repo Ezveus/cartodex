@@ -24,7 +24,7 @@ carries that printing's steppers; a row with several shows the total and the sum
 another printing, into: the printings in the deck, then printings the member owns at 0 copies, then
 an "Other printings (N)" disclosure for the rest. Each sub-row carries the quantity stepper, the
 real/proxy stepper (physical decks), and **⇄**, which moves one copy into that printing from the
-in-deck printing holding the most copies, named in its tooltip.
+in-deck printing holding the most proxies (then the most copies), named in its tooltip.
 
 **Greedy everywhere.** A quantity increase claims free real copies through
 `Allocations::Backing.greedy` (so does ⇄, for the copy it lands); a decrease drops proxies first and
@@ -69,10 +69,14 @@ Each is evaluated on the motivating case: Boss's Orders, 3× MEG 114, wanted 1×
    render path and no extra endpoint; the cost is HTML for printings nobody opens (a printing
    sub-row is a few hundred bytes). *Lazy*: the same clicks plus one request on first open. On the
    case: identical — expand, open "Other printings" if PAL 172 is not owned, ⇄ on PAL 172.
-2. **⇄'s source is the in-deck printing with the most copies; a tie goes to the first in catalogue
-   order** (newest set first, the `Cards::Printings` order). *Alternatives*: the oldest set, or the
-   printing with the most proxies (so a real copy is never the one moved). On the case: MEG 114 is
-   the only candidate, so every rule gives 2× MEG 114 + 1× PAL 172 in one click.
+2. **⇄'s source is the other in-deck printing with the most proxies; a tie goes to the one with the
+   most copies, then to the first in catalogue order** (newest set first, the `Cards::Printings`
+   order). *Reversed by the owner*: the first build took the most copies, which could move a real
+   copy off a fully backed printing while another printing still played proxies; moving a proxy
+   leaves every physical card where it is. On a non-physical deck proxies are not compared at all
+   (every copy is one there), so the rule is the most copies. The row's display card still goes by
+   copies alone. On the case: MEG 114 is the only candidate, so every rule gives 2× MEG 114 + 1×
+   PAL 172 in one click.
 3. **Order inside an expanded row: catalogue order within each group** (in deck, owned, others).
    Quantity order was rejected because a sub-row would jump under the cursor after a `+`. The public
    page, which may not query `card_sets`, orders its sub-rows by set code then number. On the case:

@@ -144,6 +144,53 @@ module Decks
       assert_equal :other, printing(budew, @pre).group, "budew_pre_one holds 0 copies"
     end
 
+    # ⇄ moves a proxy where it can, so that a real copy is the last thing a split takes away.
+    test "move_from is the in-deck printing with the most proxies, even when it holds fewer copies" do
+      por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
+      @user.collections.find_by!(card: @asc).update!(quantity: 3)
+      @deck.deck_cards.create!(card: @asc, quantity: 3, owned_copies: 3)
+      @deck.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 0)
+
+      state = budew
+
+      assert_equal @pre, printing(state, por).move_from, "PRE's 2 proxies outrank ASC's 3 reals"
+      assert_equal @pre, printing(state, @asc).move_from
+      assert_equal @asc, printing(state, @pre).move_from, "the only other in-deck printing"
+      assert_equal @asc, state.display_card, "the display card still goes by copies"
+    end
+
+    test "a tie on proxies moves from the printing with the most copies" do
+      por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
+      @user.collections.find_by!(card: @asc).update!(quantity: 1)
+      @user.collections.find_by!(card: @pre).update!(quantity: 2)
+      @deck.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 1)
+      @deck.deck_cards.create!(card: @pre, quantity: 3, owned_copies: 2)
+
+      assert_equal @pre, printing(budew, por).move_from, "one proxy each; PRE plays 3 to ASC's 2, though ASC sorts first"
+    end
+
+    test "a tie on proxies and copies moves from the first printing in catalogue order" do
+      por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
+      @user.collections.find_by!(card: @asc).update!(quantity: 1)
+      @user.collections.find_by!(card: @pre).update!(quantity: 1)
+      @deck.deck_cards.create!(card: @pre, quantity: 2, owned_copies: 1)
+      @deck.deck_cards.create!(card: @asc, quantity: 2, owned_copies: 1)
+
+      assert_equal @asc, printing(budew, por).move_from, "ASC is the newer set"
+    end
+
+    # A non-physical deck backs nothing, so proxies say nothing there: Deck releases every real copy
+    # when it stops being physical, and a row that still carries some (written past the model) must
+    # not decide the source.
+    test "on a non-physical deck move_from goes by copies alone" do
+      por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
+      deck = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
+      deck.deck_cards.create!(card: @asc, quantity: 3).update_column(:owned_copies, 3)
+      deck.deck_cards.create!(card: @pre, quantity: 2)
+
+      assert_equal @asc, printing(budew(deck), por).move_from, "ASC plays 3; PRE's 2 \"proxies\" count for nothing"
+    end
+
     test "a tie on copies moves from the newer set" do
       por = reprint(set: card_sets(:por), set_name: "POR", set_number: "12")
       @deck.deck_cards.create!(card: @pre, quantity: 2)

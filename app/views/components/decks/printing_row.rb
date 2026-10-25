@@ -3,8 +3,9 @@ module Decks
   # — `row_key` and `show_name` given — a row of its own in the set view, where each section is a
   # set and a printing is the natural unit.
   #
-  # ⇄ moves one copy *into* this printing from the deck's printing holding the most copies, named
-  # in its tooltip, so splitting 3× MEG 114 into 1× PAL 172 + 2× MEG 114 is one click.
+  # ⇄ moves one copy *into* this printing from the deck's printing holding the most proxies
+  # (FingerprintStates.build has the rule), named in its tooltip, so splitting 3× MEG 114 into
+  # 1× PAL 172 + 2× MEG 114 is one click.
   class PrintingRow < OwnerRow
     def initialize(printing:, state:, deck:, group: :type, row_key: nil, show_name: false)
       @printing = printing

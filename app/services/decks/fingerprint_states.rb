@@ -12,7 +12,7 @@ module Decks
     # One printing of a card, from the point of view of one deck.
     #
     # group: :deck (in the deck), :owned (not in the deck, at least one copy owned), :other.
-    # max_owned is the real +'s bound; move_from is ⇄'s source; can_add_to_collection decides
+    # max_owned is the real +'s bound; move_from is ⇄'s source (see .build); can_add_to_collection decides
     # whether "+ add to my collection and use it here" is offered — exactly when
     # Decks::CollectionCopyAdder would accept it. One more copy is free for this deck iff the
     # printing's committed reals do not exceed what is owned; beside "no free copy"
@@ -73,7 +73,8 @@ module Decks
         states = printings.map do |card|
           owner_printing(card, rows_by_card[card.id], availability.fetch(card.id), physical: deck.physical?)
         end
-        build(states.sort_by.with_index { |state, index| [ GROUP_ORDER.index(state.group), index ] })
+        build(states.sort_by.with_index { |state, index| [ GROUP_ORDER.index(state.group), index ] },
+              physical: deck.physical?)
       end
     end
 
@@ -136,13 +137,16 @@ module Decks
     end
     private_class_method :public_printing
 
-    # The row's display card and ⇄'s source are one rule — the in-deck printing with the most
-    # copies, ties to the first in printing order — minus, for ⇄, the printing the move lands on.
-    def self.build(printings, with_move_from: true)
+    # The row's display card is the in-deck printing with the most copies. ⇄'s source is the other
+    # in-deck printing with the most proxies — a proxy moved is a card nobody owns changing its
+    # printed set, where a real one moved would leave a physical card unaccounted for — then the
+    # most copies. Both break the last tie on the first in printing order (newest set first). A
+    # non-physical deck backs nothing, so its proxies are not compared at all and ⇄ goes by copies.
+    def self.build(printings, with_move_from: true, physical: false)
       in_deck = printings.select { |printing| printing.group == :deck }
       if with_move_from
         printings.each do |printing|
-          printing.move_from = most_copies(in_deck.reject { |source| source.equal?(printing) })&.card
+          printing.move_from = move_source(in_deck.reject { |source| source.equal?(printing) }, physical:)&.card
         end
       end
 
@@ -158,5 +162,12 @@ module Decks
       printings.each_with_index.max_by { |printing, index| [ printing.quantity, -index ] }&.first
     end
     private_class_method :most_copies
+
+    def self.move_source(printings, physical:)
+      printings.each_with_index.max_by do |printing, index|
+        [ physical ? printing.proxies : 0, printing.quantity, -index ]
+      end&.first
+    end
+    private_class_method :move_source
   end
 end
