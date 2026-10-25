@@ -512,6 +512,25 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "budew_shared" ], json["rows"].map { |row| row["key"] }
   end
 
+  # A refusal the model raises is a refusal like any other: its reason and the card's fresh state.
+  test "a create the model refuses answers its errors and the card's fresh payload" do
+    @deck.deck_cards.create!(card: @card, quantity: 1)
+    invalid = DeckCard.new(deck: @deck, card: @card, quantity: 0).tap(&:validate)
+    Decks::CardAdder.define_singleton_method(:call) { |**| raise ActiveRecord::RecordInvalid, invalid }
+
+    begin
+      post api_deck_cards_path(@deck), params: { deck_card: { card_id: @card.id, quantity: 1 } }, as: :json
+    ensure
+      Decks::CardAdder.singleton_class.send(:remove_method, :call)
+    end
+
+    assert_response :unprocessable_entity
+    json = JSON.parse(response.body)
+    assert_includes json["errors"], "Quantity must be greater than 0"
+    assert_equal "honedge_fp", json["fingerprint_key"]
+    assert_equal [ "honedge_fp" ], json["rows"].map { |row| row["key"] }
+  end
+
   # — "+ add to my collection and use it here" —
 
   test "collection_copy adds one copy to the collection and backs one proxy with it" do

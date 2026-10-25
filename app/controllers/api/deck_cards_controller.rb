@@ -25,8 +25,6 @@ module Api
       return if performed?
 
       render json: deck_card_json(deck_card).merge(fingerprint_payload(card)), status: :created
-    rescue ActiveRecord::RecordInvalid => e
-      render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
     end
 
     def update

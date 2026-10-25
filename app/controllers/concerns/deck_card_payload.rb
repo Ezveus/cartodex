@@ -18,10 +18,14 @@ module DeckCardPayload
   # usually a page gone stale — another tab, another deck claiming the copies — and the page redraws
   # from the payload, so it does not keep offering the step the server has just refused. The write's
   # transaction rolled back, so the payload is the state the refusal was decided against.
+  #
+  # A RecordInvalid is one too — the model refusing what the write would have saved — and answers
+  # the record's own messages.
   def refusing(card)
     yield
-  rescue ArgumentError, Decks::OwnedCopiesSetter::NotPhysicalError => e
-    render json: { errors: [ e.message ] }.merge(fingerprint_payload(card)), status: :unprocessable_entity
+  rescue ArgumentError, Decks::OwnedCopiesSetter::NotPhysicalError, ActiveRecord::RecordInvalid => e
+    errors = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages : [ e.message ]
+    render json: { errors: errors }.merge(fingerprint_payload(card)), status: :unprocessable_entity
     nil
   end
 
