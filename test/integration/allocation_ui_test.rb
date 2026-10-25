@@ -24,12 +24,13 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
                   "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: -1 } }.to_json
     assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-plus-#{@card.id}]:not([disabled])" \
                   "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: 1 } }.to_json
-    assert_select ".deck-card-collect", count: 0
+    # One proxy left: the collection add is offered beside the real +, free copy or not.
+    assert_select ".deck-card-collect", count: 1
   end
 
-  # "+ add to my collection and use it here" is offered only where it means one thing: a proxy to
-  # back and no free copy to back it with.
-  test "deck show offers to add a copy to the collection only when no free copy is left" do
+  # "+ add to my collection and use it here" is offered wherever a proxy could be backed by one more
+  # copy — with or without a free copy already in the collection — and gone once nothing is a proxy.
+  test "deck show offers to add a copy to the collection while the row has a proxy" do
     deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
     deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
 
@@ -42,8 +43,14 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
     @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
     get deck_path(deck)
 
-    assert_select ".deck-card-collect", count: 0
     assert_select "[data-focus-key=real-plus-#{@card.id}]:not([disabled])"
+    assert_select "button.deck-card-collect[data-focus-key=collect-#{@card.id}]", count: 1
+
+    deck.deck_cards.find_by!(card: @card).update!(owned_copies: 2)
+    @user.collections.find_by!(card: @card).update!(quantity: 2)
+    get deck_path(deck)
+
+    assert_select ".deck-card-collect", count: 0
   end
 
   # A non-physical deck consumes no collection: no split, no stepper, no collection add — even on a

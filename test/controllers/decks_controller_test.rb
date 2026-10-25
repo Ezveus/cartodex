@@ -24,7 +24,7 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   # The deck B5 renders for both readers: physical, Honedge backed by its one owned copy, and
   # Budew split across two printings with ASC 16 all proxies and no free ASC copy. That is what
   # makes each owner control appear — the allocation stepper (physical), ⇄ (a second printing in
-  # the deck), "+ add to my collection" (a proxy with no free copy), and the owned note (a third
+  # the deck), "+ add to my collection" (a proxy, not over-allocated), and the owned note (a third
   # Budew printing the owner owns and the deck does not play) — so
   # every absence asserted of the visitor's page is one the owner's page really renders.
   def shared_split_deck

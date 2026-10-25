@@ -451,14 +451,23 @@ class Api::DeckCardsControllerTest < ActionDispatch::IntegrationTest
     assert json["deck"]["has_proxies"]
   end
 
-  test "collection_copy refuses with nothing to back, with a free copy, and on a deck that is not physical" do
+  # With a free copy the click still adds one, then backs greedily: the free copy and the new one.
+  test "collection_copy with a free copy adds one and backs every proxy it can" do
     asc = cards(:budew_asc)
-    # A free copy: the real + is the move.
     @user.collections.find_by!(card: asc).update!(quantity: 1)
-    @deck.deck_cards.create!(card: asc, quantity: 2, owned_copies: 0)
-    post collection_copy_api_deck_card_path(@deck, asc), as: :json
-    assert_response :unprocessable_entity
-    assert_match(/free copy/, JSON.parse(response.body)["errors"].sole)
+    @deck.deck_cards.create!(card: asc, quantity: 3, owned_copies: 0)
+
+    assert_difference -> { @user.collections.where(card: asc).sum(:quantity) }, 1 do
+      post collection_copy_api_deck_card_path(@deck, asc), as: :json
+    end
+
+    assert_response :success
+    assert_equal [ 2, 1 ], JSON.parse(response.body).values_at("owned_copies", "proxies")
+  end
+
+  test "collection_copy refuses with nothing to back and on a deck that is not physical" do
+    asc = cards(:budew_asc)
+    @user.collections.find_by!(card: asc).update!(quantity: 1)
 
     # No proxy left to back.
     @deck.deck_cards.create!(card: @card, quantity: 1, owned_copies: 1)

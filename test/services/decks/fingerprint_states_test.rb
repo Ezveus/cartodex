@@ -232,7 +232,7 @@ module Decks
       assert_equal [ 3, 2 ], [ asc.owned, asc.available ]
       assert_equal 2, asc.max_owned
       assert_not asc.over_allocated
-      assert_not asc.can_add_to_collection, "a free copy remains, so the real + is the way"
+      assert asc.can_add_to_collection, "a proxy, and nothing over-allocated: a free copy does not stop it"
 
       assert_equal [ 1, 1 ], [ pre.owned, pre.available ]
       assert_equal 1, pre.max_owned

@@ -55,16 +55,19 @@ module Decks
       end
     end
 
-    # Allowing it would let one click claim several reals: the free copy plus the new one.
-    test "refuses when a free copy already exists, and writes nothing" do
+    # The owner's rule: the click adds one copy and then backs greedily, so with a free copy already
+    # in the collection it claims that one too — two proxies backed by one click.
+    test "with a free copy already in the collection, adds one and backs every proxy it can" do
       @user.collections.find_by!(card: @card).update!(quantity: 2)
-      @deck.deck_cards.create!(card: @card, quantity: 3, owned_copies: 1)
+      @deck.deck_cards.create!(card: @card, quantity: 4, owned_copies: 1)
 
-      assert_no_difference -> { owned } do
-        error = assert_raises(ArgumentError) { CollectionCopyAdder.call(deck: @deck, card: @card) }
-        assert_equal "a free copy is already available — use the real copy +", error.message
+      deck_card = nil
+      assert_difference -> { owned }, 1 do
+        deck_card = CollectionCopyAdder.call(deck: @deck, card: @card)
       end
-      assert_equal 1, @deck.deck_cards.find_by!(card: @card).owned_copies
+
+      assert_equal 3, deck_card.owned_copies, "the free copy and the new one"
+      assert_equal 3, @deck.deck_cards.find_by!(card: @card).owned_copies
     end
 
     # Two physical decks back 2 reals out of 1 owned. One more copy only brings the collection back

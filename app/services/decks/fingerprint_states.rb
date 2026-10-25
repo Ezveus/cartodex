@@ -12,12 +12,11 @@ module Decks
     # One printing of a card, from the point of view of one deck.
     #
     # group: :deck (in the deck), :owned (not in the deck, at least one copy owned), :other.
-    # max_owned is the real +'s bound; move_from is ⇄'s source (see .build); can_add_to_collection decides
-    # whether "+ add to my collection and use it here" is offered — exactly when
-    # Decks::CollectionCopyAdder would accept it. One more copy is free for this deck iff the
-    # printing's committed reals do not exceed what is owned; beside "no free copy"
-    # (available <= owned_copies) that leaves committed == owned, so an over-allocated printing is
-    # refused here as the adder refuses it.
+    # max_owned is the real +'s bound; move_from is ⇄'s source (see .build); can_add_to_collection
+    # decides whether "+ add to my collection and use it here" is offered — exactly when
+    # Decks::CollectionCopyAdder would accept it: a physical deck, a proxy to back, and a printing
+    # whose committed reals do not exceed what is owned, since only then is one more copy free for
+    # this deck. A free copy already in the collection does not withdraw it.
     PrintingState = Struct.new(:card, :deck_card, :group, :quantity, :owned_copies, :proxies,
                                :owned, :available, :max_owned, :over_allocated, :move_from,
                                :can_add_to_collection, keyword_init: true) do
@@ -121,8 +120,7 @@ module Decks
         owned: counts.owned, available: counts.available,
         max_owned: physical ? [ quantity, counts.available ].min : 0,
         over_allocated: over_allocated,
-        can_add_to_collection: physical && !over_allocated && quantity > owned_copies &&
-          counts.available <= owned_copies
+        can_add_to_collection: physical && !over_allocated && quantity > owned_copies
       )
     end
     private_class_method :owner_printing

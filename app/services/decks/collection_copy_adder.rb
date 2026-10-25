@@ -1,13 +1,15 @@
 module Decks
   # "+ add to my collection and use it here": records one more physical copy of a printing and
-  # backs one of the deck's proxies with it, in one transaction.
+  # backs the deck's proxies greedily with what the collection then leaves free, in one
+  # transaction.
   #
-  # It refuses whenever the click would mean something else. With no proxy there is nothing to
-  # back. With a free copy already in the collection the real + is the move, and allowing this
-  # would let one click claim several reals — the free one and the new one. And on an
-  # over-allocated printing one more copy only brings the collection back towards what other decks
-  # already back, so it cannot become this deck's: the collection write is rolled back with the
-  # refusal rather than leaving a copy nobody asked for.
+  # A free copy already in the collection does not stop it: the owner chose one click that may back
+  # several proxies — the free copies and the new one — over sending the member to the real + first.
+  # It refuses only when the click would mean something else. With no proxy there is nothing to
+  # back. And on an over-allocated printing one more copy only brings the collection back towards
+  # what other decks already back, so it cannot become this deck's: when the new copy makes nothing
+  # more real here, the collection write is rolled back with the refusal rather than leaving a copy
+  # nobody asked for.
   class CollectionCopyAdder < ApplicationService
     def initialize(deck:, card:)
       @deck = deck
@@ -20,16 +22,15 @@ module Decks
       serialized_transaction do
         deck_card = @deck.deck_cards.find_by!(card: @card)
         raise ArgumentError, "no proxy left to back" if deck_card.owned_copies >= deck_card.quantity
-        if available > deck_card.owned_copies
-          raise ArgumentError, "a free copy is already available — use the real copy +"
-        end
 
         Collections::CardAdder.call(user: @deck.user, card: @card, quantity: 1)
 
         backed = Allocations::Backing.greedy(
           quantity: deck_card.quantity, current_owned: deck_card.owned_copies, available: available
         )
-        unless backed == deck_card.owned_copies + 1
+        # Not over-allocated, the copies free for this deck were at least the ones it backs, so with a
+        # proxy left the new copy makes at least one more real; over-allocated, it makes none.
+        unless backed > deck_card.owned_copies
           raise ArgumentError, "this printing is over-allocated: the new copy would not be free for this deck"
         end
 
@@ -40,7 +41,7 @@ module Decks
 
     private
 
-    # Read fresh on every call: the second read has to see the copy just added.
+    # Read after the collection write, so it counts the copy just added.
     def available
       Allocations::Availability.call(user: @deck.user, card: @card, excluding_deck: @deck).available
     end

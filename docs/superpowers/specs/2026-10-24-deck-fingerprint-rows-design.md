@@ -32,9 +32,10 @@ never claims. That is `Decks::DeckCardQuantitySetter`, and therefore MCP `set_de
 whose description says so.
 
 **"+ add to my collection and use it here"** is offered on a physical deck's printing when it has a
-proxy and no free copy. `Decks::CollectionCopyAdder` adds one copy to the collection
-(`Collections::CardAdder`, language and finish `unknown`) and backs one proxy with it, in one
-`serialized_transaction`.
+proxy and is not over-allocated. `Decks::CollectionCopyAdder` adds one copy to the collection
+(`Collections::CardAdder`, language and finish `unknown`) and then backs the row greedily
+(`Allocations::Backing.greedy` over a fresh availability), in one `serialized_transaction` — so
+with free copies already in the collection one click may back several proxies.
 
 **The server renders, the browser applies.** Every write answers with the fingerprint's whole state
 (per printing: quantity, real, proxies, `max_owned`, available, owned, over-allocated, ⇄'s default
@@ -87,11 +88,15 @@ Each is evaluated on the motivating case: Boss's Orders, 3× MEG 114, wanted 1×
 5. **Only an increase claims free copies; a decrease never does.** *Alternative*: re-derive greedily
    on every write. On the case: ⇄ moves a proxy-or-real copy off MEG 114 (a proxy first) and backs
    PAL 172 with a free copy when there is one.
-6. **"+ add to my collection" is refused by the API when there is no proxy to back, a free copy
-   already exists, or the printing is over-allocated** (the button is only rendered otherwise: on an
-   over-allocated printing the added copy would not be free for this deck). Allowing it with free copies would let one
-   click claim several reals. On the case: offered on PAL 172 after ⇄ only when the member owns no
-   free PAL 172.
+6. **"+ add to my collection" is refused by the API only when there is no proxy to back or the
+   printing is over-allocated** (the button is only rendered otherwise: on an over-allocated
+   printing the added copy would not be free for this deck, so the collection write is rolled back
+   with the refusal). *Reversed by the owner*: the first build also refused when a free copy already
+   existed, to keep one click from claiming several reals; the owner accepted exactly that — the
+   click adds one copy and backs greedily, the free copies and the new one alike. One consequence
+   follows from the rule as stated: when the free copies already cover every proxy, the click still
+   adds a copy to the collection, which this deck then does not need. On the case: offered on PAL
+   172 after ⇄ whenever it plays a proxy there.
 7. **The expand toggle exists only when the catalogue holds another printing**; a single-printing
    row's expansion does not repeat the printing it already shows. "N printings" always counts the
    printings in the deck; the owner's toggle reads "All printings (M)", counting the catalogue.
