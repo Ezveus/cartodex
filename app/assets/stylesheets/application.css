@@ -1627,8 +1627,13 @@ textarea.form-input {
   text-align: center;
 }
 
+/* Sized by its text, then grown into what is left: a line too narrow for the name beside its set
+   and toggles wraps them below it rather than squeezing the name. `flex: 1` (a zero basis) let the
+   name shrink first, and below its longest word its text spilled over the set label and the
+   "All printings" toggle beside it. A single word wider than the whole line still breaks. */
 .deck-card-name {
-  flex: 1;
+  flex: 1 1 auto;
+  overflow-wrap: break-word;
 }
 
 .deck-card-set {
@@ -4005,10 +4010,6 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   .deck-card-list .deck-card-line {
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
-  }
-
-  .deck-card-list .deck-card-name {
-    min-width: 0; /* a long card name has to be allowed to shrink, or it pushes the row wider */
   }
 
   .deck-card-list .deck-card-alloc {
