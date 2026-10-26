@@ -4,7 +4,8 @@
 // This is a one-off tool, run by hand, and it is deliberately the dumbest piece of the import:
 // it navigates, slices out `section.card-detail`, and writes it. Every rule about what those
 // bytes *mean* lives in Cards::OfficialParser, where it is covered by fixtures. Nothing here is
-// unit-tested — this repository has no JS test infrastructure — so nothing here decides anything.
+// unit-tested — the repository's JS unit tests (test/javascript/) cover app/javascript only, and
+// this script drives a real browser — so nothing here decides anything.
 //
 // Why a browser at all: www.pokemon.com sits behind Imperva. A plain HTTP client gets two or three
 // requests and is then served a ~930-byte block page *with HTTP 200*, and the block sticks to the

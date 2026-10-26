@@ -88,8 +88,8 @@ Phlex converts underscores to hyphens in data attribute keys automatically:
 div(data: { controller: "card-preview" }) do
   li(data: {
     action: "mouseenter->card-preview#show",
-    card_preview_target: "item",          # → data-card-preview-target="item"
-    deck_card_quantity_value: dc.quantity  # → data-deck-card-quantity-value="..."
+    card_preview_target: "item",                # → data-card-preview-target="item"
+    collection_quantity_card_id_value: card.id  # → data-collection-quantity-card-id-value="..."
   })
 end
 ```

@@ -10,77 +10,236 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
-  test "a signed-in stranger sees a shared deck's decklist and none of its owner controls" do
-    honedge = cards(:honedge)
+  # A reprint of a fixture card, created for real and then forced onto the fixture's literal
+  # fingerprint: fixtures bypass compute_fingerprint, so a created twin would otherwise take a
+  # fingerprint of its own and be no reprint at all. Same as Cards::PrintingsTest's helper.
+  def reprint(card, set_name:, set_number:, card_set: nil)
+    Card.create!(
+      name: card.name, card_type: card.card_type, hp: card.hp, type_symbol: card.type_symbol,
+      retreat_cost: card.retreat_cost, stage: card.stage, card_set: card_set,
+      set_name: set_name, set_number: set_number, rarity: "Common"
+    ).tap { |twin| twin.update_column(:fingerprint, card.fingerprint) }
+  end
+
+  # The deck B5 renders for both readers: physical, Honedge backed by its one owned copy, and
+  # Budew split across two printings with ASC 16 all proxies and no free ASC copy. That is what
+  # makes each owner control appear — the allocation stepper (physical), ⇄ (a second printing in
+  # the deck), "+ add to my collection" (ASC 16 plays proxies; AllocationUiTest holds when the
+  # button is and is not offered), the owned note (POR 3, owned and not played) and the "Other
+  # printings" disclosure that fetches the rest (TWM 9, neither) — so every absence asserted of the
+  # visitor's page is one the owner's page really renders.
+  def shared_split_deck
     @deck.update!(shared: true, physical: true)
-    # A real owned copy, so the owner's view would carry `.deck-card-alloc` — otherwise that
-    # absence assertion passes on every deck, physical or not, and proves nothing.
-    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
-    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+    @deck.deck_cards.find_by!(card: cards(:honedge)).update!(owned_copies: 1)
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2, owned_copies: 0)
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1, owned_copies: 0)
+    # Fixtures carry no image_url, and Phlex omits a nil data attribute, so the preview URL would
+    # be missing on every row and the export assertions below would prove nothing.
+    %i[honedge budew_asc budew_pre].each { |name| cards(name).update!(image_url: "https://example.test/#{name}.png") }
+    # After that update!, which re-runs compute_fingerprint: the twin must copy the fingerprint the
+    # two in-deck printings carry now, not the fixture's literal.
+    @user.collections.create!(card: reprint(cards(:budew_asc), set_name: "POR", set_number: "3"), quantity: 1)
+    reprint(cards(:budew_asc), set_name: "TWM", set_number: "9")
+  end
 
-    # A second printing of Honedge, so Cards::Printings.swappable_card_ids includes it and the
-    # owner's row would carry `.deck-card-set-swap` — otherwise that absence assertion is equally
-    # vacuous. A real Card record: fixtures bypass compute_fingerprint, so the fixture's literal
-    # fingerprint has to be forced onto a genuinely created row afterward, same as
-    # Cards::PrintingsTest's `reprint` helper.
-    honedge_reprint = Card.create!(
-      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
-      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
-      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
-    )
-    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+  OWNER_ONLY = {
+    write: "[data-action~='deck-rows#write']", owned_note: ".deck-printing-owned",
+    others: "[data-action~='deck-rows#others']",
+    move: ".deck-printing-move", row_key: "[data-row-key]", collect: ".deck-card-collect",
+    alloc: ".deck-card-alloc"
+  }.freeze
 
-    # Fixtures carry no image_url, so data-card-preview-url would otherwise be nil on every row
-    # (Phlex omits a nil data attribute) and the DOM-contract assertion below would prove nothing.
-    cards(:doublade).update!(image_url: "https://example.test/doublade.png")
-    @deck.deck_cards.create!(card: cards(:doublade), quantity: 2, owned_copies: 0)
+  test "a signed-in stranger sees a shared deck's decklist and none of its owner controls" do
+    shared_split_deck
     sign_in users(:two)
 
     get deck_path(@deck)
 
     assert_response :success
     assert_select "h1", text: @deck.name
-    assert_select ".deck-card-item", count: 2
-
     # The DOM contract the image export depends on — the export is public, so these are
     # requirements, not incidental markup.
     assert_select ".deck-show-header h1"
-    assert_select ".deck-card-item[data-card-preview-url]"
-    assert_select ".deck-card-item .deck-card-qty"
+    assert_select ".deck-card-item[data-card-preview-url]", count: 3
+    assert_select ".deck-show-container[data-controller~=disclosure]"
 
-    # Absence assertions: the whole point of a separate view is that it cannot render these.
-    # Setup above makes each one non-vacuous — the deck is physical with an owned copy, and
-    # honedge has a second printing — so Decks::ShowView would render every one of them for
-    # the owner (see "the owner still sees ..." below), and the public view still must not.
-    assert_select ".deck-card-alloc", count: 0
-    assert_select ".deck-card-set-swap", count: 0
+    # The whole point of a separate view is that it cannot render these. shared_split_deck makes
+    # each one non-vacuous: the owner's request below, on the very same deck, carries every one.
+    OWNER_ONLY.each { |name, selector| assert_select selector, { count: 0 }, "#{name} leaked to a stranger" }
     assert_select ".deck-badges .badge", text: "Proxies", count: 0
     assert_select "a[href=?]", edit_deck_path(@deck), count: 0
     assert_select "button", text: "Log Result", count: 0
     assert_select ".deck-card-search", count: 0
   end
 
-  # What makes every absence assertion above meaningful: on the very same deck, the owner's
-  # request does carry the allocation and printing-swap controls the stranger's must not.
-  test "the owner still sees the allocation and swap controls on the same deck" do
-    honedge = cards(:honedge)
-    @deck.update!(shared: true, physical: true)
-    @user.collections.find_or_create_by!(card: honedge).update!(quantity: 1)
-    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
-
-    honedge_reprint = Card.create!(
-      name: honedge.name, card_type: "Pokémon", hp: honedge.hp, type_symbol: honedge.type_symbol,
-      retreat_cost: honedge.retreat_cost, stage: honedge.stage,
-      card_set: card_sets(:asc), set_name: "ASC", set_number: "99", rarity: "Common"
-    )
-    honedge_reprint.update_column(:fingerprint, honedge.fingerprint)
+  # What makes every absence assertion above meaningful.
+  test "the owner sees every one of those controls on the same deck" do
+    shared_split_deck
 
     get deck_path(@deck)
 
     assert_response :success
-    assert_select ".deck-card-alloc"
-    assert_select ".deck-card-set-swap"
+    OWNER_ONLY.each { |name, selector| assert_select selector, { minimum: 1 }, "the owner's page lost #{name}" }
   end
+
+  # B1: a section heading's "unique" counts cards, not printings — the unit the page now shows a
+  # row for. Budew in two printings is one card.
+  test "a heading counts a card split across two printings once, on both pages" do
+    @deck.update!(shared: true)
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    get deck_path(@deck)
+    assert_select ".deck-section h2", text: "Pokémon (4 — 2 unique)"
+
+    sign_in users(:two)
+    get deck_path(@deck)
+    assert_select ".deck-section h2", text: "Pokémon (4 — 2 unique)"
+  end
+
+  # B2, type view: one row per card, whatever the number of printings it is played in.
+  test "the type view renders one row per card" do
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    get deck_path(@deck)
+
+    assert_select "li.deck-fingerprint[data-fingerprint-key=budew_shared]", count: 1
+    assert_select "li.deck-fingerprint[data-row-key=budew_shared]", count: 1
+    assert_select "li.deck-fingerprint", count: 2
+    assert_select ".deck-card-name", text: "Budew", count: 1
+  end
+
+  # B3: the image export reads `.deck-card-item`/`.deck-card-qty` and must list each printing once
+  # — never the row's total as well, which is why the summary line prints `.deck-card-total` and
+  # is not an item.
+  test "both pages hand the image export each printing once and the total nowhere it reads" do
+    deck = @user.decks.create!(name: "Budews", shared: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+    deck.deck_cards.create!(card: cards(:budew_asc), quantity: 2)
+
+    [ -> { }, -> { sign_in users(:two) } ].each do |as_reader|
+      as_reader.call
+      get deck_path(deck)
+
+      assert_response :success
+      assert_select ".deck-card-item", count: 2
+      assert_equal [ 1, 2 ], css_select(".deck-card-item .deck-card-qty").map { |node| node.text.to_i }.sort
+      assert_select ".deck-card-total", count: 1, text: "3"
+      assert_select ".deck-card-item .deck-card-total", count: 0
+    end
+  end
+
+  # B4: a card held in one printing shows that printing on its own line, so its expansion lists
+  # only the others; and a card the catalogue holds once has nothing to expand at all.
+  test "a single printing's expansion does not repeat it, and only a reprinted card expands" do
+    honedge = cards(:honedge)
+    asc = reprint(honedge, set_name: "ASC", set_number: "99", card_set: card_sets(:asc))
+    @deck.deck_cards.create!(card: cards(:doublade), quantity: 1)
+
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select "li.deck-fingerprint[data-fingerprint-key=honedge_fp] .deck-printings-toggle" \
+                  "[aria-expanded=false][aria-controls=deck-printings-honedge_fp][data-action='disclosure#toggle']"
+    assert_select "li.deck-fingerprint[data-fingerprint-key=doublade_fp] .deck-printings-toggle", count: 0
+    assert_select "li.deck-fingerprint[data-fingerprint-key=doublade_fp] .deck-printing-list", count: 0
+    # ASC 99 is the only other printing, so the expansion holds nothing but the disclosure that
+    # fetches it (Api::DeckCardsControllerTest covers the sub-rows it answers).
+    assert_select "#deck-printings-honedge_fp[hidden] > li", count: 1
+    assert_select "#deck-printings-honedge_fp[hidden] > li.deck-printing-others" do
+      assert_select ".deck-printings-others-toggle", text: "Other printings (1)"
+      assert_select "ul#deck-printings-others-honedge_fp[hidden][data-deck-rows-pending]:empty"
+    end
+    assert_select ".deck-card-set", text: "ASC 99", count: 0
+    assert_select "[data-focus-key=qty-plus-#{asc.id}]", count: 0
+    assert_select "[data-focus-key=qty-plus-#{honedge.id}]", count: 1
+
+    # The public page expands only a card the deck plays in several printings.
+    @deck.update!(shared: true)
+    @deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
+    @deck.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
+    sign_in users(:two)
+    get deck_path(@deck)
+
+    assert_select ".deck-printings-toggle", count: 1
+    assert_select "li.deck-fingerprint .deck-printings-toggle[aria-controls=deck-printings-budew_shared]"
+  end
+
+  # B6: the owner's expanded row follows the catalogue (newest set first, a set-less printing
+  # last), while the public page, which may not query `card_sets`, orders by set code then number.
+  # POR (2026-01-16) is newer than ASC (2025-11-07) while "ASC" < "POR", so the two orders differ.
+  test "the owner's printings follow the catalogue and the public page's follow the set code" do
+    budew = cards(:budew_asc)
+    por = reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    @deck.update!(shared: true)
+    [ cards(:budew_pre), budew, por ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+
+    get deck_path(@deck)
+    assert_equal [ "POR 3", "ASC 16", "PRE 4" ], printing_labels("budew_shared")
+
+    sign_in users(:two)
+    get deck_path(@deck)
+    assert_equal [ "ASC 16", "POR 3", "PRE 4" ], printing_labels("budew_shared")
+  end
+
+  # "N printings" is always the count the deck plays; the catalogue's count is always "All
+  # printings (N)". The owner's toggle used to print the catalogue count as "4 printings" beside a
+  # public row printing "2 printings" for the same card.
+  test "a count of printings says whether it counts the deck's or the catalogue's" do
+    budew = cards(:budew_asc)
+    reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    reprint(budew, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
+    reprint(cards(:honedge), set_name: "ASC", set_number: "99", card_set: card_sets(:asc))
+    @deck.update!(shared: true)
+    [ cards(:budew_pre), budew ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+
+    get deck_path(@deck)
+
+    within_row = ->(key, &block) { assert_select("li.deck-fingerprint[data-fingerprint-key=#{key}]", &block) }
+    within_row.call("budew_shared") do
+      assert_select "> .deck-card-line .deck-card-set", text: "2 printings"
+      assert_select "> .deck-card-line .deck-printings-toggle", text: "All printings (4)"
+    end
+    within_row.call("honedge_fp") do
+      assert_select "> .deck-card-line .deck-card-set", text: "POR 56"
+      assert_select "> .deck-card-line .deck-printings-toggle", text: "All printings (2)"
+    end
+
+    sign_in users(:two)
+    get deck_path(@deck)
+
+    assert_select ".deck-printings-toggle", count: 1
+    assert_select ".deck-printings-toggle", text: "2 printings"
+  end
+
+  # The printings the deck plays, then those the member owns, are rendered with the page; the rest
+  # wait behind one disclosure, fetched the first time it opens: the page renders its count and the
+  # request it sends, not the sub-rows.
+  test "the owner's expansion lists the deck's printings, the owned ones, then the disclosure fetching the rest" do
+    budew = cards(:budew_asc)
+    por = reprint(budew, set_name: "POR", set_number: "3", card_set: card_sets(:por))
+    reprint(budew, set_name: "TWM", set_number: "3", card_set: card_sets(:twm))
+    @user.collections.create!(card: por, quantity: 1)
+    [ cards(:budew_pre), budew ].each { |card| @deck.deck_cards.create!(card: card, quantity: 1) }
+
+    get deck_path(@deck)
+
+    assert_equal [ "ASC 16", "PRE 4", "POR 3" ], printing_labels("budew_shared")
+    assert_select "#deck-printings-budew_shared > li.deck-printing-row:nth-child(3) .deck-printing-owned",
+                  text: "1 owned · 1 free"
+    assert_select "#deck-printings-budew_shared > li.deck-printing-others:last-child" do
+      assert_select ".deck-printings-others-toggle[aria-expanded=false][aria-controls=deck-printings-others-budew_shared]" \
+                    "[data-action='disclosure#toggle deck-rows#others'][data-deck-rows-url-param=?]",
+                    other_printings_api_deck_card_path(@deck, budew), text: "Other printings (1)"
+      assert_select "ul#deck-printings-others-budew_shared[hidden][data-deck-rows-pending]:empty"
+    end
+  end
+
+  def printing_labels(key)
+    css_select("#deck-printings-#{key} > li.deck-printing-row .deck-card-set").map { |node| node.text.squish }
+  end
+
 
   test "a signed-in stranger cannot see an unshared deck" do
     sign_in users(:two)
@@ -226,10 +385,31 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#deck-header [data-deck-proxies-target='badge'][hidden]"
 
     # The badge and the steppers that move it sit in different subtrees, so the relay only works if
-    # the listener is registered on their common ancestor under the exact event name the two
-    # stepper controllers dispatch (`dispatch("changed", { prefix: "deck-proxies" })`).
+    # the listener is registered on their common ancestor under the exact event name
+    # deck_rows_controller.js dispatches (`dispatch("changed", { prefix: "deck-proxies" })`).
     assert_select ".deck-show-container[data-controller~='deck-proxies']" \
                   "[data-action*='deck-proxies:changed->deck-proxies#toggle']"
+  end
+
+  # deck_rows_controller.js is the one writer of the list: it sits on the container so that both
+  # the card search's add — which it sends itself, after any write in flight — and every row's
+  # button reach it, and it reads the deck total and the
+  # sections through its two targets.
+  test "show wires the deck rows controller to the search, the total and the sections" do
+    get deck_path(@deck)
+
+    assert_response :success
+    assert_select ".deck-show-container[data-controller~='deck-rows'][data-controller~='disclosure']" \
+                  "[data-action~='card-search:add->deck-rows#add']"
+    assert_select "[data-action~='card-search:added->deck-rows#added']", count: 0
+    assert_select ".deck-show-container[data-controller~='deck-totals']", count: 0
+    assert_select ".stat-value[data-deck-rows-target=total]", text: "1"
+    assert_select "div.deck-sections[data-deck-rows-target=sections] > div.deck-section[data-section-key=pokemon]" do
+      assert_select "> ul.deck-card-list > li.deck-fingerprint", count: 1
+      assert_select "h2 [data-section-total]", text: "1"
+      assert_select "h2 [data-section-unique]", text: "1"
+    end
+    assert_select ".deck-show-main[data-deck-group]", count: 0
   end
 
   test "show renders the proxies badge visible when the deck holds a proxy" do
@@ -243,6 +423,8 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "the deck page hands its javascript the key, not the id" do
+    honedge = cards(:honedge)
+
     get deck_path(@deck)
 
     assert_response :success
@@ -250,16 +432,55 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     # and dies in a fetch catch, so these attributes are the JS half of the identity change
     # and nothing else in the suite reads them.
     assert_select "[data-result-modal-deck-key-value=?]", @deck.key
-    assert_select "[data-card-search-deck-key-value=?]", @deck.key
-    assert_select "[data-deck-card-quantity-deck-key-value=?]", @deck.key
+    assert_select "[data-card-search-url-value=?]", api_deck_cards_path(@deck)
+    assert_select "[data-focus-key=qty-plus-#{honedge.id}][data-deck-rows-url-param=?]", api_deck_card_path(@deck, honedge)
     assert_select "[data-tournament-pdf-deck-key-value=?]", @deck.key
     assert_select "[data-result-modal-deck-id-value]", count: 0
+    assert_select "[data-card-search-deck-key-value]", count: 0
 
     # The archetype form only renders in edit mode (Decks::HeaderFrame#edit_form).
     get edit_deck_path(@deck)
 
     assert_response :success
     assert_select "[data-archetype-picker-deck-key-value=?]", @deck.key
+  end
+
+  # Every write button carries the whole request it sends, and the browser computes nothing. A
+  # stepper sends a step, never an absolute value: the server resolves it against the stored row,
+  # so a stale tab cannot send a "−" that reads as an increase. Whether a step is possible at all is
+  # decided here.
+  test "each write button carries its request, and the impossible ones are disabled" do
+    honedge = cards(:honedge)
+    @deck.update!(physical: true)
+    # One owned copy, already backing the deck's one Honedge: real + is at its bound.
+    @deck.deck_cards.find_by!(card: honedge).update!(owned_copies: 1)
+
+    get deck_path(@deck)
+
+    minus = css_select("[data-focus-key=qty-minus-#{honedge.id}]").sole
+    assert_equal "deck-rows#write", minus["data-action"]
+    assert_equal "PATCH", minus["data-deck-rows-method-param"]
+    assert_equal({ "deck_card" => { "quantity_delta" => -1 } }, JSON.parse(minus["data-deck-rows-body-param"]))
+    assert minus["data-deck-rows-failure-param"].present?
+    assert_nil minus["disabled"]
+
+    plus = css_select("[data-focus-key=qty-plus-#{honedge.id}]").sole
+    assert_equal({ "deck_card" => { "quantity_delta" => 1 } }, JSON.parse(plus["data-deck-rows-body-param"]))
+
+    real_minus = css_select("[data-focus-key=real-minus-#{honedge.id}]").sole
+    assert_equal({ "deck_card" => { "owned_copies_delta" => -1 } }, JSON.parse(real_minus["data-deck-rows-body-param"]))
+    assert_nil real_minus["disabled"]
+    real_plus = css_select("[data-focus-key=real-plus-#{honedge.id}]").sole
+    assert_equal({ "deck_card" => { "owned_copies_delta" => 1 } }, JSON.parse(real_plus["data-deck-rows-body-param"]))
+    assert real_plus["disabled"], "real + is at max_owned"
+    assert_select ".deck-card-alloc-label", text: "1 real · 0 proxy"
+
+    # In the set view every write asks for the set view's answer.
+    get deck_path(@deck, group: "set")
+
+    assert_select "[data-focus-key=qty-plus-#{honedge.id}][data-deck-rows-url-param=?]",
+                  api_deck_card_path(@deck, honedge, group: "set")
+    assert_select "[data-card-search-url-value=?]", api_deck_cards_path(@deck, group: "set")
   end
 
   # The deck list has no such steppers, so it keeps a plain server-rendered badge — no hidden
@@ -789,11 +1010,10 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
     deck = @user.decks.create!(name: "Physical", physical: true, standard_pool: standard_pools(:twm_por))
     @user.collections.find_or_create_by!(card: cards(:honedge)) { |c| c.quantity = 0 }.update!(quantity: 4)
     deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
-    # Both of these pin a branch across the two measurements: OverAllocations returns early when
-    # nothing is over-allocated, and Cards::Printings.swappable_card_ids returns early when no card
-    # on the page carries a fingerprint — and the cards the decklist grows by do carry one. Without
-    # them, a measurement that crossed either branch would report a growth that is not an N+1.
-    force_over_allocation(@user)
+    # Pins a branch across the two measurements: Decks::FingerprintStates looks reprints up only
+    # when a card on the page carries a fingerprint — and the cards the decklist grows by do carry
+    # one. Without it, a measurement that crossed that branch would report a growth that is not an
+    # N+1.
     deck.deck_cards.create!(card: cards(:budew_asc), quantity: 1)
 
     get deck_path(deck) # warm the session: the first request of a test also loads the Devise user
@@ -806,6 +1026,42 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal small, large, "query count grew with the decklist: #{small} -> #{large}"
+  end
+
+  # B7: an expanded row renders the printings the member owns outside the deck — each naming its
+  # set and reading its availability — and leaves the rest to be fetched when opened, rendering only
+  # their count, which FingerprintStates already reads. Every reprint here sits in a set of its own
+  # and half of them are owned, so a per-printing read of `card_set` or of the collection would issue
+  # distinct SQL per row, which the query cache cannot hide. The literal is what the page cost when
+  # it still rendered every one of them: fetching the unowned ones later must not have moved it.
+  test "show costs the same however many printings outside the deck its rows expand into" do
+    deck = @user.decks.create!(name: "Reprinted", physical: true, standard_pool: standard_pools(:twm_por))
+    index = 0
+    add_reprinted = lambda do |card|
+      deck.deck_cards.create!(card: card, quantity: 1)
+      2.times do |owned|
+        index += 1
+        set = CardSet.create!(code: "RP#{index}", name: "Reprint #{index}", release_date: Date.new(2020, 1, index))
+        twin = reprint(card, set_name: set.code, set_number: index.to_s, card_set: set)
+        @user.collections.create!(card: twin, quantity: 1) if owned.zero?
+      end
+    end
+
+    add_reprinted.call(cards(:honedge))
+    get deck_path(deck)
+    small = count_queries { get deck_path(deck) }
+
+    %i[doublade froakie_cri].each { |name| add_reprinted.call(cards(name)) }
+    large = count_queries { get deck_path(deck) }
+
+    assert_response :success
+    # One per owned printing outside the deck — never on the three in-deck printings, nor on the
+    # three nobody owns, which the page does not render.
+    assert_select ".deck-printing-owned", count: 3
+    assert_select ".deck-printing-row", count: 3
+    assert_select ".deck-printings-others-toggle", text: "Other printings (1)", count: 3
+    assert_equal 15, small
+    assert_equal small, large, "query count grew with the printings outside the deck: #{small} -> #{large}"
   end
 
   # The visitor path — public_show — was measured by nothing at all, which is how it came to
@@ -827,6 +1083,9 @@ class DecksControllerTest < ActionDispatch::IntegrationTest
                    pokemon_subtype: pokemon_subtypes(subtype))
       deck.deck_cards.create!(card: card, quantity: 2)
     end
+    # Budew in a second printing, so the page renders a row that expands into two: the public
+    # rows are built by Decks::FingerprintStates.deck_only, which must read nothing.
+    deck.deck_cards.create!(card: cards(:budew_pre), quantity: 1)
 
     sign_out :user
     get deck_path(deck) # warm anything the first request of a test loads once

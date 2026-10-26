@@ -53,9 +53,12 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
     assert_no_proxies_badge
   end
 
-  # Raising a card's total past what backs it creates a proxy without touching owned_copies, so the
-  # badge has to move on a quantity write too — not just on the allocation stepper.
+  # Raising a card's total past what the collection can back creates a proxy without touching
+  # owned_copies, so the badge has to move on a quantity write too — not just on the allocation
+  # stepper. The collection holds exactly the two the deck backs: with a free copy, the + would
+  # claim it (Allocations::Backing.greedy) and no proxy would appear.
   test "outgrowing the backed copies raises the badge" do
+    @user.collections.find_by!(card: cards(:honedge)).update!(quantity: 2)
     @deck.deck_cards.create!(card: cards(:honedge), quantity: 2, owned_copies: 2)
 
     visit deck_path(@deck)
@@ -64,6 +67,7 @@ class DeckProxyBadgeTest < ApplicationSystemTestCase
     within_quantity_of("Honedge") { click_on "+" }
 
     assert_selector ".deck-card-qty", text: "3"
+    assert_selector ".deck-card-alloc-label", exact_text: "2 real · 1 proxy"
     assert_proxies_badge
   end
 

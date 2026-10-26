@@ -35,3 +35,6 @@
 
 # Subagent-driven development scratch (ledgers, briefs, review packages)
 .superpowers/
+
+# JavaScript test dependencies (package.json is dev/test only; importmap serves the app)
+/node_modules/

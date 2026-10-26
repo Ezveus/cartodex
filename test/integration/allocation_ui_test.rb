@@ -18,7 +18,75 @@ class AllocationUiTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".deck-card-alloc", /2 real/
-    assert_select "[data-controller~=deck-card-owned-copies]"
+    # The stepper's two buttons, each carrying the step it sends. 3 owned, none claimed
+    # elsewhere: the third real is still free, so + is enabled.
+    assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-minus-#{@card.id}]" \
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: -1 } }.to_json
+    assert_select ".deck-card-alloc button.qty-btn[data-focus-key=real-plus-#{@card.id}]:not([disabled])" \
+                  "[data-deck-rows-body-param=?]", { deck_card: { owned_copies_delta: 1 } }.to_json
+    # One proxy left: the collection add is offered beside the real +, free copy or not.
+    assert_select ".deck-card-collect", count: 1
+  end
+
+  # "+ add to my collection and use it here" is offered wherever a proxy could be backed by one more
+  # copy — with or without a free copy already in the collection — and gone once nothing is a proxy.
+  test "deck show offers to add a copy to the collection while the row has a proxy" do
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
+
+    get deck_path(deck)
+
+    assert_select "button.deck-card-collect[data-focus-key=collect-#{@card.id}][data-deck-rows-url-param=?]",
+                  collection_copy_api_deck_card_path(deck, @card), text: "+ add to my collection and use it here"
+    assert_select "[data-focus-key=real-plus-#{@card.id}][disabled]"
+
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    get deck_path(deck)
+
+    assert_select "[data-focus-key=real-plus-#{@card.id}]:not([disabled])"
+    assert_select "button.deck-card-collect[data-focus-key=collect-#{@card.id}]", count: 1
+
+    deck.deck_cards.find_by!(card: @card).update!(owned_copies: 2)
+    @user.collections.find_by!(card: @card).update!(quantity: 2)
+    get deck_path(deck)
+
+    assert_select ".deck-card-collect", count: 0
+  end
+
+  # Other decks back more reals than are owned: one more copy would only bring the collection back
+  # towards what they hold, so Decks::CollectionCopyAdder refuses it and the page must not offer it,
+  # though the row plays proxies and the deck is physical.
+  test "deck show never offers the collection add on an over-allocated printing" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    other = @user.decks.create!(name: "Other", physical: true, standard_pool: standard_pools(:twm_por))
+    other.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+    deck = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    deck.deck_cards.create!(card: @card, quantity: 2, owned_copies: 0)
+
+    get deck_path(deck)
+
+    assert_response :success
+    assert_select ".deck-card-alloc .deck-card-warning", text: "⚠ over-allocated"
+    assert_select ".deck-card-alloc-label", text: "0 real · 2 proxy"
+    assert_select ".deck-card-collect", count: 0
+  end
+
+  # A non-physical deck consumes no collection: no split, no stepper, no collection add — even on a
+  # printing that is all proxies with nothing free, which on a physical deck offers the add.
+  test "a non-physical deck never offers the allocation controls nor the collection add" do
+    @user.collections.find_or_initialize_by(card: @card).update!(quantity: 1)
+    physical = @user.decks.create!(name: "Phys", physical: true, standard_pool: standard_pools(:twm_por))
+    physical.deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
+    live = @user.decks.create!(name: "Live", physical: false, standard_pool: standard_pools(:twm_por))
+    live.deck_cards.create!(card: @card, quantity: 2)
+
+    get deck_path(live)
+
+    assert_response :success
+    assert_select "[data-focus-key=qty-plus-#{@card.id}]", count: 1
+    assert_select ".deck-card-alloc", count: 0
+    assert_select ".deck-card-collect", count: 0
+    assert_select ".deck-card-warning", count: 0
   end
 
   test "deck show flags an over-allocated card" do

@@ -5,9 +5,10 @@ module Decks
     # The whole curve ships in the attribute and deck_odds_controller.js picks an index out of it:
     # `seen` (turn + effect draws + prizes taken) for an accessibility cell, prizes taken alone for a
     # prize cell — which is a question about the prize block itself rather than about accessibility,
-    # and is why that axis exists at all. The controller computes nothing: the repo has no JS test
-    # infrastructure, so a second implementation of the conditional hypergeometric would be held down
-    # by nothing whatsoever.
+    # and is why that axis exists at all. The controller computes nothing: when this was built the
+    # repo had no JS test infrastructure, so a second implementation of the conditional
+    # hypergeometric would have been held down by nothing whatsoever — and with Vitest it would still
+    # be a second copy.
     #
     # Measured payload for a 60-card deck: about 9 KB of data-curve attributes.
     class Cell < ApplicationComponent

@@ -138,18 +138,6 @@ module Cards
       assert_equal few, many, "query count grew with the number of printings: #{few} -> #{many}"
     end
 
-    test "swappable_card_ids keeps only the cards that have another printing" do
-      ids = Cards::Printings.swappable_card_ids([ @asc, cards(:froakie_cri), cards(:trainer_card) ])
-
-      assert_equal [ @asc.id ].to_set, ids
-    end
-
-    test "swappable_card_ids costs one query whatever the card count" do
-      cards = [ @asc, @pre, cards(:froakie_cri), cards(:froakie_twm) ]
-
-      assert_equal 1, count_queries { Cards::Printings.swappable_card_ids(cards) }
-    end
-
     private
 
     # Another printing of Budew. Fixtures bypass the callback that computes a

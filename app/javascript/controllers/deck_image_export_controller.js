@@ -5,6 +5,18 @@ const CARD_HEIGHT = 640
 const PADDING = 12
 const MAX_COLS = 10
 
+// One entry per in-deck printing. A `.deck-card-item` is exactly one printing and carries its own
+// `.deck-card-qty`; a multi-printing row's summary line prints its total in `.deck-card-total` and is
+// not an item, so reading items alone never counts a card twice.
+export function collectCards(root) {
+  return Array.from(root.querySelectorAll(".deck-card-item"))
+    .map(item => ({
+      url: item.dataset.cardPreviewUrl,
+      quantity: parseInt(item.querySelector(".deck-card-qty").textContent, 10)
+    }))
+    .filter(c => c.url && c.quantity > 0)
+}
+
 export default class extends Controller {
   // The write is started synchronously in the click and handed a promise of the PNG: Chromium
   // checks document focus when write() is called (measured in Chromium 152), and building the
@@ -62,13 +74,7 @@ export default class extends Controller {
   }
 
   async buildImage() {
-    const items = document.querySelectorAll(".deck-card-item")
-    const cards = Array.from(items)
-      .map(item => ({
-        url: item.dataset.cardPreviewUrl,
-        quantity: parseInt(item.querySelector(".deck-card-qty").textContent, 10)
-      }))
-      .filter(c => c.url && c.quantity > 0)
+    const cards = collectCards(document)
 
     if (cards.length === 0) throw new Error("No cards to export")
 

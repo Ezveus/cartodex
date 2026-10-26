@@ -93,16 +93,17 @@ scraped at all. The categories are exactly what
 Energy, Basic Energy — plus an **`other` bucket that is rendered, not dropped**: it is unreachable
 on today's catalogue and exists so a Trainer subtype the scraper learns tomorrow surfaces as a
 labelled bucket instead of vanishing from a report that still sums to a plausible-looking 60. Tool
-before Stadium, because that is the order `Decks::ShowView::TRAINER_SUBTYPE_LABELS` prints a
-decklist in and a member reading both pages should not have to re-find the sections. Both
+before Stadium, because that is the order `Decks::Layout::TRAINER_SUBTYPE_LABELS` (aliased as
+`Decks::ShowView::TRAINER_SUBTYPE_LABELS`) prints a decklist in and a member reading both pages should not have to re-find the sections. Both
 spellings of the tool bucket are mapped (`Cards::Fetcher#parse_subtype` can emit `"Pokémon Tool"`;
 all 76 tools in the catalogue carry `"Tool"`) — a pair `TRAINER_SUBTYPE_LABELS` did **not** carry
 until this feature. It knew `"Pokémon Tool"` alone, so all 76 of them fell under "Other" on every
 deck page; the fix (both keys, and grouping on the label rather than on the raw subtype so one
 deck holding both spellings gets one section instead of two identically titled ones) is a
-pre-existing bug closed in passing here. `Decks::PublicShowView#trainer_section` still iterates
-the raw pairs and would print two "Tool" headings for such a deck — the visitor's half of the same
-fix, outstanding.
+pre-existing bug closed in passing here. The visitor's half stayed open until #236:
+`Decks::PublicShowView#trainer_section` iterated the raw pairs and would have printed two "Tool"
+headings for such a deck. Both pages now place their rows through `Decks::Layout`, which groups on
+the label, so the two can no longer disagree.
 
 **A selector of one option is not a choice — and neither is one offering two labels for one
 sample.** `MetagameScope::Result#selectable?` is what drops the control entirely

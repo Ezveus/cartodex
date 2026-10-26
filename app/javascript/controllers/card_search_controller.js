@@ -3,7 +3,9 @@ import { requestJson } from "helpers/api"
 
 export default class extends Controller {
   static targets = ["input", "results"]
-  static values = { deckKey: String }
+  // The deck's cards endpoint, rendered by the server with the page's grouping on it, so that the
+  // answer carries rows in the view the page is showing.
+  static values = { url: String }
 
   connect() {
     this.timeout = null
@@ -27,18 +29,21 @@ export default class extends Controller {
     this.timeout = setTimeout(() => this.#fetchResults(query), 300)
   }
 
-  async add(event) {
+  // The write is deck_rows_controller.js's to send: it is the one that knows whether another write
+  // is in flight, and an add sent from here could land before an older stepper answer that then
+  // overwrote it. A reload would lose the reader's place and every open disclosure.
+  add(event) {
     const cardId = event.currentTarget.dataset.cardId
-    const added = await requestJson(`/api/decks/${this.deckKeyValue}/cards`, {
-      method: "POST",
-      body: { deck_card: { card_id: cardId, quantity: 1 } },
-      failure: "Couldn't add the card to this deck"
+    this.dispatch("add", {
+      detail: {
+        url: this.urlValue,
+        body: { deck_card: { card_id: cardId, quantity: 1 } },
+        failure: "Couldn't add the card to this deck"
+      }
     })
-    if (!added) return
 
     this.inputTarget.value = ""
     this.resultsTarget.innerHTML = ""
-    window.Turbo.visit(window.location.href, { action: "replace" })
   }
 
   async #fetchResults(query) {

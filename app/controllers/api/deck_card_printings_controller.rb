@@ -1,6 +1,8 @@
 module Api
   # Reads the printings a deck slot could move to, and moves it. Separate from DeckCardsController
-  # because that one identifies a row by its card id — the very thing a swap changes.
+  # because that one identifies a row by its card id — the very thing a swap changes. No page calls
+  # either action since ⇄ replaced the printing picker; both stay for API clients, and the swap
+  # answers with the same fingerprint payload as every other deck write.
   class DeckCardPrintingsController < ApplicationController
     include DeckCardPayload
 
@@ -14,12 +16,12 @@ module Api
 
     def update
       target = Card.find(printing_params[:card_id])
-      result = Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target)
-      deck_card = result.deck_card
+      result = refusing(@card) { Decks::PrintingSwapper.call(deck: @deck, card: @card, target_card: target) }
+      return if performed?
 
-      render json: with_deck_state(deck_card_json(deck_card).merge(merged: result.merged, **row_state(deck_card)))
-    rescue ArgumentError => e
-      render json: { errors: [ e.message ] }, status: :unprocessable_entity
+      deck_card = result.deck_card
+      render json: deck_card_json(deck_card).merge(merged: result.merged, **row_state(deck_card))
+                                            .merge(fingerprint_payload(target))
     end
 
     private
@@ -29,12 +31,12 @@ module Api
     end
 
     def printing_params
-      params.require(:printing).permit(:card_id)
+      params.expect(printing: [ :card_id ])
     end
 
-    # Everything about the row that the new printing changes and deck_card_json does not carry.
-    # The page rewrites the row in place, so anything left out of here stays on screen describing
-    # the printing that is no longer there.
+    # Everything about the row that the new printing changes and deck_card_json does not carry —
+    # what the printing picker rewrote its row from. The picker is gone and the page now redraws
+    # from the fingerprint payload, but the answer keeps its keys for any other caller.
     #
     # One availability lookup answers both numbers: `committed` counts every physical deck (this
     # one included, post-write), while `available` already excludes this deck — which is exactly
