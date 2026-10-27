@@ -372,6 +372,19 @@ it leaves the reader where they were (`DeckSetViewSwapScrollTest`, pinned to a 4
 `group`; in place only the `deck-header` frame is replaced, so the list keeps its view anyway. See
 `docs/superpowers/specs/2026-10-23-deck-set-grouping-design.md`.
 
+**Both deck pages have an image view, `?view=images`, and it is read-only.** `DecksController#deck_view`
+reads it in `owner_show` and `public_show` alone — never in `edit`, so the Edit link, the header form
+and its Cancel carry `group` and drop `view`, and editing happens on the list. `Decks::ImageGrid`
+draws `Decks::Layout`'s own sections (the owner's follows `?group=set`, the public page stays by
+type), one `Decks::CardTile` per in-deck printing with its count. Three things bite. **A tile is a
+`.deck-card-item` holding a `.deck-card-qty` whose text is the bare number** — with the grid on screen
+there are no rows, and `deck_image_export_controller.js#collectCards` reads exactly that; the "×" is a
+CSS `::before`, because `parseInt("×4")` is NaN and the export drops it. **The art is `cards.image_url`
+straight from the CDN**, as `/cards` does, never `CardsController#image`, which is rate-limited per
+address for visitors (a median deck is 26 printings). **The owner's image view builds
+`FingerprintStates.deck_only`**, not the owner's states: no catalogue, no availability, 11 queries
+against the list's 15 (`DeckImageViewTest`). See `docs/superpowers/specs/2026-10-27-deck-image-view-design.md`.
+
 **One deck row per card, and the browser computes nothing** (issue #236). The owner's and the
 public deck pages list one row per `Card#fingerprint_key` (the fingerprint, or `card:<id>` when it is
 blank — the `Decks::Comparator` rule), expandable into one sub-row per printing; `?group=set` stays
