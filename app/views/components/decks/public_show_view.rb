@@ -13,8 +13,11 @@ module Decks
     #
     # `compare_candidates` are the reader's own decks, for "Compare with…": empty for a visitor,
     # who has none, and the menu is then not rendered at all.
-    def initialize(deck:, can_duplicate: false, compare_candidates: [])
+    #
+    # `view` is :list or :images (DecksController#deck_view); the grid is grouped by type, as the list.
+    def initialize(deck:, can_duplicate: false, compare_candidates: [], view: :list)
       @deck = deck
+      @view = view
       @can_duplicate = can_duplicate
       @compare_candidates = compare_candidates
     end
@@ -97,12 +100,23 @@ module Decks
     # Decks::PublicFingerprintRow's, which hold no control, and the states are `deck_only`: built
     # from the deck's own cards, they read neither the collection nor `card_sets` and cost no query.
     def main_section
-      div(class: "deck-show-main") do
+      images = @view == :images
+      div(class: [ "deck-show-main", ("deck-show-main--images" if images) ].compact.join(" ")) do
+        div(class: "deck-mode-bar") do
+          render Decks::ModeLinks.new(label: "View", current: @view, modes: Decks::ShowView::VIEWS.map { |mode, label|
+            [ mode, label, deck_path(@deck, view: (mode == :images ? "images" : nil)) ]
+          })
+        end
         states = Decks::FingerprintStates.deck_only(@deck.deck_cards)
-        render Decks::DeckSections.new(
-          sections: Decks::Layout.call(states: states, group: :type),
-          row: ->(row) { Decks::PublicFingerprintRow.new(state: row.state) }
-        )
+        sections = Decks::Layout.call(states: states, group: :type)
+        if images
+          render Decks::ImageGrid.new(sections: sections)
+        else
+          render Decks::DeckSections.new(
+            sections: sections,
+            row: ->(row) { Decks::PublicFingerprintRow.new(state: row.state) }
+          )
+        end
       end
     end
 

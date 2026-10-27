@@ -15,9 +15,10 @@ module Decks
 
     private
 
-    def deck_line(card, item:, &content)
+    # `css_class` is the line's own box — a row's flex line, or Decks::CardTile's frame.
+    def deck_line(card, item:, css_class: "deck-card-line", &content)
       div(
-        class: [ "deck-card-line", ("deck-card-item" if item) ].compact.join(" "),
+        class: [ css_class, ("deck-card-item" if item) ].compact.join(" "),
         data: {
           card_preview_url: card.image_url.present? ? image_card_path(card) : nil,
           card_preview_card_id: card.id,

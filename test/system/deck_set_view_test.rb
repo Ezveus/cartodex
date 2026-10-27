@@ -23,13 +23,13 @@ class DeckSetViewTest < ApplicationSystemTestCase
     assert_selector "h2", text: "Pokémon (3 — 2 unique)"
     assert_no_selector ".deck-set-section"
 
-    within(".deck-group-modes") { click_on "Set" }
+    within(".deck-group-modes", text: "Group by") { click_on "Set" }
 
     assert_selector ".deck-set-section h2", text: "Ascended Heroes (ASC) · 1 card"
     assert_no_selector "h2", text: "Pokémon"
     assert_current_path deck_path(@deck, group: "set")
 
-    within(".deck-group-modes") { click_on "Type" }
+    within(".deck-group-modes", text: "Group by") { click_on "Type" }
     assert_selector "h2", text: "Pokémon (3 — 2 unique)"
     assert_no_selector ".deck-set-section"
   end

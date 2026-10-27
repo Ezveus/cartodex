@@ -279,7 +279,9 @@ class DeckSetGroupingTest < ActionDispatch::IntegrationTest
       grouped = count_queries { get deck_path(@deck, group: "set") }
 
       assert_response :success
-      assert_select ".deck-group-modes", 0
+      # The page offers "View" (List / Images), never "Group by".
+      assert_select ".deck-group-modes-label", text: "Group by", count: 0
+      assert_select "a.deck-group-mode", text: "Set", count: 0
       assert_select ".deck-set-section", 0
       assert_equal plain, grouped
     end
