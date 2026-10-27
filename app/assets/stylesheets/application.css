@@ -1683,6 +1683,80 @@ textarea.form-input {
   text-decoration: underline;
 }
 
+/* "Group by" and "View" share a line while it fits, and wrap onto two on a phone. */
+.deck-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1.5rem;
+}
+
+/* The image view (Decks::ImageGrid): a section's list becomes a grid of tiles, one per in-deck
+   printing. Below the breakpoint the list column measures 324px on a 375px viewport, so 90px is
+   what gives three columns there (110px gave two); above it, 120px keeps a tile from shrinking to
+   a thumbnail beside the preview pane. */
+.deck-show-main--images .deck-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.deck-show-main--images .deck-card-list > li {
+  border-bottom: none;
+}
+
+@media (max-width: 768px) {
+  .deck-show-main--images .deck-card-list {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 0.5rem;
+  }
+}
+
+.deck-card-tile-frame {
+  position: relative;
+  cursor: pointer;
+}
+
+.deck-card-tile-image,
+.deck-card-tile-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  border-radius: 6px;
+  box-shadow: var(--e1);
+}
+
+.deck-card-tile-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* The bare number is what the image export parses; the "×" is drawn here. */
+.deck-card-tile .deck-card-qty {
+  position: absolute;
+  right: 0.3rem;
+  bottom: 0.3rem;
+  min-width: 0;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--ink-900);
+  color: var(--surface);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.deck-card-tile .deck-card-qty::before {
+  content: "×";
+}
+
 .deck-show-preview {
   width: 300px;
   flex-shrink: 0;

@@ -4,12 +4,17 @@ module Decks
     # first. Carried by `?group=set`, never stored — see DecksController#deck_grouping.
     GROUPINGS = [ [ :type, "Type" ], [ :set, "Set" ] ].freeze
 
+    # How the list is drawn: rows, or Decks::ImageGrid's read-only tiles. Carried by `?view=images`
+    # — see DecksController#deck_view. Both pages offer it.
+    VIEWS = [ [ :list, "List" ], [ :images, "Images" ] ].freeze
+
     # `states` is Decks::FingerprintStates.call for this deck and reader: every number a row shows
     # or is bounded by, computed once by the controller.
-    def initialize(deck:, states:, editing: false, tournament_profiles: [], group: :type)
+    def initialize(deck:, states:, editing: false, tournament_profiles: [], group: :type, view: :list)
       @deck = deck
       @states = states
       @group = group
+      @view = view
       @editing = editing
       @tournament_profiles = tournament_profiles
     end
@@ -74,32 +79,46 @@ module Decks
     def group_param = (set_view? ? "set" : nil)
 
     # `data-deck-group` says which view the list is in; the rows' own URLs carry it to the API.
-    def main_section
-      div(class: "deck-show-main", data: { deck_group: group_param }) do
-        card_search
-        group_links
-        render Decks::DeckSections.new(
-          sections: Decks::Layout.call(states: @states, group: @group),
-          row: ->(row) { Decks::OwnerRow.for(row, deck: @deck, group: @group) },
-          data: { deck_rows_target: "sections" }
-        )
-      end
-    end
+    def images_view? = @view == :images
 
-    # The shape and rule of Archetypes::CardReport's mode links: the current view stays a link — a
-    # tab that cannot be clicked reads as disabled — told apart by aria-current and a modifier.
-    # Always the show page, even from a full-page edit.
-    def group_links
-      div(class: "deck-group-modes") do
-        span(class: "deck-group-modes-label") { "Group by" }
-        GROUPINGS.each do |mode, label|
-          current = mode == @group
-          a(href: deck_path(@deck, group: (mode == :set ? "set" : nil)),
-            class: [ "deck-group-mode", ("deck-group-mode--current" if current) ].compact.join(" "),
-            aria_current: ("page" if current)) { label }
+    # The image view is read-only: no card search, and no `sections` target, so deck_rows_controller.js
+    # has no list to place a row into. Its states are FingerprintStates.deck_only (the controller's
+    # choice), which the owner's rows could not be drawn from.
+    def main_section
+      div(class: [ "deck-show-main", ("deck-show-main--images" if images_view?) ].compact.join(" "),
+          data: { deck_group: group_param }) do
+        card_search unless images_view?
+        div(class: "deck-mode-bar") do
+          group_links
+          view_links
+        end
+        sections = Decks::Layout.call(states: @states, group: @group)
+        if images_view?
+          render Decks::ImageGrid.new(sections: sections)
+        else
+          render Decks::DeckSections.new(
+            sections: sections,
+            row: ->(row) { Decks::OwnerRow.for(row, deck: @deck, group: @group) },
+            data: { deck_rows_target: "sections" }
+          )
         end
       end
     end
+
+    # Always the show page, even from a full-page edit; each control keeps the other's parameter.
+    def group_links
+      render Decks::ModeLinks.new(label: "Group by", current: @group, modes: GROUPINGS.map { |mode, label|
+        [ mode, label, deck_path(@deck, group: (mode == :set ? "set" : nil), view: view_param) ]
+      })
+    end
+
+    def view_links
+      render Decks::ModeLinks.new(label: "View", current: @view, modes: VIEWS.map { |mode, label|
+        [ mode, label, deck_path(@deck, group: group_param, view: (mode == :images ? "images" : nil)) ]
+      })
+    end
+
+    def view_param = (images_view? ? "images" : nil)
 
     # The search posts to the cards endpoint with the page's view on it, so its answer carries rows
     # in that view and deck_rows_controller.js places them without a reload.

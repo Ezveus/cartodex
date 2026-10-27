@@ -404,6 +404,11 @@ class DecksController < ApplicationController
   # `card_set` only in the set view, so the default page runs exactly the queries it always did.
   def card_preloads(group) = group == :set ? [ :card_set ] : []
 
+  # How the deck page draws its list: `?view=images` as a read-only grid of card images, anything
+  # else as rows. Read by both show paths and never stored, like deck_grouping. Not carried by the
+  # edit links: in place only the header frame is replaced, and the grid behind it stays.
+  def deck_view = params[:view] == "images" ? :images : :list
+
   def unavailable_decks(count)
     count == 1 ? "One of the decks you picked is no longer available." : "#{count} of the decks you picked are no longer available."
   end
@@ -450,8 +455,10 @@ class DecksController < ApplicationController
                                   tournament_entries: [ :tournament, :tournament_profile ]).find(@deck.id)
     @tournament_profiles = current_user.tournament_profiles.order(:player_name)
     @editing = false
-    @states = owner_states
-
+    @view = deck_view
+    # The grid draws the deck's own rows and nothing else, so it reads neither the catalogue nor
+    # the collection: the public page's states, three queries cheaper than the owner's.
+    @states = @view == :images ? Decks::FingerprintStates.deck_only(@deck.deck_cards) : owner_states
 
     assign_og_payload
     render :show
@@ -477,6 +484,7 @@ class DecksController < ApplicationController
     # What "Compare with…" offers a signed-in member: their own decks, the /decks order. Only
     # key and name are read, so only key and name are loaded.
     @compare_candidates = current_user ? current_user.decks.recently_updated.select(:id, :key, :name).to_a : []
+    @view = deck_view
     assign_og_payload
     render :public_show
   end
