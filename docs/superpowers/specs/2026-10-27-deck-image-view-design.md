@@ -31,6 +31,9 @@ export". The badge's text is the bare number and the "×" is drawn by CSS: `coll
 `parseInt` on the text, and `parseInt("×4")` is `NaN`, which its filter then drops — every card
 silently missing from the exported image.
 
+The count is also carried in the image's `alt` ("Budew (ASC 16), 4 copies"): the badge's bare
+number means nothing read aloud.
+
 ## Images
 
 The `<img>` loads `cards.image_url` straight from the Limitless CDN, lazily, as `/cards` and the
@@ -47,8 +50,16 @@ framed placeholder carrying its name and set, never a broken image.
 
 The grid needs only the deck's own rows, so the owner's image view builds its states with
 `Decks::FingerprintStates.deck_only` — no catalogue read, no availability. The owner's page in the
-image view therefore costs **fewer** queries than the list (asserted); the public page costs the
-same literal as its list.
+image view therefore costs **fewer** queries than the list (asserted); the public page costs
+exactly what its list costs, counted uncached.
+
+## Layout
+
+Tiles keep the card's 63:88 ratio, `minmax(120px)` above the 768px breakpoint and `minmax(90px)`
+below it, where 110px gave two columns at a 375px viewport. Below the breakpoint the grid also needs
+`align-self: stretch`: `.deck-show-content` is a flex column with `align-items: flex-start`, and a
+grid of auto-fill tracks has no width of its own — the visitor's grid measured 214px of 343. The
+no-art placeholder is `box-sizing: border-box`, or its padding and border run it under the next tile.
 
 ## Out of scope
 

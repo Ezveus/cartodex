@@ -16,7 +16,7 @@ Spec: `docs/superpowers/specs/2026-10-27-deck-image-view-design.md`.
    accepts a lambda returning one component or an array.
 5. `ShowView` (owner): `view:` param; in images — no card search, no `deck_rows_target: "sections"`,
    `ImageGrid`; "View" links beside "Group by". `PublicShowView`: `view:` param, "View" links, grid.
-6. CSS: `.deck-show-main--images .deck-card-list` → grid `repeat(auto-fill, minmax(110px, 1fr))`,
+6. CSS: `.deck-show-main--images .deck-card-list` → grid `repeat(auto-fill, minmax(120px, 1fr))`, 90px below the breakpoint (110px gave two columns at 375px — measured),
    no row border; badge `::before { content: "×" }`.
 
 Tests: controller (both pages, the param, mode links keep the other param, query counts),
