@@ -23,7 +23,8 @@ module Decks
       li(class: "deck-card-tile") do
         deck_line(card, item: true, css_class: "deck-card-tile-frame") do
           if card.image_url.present?
-            img(src: card.image_url, alt: "#{@name} (#{set_label(card)})", loading: "lazy",
+            # The count is in the alt: the badge's bare number reads as nothing to a screen reader.
+            img(src: card.image_url, alt: "#{@name} (#{set_label(card)}), #{copies}", loading: "lazy",
                 class: "deck-card-tile-image")
           else
             div(class: "deck-card-tile-placeholder") do
@@ -31,9 +32,13 @@ module Decks
               span(class: "deck-card-set") { set_label(card) }
             end
           end
-          span(class: "deck-card-qty", aria_label: "#{@printing.quantity} copies") { @printing.quantity.to_s }
+          span(class: "deck-card-qty") { @printing.quantity.to_s }
         end
       end
     end
+
+    private
+
+    def copies = @printing.quantity == 1 ? "1 copy" : "#{@printing.quantity} copies"
   end
 end

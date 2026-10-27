@@ -41,9 +41,24 @@ class DeckImageViewSystemTest < ApplicationSystemTestCase
   end
 
   # Geometry, not text: a tile rendered as a stacked row would still carry every class asserted on.
+  # The first row of tiles, left to right: each shares the first's top and starts past its right edge.
+  def assert_tiles_side_by_side
+    lefts = page.evaluate_script(<<~JS)
+      Array.from(document.querySelectorAll(".deck-card-tile")).slice(0, 3).map(tile => {
+        const r = tile.getBoundingClientRect(); return [ r.top, r.left, r.right ]
+      })
+    JS
+    first, *rest = lefts
+    rest.each do |top, left, _right|
+      assert_in_delta first[0], top, 1, "a tile wrapped below the first: #{lefts.inspect}"
+      assert_operator left, :>=, first[2], "a tile starts inside the first: #{lefts.inspect}"
+    end
+  end
+
   test "the tiles sit side by side, each with its count on the art" do
     visit deck_path(@deck, view: "images")
     assert_selector ".deck-card-tile-image", count: 4
+    assert_tiles_side_by_side
 
     boxes = page.evaluate_script(<<~JS)
       Array.from(document.querySelectorAll(".deck-card-tile")).map(tile => {
@@ -94,5 +109,22 @@ class DeckImageViewSystemTest < ApplicationSystemTestCase
 
     assert_selector ".deck-card-tile", count: 4
     assert_no_selector ".deck-set-section"
+    assert_tiles_side_by_side
+  end
+
+  # A placeholder is laid out in its column like an image: padding and border inside its width.
+  test "a card with no art keeps its tile inside its column" do
+    cards(:doublade).update_column(:image_url, nil)
+    visit deck_path(@deck, view: "images")
+    assert_selector ".deck-card-tile-placeholder", count: 1
+
+    tile, placeholder = page.evaluate_script(<<~JS)
+      (() => {
+        const ph = document.querySelector(".deck-card-tile-placeholder")
+        return [ ph.closest(".deck-card-tile").getBoundingClientRect().width, ph.getBoundingClientRect().width ]
+      })()
+    JS
+    assert_in_delta tile, placeholder, 0.5, "the placeholder is wider than its column"
+    assert_tiles_side_by_side
   end
 end

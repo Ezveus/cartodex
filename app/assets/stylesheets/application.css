@@ -1691,9 +1691,16 @@ textarea.form-input {
 }
 
 /* The image view (Decks::ImageGrid): a section's list becomes a grid of tiles, one per in-deck
-   printing. Below the breakpoint the list column measures 324px on a 375px viewport, so 90px is
-   what gives three columns there (110px gave two); above it, 120px keeps a tile from shrinking to
+   printing. Below the breakpoint the list column measures 343px on a 375px viewport, so 90px
+   leaves room for three columns there with the gap; above it, 120px keeps a tile from shrinking to
    a thumbnail beside the preview pane. */
+/* Below the breakpoint .deck-show-content is a flex column with `align-items: flex-start`, so the
+   main column is as wide as its content: rows fill it, and so does the owner's card search, but a
+   grid of auto-fill tracks has no width of its own — the visitor's grid measured 214px of 343. */
+.deck-show-main--images {
+  align-self: stretch;
+}
+
 .deck-show-main--images .deck-card-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -1726,7 +1733,10 @@ textarea.form-input {
   box-shadow: var(--e1);
 }
 
+/* Border-box, or its padding and border push it 18px past its column and under the next tile:
+   nothing in this file sets box-sizing globally. */
 .deck-card-tile-placeholder {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: center;

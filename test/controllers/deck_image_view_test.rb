@@ -55,7 +55,8 @@ class DeckImageViewTest < ActionDispatch::IntegrationTest
     assert_equal expected.sort, tile_counts.sort
     assert_select ".deck-card-item", count: 5
     assert_select ".deck-card-tile img.deck-card-tile-image[loading=lazy]", count: 5
-    assert_select "img[src=?]", cards(:budew_pre).image_url
+    assert_select "img[src=?][alt=?]", cards(:budew_pre).image_url, "Budew (PRE 4), 4 copies"
+    assert_select "img[alt=?]", "Budew (ASC 16), 1 copy"
   end
 
   test "the owner's image view is read-only" do
