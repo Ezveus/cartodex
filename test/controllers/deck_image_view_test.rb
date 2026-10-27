@@ -154,8 +154,10 @@ class DeckImageViewTest < ActionDispatch::IntegrationTest
     sign_out :user
     get deck_path(@deck)
 
-    list = count_queries { get deck_path(@deck) }
-    grid = count_queries { get deck_path(@deck, view: "images") }
+    # Uncached: a second read of the deck's cards would be served by the query cache and missed.
+    list, grid = ActiveRecord::Base.uncached do
+      [ count_queries { get deck_path(@deck) }, count_queries { get deck_path(@deck, view: "images") } ]
+    end
 
     assert_equal list, grid
   end
@@ -209,7 +211,7 @@ class DeckImageViewTest < ActionDispatch::IntegrationTest
     @deck.deck_cards.create!(card: por, quantity: 1)
     @deck.deck_cards.create!(card: asc, quantity: 2)
 
-    [ -> {}, -> { sign_out :user } ].each do |as_reader|
+    [ -> { }, -> { sign_out :user } ].each do |as_reader|
       as_reader.call
       get deck_path(@deck, view: "images")
       assert_equal [ asc.id, por.id ].map(&:to_s),
@@ -221,7 +223,7 @@ class DeckImageViewTest < ActionDispatch::IntegrationTest
   test "the view is not stored" do
     fill_deck
 
-    [ -> {}, -> { sign_out :user } ].each do |as_reader|
+    [ -> { }, -> { sign_out :user } ].each do |as_reader|
       as_reader.call
       get deck_path(@deck, view: "images")
       get deck_path(@deck)
@@ -250,11 +252,13 @@ class DeckImageViewTest < ActionDispatch::IntegrationTest
   test "a tile opens the card preview" do
     fill_deck
 
-    [ -> {}, -> { sign_out :user } ].each do |as_reader|
+    [ -> { }, -> { sign_out :user } ].each do |as_reader|
       as_reader.call
       get deck_path(@deck, view: "images")
       assert_select ".deck-show-container[data-controller~=card-preview]"
-      css_select(".deck-card-tile .deck-card-item").each do |item|
+      items = css_select(".deck-card-tile .deck-card-item")
+      assert_equal 5, items.size
+      items.each do |item|
         assert_includes item["data-action"], "mouseenter->card-preview#show"
         assert_includes item["data-action"], "click->card-preview#open"
         assert_match(/\A\d+\z/, item.at_css(".deck-card-qty").text)
