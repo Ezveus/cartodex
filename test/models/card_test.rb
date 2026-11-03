@@ -1,6 +1,15 @@
 require "test_helper"
 
 class CardTest < ActiveSupport::TestCase
+  # Both lists feed admin selects, and the model compares against exact strings elsewhere
+  # (`stage == "BREAK"`, `subtype == "Basic Energy"`), so a value missing here is unselectable.
+  test "the stage and subtype lists carry the values the validations compare against" do
+    assert_equal [ "Basic", "Stage 1", "Stage 2", "VSTAR", "VMAX", "EX", "BREAK" ], Card::STAGES
+    assert_equal [ "Item", "Tool", "Supporter", "Stadium", "Special Energy", "Basic Energy" ], Card::SUBTYPES
+    assert_includes Card::STAGES, "BREAK"
+    assert_includes Card::SUBTYPES, "Basic Energy"
+  end
+
   test "valid pokémon card" do
     card = cards(:honedge)
     assert card.valid?

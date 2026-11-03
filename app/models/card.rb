@@ -62,6 +62,10 @@ class Card < ApplicationRecord
   # Allowed values
   CARD_TYPES = %w[Pokémon Energy Trainer].freeze
   ENERGY_TYPES = %w[Grass Fire Water Lightning Fighting Psychic Darkness Metal Fairy Dragon Colorless].freeze
+  # Every value the catalogue holds, offered as selects because the model and its readers compare
+  # them as exact strings (`stage == "BREAK"`, `subtype == "Basic Energy"`).
+  STAGES = [ "Basic", "Stage 1", "Stage 2", "VSTAR", "VMAX", "EX", "BREAK" ].freeze
+  SUBTYPES = [ "Item", "Tool", "Supporter", "Stadium", "Special Energy", "Basic Energy" ].freeze
 
   # Maps each energy type to the design-system colour token that represents it.
   # Lightning reads as the "bolt" token; Colorless borrows the neutral metal grey.

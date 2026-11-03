@@ -159,6 +159,9 @@ Rails.application.routes.draw do
       resources :card_sets do
         post :import, on: :collection
         post :rescrape, on: :member
+        # A card is created inside the set it belongs to and edited at its own address, so only
+        # these two nest.
+        resources :cards, only: %i[new create]
       end
       resources :cards, only: [ :index, :show, :edit, :update ] do
         post :rescrape, on: :member
