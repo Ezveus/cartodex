@@ -252,4 +252,85 @@ class Cards::ManualWriterTest < ActiveSupport::TestCase
     assert_includes card.errors.full_messages, "Attack 1 needs a name"
     assert_not_empty card.errors.full_messages_for(:hp)
   end
+
+  BASIC_FIRE = {
+    "name" => "Fire Energy", "card_type" => "Energy", "subtype" => "Basic Energy", "type_symbol" => "",
+    "stage" => "", "rarity" => "", "artist" => " ", "set_name" => "TST", "set_number" => "5"
+  }.freeze
+
+  # Decks::Exporter tells a basic energy by a nil type_symbol: a stored "" exported "Fire Energy".
+  test "blank posted fields are stored as nil, so a basic energy exports under its symbol" do
+    card = Card.new
+    assert write(card, attributes: BASIC_FIRE)
+
+    card.reload
+    assert_equal [ nil, nil, nil, nil ], [ card.type_symbol, card.stage, card.rarity, card.artist ]
+    deck = decks(:one)
+    deck.deck_cards.create!(card:, quantity: 4)
+    assert_includes Decks::Exporter.call(deck), "4 Basic {R} Energy TST 5"
+  end
+
+  test "a typographic apostrophe is folded and the name stripped, so it fingerprints like the plain one" do
+    curly = Card.new
+    assert write(curly, attributes: TRAINER.merge("name" => "  Rosa\u2019s Encouragement  "))
+    plain = Card.new
+    assert write(plain, attributes: TRAINER.merge("name" => "Rosa's Encouragement", "set_number" => "3"))
+
+    assert_equal "Rosa's Encouragement", curly.reload.name
+    assert_equal plain.reload.fingerprint, curly.fingerprint
+  end
+
+  test "slot values are folded the same way, and a blank ability effect is nil" do
+    card = Card.new
+    assert write(card, attributes: POKEMON,
+                       attacks: [ EMBER.merge("effect" => " Discard your opponent\u2019s Tool. ") ],
+                       abilities: [ { "name" => " Rosa\u2019s Blaze ", "effect" => "  " } ])
+
+    assert_equal [ "Discard your opponent's Tool." ], card.reload.attacks.pluck(:effect)
+    assert_equal [ [ "Rosa's Blaze", nil ] ], card.abilities.pluck(:name, :effect)
+  end
+
+  test "an unchanged edit of a card with nil artist and stage leaves them nil" do
+    card = settled(cards(:honedge))
+    card.update_columns(artist: nil, stage: nil)
+
+    assert write(card, attributes: { "artist" => "", "stage" => "", "rarity" => "Common" })
+
+    card.reload
+    assert_nil card.artist
+    assert_nil card.stage
+  end
+
+  # Limitless writes every multiplier attack with U+00D7 (432 of them): an ASCII x would fingerprint
+  # the hand-made printing apart from its scraped reprint.
+  test "a trailing x after digits in the damage becomes the multiplication sign" do
+    card = Card.new
+    assert write(card, attributes: POKEMON,
+                       attacks: [ EMBER.merge("name" => "A", "damage" => "110x"),
+                                  EMBER.merge("name" => "B", "damage" => " 20X "),
+                                  EMBER.merge("name" => "C", "damage" => "110\u00d7"),
+                                  EMBER.merge("name" => "D", "damage" => "30+") ])
+
+    assert_equal [ "110\u00d7", "20\u00d7", "110\u00d7", "30+" ], card.reload.attacks.pluck(:damage)
+  end
+
+  test "an Energy named like an ex gets no Pokémon subtype" do
+    card = Card.new
+    assert write(card, attributes: BASIC_FIRE.merge("name" => "Foo ex", "subtype" => "Special Energy", "rarity" => "Rare"))
+
+    assert_nil card.reload.pokemon_subtype
+  end
+
+  test "an update replaces a held ability with another, then with none" do
+    card = cards(:honedge)
+    card.abilities.create!(name: "Keen Edge", effect: "Sharp.", position: 0)
+    card = settled(card)
+    cut = card.attacks.map { _1.attributes.slice(*%w[name cost damage effect]) }
+
+    assert write(card, attacks: cut, abilities: [ { "name" => "Dull Edge", "effect" => "" } ])
+    assert_equal [ "Dull Edge" ], card.reload.abilities.pluck(:name)
+
+    assert write(card, attacks: cut, abilities: [])
+    assert_equal [], card.reload.abilities.pluck(:name)
+  end
 end

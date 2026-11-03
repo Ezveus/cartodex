@@ -16,10 +16,11 @@ module Admin
       load_slots_from_card
     end
 
-    # The set is the page's: a posted card_set_id would let the form file the card elsewhere.
+    # The set is the page's, code included: a posted card_set_id or set_name would file the card
+    # elsewhere, or under a code its set does not have.
     def create
       @card = @card_set.cards.new(set_full_name: @card_set.name)
-      if write(card_params.except(:card_set_id))
+      if write(card_params.except(:card_set_id).merge(set_name: @card_set.code))
         redirect_to admin_card_path(@card), notice: "Card created."
       else
         render :new, status: :unprocessable_entity
@@ -58,13 +59,20 @@ module Admin
     end
 
     # Label assignments and archetypes are keyed on fingerprints and their resync tasks walk the
-    # whole catalogue, so a moved fingerprint is reported rather than repaired here.
+    # whole catalogue, so a moved fingerprint is reported rather than repaired here. While another
+    # printing still carries the old fingerprint the resync finds it alive and moves nothing, so
+    # naming the tasks there would promise a repair that does not happen.
     def update_notice(old_fingerprint)
       notice = "Card updated."
       return notice unless @card.saved_change_to_fingerprint?
 
-      "#{notice} Its fingerprint moved from #{old_fingerprint} to #{@card.fingerprint}: " \
-        "run bin/rails card_labels:resync_fingerprints and bin/rails archetypes:resync_fingerprints."
+      moved = "#{notice} Its fingerprint moved from #{old_fingerprint} to #{@card.fingerprint}"
+      others = Card.where(fingerprint: old_fingerprint).where.not(id: @card.id).count
+      if others.positive?
+        "#{moved}; #{others} other printing(s) keep #{old_fingerprint}, so its labels and archetypes stay with them."
+      else
+        "#{moved}: run bin/rails card_labels:resync_fingerprints and bin/rails archetypes:resync_fingerprints."
+      end
     end
 
     # On a refusal the form re-renders what was typed, so the slots stay as submitted.

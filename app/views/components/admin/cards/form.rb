@@ -37,7 +37,7 @@ module Admin
           end
           text_group(f, :rarity)
           text_group(f, :regulation_mark)
-          text_group(f, :set_name, label: "Set Code")
+          set_code_group(f)
           text_group(f, :set_number)
           # On create the set is the page's, so the select would only offer a value the controller
           # ignores.
@@ -73,6 +73,16 @@ module Admin
         end
       end
 
+      # On create the code is the set's and the controller ignores a posted one, so it is shown but
+      # carries no name: an editable field would invite a value that is silently dropped.
+      def set_code_group(form)
+        return text_group(form, :set_name, label: "Set Code") if @card.persisted?
+
+        render Ui::FormGroup.new(label: "Set Code", field_name: "card_set_name") do
+          input(type: "text", id: "card_set_name", value: @card.set_name.to_s, readonly: true, class: "form-input")
+        end
+      end
+
       # A value outside the list stays an option, or editing such a card would silently blank it.
       def select_group(form, attribute, choices, label: nil)
         current = @card.public_send(attribute)
@@ -86,7 +96,7 @@ module Admin
       # Never fewer slots than the card holds, so an edit cannot drop one.
       def attack_slots
         count = [ ::Cards::ManualWriter::ATTACK_SLOTS, @attacks.size ].max
-        fieldset(class: "form-group") do
+        fieldset(class: "form-fieldset") do
           legend(class: "form-label") { "Attacks" }
           count.times do |index|
             slot = @attacks[index] || {}
@@ -102,7 +112,7 @@ module Admin
 
       def ability_slots
         count = [ ::Cards::ManualWriter::ABILITY_SLOTS, @abilities.size ].max
-        fieldset(class: "form-group") do
+        fieldset(class: "form-fieldset") do
           legend(class: "form-label") { "Abilities" }
           count.times do |index|
             slot = @abilities[index] || {}

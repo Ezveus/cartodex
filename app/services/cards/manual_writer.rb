@@ -13,7 +13,7 @@ module Cards
 
     def initialize(card, attributes:, attacks:, abilities:)
       @card = card
-      @attributes = attributes.to_h.transform_values { _1.is_a?(String) ? _1.strip : _1 }
+      @attributes = attributes.to_h.transform_values { _1.is_a?(String) ? clean(_1) : _1 }
       @attacks = attacks
       @abilities = abilities
     end
@@ -56,12 +56,19 @@ module Cards
       end
 
       attacks.each_with_index do |slot, position|
-        @card.attacks.build(name: slot["name"], cost: slot["cost"].presence || "0",
-                            damage: slot["damage"].presence, effect: slot["effect"].presence, position:)
+        @card.attacks.build(name: slot["name"], cost: slot["cost"] || "0",
+                            damage: slot["damage"]&.sub(/\A(\d+)[xX]\z/, "\\1\u00d7"), effect: slot["effect"], position:)
       end
       abilities.each_with_index do |slot, position|
-        @card.abilities.build(name: slot["name"], effect: slot["effect"].presence, position:)
+        @card.abilities.build(name: slot["name"], effect: slot["effect"], position:)
       end
+    end
+
+    # The rule Cards::OfficialParser#text applies to scraped text, so a hand-typed "Rosa’s" joins
+    # its scraped reprint's fingerprint. Blank is nil, not "": Decks::Exporter tells a basic energy
+    # by a nil type_symbol, and an untouched optional field must not turn nil into "" on an edit.
+    def clean(value)
+      value.strip.tr("\u2019", "'").presence
     end
 
     # A slot left entirely blank is an unused slot; one with text but no name is refused rather than
@@ -69,9 +76,9 @@ module Cards
     def kept_slots(slots, fields, label)
       errors = []
       kept = slots.each_with_index.filter_map do |slot, index|
-        values = fields.to_h { [ _1, slot[_1].to_s.strip ] }
-        next if values.values.all?(&:empty?)
-        if values["name"].empty?
+        values = fields.to_h { [ _1, clean(slot[_1].to_s) ] }
+        next if values.values.all?(&:nil?)
+        if values["name"].nil?
           errors << "#{label} #{index + 1} needs a name"
           next
         end

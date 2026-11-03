@@ -29,5 +29,9 @@ class Admin::CardSetCardsRoutingTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     get "/admin/card_sets/#{@set.id}/cards/#{card.id}"
     assert_response :not_found
+    patch "/admin/card_sets/#{@set.id}/cards/#{card.id}", params: { card: { rarity: "Rare" } }
+    assert_response :not_found
+    delete "/admin/card_sets/#{@set.id}/cards/#{card.id}"
+    assert_response :not_found
   end
 end

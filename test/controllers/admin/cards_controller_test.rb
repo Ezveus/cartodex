@@ -121,7 +121,8 @@ class Admin::CardsControllerTest < ActionDispatch::IntegrationTest
     get new_admin_card_set_card_path(card_sets(:por))
 
     assert_response :success
-    assert_select "input[name='card[set_name]'][value='POR']"
+    assert_select "input[name='card[set_name]']", 0
+    assert_select "input#card_set_name[readonly][value='POR']:not([name])"
     assert_select "input[name^='card[attacks]'][name$='[name]']", 3
     (0..2).each { assert_select "input[name='card[attacks][#{_1}][name]']" }
     assert_select "input[name^='card[abilities]'][name$='[name]']", 2
@@ -287,11 +288,11 @@ class Admin::CardsControllerTest < ActionDispatch::IntegrationTest
     submit_form(NEW_POKEMON.merge(
       "card[stage]" => "Stage 1", "card[subtype]" => "Item", "card[evolves_from]" => "Ember Pup",
       "card[weakness]" => "Water", "card[resistance]" => "Grass", "card[regulation_mark]" => "H",
-      "card[set_name]" => "XYZ", "card[artist]" => "Ken Sugimori",
+      "card[artist]" => "Ken Sugimori",
       "card[image_url]" => "https://example.com/testmon.png", "card[effect]" => "Rule text."
     ))
 
-    card = Card.find_by!(set_name: "XYZ", set_number: "999")
+    card = Card.find_by!(set_name: "POR", set_number: "999")
     expected = {
       "name" => "Testmon", "card_type" => "Pokémon", "hp" => 90, "type_symbol" => "Fire", "retreat_cost" => 1,
       "rarity" => "Common", "stage" => "Stage 1", "subtype" => "Item", "evolves_from" => "Ember Pup",
@@ -367,5 +368,89 @@ class Admin::CardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select ".admin-header-actions > :first-child.btn.btn-secondary[href=?]",
                   new_admin_card_set_card_path(por), text: "New card"
+  end
+
+  # The set is the page's, its code included: a posted set_name would file the printing under
+  # another set's code while card_set_id points at this one.
+  test "create stores the page's set code whatever set_name is posted" do
+    por = card_sets(:por)
+    get new_admin_card_set_card_path(por)
+    submit_form(NEW_POKEMON.merge("card[set_name]" => "pal"))
+
+    assert_redirected_to admin_card_path(Card.find_by!(set_name: "POR", set_number: "999"))
+    assert_not Card.exists?(set_name: %w[pal PAL], set_number: "999")
+  end
+
+  test "edit keeps the set code editable" do
+    get edit_admin_card_path(cards(:honedge))
+
+    assert_select "input[name='card[set_name]'][value='POR']"
+  end
+
+  test "an update whose old fingerprint other printings still carry says they keep it" do
+    card = settle(cards(:honedge))
+    old_fingerprint = card.fingerprint
+    reprint = Card.new(card.attributes.slice(*%w[name card_type hp type_symbol retreat_cost rarity set_name])
+                           .merge("set_number" => "999"))
+    reprint.attacks.build(name: "Cut", cost: "C", damage: "10", position: 0)
+    reprint.save!
+    assert_equal old_fingerprint, reprint.fingerprint, "sanity: the reprint shares the fingerprint"
+
+    get edit_admin_card_path(card)
+    submit_form("card[hp]" => "80")
+
+    new_fingerprint = card.reload.fingerprint
+    assert_not_equal old_fingerprint, new_fingerprint
+    assert_equal "Card updated. Its fingerprint moved from #{old_fingerprint} to #{new_fingerprint}; " \
+                 "1 other printing(s) keep #{old_fingerprint}, so its labels and archetypes stay with them.",
+                 flash[:notice]
+  end
+
+  test "the attack and ability slots sit in form fieldsets" do
+    get edit_admin_card_path(cards(:honedge))
+
+    assert_select "fieldset.form-fieldset > legend", text: "Attacks"
+    assert_select "fieldset.form-fieldset > legend", text: "Abilities"
+    assert_select "fieldset.form-group", 0
+  end
+
+  test "a non-numeric slot key is ignored" do
+    card = cards(:honedge)
+
+    patch admin_card_path(card), params: { card: { attacks: { "0" => { name: "A" }, "foo" => { name: "X" }, "1" => { name: "B" } } } }
+
+    assert_redirected_to admin_card_path(card)
+    assert_equal %w[A B], card.reload.attacks.pluck(:name)
+  end
+
+  test "a scalar where slots are expected writes no attack and does not fail" do
+    card = cards(:honedge)
+
+    patch admin_card_path(card), params: { card: { attacks: "x" } }
+    assert_redirected_to admin_card_path(card)
+    assert_empty card.reload.attacks
+
+    patch admin_card_path(card), params: { card: { attacks: { "0" => "x" } } }
+    assert_redirected_to admin_card_path(card)
+    assert_empty card.reload.attacks
+  end
+
+  test "edit offers no set as a blank option, and a card without a set keeps none" do
+    card = cards(:honedge)
+    card.update_column(:card_set_id, nil)
+
+    get edit_admin_card_path(card)
+    assert_select "select[name='card[card_set_id]'] option[value='']", text: "— None —"
+    submit_form
+
+    assert_redirected_to admin_card_path(card)
+    assert_nil card.reload.card_set_id
+  end
+
+  test "retreat cost refuses a negative and the type select is labelled Energy Type" do
+    get new_admin_card_set_card_path(card_sets(:por))
+
+    assert_select "input[name='card[retreat_cost]'][min='0']"
+    assert_select "label[for='card_type_symbol']", text: "Energy Type"
   end
 end
