@@ -49,14 +49,30 @@ list keeps it as an option.
   reprint: positions are 0-based over kept slots, values are stripped, blank damage and effect are
   nil, and **a named attack with a blank cost is stored as `"0"`** — the way Limitless writes its free
   attacks; an empty string would give the card a fingerprint no other printing shares.
+- **Every posted string is cleaned the way the importers write the catalogue**: stripped, U+2019
+  folded to U+0027 (`Cards::OfficialParser`'s rule — a Trainer's fingerprint is `SHA256(name)`, so one
+  typographic apostrophe makes a reprint its own island), and **blank becomes nil**. Measured in
+  review: without the last step an unchanged edit turned NULL into `""` on 5069 `artist`, 835
+  `type_symbol` and 780 `stage` rows of the 5223, and a Basic Energy saved with `type_symbol = ""`
+  is exported by `Decks::Exporter#format_energy_name` (which tests `nil?`) as "Fire Energy" instead
+  of "Basic {R} Energy". The old nine-field edit form already wrote `""` into `type_symbol`.
+- **A damage of digits followed by `x`/`X` is stored with `×`**: Limitless writes all 432
+  multiplier attacks that way and none with a plain `x`, and damage is a fingerprint input.
 - **Every successful update bumps `updated_at`**, even when only an attack's text changed:
   `Og::CardPayload#digest` folds `updated_at` and the banner is served immutable.
 - **A fingerprint moved by an edit is reported, not repaired.** Label assignments and archetypes
   are keyed on fingerprints and their resync tasks walk the whole catalogue; the edit already moved
-  fingerprints before this change (name, HP, type). The update notice names both tasks —
-  `card_labels:resync_fingerprints`, `archetypes:resync_fingerprints` — when it happened.
-- **On create the set is the page's set.** `card_set` comes from the URL, `set_name` is pre-filled
-  with its code and `set_full_name` is set to its name. Edit keeps the set select and set fields.
+  fingerprints before this change (name, HP, type). The update notice says what happened, and the
+  two cases differ: when no card carries the old fingerprint any more it names both repair tasks —
+  `card_labels:resync_fingerprints`, `archetypes:resync_fingerprints`; when other printings still
+  carry it, it says so and does **not** name them, because those tasks then repair nothing — they
+  only move what no card carries (measured in review: editing one of two Binacle printings, the
+  label resync moved 0 assignments).
+- **On create the set is the page's set, code included.** `card_set` comes from the URL, `set_name`
+  is forced to its code (shown read-only, any posted value ignored — `Cards::Fetcher` looks a card up
+  by the exact `(set_name, set_number)` pair, so a different code would file the card under one set
+  and let a later import scrape a second printing of it) and `set_full_name` is set to its name.
+  Edit keeps the set select and set fields editable.
 
 ## Surface
 
@@ -64,6 +80,12 @@ list keeps it as an option.
 `new_admin_card_set_card_path(set)`, `admin_card_set_cards_path(set)`, served by
 `Admin::CardsController#new`/`#create`. `AdminGateTest` walks the routing table and covers them
 with no list to update.
+
+## Left as found
+
+- A PATCH that omits `card[attacks]` replaces the attacks with none. The form is the only client of
+  this route and always posts every slot.
+- `card=<scalar>` answers 500, as `params.require(:card).permit` already did on master.
 
 ## Out of scope
 
