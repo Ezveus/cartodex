@@ -19,6 +19,7 @@ module Admin
               end
             end
             div(class: "admin-header-actions") do
+              link_to "New card", new_admin_card_set_card_path(@card_set), class: "btn btn-secondary"
               link_to "Edit", edit_admin_card_set_path(@card_set), class: "btn btn-secondary"
               button_to "Rescrape", rescrape_admin_card_set_path(@card_set),
                 method: :post,
