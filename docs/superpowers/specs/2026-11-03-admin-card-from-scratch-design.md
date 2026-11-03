@@ -65,9 +65,13 @@ list keeps it as an option.
   fingerprints before this change (name, HP, type). The update notice says what happened, and the
   two cases differ: when no card carries the old fingerprint any more it names both repair tasks —
   `card_labels:resync_fingerprints`, `archetypes:resync_fingerprints`; when other printings still
-  carry it, it says so and does **not** name them, because those tasks then repair nothing — they
-  only move what no card carries (measured in review: editing one of two Binacle printings, the
-  label resync moved 0 assignments).
+  carry it, it says so and does **not** name them. The label resync only moves an assignment whose
+  fingerprint no card carries, so it moves nothing here (measured in review: editing one of two
+  Binacle printings, 0 assignments moved) and the labels stay with the other printings. An
+  archetype does the opposite: `Decks::ArchetypeDetector.score` reads its member card's *live*
+  fingerprint, so an archetype built on the edited printing follows the new value at once, and decks
+  playing the other printings stop matching it (measured in the second review pass on Dragapult ex,
+  archetype 2: matched before the edit, not after, with no resync run). The notice says both.
 - **On create the set is the page's set, code included.** `card_set` comes from the URL, `set_name`
   is forced to its code (shown read-only, any posted value ignored — `Cards::Fetcher` looks a card up
   by the exact `(set_name, set_number)` pair, so a different code would file the card under one set

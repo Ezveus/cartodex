@@ -69,7 +69,8 @@ module Admin
       moved = "#{notice} Its fingerprint moved from #{old_fingerprint} to #{@card.fingerprint}"
       others = Card.where(fingerprint: old_fingerprint).where.not(id: @card.id).count
       if others.positive?
-        "#{moved}; #{others} other printing(s) keep #{old_fingerprint}, so its labels and archetypes stay with them."
+        "#{moved}; #{others} other printing(s) keep #{old_fingerprint}: label assignments stay with them, " \
+          "and an archetype built on this printing now matches #{@card.fingerprint} only."
       else
         "#{moved}: run bin/rails card_labels:resync_fingerprints and bin/rails archetypes:resync_fingerprints."
       end

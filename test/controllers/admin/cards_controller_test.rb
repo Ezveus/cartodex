@@ -402,7 +402,8 @@ class Admin::CardsControllerTest < ActionDispatch::IntegrationTest
     new_fingerprint = card.reload.fingerprint
     assert_not_equal old_fingerprint, new_fingerprint
     assert_equal "Card updated. Its fingerprint moved from #{old_fingerprint} to #{new_fingerprint}; " \
-                 "1 other printing(s) keep #{old_fingerprint}, so its labels and archetypes stay with them.",
+                 "1 other printing(s) keep #{old_fingerprint}: label assignments stay with them, " \
+                 "and an archetype built on this printing now matches #{new_fingerprint} only.",
                  flash[:notice]
   end
 
