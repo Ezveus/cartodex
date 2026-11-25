@@ -76,14 +76,16 @@ module Archetypes
     # prevent, and widening the Venue select to `selectable?` offers "Online — 0 lists" on an
     # archetype that has never had an online result.
     #
-    # No new CSS, and that is measured rather than assumed: `.deck-filters` is already
+    # The layout is `.deck-filters`' own, and that is measured rather than assumed: it is already
     # `display: flex; flex-wrap: wrap; gap: .5rem` and `.archetype-sample-label` is already the
     # flex item carrying a label and its select, so two of them sit side by side above the
     # breakpoint and stack below it.
     #
     # The Tournament select joined as a third guard on the same terms: a single-pool, paper-only
     # archetype recorded at a dozen Regionals offers neither of the first two and still has a real
-    # choice to make. Still no new CSS — a third label wraps like the second.
+    # choice to make. A third label wraps like the second; what it did need is one CSS rule capping
+    # the select at its row (`.archetype-sample-label .deck-filter-select`), since a select is as
+    # wide as its longest option and online event names pushed it to 905px at 500px.
     def selector
       return unless any_select?
 

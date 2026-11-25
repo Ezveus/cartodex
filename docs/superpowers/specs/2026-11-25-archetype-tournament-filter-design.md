@@ -70,7 +70,10 @@ venue (**Venue**). This adds a third axis: one tournament.
 - A **tournament note** replaces the venue note when a tournament is selected: the Sample and Venue
   labels then count every tournament of the selection while the report covers one. It names only
   the selects actually rendered.
-- No new CSS: `.deck-filters` already wraps its `.archetype-sample-label` items. Checked on
+- One CSS rule, found in the browser rather than planned: `.deck-filters` already wraps its
+  `.archetype-sample-label` items, but a select is as wide as its longest option and online event
+  names made the Tournament label 905px at 500px, scrolling the page sideways; the select is now
+  capped at its row (`.archetype-sample-label .deck-filter-select`). Checked on
   bounding boxes at both sweep widths, since a 66-option select carries long labels.
 
 ### `Archetypes::CardReport`
