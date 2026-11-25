@@ -46,11 +46,18 @@ module Admin
 
       # Names whose run it is, because the replay is theirs and not the admin's: a deck lands in that
       # member's decks, which is worth saying before it happens rather than after.
+      #
+      # A field-list replay puts this import's decklist back on the standing and drops whatever list
+      # it holds now, a hand correction included — the owner's call: the import wins. Said here,
+      # since nothing on the row shows that a newer list exists.
       def reimport_confirm(imp)
         text = "Reimport #{imp.label} with the same parameters, as #{imp.user.email}?"
-        return text unless imp.kind == "deck"
-
-        "#{text} This adds another deck to their decks."
+        case imp.kind
+        when "deck" then "#{text} This adds another deck to their decks."
+        when "standing_list" then "#{text} This replaces the field list the standing holds now, " \
+                                  "even one corrected since."
+        else text
+        end
       end
 
       def status_badge(imp)

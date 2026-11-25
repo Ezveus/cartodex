@@ -49,7 +49,7 @@ actions become **Reimport** (primary), **Undo** (secondary, bulk standings runs 
    Limitless has since priced, re-run a label search). A pending row is allowed so the action keeps
    what Retry offered for a stuck job; if that job is in fact still running, both run. Each job is
    safe to run twice in the sense that matters: a set import re-links, a label import writes the
-   same rows, a field-list import replaces the standing's list, a bulk standings run de-duplicates,
+   same rows, a field-list import replaces the standing's list (see decision 9), a bulk standings run de-duplicates,
    and a deck import makes a second deck — which is what "import this decklist again" means.
 
 5. **The replay runs as the import's own user**, as Retry did: a deck import lands in that member's
@@ -78,6 +78,13 @@ actions become **Reimport** (primary), **Undo** (secondary, bulk standings runs 
 8. **Buttons** go through the existing classes: `btn btn-primary btn-sm`, `btn btn-secondary btn-sm`,
    `btn btn-danger btn-sm`. Delete was `btn-danger btn-sm` without `btn`, so it did not share the
    others' box.
+
+9. **A field-list replay wins over whatever the standing holds now** — owner's decision, taken
+   after both reviews reproduced it: import A's list, a member's later correction B, then a replay
+   of A puts A back and `StandingListImportJob` destroys B (`destroy_if_ownerless`). The replay's
+   list is also a new deck with a new `key`, so a `/decks/<key>` link to the current list breaks.
+   Nothing on the row shows that a newer list exists, so the confirm says it: "This replaces the
+   field list the standing holds now, even one corrected since."
 
 ## Out of scope
 

@@ -83,6 +83,12 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes confirm, "another deck"
     assert_includes css_select("a[href='#{reimport_admin_import_path(deck)}']").first["data-turbo-confirm"],
       "This adds another deck to their decks."
+    field_list = users(:two).imports.create!(kind: "standing_list", label: "Ash — Event", status: "completed",
+      tournament: tournaments(:one),
+      replay_params: { "standing_id" => tournament_standings(:ash_masters).id, "decklist" => "4 Doublade TWM 62" })
+    get admin_imports_path
+    assert_includes css_select("a[href='#{reimport_admin_import_path(field_list)}']").first["data-turbo-confirm"],
+      "replaces the field list the standing holds now"
 
     assert_select "a.btn.btn-secondary.btn-sm[href='#{undo_admin_import_path(run)}']", 1
     assert_select "a[href$='/undo']", 1
