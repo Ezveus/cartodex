@@ -80,7 +80,9 @@ venue (**Venue**). This adds a third axis: one tournament.
 
 - The mode links re-emit `tournament:` off the scope (nil when none), like `venue:`.
 - Empty state under a selected tournament: the pool and venue suggestions are both clicks that keep
-  the tournament, so they are suppressed by the scoped counts; a third suggestion — "All
+  the tournament. The pool one withholds itself through the scoped `all_formats_lists_count`; the
+  venue one through an explicit guard, since `venue_options` is deliberately not scoped to the
+  event. A third suggestion — "All
   tournaments" — is made when the selection holds lists.
 
 ### Controller

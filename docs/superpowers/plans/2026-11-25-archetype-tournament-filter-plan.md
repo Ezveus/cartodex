@@ -11,7 +11,8 @@ lines — dispatching lanes would cost more than it returns.
 - `Bucket` gains `tournament_id`, `tournament_name`; `buckets` groups by `tournaments.id` and plucks
   `tournaments.id, tournaments.name, tournaments.standard_pool_id, tournaments.online, COUNT(*),
   COUNT(DISTINCT deck_id), MAX(tournaments.date)`.
-- `Result` gains `tournament` (a `Tournament`-like Struct `id/name/date`, nil = all),
+- `Result` gains `tournament` (`SelectedTournament`, a Struct carrying the id alone — its name and
+  date were dropped once the mutation pass showed nothing read them; nil = all),
   `tournament_options`, `tournament_selectable`.
 - `selected_tournament(pool, venue)`; `selection_rows(pool, venue, tournament = nil)`.
 - `standings_scope(pool, venue, tournament)` adds `where(tournament_id:)`.
