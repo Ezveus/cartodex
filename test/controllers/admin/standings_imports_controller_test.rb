@@ -131,6 +131,12 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
         "expected_row_count" => 5
       }
     ])
+    # What /admin/imports replays: the same options, without the row count. Kept, it would refuse
+    # every replay of a completed run — the rows this run writes plan as :skip next time.
+    assert_equal({
+      "deck_id" => "280", "archetype_id" => @archetype.id,
+      "event_filters" => [ "NAIC", "World Championships" ], "limit_per_event" => 4
+    }, import.replay_params)
 
     assert_redirected_to admin_imports_path
   end
@@ -347,6 +353,10 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
         "set" => ONLINE_SET
       }
     ])
+    assert_equal({
+      "archetype_id" => @archetype.id, "event_filters" => [], "limit_per_event" => nil,
+      "source" => "online", "slug" => "raging-bolt-ogerpon", "rotation" => "2026", "set" => ONLINE_SET
+    }, import.reload.replay_params)
   end
 
   # The online twin of the end-to-end test above, and it exists for the same reason: a Hash key
@@ -847,6 +857,8 @@ class Admin::StandingsImportsControllerTest < ActionDispatch::IntegrationTest
       import.id, @admin.id,
       { "source" => "event", "tournament_id" => EVENT_ID, "event_filters" => [], "limit_per_event" => nil }
     ])
+    assert_equal({ "source" => "event", "tournament_id" => EVENT_ID, "event_filters" => [], "limit_per_event" => nil },
+      import.reload.replay_params)
     assert_redirected_to admin_imports_path
   end
 

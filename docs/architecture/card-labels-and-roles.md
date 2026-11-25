@@ -43,11 +43,10 @@ Limitless's card search for one label's `is:` token rather than a standings shee
 the two kinds before it, it leaves no receipt to undo: a re-run writes exactly
 the rows the source still lists and deletes nothing on its own, so there is nothing for
 `Admin::ImportsController#undo` to act on and it falls through to that action's generic refusal.
-`Admin::ImportsController::RETRYABLE_KINDS` does not carry it either — an Import stores only the
-label and the query, not a payload, and the query still lives on the `CardLabel` row, so retrying
-means running the import again from there rather than from the `Import`; `UNRETRYABLE_REASONS`
-says exactly that in the admin's own words instead of falling through to the generic fallback
-sentence.
+It can be reimported from `/admin/imports`: a run stores its `card_label_id` in
+`imports.replay_params`, and `Imports::Replayer` runs the job again against a new Import. The job
+reads the label's *current* `source_query`, not the one the first run searched, so the replay's
+row is labelled with the token it will actually run — an admin may have edited the label since.
 
 **`CardLabels::RoleSuggester` proposes and never decides**, which is the asymmetry the whole store
 was built for. One versioned regex per slug reads `cards.effect` **plus** every attack's and

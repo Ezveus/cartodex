@@ -28,7 +28,12 @@ module Api
     end
 
     def import
-      import = current_user.imports.create!(kind: "deck", label: params[:name])
+      # What /admin/imports needs to run this again (Imports::Replayer): the decklist is the whole
+      # job, and before this column it was lost the moment the job was enqueued.
+      import = current_user.imports.create!(
+        kind: "deck", label: params[:name],
+        replay_params: { "decklist" => params[:decklist].to_s, "name" => params[:name] }
+      )
       Decks::ImportJob.perform_later(params[:decklist], current_user, params[:name], import)
       render json: { import_id: import.id }, status: :accepted
     end

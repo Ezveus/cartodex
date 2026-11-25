@@ -562,6 +562,15 @@ textarea.form-input {
   flex: 1;
 }
 
+/* The Actions cell of /admin/imports: Reimport, Undo, Delete wrap inside a narrow column, and the
+   gap is what keeps a wrapped line off the one above it. */
+.import-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 #scanner-video {
   width: 100%;
   max-width: 400px;

@@ -93,6 +93,7 @@ class Admin::CardLabelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to admin_imports_path
     assert_equal "card_labels", Import.last.kind
+    assert_equal({ "card_label_id" => @type_label.id }, Import.last.replay_params)
   end
 
   # Only a label that says where to read it can be imported, and the screen must refuse rather

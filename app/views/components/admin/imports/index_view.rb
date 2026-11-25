@@ -44,6 +44,22 @@ module Admin
           "so they can no longer be undone."
       end
 
+      # Names whose run it is, because the replay is theirs and not the admin's: a deck lands in that
+      # member's decks, which is worth saying before it happens rather than after.
+      #
+      # A field-list replay puts this import's decklist back on the standing and drops whatever list
+      # it holds now, a hand correction included — the owner's call: the import wins. Said here,
+      # since nothing on the row shows that a newer list exists.
+      def reimport_confirm(imp)
+        text = "Reimport #{imp.label} with the same parameters, as #{imp.user.email}?"
+        case imp.kind
+        when "deck" then "#{text} This adds another deck to their decks."
+        when "standing_list" then "#{text} This replaces the field list the standing holds now, " \
+                                  "even one corrected since."
+        else text
+        end
+      end
+
       def status_badge(imp)
         render Ui::StatusBadge.new(status: imp.status)
       end
@@ -112,30 +128,39 @@ module Admin
         "#{line} (real #{entry["owned_before"]} \u2192 #{entry["owned_after"]})"
       end
 
+      # Reimport, Undo, Delete — primary, secondary, danger, in the order an admin reaches for them.
+      # Reimport is offered on any status (a completed run is the main case: re-reading a set, or
+      # picking up an archetype's new lists) and only where there is something to replay — see
+      # Import#replayable?.
+      # In a wrapping flex row with a gap: three buttons do not fit the column at desktop width, and
+      # as inline links separated by " " the second line sat flush against the first (measured at
+      # 1400px: Reimport's bottom edge at y 459, Undo's top at 459). Every control is an <a>, so a
+      # <div> around them stacks nothing — the note in Admin::CardLabels::IndexView is about
+      # button_to's block-level <form>, which this cell never renders.
       def actions_cell(imp)
-        if imp.failed? || imp.pending?
-          link_to "Retry", retry_admin_import_path(imp),
-            data: { turbo_method: :post, turbo_confirm: "Retry import #{imp.label}?" },
-            class: "btn btn-primary btn-sm"
-          plain " "
+        div(class: "import-row-actions") do
+          if imp.replayable?
+            link_to "Reimport", reimport_admin_import_path(imp),
+              data: { turbo_method: :post, turbo_confirm: reimport_confirm(imp) },
+              class: "btn btn-primary btn-sm"
+          end
+          # Undo is offered for every bulk run, not only a failed one: the damage this button
+          # repairs is rows that were written *successfully* from a wrong deck id or a wrong
+          # archetype. It says what it will not do, because it genuinely will not — a claimed row
+          # belongs to the member who claimed it and survives.
+          if imp.kind == "limitless_standings"
+            link_to "Undo", undo_admin_import_path(imp),
+              data: {
+                turbo_method: :post,
+                turbo_confirm: "Undo import ##{imp.id}? Every standing it created that nobody has " \
+                               "claimed will be deleted, along with the field lists attached to them."
+              },
+              class: "btn btn-secondary btn-sm"
+          end
+          link_to "Delete", admin_import_path(imp),
+            data: { turbo_method: :delete, turbo_confirm: delete_confirm(imp) },
+            class: "btn btn-danger btn-sm"
         end
-        # Undo is offered for every bulk run, not only a failed one: the damage this button
-        # repairs is rows that were written *successfully* from a wrong deck id or a wrong
-        # archetype. It says what it will not do, because it genuinely will not — a claimed row
-        # belongs to the member who claimed it and survives.
-        if imp.kind == "limitless_standings"
-          link_to "Undo", undo_admin_import_path(imp),
-            data: {
-              turbo_method: :post,
-              turbo_confirm: "Undo import ##{imp.id}? Every standing it created that nobody has " \
-                             "claimed will be deleted, along with the field lists attached to them."
-            },
-            class: "btn btn-secondary btn-sm"
-          plain " "
-        end
-        link_to "Delete", admin_import_path(imp),
-          data: { turbo_method: :delete, turbo_confirm: delete_confirm(imp) },
-          class: "btn-danger btn-sm"
       end
     end
   end

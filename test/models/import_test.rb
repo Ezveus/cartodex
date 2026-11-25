@@ -55,4 +55,35 @@ class ImportTest < ActiveSupport::TestCase
     assert_equal 1, entry["owned_before"]
     assert_equal 2, entry["owned_after"]
   end
+
+  # Every kind but bulk_cards, and only with something stored. Built with params on a bulk_cards
+  # row on purpose: a real one carries `{}`, so without that the constant could wrongly list it and
+  # no other test would notice.
+  test "replayable? needs a replayable kind and stored parameters" do
+    assert Import.new(kind: "deck", replay_params: { "decklist" => "4 Honedge POR 56", "name" => "n" }).replayable?
+    assert_not Import.new(kind: "deck").replayable?, "a row written before the column carries {}"
+    assert_not Import.new(kind: "bulk_cards", replay_params: { "x" => 1 }).replayable?
+    assert_equal Import::KINDS - [ "bulk_cards" ], Import::REPLAYABLE_KINDS
+  end
+
+  test "an import written without parameters reads back as an empty hash, never nil" do
+    import = users(:one).imports.create!(kind: "deck", label: "Raging Bolt")
+
+    assert_equal({}, import.reload.replay_params)
+  end
+
+  # CI loads db/schema.rb and never runs a migration, so the backfill is executed by nothing else.
+  # A card set is the one kind whose label is its whole job; every other old row stays `{}`.
+  test "the migration rebuilds a card set's URL from its label and leaves every other kind alone" do
+    require Rails.root.join("db/migrate/20261125090000_add_replay_params_to_imports.rb")
+    set = users(:one).imports.create!(kind: "card_set", label: "MEG", status: "completed")
+    deck = users(:one).imports.create!(kind: "deck", label: "Raging Bolt")
+
+    migration = AddReplayParamsToImports.new
+    migration.suppress_messages { migration.backfill_card_sets }
+
+    assert_equal({ "url" => "https://limitlesstcg.com/cards/MEG" }, set.reload.replay_params)
+    assert set.replayable?
+    assert_equal({}, deck.reload.replay_params)
+  end
 end

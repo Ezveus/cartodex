@@ -69,7 +69,7 @@ class CardLabels::ImportJobTest < ActiveJob::TestCase
 
   # Enqueued with ids for exactly this: handed the record, GlobalID raises before #perform is
   # entered and the rescue below never runs, leaving the Import at "pending" forever with no way
-  # to clear it — Admin::ImportsController#retry refuses this kind.
+  # to clear it — a Reimport adds a new row and finishes no old one.
   test "a label deleted while the run was queued fails the import instead of hanging it" do
     @label.destroy
 

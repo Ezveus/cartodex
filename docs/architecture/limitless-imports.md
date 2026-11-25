@@ -67,9 +67,20 @@ created rows nobody has claimed, takes the field list back off the enriched ones
 `update_column` (for the reason `#unclaim` uses it), keeps the claimed rows and says how many, and
 leaves the events alone.
 `Import::KINDS` gains `limitless_standings`, whose `tournament_id` stays nil because a run spans
-many events, and `Admin::ImportsController#retry` became an allowlist (`deck`, `card_set`) rather
-than a chain of refusals — its `case` has no `else`, so a new kind used to destroy the row and
-enqueue nothing.
+many events.
+
+**A run can be replayed from `/admin/imports`, and the replay carries no row count.** `#create`
+stores the job's options in `imports.replay_params`, **minus `expected_row_count`**, and the
+Reimport button hands them to `Imports::Replayer`, which creates a new `Import` and enqueues the
+same job against it. Pulling in the lists an archetype gained since the last run, without
+re-pasting the URL or choosing the archetype again, is what Reimport exists for. The count would
+refuse every such replay: the rows a run wrote plan as `:skip` on the next one, so
+`importable_rows` shrinks to what is new and `#verify!` raises `PlanDrifted` — measured on the
+job's own fixture, the second run read "Limitless now offers 0 importable rows, not the 6 that
+were previewed". Without it, a replay writes the new rows, skips the rest, and stays bounded by
+`PlanTooLarge` and by the run's `event_filters`/`limit_per_event`. The new rows land on the
+**replay's** receipt, so its Undo takes back only what the replay wrote. The count still guards
+the first click, where it belongs: a page that moved between a preview and its confirm.
 
 **The screen takes one Limitless URL, and nothing past the preview ever sees it.** The admin pastes
 the address of the page they are looking at, and `Tournaments::LimitlessUrl` reads it into the

@@ -33,6 +33,9 @@ class Api::DecksControllerTest < ActionDispatch::IntegrationTest
     assert_response :accepted
     json = JSON.parse(response.body)
     assert json["import_id"].present?, "Response should include an import_id"
+    # What /admin/imports replays. The decklist is the job; before this column it was lost the
+    # moment the job was enqueued, and Retry re-ran the deck's *name* as its list.
+    assert_equal({ "decklist" => decklist, "name" => "My Deck" }, Import.find(json["import_id"]).replay_params)
   end
 
   test "import requires authentication" do

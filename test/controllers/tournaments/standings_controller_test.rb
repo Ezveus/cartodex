@@ -341,6 +341,11 @@ class Tournaments::StandingsControllerTest < ActionDispatch::IntegrationTest
     import = Import.order(:id).last
     assert_equal "standing_list", import.kind
     assert_equal @user, import.user
+    # The decklist is stored nowhere else, so this is what makes the row replayable from
+    # /admin/imports; the tournament is what scopes a replay's "Importing…" item to this event.
+    assert_equal({ "standing_id" => TournamentStanding.order(:id).last.id, "decklist" => "4 Doublade TWM 62" },
+      import.replay_params)
+    assert_equal @tournament, import.tournament
     # The row exists before its list does, which is the point: a failed import must not lose the
     # standing somebody typed.
     assert_equal "Brock", TournamentStanding.order(:id).last.player_name

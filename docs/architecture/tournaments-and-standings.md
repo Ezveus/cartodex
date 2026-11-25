@@ -133,8 +133,8 @@ ids, not records**, unlike `Decks::ImportJob` and `CardSets::ImportJob`, and the
 governance: those two are handed a user and an import, neither of which can vanish mid-flight,
 while any member may delete this standing — or the event, which cascades onto it. Handed records,
 GlobalID raises `ActiveJob::DeserializationError` **before** `#perform` is entered, where the
-method's own `rescue` cannot see it: the `Import` would sit at `"pending"` forever, with
-`Admin::ImportsController#retry` refusing this kind and no other way to clear it. As ids the
+method's own `rescue` cannot see it: the `Import` would sit at `"pending"` forever, with nothing
+but a Delete able to clear it — a Reimport adds a new row beside it and finishes no old one. As ids the
 deletion is an ordinary lookup miss, raised as `StandingDeleted` and reported down the same path as
 a bad decklist. The `rescue` also **destroys the deck it just created** when the `update!` attaching
 it fails: `Decks::Fetcher` commits its own transaction, so the list lands first, and what is left
@@ -160,11 +160,11 @@ has a date and it is the only thing that knows which pool was legal — and
 `clear_inapplicable_classification` drops the pool when the format is not Standard and the custom
 name when it is not Other, so neither a GLC event's list nor a Standard one needs a special case. The deck's name is
 `"<player> — <event> (<date>)"` because `/decks/shared` prints no author and the name is the only
-thing that can situate the list. `Import::KINDS` gained `standing_list`, and
-`Admin::ImportsController#retry` **refuses** it explicitly rather than falling through the `case`:
-the decklist text is not stored, so there is nothing to re-run. (The `"deck"` branch of that same
-`case` has never worked — it re-enqueues `@import.label` as the *decklist*, which is the deck's
-name. Pre-existing, out of scope, recorded so the new kind is not wired into the same silence.)
+thing that can situate the list. `Import::KINDS` gained `standing_list`. The field-list import
+stores its `standing_id` and decklist in `imports.replay_params`, so `/admin/imports` can
+**Reimport** it (`Imports::Replayer`): the job then replaces the standing's list as it would on
+any edit. Rows written before that column carry `{}` and cannot be replayed — the decklist was
+never kept.
 The archetype `Decks::Fetcher` detects stays on the deck and never overwrites the standing's own:
 the standing's was declared by a human making a record, detection exists to guess when nobody has,
 and a disagreement between the two is information rather than a conflict.
