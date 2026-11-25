@@ -19,12 +19,15 @@ class Imports::ReplayerTest < ActiveJob::TestCase
     assert_enqueued_with(job: Decks::ImportJob, args: [ "4 Honedge POR 56", @owner, "Raging Bolt", replay ])
   end
 
-  test "a card set import replays its URL" do
-    import = imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" })
+  # The stored URL is not the one the label rebuilds, on purpose: Retry rebuilt it from the label,
+  # and with the two equal a replay doing that again would pass.
+  test "a card set import replays its stored URL, not one rebuilt from the label" do
+    import = imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG?display=list" })
 
     replay = Imports::Replayer.call(import)
 
-    assert_enqueued_with(job: CardSets::ImportJob, args: [ "https://limitlesstcg.com/cards/MEG", @owner, replay ])
+    assert_enqueued_with(job: CardSets::ImportJob,
+      args: [ "https://limitlesstcg.com/cards/MEG?display=list", @owner, replay ])
   end
 
   test "a field-list import replays its standing and decklist, and stays on its event" do
@@ -118,6 +121,17 @@ class Imports::ReplayerTest < ActiveJob::TestCase
   test "a set already being imported by anybody refuses the replay" do
     imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, user: users(:one), status: "pending")
     import = imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, status: "failed")
+
+    error = assert_refused(import)
+
+    assert_equal "Set MEG is already being imported.", error.message
+  end
+
+  # The guard reads the other rows whatever the replayed row's own status: a pending row is refused
+  # too when a second run of its set is already queued.
+  test "a pending set import is refused while another run of that set is pending" do
+    imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, status: "pending")
+    import = imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, status: "pending")
 
     error = assert_refused(import)
 
