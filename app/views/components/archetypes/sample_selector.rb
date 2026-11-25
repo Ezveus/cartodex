@@ -54,11 +54,11 @@ module Archetypes
       # of the first two: an archetype whose every standing sits in one pool is not `selectable?`
       # and a sixteen-list sample is not `small_sample?`, which is exactly the shape one online
       # import produces, so without it the blend would be named nowhere on this page.
-      return unless @scope.selectable? || @scope.venue_selectable? ||
-                    @scope.small_sample? || @scope.online_lists?
+      return unless any_select? || @scope.small_sample? || @scope.online_lists?
 
       div(class: "archetype-sample") do
         selector
+        tournament_note
         venue_note
         pool_note
         online_note
@@ -76,12 +76,18 @@ module Archetypes
     # prevent, and widening the Venue select to `selectable?` offers "Online — 0 lists" on an
     # archetype that has never had an online result.
     #
-    # No new CSS, and that is measured rather than assumed: `.deck-filters` is already
+    # The layout is `.deck-filters`' own, and that is measured rather than assumed: it is already
     # `display: flex; flex-wrap: wrap; gap: .5rem` and `.archetype-sample-label` is already the
     # flex item carrying a label and its select, so two of them sit side by side above the
     # breakpoint and stack below it.
+    #
+    # The Tournament select joined as a third guard on the same terms: a single-pool, paper-only
+    # archetype recorded at a dozen Regionals offers neither of the first two and still has a real
+    # choice to make. A third label wraps like the second; what it did need is one CSS rule capping
+    # the select at its row (`.archetype-sample-label .deck-filter-select`), since a select is as
+    # wide as its longest option and online event names pushed it to 905px at 500px.
     def selector
-      return unless @scope.selectable? || @scope.venue_selectable?
+      return unless any_select?
 
       form(action: analysis_archetype_path(@scope.archetype), method: "get", class: "deck-filters",
            data: { controller: "card-filter" }) do
@@ -91,7 +97,12 @@ module Archetypes
         input(type: "hidden", name: "group", value: "role") if @grouping == :role
         pool_select
         venue_select
+        tournament_select
       end
+    end
+
+    def any_select?
+      @scope.selectable? || @scope.venue_selectable? || @scope.tournament_selectable?
     end
 
     # The label wraps the select rather than pointing at it: Ui::FilterSelect emits no id, and an
@@ -120,8 +131,25 @@ module Archetypes
       end
     end
 
+    # Cascading: its options are the events of the pool and venue chosen beside it, so a change to
+    # either of those that leaves the chosen event behind lands on "All tournaments" — the scope
+    # clamps it, and `selected:` reads the clamp, never the parameter.
+    def tournament_select
+      return unless @scope.tournament_selectable?
+
+      label(class: "archetype-sample-label") do
+        span { "Tournament" }
+        render Ui::FilterSelect.new(name: "tournament", options: tournament_options,
+                                    selected: @scope.tournament&.id&.to_s || MetagameScope::ALL)
+      end
+    end
+
     def options
       @scope.options.map { |option| [ option.label, option.value ] }
+    end
+
+    def tournament_options
+      @scope.tournament_options.map { |option| [ option.label, option.value ] }
     end
 
     def venue_options
@@ -151,8 +179,11 @@ module Archetypes
     # the cheaper half of the trade; the alternative that makes the label literally true is to give
     # the Sample select its own form so that changing the pool resets the venue, which is a
     # different product decision about what a click does and is left to the owner.
+    #
+    # Withheld under a chosen tournament, whose note says the same thing about both labels at once:
+    # "the lists of the venue selected" is no longer the report's sample there.
     def venue_note
-      return unless @scope.venue != :all && @scope.selectable?
+      return unless @scope.venue != :all && @scope.selectable? && @scope.tournament.nil?
 
       count = @scope.lists_count
 
@@ -160,6 +191,29 @@ module Archetypes
         plain "The Sample counts above are over both venues. This report covers the "
         strong { "#{count} #{'list'.pluralize(count)}" }
         plain " of the venue selected beside it."
+      end
+    end
+
+    # The venue note's argument one axis down. The Sample and Venue labels are counted over every
+    # event of the selection — deliberately, for the stability reasons written on the venue axis —
+    # so under one event both assert a sample the report below does not show. It names only the
+    # selects actually rendered, since a sentence about "the Venue counts above" under no Venue
+    # select sends the reader looking for a control that is not there; and it says nothing when
+    # the Tournament select is alone, whose own selected label is the sample.
+    def tournament_note
+      return if @scope.tournament.nil?
+
+      names = []
+      names << "Sample" if @scope.selectable?
+      names << "Venue" if @scope.venue_selectable?
+      return if names.empty?
+
+      count = @scope.lists_count
+
+      p(class: "archetype-sample-note") do
+        plain "The #{names.join(' and ')} counts above span every tournament. This report covers the "
+        strong { "#{count} #{'list'.pluralize(count)}" }
+        plain " of the tournament selected beside #{names.size == 1 ? 'it' : 'them'}."
       end
     end
 

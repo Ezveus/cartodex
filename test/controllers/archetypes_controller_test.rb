@@ -561,11 +561,13 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
     get analysis_archetype_path(archetype)
 
-    # One pool and both venues: the Venue select alone, and no Sample select — a `<select>` of one
+    # One pool and both venues: the Venue select, and no Sample select — a `<select>` of one
     # option is the non-choice `Result#selectable?` exists to drop. 15 of the 24 blended
-    # archetypes in production are in exactly this shape.
-    assert_select ".archetype-sample-label", count: 1
+    # archetypes in production are in exactly this shape. Each standing sits at its own event, so
+    # the Tournament select is the second label.
+    assert_select ".archetype-sample-label", count: 2
     assert_select "select[name=venue]", count: 1
+    assert_select "select[name=tournament]", count: 1
     assert_select "select[name=pool]", count: 0
     blended = css_select(".archetype-card-row").size
 
@@ -594,9 +596,10 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
 
     get analysis_archetype_path(archetype)
 
-    assert_select ".archetype-sample-label", count: 2
+    assert_select ".archetype-sample-label", count: 3
     assert_select "select[name=pool]", count: 1
     assert_select "select[name=venue]", count: 1
+    assert_select "select[name=tournament]", count: 1
   end
 
   # The clamp, in the only two things the page still shows once it has fired: there is no venue
@@ -650,6 +653,64 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal [ 17, 17, 17 ], counts.values, "a venue changed the page's cost: #{counts.inspect}"
+  end
+
+  # ---- the tournament axis ----
+
+  # The page's side of the cascade: one event narrows the report and the panel, the select marks
+  # it, and the mode links carry it so switching to role mode does not silently widen the sample.
+  test "a tournament narrows the report to the event it names" do
+    archetype = quiet_archetype(700, name: "Toured Archetype")
+    3.times { |i| listed_standing_for(archetype, 700 + i) }
+    picked = TournamentStanding.where(archetype: archetype).order(:id).first.tournament
+
+    get analysis_archetype_path(archetype)
+    everything = css_select(".archetype-card-row").size
+
+    get analysis_archetype_path(archetype, tournament: picked.id)
+
+    assert_response :success
+    assert_select "select[name=tournament] option[selected][value=?]", picked.id.to_s
+    assert_operator css_select(".archetype-card-row").size, :<, everything
+    hrefs = css_select("a.archetype-report-mode").map { |link| link["href"] }
+    assert_equal 2, hrefs.count { |href| href.include?("tournament=#{picked.id}") }, hrefs.inspect
+  end
+
+  # `?tournament[]=junk` is an Array and `?tournament[a]=b` a Parameters; neither may 500, and a
+  # stale id (an event another archetype was recorded at) lands on "All tournaments".
+  test "the analysis survives a malformed or foreign tournament parameter" do
+    archetype = quiet_archetype(710, name: "Malformed Tournament Archetype")
+    2.times { |i| listed_standing_for(archetype, 710 + i) }
+    foreign = quiet_archetype(715, name: "Foreign Tournament Archetype")
+    listed_standing_for(foreign, 715)
+    foreign_event = TournamentStanding.find_by!(archetype: foreign).tournament
+
+    [ [ "junk" ], { a: "b" }, foreign_event.id ].each do |param|
+      get analysis_archetype_path(archetype, tournament: param)
+
+      assert_response :success
+      assert_select "select[name=tournament] option[selected][value=all]", 1, param.inspect
+    end
+  end
+
+  # The pinned cost, with and without an event: the tournament rides in the one grouped query
+  # MetagameScope already ran, so choosing one adds nothing.
+  test "the tournament axis costs no query the unfiltered page does not" do
+    archetype = quiet_archetype(720, name: "Tournament Cost Archetype")
+    3.times { |i| listed_standing_for(archetype, 720 + i) }
+    picked = TournamentStanding.where(archetype: archetype).first.tournament
+
+    get analysis_archetype_path(archetype) # warm the session
+
+    counts = [ nil, picked.id ].map do |tournament|
+      queries = capture_queries { get analysis_archetype_path(archetype, tournament: tournament) }
+      assert_select ".archetype-card-row", minimum: 1
+      # The selected path really ran: a clamped id would cost 17 for the wrong reason.
+      assert_select "select[name=tournament] option[selected][value=?]", (tournament || "all").to_s
+      queries.size
+    end
+
+    assert_equal [ 17, 17 ], counts, "a tournament changed the page's cost"
   end
 
   # The twin of the note below, one panel further down, and false in the other direction: under

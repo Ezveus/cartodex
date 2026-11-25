@@ -4206,6 +4206,17 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   align-items: center;
   gap: 0.5rem;
   font-weight: 500;
+  max-width: 100%;
+}
+
+/* A select is as wide as its longest option, and the Tournament select's options carry an event
+   name: online event names run long enough that, unbounded, the label measured 905px and pushed
+   the page into a horizontal scroll at 500px (Dragapult ex, All formats). Capped at the row, the
+   select truncates its closed label and the open list still shows every name whole. */
+.archetype-sample-label .deck-filter-select {
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
 }
 
 .archetype-sample-note {
