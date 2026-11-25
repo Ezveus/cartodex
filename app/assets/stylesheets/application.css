@@ -1926,9 +1926,13 @@ textarea.form-input {
    display so the disclosure marker stays; name and figures are inline runs that wrap under each
    other at narrow widths rather than flex items spread apart. */
 .card-usage-intro {
-  margin: 0 0 1rem;
+  margin-bottom: 1rem;
   color: var(--ink-500);
   font-size: 0.9rem;
+}
+
+.card-usage-intro p {
+  margin: 0 0 0.4rem;
 }
 
 .card-usage-filters {

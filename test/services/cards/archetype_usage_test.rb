@@ -116,7 +116,7 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     assert_equal({ pool: "all" }, node.analysis_params)
     outside = node.pools.last
     assert_nil outside.pool_id
-    assert_equal "Outside Standard", outside.label
+    assert_equal "Other formats", outside.label
     assert_nil outside.analysis_params
     assert_equal({ pool: "all", tournament: sample[:glc].id.to_s }, outside.tournaments.sole.analysis_params)
     node.pools.each do |candidate|
@@ -124,7 +124,7 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     end
   end
 
-  # The pool order is most recent listed event first and "Outside Standard" last, whatever its
+  # The pool order is most recent listed event first and "Other formats" last, whatever its
   # date — the GLC event here sits between the two pools' dates.
   test "pools are ordered by their latest listed event, the non-Standard node last" do
     sample = parity_sample

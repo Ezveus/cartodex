@@ -18,11 +18,7 @@ module Cards
     def view_template
       section(class: "card-info-section card-usage", id: "usage") do
         h2 { "Played in recorded lists" }
-        p(class: "card-usage-intro") do
-          plain "The share of each archetype's lists recorded in Cartodex that play this card, " \
-                "in any printing — the figure the archetype's analysis prints for it, by pool " \
-                "and by tournament."
-        end
+        intro
         venue_form if @usage.venue_selectable?
 
         if @usage.any?
@@ -34,6 +30,32 @@ module Cards
     end
 
     private
+
+    # Three sentences, each answering a review finding about what the figures claim. Every linked
+    # node is the analysis's figure for the same sample — "Other formats" has no such sample. An
+    # archetype's first line counts every rotation together, as the analysis's "All formats" does,
+    # and says so on the line itself. And the analysis's two qualifiers — a small-sample notice
+    # under MetagameScope::SMALL_SAMPLE lists, and the note that paper and online lists are
+    # counted together — apply here as much as there: on a production copy, two thirds of the
+    # linked nodes hold fewer than 10 lists.
+    def intro
+      div(class: "card-usage-intro") do
+        p do
+          plain "The share of each sample's lists recorded in Cartodex that play this card, in any " \
+                "printing. Every line with an Analysis link is the figure the archetype's analysis " \
+                "prints for the same sample."
+        end
+        p do
+          plain "An archetype's first line counts every format and rotation together, as the " \
+                "analysis's All formats does; open it for one Standard pool at a time."
+        end
+        p do
+          plain "Below #{Archetypes::MetagameScope::SMALL_SAMPLE} lists a percentage rests on a " \
+                "handful of lists, and unless a venue is chosen, paper and online lists are " \
+                "counted together."
+        end
+      end
+    end
 
     # A GET back onto this page, anchored on the section so the reload lands where the reader was.
     def venue_form
@@ -53,7 +75,10 @@ module Cards
     def archetype_item(node)
       li(class: "card-usage-node card-usage-archetype") do
         details do
-          summary { node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype) }
+          summary do
+            node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype,
+                      scope: "All formats")
+          end
           ul(class: "card-usage-children") { node.pools.each { |pool| pool_item(pool, node.archetype) } }
         end
       end
@@ -79,17 +104,20 @@ module Cards
       return unless count.positive?
 
       li(class: "card-usage-unplayed") do
-        "#{count} other #{'tournament'.pluralize(count)} in this pool: not played."
+        "#{count} other #{'tournament'.pluralize(count)} here: not played."
       end
     end
 
     # The link to the analysis the node reproduces trails the figures rather than wrapping the name:
     # inside a <summary>, a linked name takes the tap that was meant to open the node — measured in
     # the 390px system test, where the summary's centre lands on the name and the click navigated
-    # away instead of expanding. "Outside Standard" has no analysis to link to.
-    def node_line(name, usage, params, archetype)
+    # away instead of expanding. "Other formats" has no analysis to link to.
+    #
+    # `scope` names a sample the line's name does not: an archetype's first line blends every
+    # rotation, which the analysis only shows under "All formats".
+    def node_line(name, usage, params, archetype, scope: nil)
       span(class: "card-usage-name") { name }
-      span(class: "card-usage-figures") { figures(usage) }
+      span(class: "card-usage-figures") { [ scope, figures(usage) ].compact.join(" · ") }
       return unless params
 
       a(href: "#{analysis_base(archetype)}?#{params.to_query}", class: "card-usage-link") { "Analysis" }

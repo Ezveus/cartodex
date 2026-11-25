@@ -27,7 +27,7 @@ class CardUsageTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_select "#usage .card-usage-archetype > details > summary .card-usage-figures",
-                    text: "66.7% · 2 of 3 lists · 1-2 copies · most often 1 / 2 — tied"
+                    text: "All formats · 66.7% · 2 of 3 lists · 1-2 copies · most often 1 / 2 — tied"
       assert_select "#usage .card-usage-archetype a[href=?]",
                     analysis_archetype_path(@archetype, pool: "all")
       assert_select "#usage .card-usage-tournament", count: 2
@@ -42,7 +42,7 @@ class CardUsageTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#usage select[name=venue] option[selected][value=online]"
     assert_select "#usage .card-usage-archetype > details > summary .card-usage-figures",
-                  text: "100% · 1 of 1 list · 1 copy"
+                  text: "All formats · 100% · 1 of 1 list · 1 copy"
     assert_select "#usage .card-usage-link" do |anchors|
       assert anchors.all? { |anchor| anchor["href"].include?("venue=online") }, anchors.map { _1["href"] }.inspect
     end
@@ -55,6 +55,25 @@ class CardUsageTest < ActionDispatch::IntegrationTest
 
     get "#{card_path(@card)}?venue[x]=y"
     assert_response :success
+  end
+
+  # card_allocation_controller.js reloads this page on every collection +/- only to extract the
+  # `#card-allocation` frame. Measured on the widest card, the tree was 466 KB of that 474 KB
+  # response, so a frame request skips it — and its aggregate query — entirely.
+  test "the allocation frame's refresh does not compute the tree" do
+    sign_in users(:one)
+
+    queries = capture_queries do
+      get card_path(@card), headers: { "Turbo-Frame" => Cards::AllocationSection::FRAME_ID }
+    end
+
+    assert_response :success
+    assert_select "#card-allocation"
+    assert_select "#usage", count: 0
+    assert_empty queries.grep(/tournament_standings/)
+
+    get card_path(@card)
+    assert_select "#usage"
   end
 
   private

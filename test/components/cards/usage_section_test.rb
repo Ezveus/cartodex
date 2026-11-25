@@ -6,7 +6,7 @@ require "test_helper"
 class Cards::UsageSectionTest < ActiveSupport::TestCase
   Usage = Cards::ArchetypeUsage::Usage
 
-  test "each node links to the analysis with its own parameters, Outside Standard to nothing" do
+  test "each node links to the analysis with its own parameters, Other formats to nothing" do
     html = render_usage(tree)
     doc = Nokogiri::HTML5(html)
     archetype = archetypes(:ogerpon)
@@ -19,7 +19,7 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
       "/archetypes/#{archetype.to_param}/analysis?pool=all&tournament=11&venue=paper"
     ], hrefs
     outside = doc.css(".card-usage-pool > details > summary").last
-    assert_equal "Outside Standard", outside.at_css(".card-usage-name").text
+    assert_equal "Other formats", outside.at_css(".card-usage-name").text
     assert_empty outside.css("a")
   end
 
@@ -27,13 +27,16 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
     doc = Nokogiri::HTML5(render_usage(tree))
     figures = doc.css(".card-usage-figures").map(&:text)
 
-    assert_equal "33.3% · 1 of 3 lists · 1-2 copies · most often 1 / 2 — tied", figures[0]
+    # The archetype line blends every rotation, as the analysis's "All formats" does, and says so.
+    assert_equal "All formats · 33.3% · 1 of 3 lists · 1-2 copies · most often 1 / 2 — tied", figures[0]
     assert_equal "100% · 1 of 1 list · 1 copy", figures[1]
     assert_equal "100% · 1 of 1 list · 1 copy", figures[2]
     # Usage's nil copies make `single_quantity?` true — `nil == nil` — and CopiesText would print
     # " copies" for it. A node nobody plays must never reach that text.
     assert_equal "not played · 0 of 12 lists", figures[3]
-    assert_includes doc.css(".card-usage-unplayed").map(&:text), "2 other tournaments in this pool: not played."
+    # "here", not "in this pool": the Other formats node is not a pool, and carries the same line.
+    assert_equal [ "2 other tournaments here: not played.", "1 other tournament here: not played." ],
+                 doc.css(".card-usage-unplayed").map(&:text)
   end
 
   test "the venue select renders only when both venues hold lists playing the card" do
@@ -80,8 +83,8 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
       analysis_params: { pool: "all", tournament: "11", venue: "paper" }
     )
     outside = Cards::ArchetypeUsage::PoolNode.new(
-      pool_id: nil, label: "Outside Standard", usage: usage(12, 0, 0.0, nil, nil, []), tournaments: [ glc ],
-      unplayed_tournaments_count: 0, analysis_params: nil
+      pool_id: nil, label: "Other formats", usage: usage(12, 0, 0.0, nil, nil, []), tournaments: [ glc ],
+      unplayed_tournaments_count: 1, analysis_params: nil
     )
     archetype = Cards::ArchetypeUsage::ArchetypeNode.new(
       archetype: archetypes(:ogerpon), usage: usage(3, 1, 33.3, 1, 2, [ 1, 2 ]),

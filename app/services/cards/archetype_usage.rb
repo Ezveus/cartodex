@@ -17,7 +17,7 @@ module Cards
   # docs/superpowers/specs/2026-11-25-card-archetype-usage-design.md.
   class ArchetypeUsage < ApplicationService
     VENUES = %w[all paper online].freeze
-    OUTSIDE_STANDARD_LABEL = "Outside Standard".freeze
+    OTHER_FORMATS_LABEL = "Other formats".freeze
 
     # `min_copies`/`max_copies`/`modes` are over the lists that play the card — the range *when
     # played*, as `CardStats::Entry` reports it — and nil/nil/[] when none does. The predicate
@@ -31,9 +31,11 @@ module Cards
 
     TournamentNode = Struct.new(:tournament_id, :label, :usage, :analysis_params, keyword_init: true)
 
-    # `pool_id` nil is the "Outside Standard" node: the events no Standard pool anchors. The
-    # analysis offers no sample of exactly those, so it carries no `analysis_params` and links
-    # nowhere — its figure is true, it simply has no page to agree with.
+    # `pool_id` nil is the "Other formats" node: the events no Standard pool anchors — Expanded,
+    # GLC, and the Japanese Standard events, which are filed as `other` (measured on a production
+    # copy: four "Standard (JP)" events). The analysis offers no sample of exactly those, so the
+    # node carries no `analysis_params` and links nowhere — its figure is true, it simply has no
+    # page to agree with.
     PoolNode = Struct.new(:pool_id, :label, :usage, :tournaments, :unplayed_tournaments_count,
                           :analysis_params, keyword_init: true)
 
@@ -73,10 +75,10 @@ module Cards
     private
 
     # Every listed standing of every archetype holding at least one list that plays the card, with
-    # that list's copies of it (nil when it plays none). DISTINCT because one deck may hold two
-    # printings of the card — they are summed in the subquery, never joined twice — and the
-    # standings themselves are the population, so a deck at two events is two rows, each counted
-    # once per node by the deck-id sets below.
+    # that list's copies of it (nil when it plays none). One row per standing: two printings of the
+    # card in one deck are summed by the subquery's GROUP BY, so the LEFT JOIN matches one row per
+    # deck, and a deck at two events is two rows that the deck-id sets below count once per node.
+    # No DISTINCT — it was here once, and a mutation removing it changed no figure.
     def rows
       @rows ||= begin
         plays = card_rows.group(:deck_id)
@@ -89,7 +91,6 @@ module Cards
           .where(archetype_id: played_archetypes)
           .joins(:tournament)
           .joins("LEFT JOIN (#{plays.to_sql}) plays ON plays.deck_id = tournament_standings.deck_id")
-          .distinct
           .pluck(
             :archetype_id, Arel.sql("tournaments.standard_pool_id"), Arel.sql("tournaments.online"),
             :tournament_id, Arel.sql("tournaments.name"), Arel.sql("tournaments.date"),
@@ -199,7 +200,7 @@ module Cards
                   with_venue({ pool: pool_id.to_s }, venue))
       end
       if grouped.key?(nil)
-        nodes << pool_node(venue, nil, OUTSIDE_STANDARD_LABEL, grouped[nil], nil)
+        nodes << pool_node(venue, nil, OTHER_FORMATS_LABEL, grouped[nil], nil)
       end
       nodes
     end

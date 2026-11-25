@@ -130,7 +130,13 @@ class CardsController < ApplicationController
     @og_payload = Og::CardPayload.call(@card)
     # Public, like the archetype analysis whose figures it reproduces. `venue` is passed raw: the
     # service `to_s`es it, so an Array- or Hash-shaped param falls back to All rather than raising.
-    @usage = Cards::ArchetypeUsage.call(card: @card, venue_param: params[:venue])
+    #
+    # Not for the allocation frame's own refresh: card_allocation_controller.js reloads this page on
+    # every collection +/- to extract `#card-allocation`, and measured on the widest card the tree
+    # was 466 KB of the 474 KB it rendered for nothing.
+    unless turbo_frame_request_id == Cards::AllocationSection::FRAME_ID
+      @usage = Cards::ArchetypeUsage.call(card: @card, venue_param: params[:venue])
+    end
   end
 
   def image

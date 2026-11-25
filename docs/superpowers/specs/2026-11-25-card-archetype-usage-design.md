@@ -63,14 +63,14 @@ one sample is not a choice). Options carry the number of lists playing the card 
   "dropped after rotation" is an answer — most recent **listed** event in the venue first, the pool
   id breaking a tie. That is close to, and deliberately not, the analysis selector's order, which
   reads `MAX(date)` over every standing in every venue: the one query here holds listed standings
-  only, and matching it exactly would cost a second grouped query to order a handful of nodes. Events with no Standard pool form one last node, **"Outside Standard"**,
+  only, and matching it exactly would cost a second grouped query to order a handful of nodes. Events with no Standard pool form one last node, **"Other formats"** (Expanded, GLC and the four Japanese Standard events filed as `other`),
   whose figure has no analysis counterpart (the analysis offers no "non-Standard only" sample) and
   which therefore links nowhere.
 - **Tournaments**: those of that pool where the card is played, newest first, the id breaking a
   tie, labelled `"<name> (<I18n.l date>)"`. The rest are a count on the pool node
   (`unplayed_tournaments_count`) — 448 of Iono's 500 leaves would otherwise read 0 %.
 
-**Links.** Every node but "Outside Standard" carries the analysis parameters it reproduces:
+**Links.** Every node but "Other formats" carries the analysis parameters it reproduces:
 archetype `{pool: "all"}`, pool `{pool: id}`, tournament `{pool: id or "all", tournament: id}`,
 each plus `venue:` when the venue is not `:all`. Reproduction holds through the analysis's clamps:
 a node exists only where the archetype has lists in the venue, so the venue clamp cannot fire, and
@@ -105,10 +105,15 @@ this page, and this page now runs an aggregate over up to ~4600 rows. Signed-in 
 
 ### Cost of the widest card
 
-Measured on the production copy, card page of Boss's Orders (1383 nodes): **430 KB of HTML, 28 KB
-gzipped**, about 140 ms of server time warm — 70 ms in the service, 63 ms rendering (120 ms before
-the analysis URL was built once per archetype instead of once per node). Iono: 74 KB, 67 ms. A card
-no list plays: 14.5 KB, 29 ms. A lazy Turbo Frame for the section was weighed and not taken: it
+Measured on the production copy, card page of Boss's Orders (1383 nodes): **476 KB of HTML, 30 KB
+gzipped**, about 190 ms warm end to end — of which ~70 ms in the service and ~63 ms rendering the
+section (120 ms before the analysis URL was built once per archetype instead of once per node).
+Iono: 80 KB, 64 ms. A card no list plays: 14.8 KB, 23 ms.
+
+**The allocation frame's refresh skips the section.** `card_allocation_controller.js` reloads
+`card_path` on every collection +/- to extract `#card-allocation`; computing the tree there cost
+474 KB and 190 ms per click on Boss's Orders, for a frame of 8 KB. With the `Turbo-Frame` header
+naming that frame, `#show` does not call the service: 15 KB, 19 ms. A lazy Turbo Frame for the section was weighed and not taken: it
 would keep the hover prefetch from `/cards` off the aggregate, at the price of a new public route,
 its policy and rate limit, and a frame-navigated limited action that swallows its 429
 (`docs/architecture/deck-odds.md`); the visitor rate limit above bounds the same cost with none of
