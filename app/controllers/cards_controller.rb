@@ -18,6 +18,11 @@ class CardsController < ApplicationController
   # export the public scope explicitly promises.
   IMAGE_RATE_LIMIT_TO = 300
   INDEX_RATE_LIMIT_TO = 60
+  # A card page now aggregates every recorded list of every archetype playing the card (Boss's
+  # Orders: ~4600 rows, ~47 ms on a production copy), and /cards renders 48 hover-prefetched links
+  # to it. ArchetypesController#show's budget, for that same reason: a cursor down a listing, not a
+  # click, sets the peak rate of the page behind it (docs/architecture/public-surface.md).
+  SHOW_RATE_LIMIT_TO = 120
   RATE_LIMIT_WITHIN = 1.minute
 
   rate_limit to: IMAGE_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
@@ -27,6 +32,10 @@ class CardsController < ApplicationController
   rate_limit to: INDEX_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "cards-index", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :index
+
+  rate_limit to: SHOW_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "cards-show", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :show
 
   def index
     authorize Card, :index?
@@ -119,6 +128,9 @@ class CardsController < ApplicationController
     # :pokemon_subtype is already in the includes above and the payload reads only the card's own
     # columns, so this is free. Unconditional: the catalog is public, CardPolicy#og_image? is true.
     @og_payload = Og::CardPayload.call(@card)
+    # Public, like the archetype analysis whose figures it reproduces. `venue` is passed raw: the
+    # service `to_s`es it, so an Array- or Hash-shaped param falls back to All rather than raising.
+    @usage = Cards::ArchetypeUsage.call(card: @card, venue_param: params[:venue])
   end
 
   def image

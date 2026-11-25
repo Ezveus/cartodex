@@ -1,12 +1,13 @@
 module Cards
   class ShowView < ApplicationComponent
-    def initialize(card:, alt_printings:, collection_quantity: 0, signed_in: false, allocation: nil, committing_decks: [])
+    def initialize(card:, alt_printings:, collection_quantity: 0, signed_in: false, allocation: nil, committing_decks: [], usage: nil)
       @card = card
       @allocation = allocation
       @committing_decks = committing_decks
       @alt_printings = alt_printings
       @collection_quantity = collection_quantity
       @signed_in = signed_in
+      @usage = usage
     end
 
     def view_template
@@ -29,6 +30,7 @@ module Cards
             alt_printings_section
           end
         end
+        render Cards::UsageSection.new(card: @card, usage: @usage) if @usage
       end
     end
 

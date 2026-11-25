@@ -1922,6 +1922,63 @@ textarea.form-input {
   margin-bottom: 1rem;
 }
 
+/* Cards::UsageSection — a tree of nested <details>. The summary keeps its default `list-item`
+   display so the disclosure marker stays; name and figures are inline runs that wrap under each
+   other at narrow widths rather than flex items spread apart. */
+.card-usage-intro {
+  margin: 0 0 1rem;
+  color: var(--ink-500);
+  font-size: 0.9rem;
+}
+
+.card-usage-filters {
+  margin-bottom: 1rem;
+}
+
+.card-usage-tree,
+.card-usage-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card-usage-children {
+  padding-left: 1.25rem;
+}
+
+.card-usage-node {
+  padding: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+
+.card-usage-node summary {
+  cursor: pointer;
+}
+
+.card-usage-tournament {
+  padding-left: 1rem;
+}
+
+.card-usage-name {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.card-usage-link {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.card-usage-figures,
+.card-usage-unplayed {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+}
+
+.card-usage-unplayed {
+  padding-left: 1rem;
+}
+
 .card-info-list {
   display: grid;
   grid-template-columns: auto 1fr;
