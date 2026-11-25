@@ -132,7 +132,10 @@ class Imports::ReplayerTest < ActiveJob::TestCase
     end
   end
 
+  # The completed MEG row is what holds `.pending` in the guard: without it, a set imported twice
+  # could never be reimported again, and nothing else here would notice.
   test "the set guard reads only pending card-set imports of the same set" do
+    imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, status: "completed")
     imported("card_set", "TWM", { "url" => "https://limitlesstcg.com/cards/TWM" }, status: "pending")
     imported("deck", "MEG", { "decklist" => "x", "name" => "MEG" }, status: "pending")
     import = imported("card_set", "MEG", { "url" => "https://limitlesstcg.com/cards/MEG" }, status: "failed")
