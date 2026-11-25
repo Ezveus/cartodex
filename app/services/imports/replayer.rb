@@ -31,7 +31,7 @@ module Imports
       enqueue = job_for(@import.kind)
 
       replay = @import.user.imports.create!(
-        kind: @import.kind, label: @import.label,
+        kind: @import.kind, label: replay_label,
         tournament_id: @import.tournament_id, replay_params: @import.replay_params
       )
       enqueue.call(replay)
@@ -54,6 +54,18 @@ module Imports
           Import.card_set_imports.pending.where.not(id: @import.id).exists?(label: @import.label)
         raise Refused, "Set #{@import.label} is already being imported."
       end
+    end
+
+    # The original's label, except where it names a value the replay will not use. A card-label
+    # import's label spells the search token, while the job runs whatever token the label carries
+    # *now* — an admin may have edited it since — so the row, its summary and its flash would
+    # otherwise name a search that was never run. A label deleted since keeps the old text; the job
+    # then fails the row with "That card label no longer exists."
+    def replay_label
+      return @import.label unless @import.kind == "card_labels"
+
+      card_label = CardLabel.find_by(id: @import.replay_params["card_label_id"])
+      card_label ? "#{card_label.name} (#{card_label.source_query})" : @import.label
     end
 
     def job_for(kind)

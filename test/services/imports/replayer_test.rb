@@ -56,6 +56,16 @@ class Imports::ReplayerTest < ActiveJob::TestCase
     assert_enqueued_with(job: CardLabels::ImportJob, args: [ replay.id, 42, @owner.id ])
   end
 
+  # The job runs the token the label carries at replay time, so the new row has to name that one:
+  # copied verbatim, the table and the job's flash would name a search that was never run.
+  test "a card-label replay is labelled with the search it will actually run" do
+    card_label = CardLabel.create!(slug: "ace-spec", name: "ACE SPEC", family: "type", position: 10,
+                                   source_query: "is:tool")
+    import = imported("card_labels", "ACE SPEC (is:ace)", { "card_label_id" => card_label.id })
+
+    assert_equal "ACE SPEC (is:tool)", Imports::Replayer.call(import).label
+  end
+
   # --- the new row and the old one ---------------------------------------------------------------
 
   # The original keeps its status, its error and its receipt: a bulk run's Undo reads that receipt

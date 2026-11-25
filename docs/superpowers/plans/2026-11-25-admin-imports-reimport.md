@@ -49,4 +49,17 @@ Spec: `docs/superpowers/specs/2026-11-25-admin-imports-reimport-design.md`.
 
 ## Tests the adversary asked for
 
-(filled after `ship-plan-adversary`)
+| Decision the suite would not have noticed | Test |
+|---|---|
+| Each writer stores the right `replay_params` | one assertion each in `api/decks`, `admin/card_sets` (new file), `admin/card_labels`, `tournaments/standings`, and the three confirm tests of `admin/standings_imports` (`expected_row_count` absent) |
+| The replay reads String keys and passes each job its arguments in order | `Imports::ReplayerTest` — one `args:` assertion per kind, a deck whose decklist differs from its label |
+| The replay runs as the import's owner | every `ReplayerTest` row belongs to `users(:two)`; the controller test signs in `users(:one)` |
+| The original is kept, the copy carries kind, label, tournament, params | `ReplayerTest` "the replay is a new pending row…", the field-list test for `tournament` |
+| Any status is replayable | completed rows in `ReplayerTest` and the controller test |
+| Refusals write and enqueue nothing | `assert_refused` wraps both, for bulk_cards, no params, and the set guard |
+| The set guard excludes the row itself, spans users, reads only pending card-set rows of that set | three `ReplayerTest` cases |
+| `REPLAYABLE_KINDS` leaves bulk_cards out | `ImportTest` with params on a bulk_cards row |
+| A kind with no branch writes nothing | `ReplayerTest` "a kind with no replay written…" |
+| The migration backfill | `ImportTest` runs `backfill_card_sets` |
+| Buttons: which rows, which class, which order, whose email in the confirm | `Admin::ImportsControllerTest` actions-cell test |
+| A replay of a completed bulk run imports only what is new, onto its own receipt | `LimitlessImportJobTest` "a replay of a completed run…" (page without one row, then with it) |
