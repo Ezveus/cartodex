@@ -703,11 +703,7 @@ class ArchetypesControllerTest < ActionDispatch::IntegrationTest
     get analysis_archetype_path(archetype) # warm the session
 
     counts = [ nil, picked.id ].map do |tournament|
-      # Uncached: MetagameScope reads its one grouped query many times over, and the query cache
-      # would serve a lost memoisation for free.
-      queries = ActiveRecord::Base.uncached do
-        capture_queries { get analysis_archetype_path(archetype, tournament: tournament) }
-      end
+      queries = capture_queries { get analysis_archetype_path(archetype, tournament: tournament) }
       assert_select ".archetype-card-row", minimum: 1
       # The selected path really ran: a clamped id would cost 17 for the wrong reason.
       assert_select "select[name=tournament] option[selected][value=?]", (tournament || "all").to_s

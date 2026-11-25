@@ -717,6 +717,29 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_nil result.tournament
   end
 
+  # Every figure on the selector — three axes of options, the clamps, the counts — is a fold over
+  # one grouped query, read dozens of times per call. Inside a request the query cache serves a
+  # lost memoisation for free, so the controller's 17 cannot see it; only an uncached count here
+  # can. Four statements: the buckets, then the pools that name them with their two preloaded
+  # bounds (`StandardPool.named`). Measured at 22 with the memoisation removed.
+  test "one call costs the bucket query and the pool lookup, whatever the tournament" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    picked = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    record(picked, archetype, deck: field_list)
+    record(online_event(pool: pool, date: Date.new(2026, 5, 2)), archetype, deck: field_list)
+
+    counts = [ nil, picked.id ].map do |tournament|
+      ActiveRecord::Base.uncached do
+        capture_queries do
+          Archetypes::MetagameScope.call(archetype: archetype, tournament_param: tournament)
+        end.size
+      end
+    end
+
+    assert_equal [ 4, 4 ], counts
+  end
+
   # Ids that do not follow dates: `GROUP BY tournaments.id` hands rows back in id order, so a
   # fixture creating the oldest event first cannot tell a date sort from a bare `reverse`.
   test "tournament options follow the event date, not the order the events were created in" do
