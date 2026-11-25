@@ -362,7 +362,7 @@ Championships 2026* with the weeklies and splits the sample six ways where the m
 already that one side falls under `SMALL_SAMPLE`. Tier is a refinement *within* the paper half, and
 its own issue.
 
-`buckets` gains `tournaments.online` as a second `GROUP BY` column — still **one query**, the row
+`buckets` gained `tournaments.online` as a second `GROUP BY` column — still **one query**, the row
 count at most doubling (59 buckets, ≤118 rows) — and the old
 `COUNT(DISTINCT CASE WHEN tournaments.online …)` term disappears, since the online list count is
 now the `lists` of the online row. **`online` needs no cast and must not be given one**: SQLite
@@ -423,6 +423,10 @@ online 19), one of the four the issue was reopened for. `fuller_sample_available
 total `options` already carries; measured over the 147 reachable `(archetype, pool, venue)` states,
 they diverge on 0.
 
+**`buckets` is now grouped by tournament** (see the tournament axis below), so both of those
+columns ride along on one row per event and every pool and venue figure is a fold of events
+rather than of cells. What follows about the fold is true of events too.
+
 **"All formats" reads `pool_id: nil` as a selection, never as the non-Standard bucket**, which is
 the one place that overload matters: read the other way, the Venue control answers over the GLC
 bucket alone — vanishing for the 40 archetypes with no non-Standard event and reading "13 GLC
@@ -478,6 +482,48 @@ boxes at both sweep widths anyway, since `.archetype-category-header` and `/arch
 each cost this repository one bug of that kind. **No migration.** Still out: a tier control, any
 win rate, `/archetypes` (which names the blend already and has no controls), and a venue axis
 anywhere but this page.
+
+**The sample also narrows to one tournament, and that axis cascades** (2026-11-25,
+`docs/superpowers/specs/2026-11-25-archetype-tournament-filter-design.md`).
+`MetagameScope.call(archetype:, pool_param:, venue_param:, tournament_param:)` — a third
+`<select>`, **Tournament**, in the same form. Two owner decisions: **one** event at a time, and its
+options are the events of the chosen pool **and** venue, so pool → venue → tournament resolve in
+that order and the tournament never drives the other two. Measured on a production copy: up to 66
+events for one archetype, at most 20 per (pool, venue) cell; 845 of 1022 (archetype, event) pairs
+hold one list, 49 hold ten or more — the useful case is a large paper event (Baltimore 575
+standings over 43 archetypes).
+
+- **No query.** `buckets` groups by `tournaments.id` with the pool, the venue and the name as
+  columns each event carries one of (`tournaments.name` is a bare column, functionally dependent
+  on the id); same plan, still 17 queries, asserted with an event selected. The price is the fold's
+  over-count reaching **inside** a cell — a deck at two events of one pool is counted twice by the
+  selector and once by `CardStats` — measured on 0 decks (0 carry more than one standing) and named
+  by its own test. A second grouped query would have kept cells exact at one query more.
+- **The clamp.** A tournament outside the pool + venue selection — a stale link, a venue change
+  that left the event behind, an event this archetype has no standing at, junk — resolves to "All
+  tournaments", recorded in the `Result`. So does the selection's **only** event:
+  `tournament_selectable?` is "at least two events holding a *standing*" (an event with placements
+  and no list is offered at "0 lists", the pool axis's rule), and a URL naming the single event must
+  not pin a filter the page offers no control to remove.
+- **Options** lead with "All tournaments", then newest first with the id breaking a tie, labelled
+  `"<name> (<date>) — N lists"` — the `TournamentEntry#picker_label` spelling, because 55 events
+  share a name. The date tells them apart **by data, not by constraint**: the `(name_normalized,
+  date)` UNIQUE index is partial (`WHERE online = 0`), so two online events of one name on one day
+  are legal and would print two identical labels over two distinct values — measured 0 such pairs,
+  while online weeklies reuse one name up to 14 times on 14 dates. Counted within the selection: these labels move with pool and venue, as venue
+  labels move with the pool; pool and venue labels and `unpooled?`/`selectable?`/`venue_selectable?`
+  do **not** move with the event, for the reasons above.
+- **What narrows to the event**: `lists_count`, `online_lists_count`, both relations (the filter
+  sits *before* `standings_scope`'s early return, or All formats + All venues — the only way a GLC
+  event is reached — narrows the counts and not the report), `unpooled_in_sample?` and
+  `all_formats_lists_count`, since a pool change carries the event along and keeps it.
+- **On the page.** `SampleSelector#tournament_note` replaces the venue note under a chosen event,
+  naming only the selects actually rendered ("The Sample and Venue counts above span every
+  tournament"); nothing when Tournament is the only select. `CardReport`'s mode links re-emit
+  `tournament=` off the scope; its empty state drops the venue suggestion under an event (the
+  click keeps it) and offers "All tournaments" instead. **One CSS rule**: a select is as wide as
+  its longest option, and online event names pushed the Tournament label to 905 px and the page
+  into a horizontal scroll at 500 px, so the select is capped at its row.
 
 **Out of scope, deliberately:** cross-archetype comparison and any page spanning archetypes (it
 would need a complete field, which no import produces), per-division card statistics (junior and

@@ -27,9 +27,10 @@ module Archetypes
     # venue against the raw parameter by accident.
     VENUES = %w[all paper online].freeze
 
-    # The one tournament a reader narrowed the report to: what the select and the note print, and
-    # nothing a caller could mistake for the model — the report never needs more of it than this.
-    SelectedTournament = Struct.new(:id, :name, :date, keyword_init: true)
+    # The one tournament a reader narrowed the report to. Its id is all any reader needs — the
+    # select marks it and the mode links re-emit it — and a Struct rather than a bare Integer so
+    # nothing can mistake it for a count, nor for the model.
+    SelectedTournament = Struct.new(:id, keyword_init: true)
 
     Result = Struct.new(
       :archetype, :standings, :listed_standings, :pool, :options,
@@ -163,9 +164,7 @@ module Archetypes
         venue: venue,
         venue_options: venue_options(pool),
         venue_selectable: venue_selectable?(pool),
-        tournament: tournament && SelectedTournament.new(id: tournament.tournament_id,
-                                                         name: tournament.tournament_name,
-                                                         date: tournament.last_on),
+        tournament: tournament && SelectedTournament.new(id: tournament.tournament_id),
         tournament_options: tournament_options(pool, venue),
         tournament_selectable: tournament_selectable?(pool, venue)
       )
@@ -422,10 +421,10 @@ module Archetypes
     # `Result#tournament_selectable?`). The clamp is recorded in the Result for the reason the
     # venue's is: the select above the report and the report itself must not disagree.
     def selected_tournament(pool, venue)
-      return nil if @tournament_param.empty? || @tournament_param == ALL
       return nil unless tournament_selectable?(pool, venue)
 
-      # Compared as Strings rather than through `to_i`, which would read "12junk" as 12.
+      # Compared as Strings rather than through `to_i`, which would read "12junk" as 12. ALL and a
+      # blank parameter need no branch of their own: no id spells either.
       selection_rows(pool, venue).find { |bucket| bucket.tournament_id.to_s == @tournament_param }
     end
 

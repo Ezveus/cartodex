@@ -256,9 +256,9 @@ module Archetypes
     # carries it along, and every pool and venue that held it still does — so the pool one is
     # already counted on the event (`all_formats_lists_count`) and the venue one withholds itself.
     # This is the click that widens.
+    #
+    # No tournament guard: with none chosen, an empty sample means "All tournaments" is empty too.
     def lists_in_other_tournament?
-      return false if @scope.tournament.nil?
-
       all = @scope.tournament_options.find { |option| option.value == MetagameScope::ALL }
       all&.lists_count.to_i.positive?
     end

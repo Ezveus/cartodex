@@ -294,7 +294,7 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
   end
 
   def tournament(id)
-    Archetypes::MetagameScope::SelectedTournament.new(id: id, name: "Regional", date: Date.new(2026, 9, 19))
+    Archetypes::MetagameScope::SelectedTournament.new(id: id)
   end
 
   def all_tournaments(lists)

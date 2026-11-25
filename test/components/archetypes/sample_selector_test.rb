@@ -309,8 +309,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_match(/The Sample and Venue counts above span every tournament/, both)
     assert_match(%r{This report covers the <strong>7 lists</strong> of the tournament selected beside them\.}, both)
     assert_no_match(/over both venues/, both)
-    assert_match(/The Sample counts above span every tournament/, pool_only)
-    assert_match(/The Venue counts above span every tournament/, venue_only)
+    assert_match(%r{The Sample counts above span every tournament\. .* selected beside it\.}, pool_only)
+    assert_match(%r{The Venue counts above span every tournament\. .* selected beside it\.}, venue_only)
   end
 
   # Nothing to qualify when the Tournament select is the only one: its own selected label is the
@@ -339,8 +339,7 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
   private
 
   def selected_tournament(id)
-    Archetypes::MetagameScope::SelectedTournament.new(id: id, name: "Regional Baltimore, MD",
-                                                      date: Date.new(2026, 9, 19))
+    Archetypes::MetagameScope::SelectedTournament.new(id: id)
   end
 
   def tournament_options(total)

@@ -508,8 +508,10 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
   # --- The tournament axis ------------------------------------------------------------------------
 
   # The labels as literals, in order: most recent first, the date beside the name, "All
-  # tournaments" first with the selection's total. Two events share the newest date so the id has
-  # to break the tie — without it the two could swap places between two loads of one page.
+  # tournaments" first with the selection's total. Two events share the newest date; the code
+  # breaks that tie by id, and this test cannot prove it does — `GROUP BY tournaments.id` hands the
+  # rows over in id order, so a sort on the date alone lands on the same order here. The tie-break
+  # is there for a database that does not.
   test "tournament options list the selection's events, newest first, each with its date and count" do
     archetype = archetype_of_its_own
     pool = standard_pools(:twm_por)
@@ -609,7 +611,9 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     foreign = standard_event(pool: pool, date: Date.new(2026, 5, 2))
     record(foreign, archetype_of_its_own, deck: field_list)
 
-    [ nil, "", "all", "999999", "junk", foreign.id.to_s, [ "1" ], { a: 1 } ].each do |param|
+    own = TournamentStanding.where(archetype: archetype).first.tournament_id
+    [ nil, "", "all", "999999", "junk", foreign.id.to_s, "#{own}junk", "0#{own}", " #{own}",
+      [ own.to_s ], { a: 1 } ].each do |param|
       result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: param)
 
       assert_nil result.tournament, "#{param.inspect} should clamp"
@@ -693,6 +697,24 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_equal [ 1, 1 ], [ first, second ].map { |event|
       Archetypes::MetagameScope.call(archetype: archetype, tournament_param: event.id).lists_count
     }
+  end
+
+  # The venue half of "one event is no choice": the pool holds two events, the venue one. Counted
+  # over the pool, the select would offer that one event beside "All tournaments" — two labels for
+  # one sample.
+  test "a venue holding one event is no tournament choice, however many the pool holds" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    2.times { record(standard_event(pool: pool, date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+    weekly = online_event(pool: pool, date: Date.new(2026, 5, 2))
+    2.times { record(weekly, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, venue_param: "online",
+                                            tournament_param: weekly.id)
+
+    assert_equal :online, result.venue
+    refute_predicate result, :tournament_selectable?
+    assert_nil result.tournament
   end
 
   # Ids that do not follow dates: `GROUP BY tournaments.id` hands rows back in id order, so a
