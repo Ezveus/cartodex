@@ -27,10 +27,15 @@ module Archetypes
     # venue against the raw parameter by accident.
     VENUES = %w[all paper online].freeze
 
+    # The one tournament a reader narrowed the report to: what the select and the note print, and
+    # nothing a caller could mistake for the model — the report never needs more of it than this.
+    SelectedTournament = Struct.new(:id, :name, :date, keyword_init: true)
+
     Result = Struct.new(
       :archetype, :standings, :listed_standings, :pool, :options,
       :lists_count, :online_lists_count, :unpooled, :unpooled_in_sample,
       :all_formats_lists_count, :venue, :venue_options, :venue_selectable,
+      :tournament, :tournament_options, :tournament_selectable,
       keyword_init: true
     ) do
       # Whether any standing sits on an event with no Standard pool — a GLC or Expanded one. Those
@@ -103,6 +108,12 @@ module Archetypes
       # two agree for a single pool and diverge under "All formats", where the cells span pools —
       # see `venue_present?`.
       def venue_selectable? = venue_selectable
+
+      # Whether the tournament control is a genuine choice: the pool + venue selection holds at
+      # least two events. One event is the same sample as "All tournaments" — two labels for one
+      # sample, the shape both controls above already refuse — and a URL naming it is clamped too,
+      # so the page never pins a filter it offers no control to remove.
+      def tournament_selectable? = tournament_selectable
     end
 
     # `pool_param` is whatever arrived in the query string: a pool id, ALL, nil, or junk —
@@ -113,44 +124,60 @@ module Archetypes
     # resolves by `VENUES.include?`, which answers false for nil, an Array or a Hash without
     # raising, so the guard fails closed with or without it. What `to_s` actually does here is
     # widen the input to accept a Symbol, which is what an internal caller would pass.
-    def initialize(archetype:, pool_param: nil, venue_param: nil)
+    #
+    # `tournament_param` likewise: an id, ALL, nil or junk, `to_s` first. It resolves against the
+    # events this archetype holds standings at, never against the `tournaments` table, so an id
+    # naming somebody else's event is junk like any other.
+    def initialize(archetype:, pool_param: nil, venue_param: nil, tournament_param: nil)
       @archetype = archetype
       @pool_param = pool_param.to_s
       @venue_param = venue_param.to_s
+      @tournament_param = tournament_param.to_s
     end
 
+    # Pool, then venue, then tournament: each axis resolves inside the ones before it, which is
+    # what "cascading" means here. The tournament never drives the pool or the venue.
     def call
       pool = selected_pool
       venue = selected_venue(pool)
-      totals = fold(selection_rows(pool, venue))
+      tournament = selected_tournament(pool, venue)
+      totals = fold(selection_rows(pool, venue, tournament))
 
       Result.new(
         archetype: @archetype,
-        standings: standings_scope(pool, venue),
-        listed_standings: standings_scope(pool, venue).where.not(deck_id: nil),
+        standings: standings_scope(pool, venue, tournament),
+        listed_standings: standings_scope(pool, venue, tournament).where.not(deck_id: nil),
         pool: pool,
         options: options,
         lists_count: totals.lists,
-        online_lists_count: venue == :paper ? 0 : fold(selection_rows(pool, :online)).lists,
+        online_lists_count: venue == :paper ? 0 : fold(selection_rows(pool, :online, tournament)).lists,
         unpooled: buckets.any? { |bucket| bucket.pool_id.nil? },
-        unpooled_in_sample: selection_rows(nil, venue).any? { |bucket| bucket.pool_id.nil? },
-        # Every pool, *this* venue. The card report's empty state is the only reader, and it needs
-        # a count the reader's click would actually deliver: `options`' "All formats" is
-        # venue-independent, so on a pool with placements and no typed list it promised lists that
-        # the current venue may not hold, and the one form carries the venue along with the click.
-        # A fold over buckets already in memory, so no query.
-        all_formats_lists_count: fold(selection_rows(nil, venue)).lists,
+        unpooled_in_sample: selection_rows(nil, venue, tournament).any? { |bucket| bucket.pool_id.nil? },
+        # Every pool, *this* venue — and *this* tournament, since a pool change carries it along
+        # and keeps it: "All formats" holds every event. The card report's empty state is the only
+        # reader, and it needs a count the reader's click would actually deliver: `options`' "All
+        # formats" is venue-independent, so on a pool with placements and no typed list it
+        # promised lists that the current venue may not hold, and the one form carries the venue
+        # along with the click. A fold over buckets already in memory, so no query.
+        all_formats_lists_count: fold(selection_rows(nil, venue, tournament)).lists,
         venue: venue,
         venue_options: venue_options(pool),
-        venue_selectable: venue_selectable?(pool)
+        venue_selectable: venue_selectable?(pool),
+        tournament: tournament && SelectedTournament.new(id: tournament.tournament_id,
+                                                         name: tournament.tournament_name,
+                                                         date: tournament.last_on),
+        tournament_options: tournament_options(pool, venue),
+        tournament_selectable: tournament_selectable?(pool, venue)
       )
     end
 
     private
 
-    # A bucket is one (pool, venue) cell. `online` is nil on a folded bucket, which is the only
-    # thing that distinguishes a cell from a total built out of cells.
-    Bucket = Struct.new(:pool_id, :online, :standings, :lists, :last_on, keyword_init: true)
+    # A bucket is one tournament, which sits in exactly one (pool, venue) cell. `online` and
+    # `tournament_id` are nil on a folded bucket, which is the only thing that distinguishes an
+    # event from a total built out of events.
+    Bucket = Struct.new(:pool_id, :online, :tournament_id, :tournament_name, :standings, :lists,
+                        :last_on, keyword_init: true)
 
     # One grouped query, and every number the selector prints comes out of it: per Standard pool
     # (NULL for the non-Standard events, which carry no pool by design) and per venue, how many
@@ -161,11 +188,15 @@ module Archetypes
     # list count and the standings count in the same pass, without a second query or a filtered
     # relation.
     #
-    # `tournaments.online` is a second GROUP BY column on a scan that was already running, so this
-    # stays one query and the row count at most doubles — 59 buckets and at most 118 rows on the
-    # production data, folded in Ruby below. It replaced a
-    # `COUNT(DISTINCT CASE WHEN tournaments.online …)` term: the online list count is now simply
-    # the `lists` of the online row, so there is one fewer way for the two to disagree.
+    # It is grouped by **tournament**, and the pool and the venue ride along as columns each event
+    # carries exactly one of. That is what lets the tournament axis cost no query: every pool and
+    # venue figure was already a fold of rows, and now it folds events instead of cells. Measured
+    # on a production copy, at most 66 events for one archetype (6.4 per cell on average), and the
+    # plan is unchanged — `index_tournament_standings_on_archetype_id`, then the tournament's
+    # primary key — so the page stays at its 17 queries. The price is `fold`'s, written there.
+    #
+    # `tournaments.name` is a bare column beside a GROUP BY on `tournaments.id`, which SQLite takes
+    # from the group's one row: every column of a tournament is functionally dependent on its id.
     #
     # `online` needs no cast and must not be given one. SQLite reports a decltype for a bare
     # column reference, so the adapter's `cast_values` hands back true/false here — measured,
@@ -177,16 +208,19 @@ module Archetypes
       @buckets ||= TournamentStanding
         .where(archetype_id: @archetype.id)
         .joins(:tournament)
-        .group("tournaments.standard_pool_id", "tournaments.online")
+        .group("tournaments.id")
         .pluck(
           Arel.sql("tournaments.standard_pool_id"),
           Arel.sql("tournaments.online"),
+          Arel.sql("tournaments.id"),
+          Arel.sql("tournaments.name"),
           Arel.sql("COUNT(*)"),
           Arel.sql("COUNT(DISTINCT tournament_standings.deck_id)"),
           Arel.sql("MAX(tournaments.date)")
         )
-        .map do |pool_id, online, standings, lists, last_on|
-          Bucket.new(pool_id: pool_id, online: online, standings: standings, lists: lists,
+        .map do |pool_id, online, tournament_id, name, standings, lists, last_on|
+          Bucket.new(pool_id: pool_id, online: online, tournament_id: tournament_id,
+                     tournament_name: name, standings: standings, lists: lists,
                      last_on: to_date(last_on))
         end
     end
@@ -198,11 +232,14 @@ module Archetypes
     # would count only the GLC lists for the other 8, so a reader choosing "All formats" would
     # lose the control with no way back but editing the URL. Measured, 24 of the 48 archetypes
     # carrying a list have a blended All-formats sample, so that is the majority state.
-    def selection_rows(pool, venue)
+    #
+    # `tournament`, when given, is one of these buckets and narrows the rows to itself.
+    def selection_rows(pool, venue, tournament = nil)
       rows = pool ? buckets.select { |bucket| bucket.pool_id == pool.id } : buckets
-      return rows if venue == :all
+      rows = rows.select { |bucket| bucket.online == (venue == :online) } unless venue == :all
+      return rows if tournament.nil?
 
-      rows.select { |bucket| bucket.online == (venue == :online) }
+      rows.select { |bucket| bucket.tournament_id == tournament.tournament_id }
     end
 
     # "Does this half of the selection hold anything?" — one definition, called by the clamp and by
@@ -220,21 +257,25 @@ module Archetypes
       selection_rows(pool, venue).sum(&:standings).positive?
     end
 
-    # Sums a set of cells into one bucket. Sound because a deck cannot be counted twice — measured
+    # Sums a set of events into one bucket. Sound because a deck cannot be counted twice — measured
     # on the production data, 0 decks carry standings under both venues and 0 carry more than one
     # standing at all, so the fold matches the single grouped count on 59 buckets of 59 and
-    # 1223 == 1223 across pools.
+    # 1223 == 1223 across pools. Re-measured when the buckets became events (2026-11-25): still 0
+    # decks with more than one standing, and 0 at two events under one archetype.
     #
     # Where that stops being true it over-counts, and that is a pre-existing property extended
     # along a second axis rather than a new one: `total` has always been `buckets.sum(&:lists)`,
     # which double-counts a deck holding standings in two pools. Nothing in the schema forbids the
     # shape — `index_tournament_standings_on_deck_id` is not unique, and two standings pointing at
     # one deck is legitimate — so a test names the behaviour rather than asserting an identity the
-    # fold cannot violate. Making it exact costs a second query per option; the venue-filtered
-    # counts the page actually prints are exact either way, since each is a single cell.
+    # fold cannot violate. Making it exact costs a second query per option; a tournament's own
+    # count is exact either way, since each is a single event. Since the buckets became events the
+    # over-count reaches *inside* a cell too — a deck at two events of one pool — which is the same
+    # property on a third axis, named by its own test; a second grouped query for the tournament
+    # options would have kept cells exact, at one more query on a page three assertions pin at 17.
     def fold(rows)
       Bucket.new(
-        pool_id: rows.first&.pool_id, online: nil,
+        pool_id: rows.first&.pool_id, online: nil, tournament_id: nil, tournament_name: nil,
         standings: rows.sum(&:standings), lists: rows.sum(&:lists),
         last_on: rows.filter_map(&:last_on).max
       )
@@ -352,8 +393,12 @@ module Archetypes
       venue_present?(pool, :paper) && venue_present?(pool, :online)
     end
 
-    def standings_scope(pool, venue)
+    # The tournament is a plain `tournament_id` predicate on the standings themselves, so it needs
+    # no join of its own; it is applied before the early return so "All formats, every venue, one
+    # event" — the shape a GLC event is reached in — is still narrowed.
+    def standings_scope(pool, venue, tournament)
       scope = TournamentStanding.where(archetype_id: @archetype.id)
+      scope = scope.where(tournament_id: tournament.tournament_id) if tournament
       # Today's exact relation for today's exact case, so the unfiltered page cannot regress on a
       # join it never needed.
       return scope if pool.nil? && venue == :all
@@ -362,6 +407,47 @@ module Archetypes
       scope = scope.where(tournaments: { standard_pool_id: pool.id }) if pool
       scope = scope.where(tournaments: { online: venue == :online }) unless venue == :all
       scope
+    end
+
+    # The selection's events, most recent first, the id breaking a tie so two events on one date
+    # cannot swap places between two loads of the same page — the order `pool_buckets` keeps.
+    def tournament_buckets(pool, venue)
+      selection_rows(pool, venue).sort_by { |bucket| [ bucket.last_on, bucket.tournament_id ] }
+                                 .reverse
+    end
+
+    # Resolved inside the pool + venue selection: an id outside it — a stale link, a venue change
+    # that left the event behind, an event this archetype was never recorded at, junk — clamps to
+    # "All tournaments", and so does the selection's only event (see
+    # `Result#tournament_selectable?`). The clamp is recorded in the Result for the reason the
+    # venue's is: the select above the report and the report itself must not disagree.
+    def selected_tournament(pool, venue)
+      return nil if @tournament_param.empty? || @tournament_param == ALL
+      return nil unless tournament_selectable?(pool, venue)
+
+      # Compared as Strings rather than through `to_i`, which would read "12junk" as 12.
+      selection_rows(pool, venue).find { |bucket| bucket.tournament_id.to_s == @tournament_param }
+    end
+
+    # Counted within the selection: these labels move with the pool and the venue, as the venue's
+    # move with the pool. The date is in the label because the name alone is not an identity —
+    # measured, 55 tournaments share their name with another — and it is the spelling
+    # TournamentEntry#picker_label prints. "All tournaments" leads, as the default does in Venue.
+    def tournament_options(pool, venue)
+      all = Option.new(value: ALL,
+                       label: "All tournaments — #{list_label(fold(selection_rows(pool, venue)).lists)}",
+                       lists_count: fold(selection_rows(pool, venue)).lists)
+
+      [ all ] + tournament_buckets(pool, venue).map do |bucket|
+        Option.new(value: bucket.tournament_id.to_s,
+                   label: "#{bucket.tournament_name} (#{I18n.l(bucket.last_on)}) — " \
+                          "#{list_label(bucket.lists)}",
+                   lists_count: bucket.lists)
+      end
+    end
+
+    def tournament_selectable?(pool, venue)
+      selection_rows(pool, venue).size > 1
     end
 
     def total = @total ||= fold(buckets)

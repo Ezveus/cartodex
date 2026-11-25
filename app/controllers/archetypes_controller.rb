@@ -173,8 +173,13 @@ class ArchetypesController < ApplicationController
     # comment promises it is the only place that answers which standings count, and the page's four
     # printed "N lists" agree *because* one object computes them. A filter applied in the
     # controller would have the selector print 118 while the report counted 98.
+    #
+    # `params[:tournament]` the same way, and for the same reason: the tournament is the third axis
+    # of that one answer, resolved inside the pool and the venue (a cascade), never a fourth filter
+    # bolted on here.
     @scope = Archetypes::MetagameScope.call(archetype: @archetype, pool_param: params[:pool],
-                                            venue_param: params[:venue])
+                                            venue_param: params[:venue],
+                                            tournament_param: params[:tournament])
     # Two different populations, from the one service that decides them: the card report can only
     # speak for the standings whose decklist somebody typed, while a recorded placement is a
     # result whether or not anybody did.

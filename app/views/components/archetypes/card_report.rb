@@ -81,7 +81,8 @@ module Archetypes
     # all, which makes that structural rather than a convention.
     def path_for(mode)
       Rails.application.routes.url_helpers.analysis_archetype_path(
-        @scope.archetype, pool: pool_param, group: mode, venue: venue_param
+        @scope.archetype, pool: pool_param, group: mode, venue: venue_param,
+        tournament: @scope.tournament&.id
       )
     end
 
@@ -247,7 +248,19 @@ module Archetypes
         plain "No decklist recorded for this sample yet."
         plain " Lists exist under “All formats” — try that sample above." if lists_in_other_pool?
         plain " Lists exist under “All” venues — try that beside it." if lists_in_other_venue?
+        plain " Lists exist under “All tournaments” — try that beside it." if lists_in_other_tournament?
       end
+    end
+
+    # Under one event the other two suggestions describe clicks that keep the event — the form
+    # carries it along, and every pool and venue that held it still does — so the pool one is
+    # already counted on the event (`all_formats_lists_count`) and the venue one withholds itself.
+    # This is the click that widens.
+    def lists_in_other_tournament?
+      return false if @scope.tournament.nil?
+
+      all = @scope.tournament_options.find { |option| option.value == MetagameScope::ALL }
+      all&.lists_count.to_i.positive?
     end
 
     def lists_in_other_pool?
@@ -255,7 +268,7 @@ module Archetypes
     end
 
     def lists_in_other_venue?
-      return false if @scope.venue == :all
+      return false if @scope.venue == :all || @scope.tournament
 
       all_venues = @scope.venue_options.find { |option| option.value == MetagameScope::ALL }
       all_venues&.lists_count.to_i.positive?

@@ -505,6 +505,302 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
     assert_equal [ 0, 0, 0 ], result.venue_options.map(&:lists_count)
   end
 
+  # --- The tournament axis ------------------------------------------------------------------------
+
+  # The labels as literals, in order: most recent first, the date beside the name, "All
+  # tournaments" first with the selection's total. Two events share the newest date so the id has
+  # to break the tie — without it the two could swap places between two loads of one page.
+  test "tournament options list the selection's events, newest first, each with its date and count" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    old = named_event("Regional Old", pool: pool, date: Date.new(2026, 4, 1))
+    first_tie = named_event("Regional Tie A", pool: pool, date: Date.new(2026, 5, 1))
+    second_tie = named_event("Regional Tie B", pool: pool, date: Date.new(2026, 5, 1))
+    3.times { record(old, archetype, deck: field_list) }
+    record(first_tie, archetype, deck: field_list)
+    2.times { record(second_tie, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal [
+      [ Archetypes::MetagameScope::ALL, "All tournaments — 6 lists", 6 ],
+      [ second_tie.id.to_s, "#{second_tie.name} (#{I18n.l(second_tie.date)}) — 2 lists", 2 ],
+      [ first_tie.id.to_s, "#{first_tie.name} (#{I18n.l(first_tie.date)}) — 1 list", 1 ],
+      [ old.id.to_s, "#{old.name} (#{I18n.l(old.date)}) — 3 lists", 3 ]
+    ], result.tournament_options.map { |option| [ option.value, option.label, option.lists_count ] }
+    assert_predicate result, :tournament_selectable?
+    assert_nil result.tournament
+  end
+
+  # Every figure about the sample narrows, and both relations: the performance panel reads one and
+  # the card report the other, so narrowing only `standings` would split the page in two.
+  test "a selected tournament narrows the counts and both relations" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    big = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    other = standard_event(pool: pool, date: Date.new(2026, 4, 1))
+    3.times { record(big, archetype, deck: field_list) }
+    record(big, archetype)
+    5.times { record(other, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: big.id.to_s)
+
+    assert_equal big.id, result.tournament.id
+    assert_equal 3, result.lists_count
+    assert_equal 4, result.standings.count
+    assert_equal 3, result.listed_standings.count
+    assert_equal [ big.id ], result.standings.distinct.pluck(:tournament_id)
+  end
+
+  # Under a tournament the online count is that tournament's: an online event is wholly online and
+  # a paper one wholly paper, whatever the pool around it holds.
+  test "online_lists_count describes the selected tournament" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    paper = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    online = online_event(pool: pool, date: Date.new(2026, 5, 2))
+    2.times { record(paper, archetype, deck: field_list) }
+    3.times { record(online, archetype, deck: field_list) }
+
+    assert_equal [ [ 2, 0 ], [ 3, 3 ] ], [ paper, online ].map { |event|
+      result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: event.id)
+      [ result.lists_count, result.online_lists_count ]
+    }
+  end
+
+  # The cascade: a tournament outside the pool + venue selection is not selected, in the Result
+  # and in the relation — which is what a venue change that leaves the event behind produces,
+  # since the one form carries the tournament along.
+  test "a tournament outside the selected venue clamps to all tournaments" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    paper = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    2.times { record(standard_event(pool: pool, date: Date.new(2026, 5, 3)), archetype, deck: field_list) }
+    record(paper, archetype, deck: field_list)
+    2.times { record(online_event(pool: pool, date: Date.new(2026, 5, 2)), archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, venue_param: "online",
+                                            tournament_param: paper.id.to_s)
+
+    assert_nil result.tournament
+    assert_equal 2, result.lists_count
+    assert_equal 2, result.standings.count
+  end
+
+  test "a tournament outside the selected pool clamps to all tournaments" do
+    archetype = archetype_of_its_own
+    elsewhere = standard_event(pool: standard_pools(:twm_asc), date: Date.new(2025, 6, 1))
+    record(elsewhere, archetype, deck: field_list)
+    2.times { record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: elsewhere.id)
+
+    assert_equal standard_pools(:twm_por), result.pool
+    assert_nil result.tournament
+    assert_equal 2, result.standings.count
+  end
+
+  # A tournament this archetype holds no standing at is not in the selection either, even though
+  # the row exists: the id is a reference to *this report's* events, not to any event.
+  test "an unknown, foreign, blank or non-scalar tournament parameter clamps without raising" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    2.times { record(standard_event(pool: pool, date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+    foreign = standard_event(pool: pool, date: Date.new(2026, 5, 2))
+    record(foreign, archetype_of_its_own, deck: field_list)
+
+    [ nil, "", "all", "999999", "junk", foreign.id.to_s, [ "1" ], { a: 1 } ].each do |param|
+      result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: param)
+
+      assert_nil result.tournament, "#{param.inspect} should clamp"
+      assert_equal 2, result.lists_count
+    end
+  end
+
+  # One event is the same sample as "All tournaments": two labels for one sample. And a URL naming
+  # it must not pin a filter the page offers no control to remove.
+  test "a selection holding one tournament is no choice, and naming it clamps" do
+    archetype = archetype_of_its_own
+    only = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    3.times { record(only, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: only.id)
+
+    refute_predicate result, :tournament_selectable?
+    assert_nil result.tournament
+  end
+
+  # The labels move with the axes above them, which is what the cascade means: under Online only
+  # online events are offered, each counted, and "All tournaments" is the venue's total.
+  test "tournament options are counted within the venue, and pool and venue labels do not move" do
+    archetype, = blended(paper: 2, online: 3)
+    paper_event = TournamentStanding.where(archetype: archetype).joins(:tournament)
+                                    .where(tournaments: { online: false }).first.tournament
+
+    online = Archetypes::MetagameScope.call(archetype: archetype, venue_param: "online")
+    picked = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: paper_event.id)
+    unpicked = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal [ "All tournaments — 3 lists" ], online.tournament_options.first(1).map(&:label)
+    assert_equal 4, online.tournament_options.size
+    assert_equal paper_event.id, picked.tournament.id
+    assert_equal unpicked.options.map(&:label), picked.options.map(&:label)
+    assert_equal unpicked.venue_options.map(&:label), picked.venue_options.map(&:label)
+    assert_equal 1, picked.lists_count
+    assert_predicate picked, :venue_selectable?
+  end
+
+  # A pool change carries the tournament along and keeps it — "All formats" holds every event — so
+  # the card report's "try All formats" must be counted on the tournament, or it promises lists the
+  # click will not show. Same for the pool note: it is about the sample, and the sample is one event.
+  test "all_formats_lists_count and unpooled_in_sample narrow to the selected tournament" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    bare = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    record(bare, archetype)
+    record(standard_event(pool: pool, date: Date.new(2026, 4, 1)), archetype, deck: field_list)
+    glc = unpooled_event(date: Date.new(2026, 3, 1))
+    record(glc, archetype, deck: field_list)
+
+    on_bare = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: bare.id)
+    on_glc = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: Archetypes::MetagameScope::ALL,
+                                            tournament_param: glc.id)
+
+    assert_equal bare.id, on_bare.tournament.id
+    assert_equal 0, on_bare.all_formats_lists_count
+    refute_predicate on_bare, :unpooled_in_sample?
+    assert_predicate on_bare, :unpooled?
+    assert_predicate on_glc, :unpooled_in_sample?
+  end
+
+  # The fold now sums events inside a cell, so a deck holding standings at two events of one pool
+  # is counted twice by the selector while the relation holds it once. Named rather than left to a
+  # measurement that is true today (0 such decks); each event's own count stays exact.
+  test "one deck at two tournaments of one pool is over-counted in the pool and exact per event" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    shared = field_list
+    first = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    second = standard_event(pool: pool, date: Date.new(2026, 5, 2))
+    record(first, archetype, deck: shared)
+    record(second, archetype, deck: shared)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal 1, result.standings.distinct.count(:deck_id), "the sample really holds one deck"
+    assert_equal 2, result.lists_count, "the documented over-count changed shape"
+    assert_equal [ 1, 1 ], [ first, second ].map { |event|
+      Archetypes::MetagameScope.call(archetype: archetype, tournament_param: event.id).lists_count
+    }
+  end
+
+  # Ids that do not follow dates: `GROUP BY tournaments.id` hands rows back in id order, so a
+  # fixture creating the oldest event first cannot tell a date sort from a bare `reverse`.
+  test "tournament options follow the event date, not the order the events were created in" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    newest = standard_event(pool: pool, date: Date.new(2026, 6, 1))
+    oldest = standard_event(pool: pool, date: Date.new(2026, 4, 1))
+    middle = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    [ newest, oldest, middle ].each { |event| record(event, archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_equal [ Archetypes::MetagameScope::ALL, newest.id.to_s, middle.id.to_s, oldest.id.to_s ],
+      result.tournament_options.map(&:value)
+  end
+
+  # The pool half of the cascade, both ways round: under a pool, another pool's event is absent;
+  # under All formats, a GLC event (no pool at all) sits beside the pooled ones — the `pool_id`
+  # overload `selection_rows` reads as a selection.
+  test "tournament options hold the selected pool's events, and every event under All formats" do
+    archetype = archetype_of_its_own
+    here = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    also_here = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 2))
+    elsewhere = standard_event(pool: standard_pools(:twm_asc), date: Date.new(2025, 6, 1))
+    glc = unpooled_event(date: Date.new(2026, 3, 1))
+    [ here, also_here, elsewhere, glc ].each { |event| record(event, archetype, deck: field_list) }
+
+    pooled = Archetypes::MetagameScope.call(archetype: archetype)
+    everything = Archetypes::MetagameScope.call(archetype: archetype,
+                                                pool_param: Archetypes::MetagameScope::ALL)
+
+    assert_equal [ also_here.id, here.id ].map(&:to_s).sort,
+      pooled.tournament_options.drop(1).map(&:value).sort
+    assert_equal [ here, also_here, elsewhere, glc ].map { |event| event.id.to_s }.sort,
+      everything.tournament_options.drop(1).map(&:value).sort
+  end
+
+  # All formats and every venue is the path `standings_scope` short-circuits for, so it is the one
+  # where a tournament filter applied after that return would narrow the counts and not the
+  # relations — and a GLC event is only ever reached that way.
+  test "under All formats and every venue a tournament still narrows both relations" do
+    archetype = archetype_of_its_own
+    glc = unpooled_event(date: Date.new(2026, 3, 1))
+    2.times { record(glc, archetype, deck: field_list) }
+    record(glc, archetype)
+    3.times { record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1)), archetype, deck: field_list) }
+
+    result = Archetypes::MetagameScope.call(archetype: archetype,
+                                            pool_param: Archetypes::MetagameScope::ALL,
+                                            tournament_param: glc.id)
+
+    assert_equal glc.id, result.tournament.id
+    assert_equal [ 2, 3, 2 ], [ result.lists_count, result.standings.count, result.listed_standings.count ]
+  end
+
+  # `unpooled?` feeds `selectable?`, so narrowing it to a pooled event would make the Sample select
+  # vanish as a side effect of choosing a tournament: one pool plus a GLC event is a choice only
+  # through `unpooled?`.
+  test "choosing a pooled tournament keeps the Sample select of a one-pool archetype with a GLC event" do
+    archetype = archetype_of_its_own
+    picked = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 1))
+    record(picked, archetype, deck: field_list)
+    record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 5, 2)), archetype, deck: field_list)
+    record(unpooled_event(date: Date.new(2026, 3, 1)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, tournament_param: picked.id)
+
+    assert_equal picked.id, result.tournament.id
+    assert_predicate result, :unpooled?
+    assert_predicate result, :selectable?
+  end
+
+  # Resolution order: the venue clamps first and the tournament resolves inside what is left, so a
+  # valid event survives a venue parameter that named an empty cell.
+  test "a tournament survives the venue clamp when it is in the clamped selection" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_asc)
+    picked = standard_event(pool: pool, date: Date.new(2025, 6, 1))
+    2.times { record(picked, archetype, deck: field_list) }
+    record(standard_event(pool: pool, date: Date.new(2025, 6, 2)), archetype, deck: field_list)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype, pool_param: pool.id,
+                                            venue_param: "online", tournament_param: picked.id)
+
+    assert_equal :all, result.venue
+    assert_equal picked.id, result.tournament.id
+    assert_equal 2, result.lists_count
+  end
+
+  # "Holds a standing", following the pool and venue axes: an event with placements and no typed
+  # list is a choice, labelled "0 lists", because Archetypes::Performance counts what the card
+  # report cannot see.
+  test "an event with placements and no list is offered, and counts toward a choice" do
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    listed = standard_event(pool: pool, date: Date.new(2026, 5, 1))
+    bare = standard_event(pool: pool, date: Date.new(2026, 5, 2))
+    record(listed, archetype, deck: field_list)
+    record(bare, archetype)
+
+    result = Archetypes::MetagameScope.call(archetype: archetype)
+
+    assert_predicate result, :tournament_selectable?
+    assert_match(/— 0 lists\z/, result.tournament_options.find { |o| o.value == bare.id.to_s }.label)
+  end
+
   # Helpers, deliberately below `private`: a `test` declared under it never runs, which is why
   # everything above this line is a test and everything below it is not.
   private
@@ -525,6 +821,13 @@ class Archetypes::MetagameScopeTest < ActiveSupport::TestCase
   def standard_event(pool:, date:, tier: "regional")
     Tournament.create!(name: "Metagame Event #{next_index}", date: date, format: "standard",
                        standard_pool: pool, tier: tier, created_by: users(:one))
+  end
+
+  # The tournament options print the name, so a test about them chooses it; the counter still
+  # keeps it clear of the catalogued fixtures.
+  def named_event(name, pool:, date:)
+    Tournament.create!(name: "#{name} #{next_index}", date: date, format: "standard",
+                       standard_pool: pool, tier: "regional", created_by: users(:one))
   end
 
   # Anchored to a real pool, like the import writes them: the whole point is that an online event

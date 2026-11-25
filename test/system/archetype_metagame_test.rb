@@ -280,28 +280,66 @@ class ArchetypeMetagameTest < ApplicationSystemTestCase
   # geometric half then accepts either arrangement, because it runs at both sweep widths and the
   # two really do sit on one line above the breakpoint and wrap below it; what it rules out is the
   # third outcome, one label overlapping the other's line.
-  test "the sample and venue labels are flex siblings and sit together" do
+  #
+  # Three labels since the tournament axis, checked pair by pair, plus the one failure a long
+  # option brings: the Tournament select's labels carry an event name and a date, so it is the one
+  # that could push the page past the viewport at the narrow width.
+  test "the sample, venue and tournament labels are flex siblings and sit together" do
     archetype = split_venue_archetype
 
     visit analysis_archetype_path(archetype, pool: Archetypes::MetagameScope::ALL)
 
-    assert_selector ".deck-filters > .archetype-sample-label", count: 2,
+    assert_selector ".deck-filters > .archetype-sample-label", count: 3,
       visible: :all
 
     labels = all(".archetype-sample-label")
 
-    assert_equal 2, labels.size, "both axes should be a choice on this archetype"
+    assert_equal 3, labels.size, "all three axes should be a choice on this archetype"
 
-    sample = rect_of(labels.first)
-    venue = rect_of(labels.last)
-
-    if (venue["top"] - sample["top"]).abs < 2
-      assert_operator venue["left"] - sample["right"], :<, 24,
-        "the two labels share a line but sit #{(venue['left'] - sample['right']).round}px apart"
-    else
-      assert_operator venue["top"], :>=, sample["bottom"] - 1,
-        "the venue label overlaps the sample label's line instead of sitting under it"
+    rects = labels.map { |label| rect_of(label) }
+    rects.each_cons(2) do |before, after|
+      if (after["top"] - before["top"]).abs < 2
+        assert_operator after["left"] - before["right"], :<, 24,
+          "two labels share a line but sit #{(after['left'] - before['right']).round}px apart"
+      else
+        assert_operator after["top"], :>=, before["bottom"] - 1,
+          "a label overlaps the previous label's line instead of sitting under it"
+      end
     end
+
+    viewport = evaluate_script("document.documentElement.clientWidth")
+    rects.each do |rect|
+      assert_operator rect["right"], :<=, viewport + 1,
+        "a sample label runs #{(rect['right'] - viewport).round}px past the viewport"
+    end
+  end
+
+  # The tournament axis end to end, and the cascade: choosing an event narrows the report (the
+  # paper event's two lists all play Boss's Orders, so it reads 100 % where the pool reads 50 %),
+  # the select comes back reading that event, and then a venue change that leaves the event behind
+  # lands on "All tournaments" rather than on an empty report or a select naming an event the page
+  # is not showing.
+  test "a member narrows the sample to one tournament, and a venue change that leaves it clamps" do
+    archetype = split_venue_archetype
+    paper = Tournament.find_by!(name: "Split Paper Cup")
+
+    visit analysis_archetype_path(archetype)
+    assert_text "of these 4 lists"
+
+    select "Split Paper Cup (#{I18n.l(paper.date)}) — 2 lists", from: "Tournament"
+
+    assert_current_path(/tournament=#{paper.id}/)
+    assert_no_text "of these 4 lists"
+    assert_equal paper.id.to_s, find("select[name='tournament']").value,
+      "the tournament select does not read the event the report is showing"
+    assert_match(/100(\.0)? ?%/, find(".archetype-card-row", text: "Boss's Orders").text)
+
+    select "Online — 2 lists", from: "Venue"
+
+    assert_current_path(/venue=online/)
+    assert_text "Every list in this sample comes from an online tournament."
+    assert_no_selector "select[name='tournament']"
+    assert_no_selector ".archetype-card-row", text: "Boss's Orders"
   end
 
   # `.archetype-category-header` is `display: flex; justify-content: space-between`, so a card

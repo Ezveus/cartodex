@@ -253,7 +253,104 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
     assert_no_match(/<option value="all" selected>/, html)
   end
 
+  # --- The tournament axis ------------------------------------------------------------------------
+
+  # The tournament select answers to `tournament_selectable?` alone, and the form must render for
+  # it even when neither pool nor venue is a choice — a single-pool, paper-only archetype recorded
+  # at twelve Regionals is exactly that shape. `&&` across the three guards would drop the form.
+  test "the tournament select renders on its own when it is the only choice" do
+    html = selector(lists_count: 12, options: [ pool_option("9", 12), all_option(12) ],
+                    tournament_selectable: true, tournament_options: tournament_options(12))
+
+    assert_match(/<select name="tournament"/, html)
+    assert_no_match(/<select name="pool"/, html)
+    assert_no_match(/<select name="venue"/, html)
+    assert_match(/<option value="all" selected>All tournaments — 12 lists/, html)
+    assert_includes html, "Tournament"
+  end
+
+  test "no tournament select when the selection holds one event" do
+    html = selector(lists_count: 12, options: [ pool_option("9", 12), pool_option("8", 3), all_option(15) ],
+                    tournament_selectable: false, tournament_options: tournament_options(12).first(2))
+
+    assert_match(/<select name="pool"/, html)
+    assert_no_match(/<select name="tournament"/, html)
+  end
+
+  # `selected:` read off the scope, for the reason the venue select's is: omitted, the browser
+  # pre-selects "All tournaments" above a report covering one event.
+  test "the tournament select marks the event the page is showing" do
+    html = selector(lists_count: 7, options: [ pool_option("9", 12), all_option(12) ],
+                    tournament: selected_tournament(41), tournament_selectable: true,
+                    tournament_options: tournament_options(12))
+
+    assert_match(/<option value="41" selected>/, html)
+    assert_no_match(/<option value="all" selected>/, html)
+  end
+
+  # Under one event the Sample and Venue labels count every event of the selection while the report
+  # covers one, so the page says so — naming only the selects that are actually on screen, and
+  # replacing the venue note, whose sentence ("the lists of the venue selected") is no longer the
+  # report's sample.
+  test "the tournament note names the selects that over-count and replaces the venue note" do
+    both = selector(lists_count: 7, online_lists_count: 0, venue: :paper, venue_selectable: true,
+                    options: [ pool_option("9", 118), pool_option("8", 56), all_option(174) ],
+                    tournament: selected_tournament(41), tournament_selectable: true,
+                    tournament_options: tournament_options(98))
+    pool_only = selector(lists_count: 7,
+                         options: [ pool_option("9", 118), pool_option("8", 56), all_option(174) ],
+                         tournament: selected_tournament(41), tournament_selectable: true,
+                         tournament_options: tournament_options(118))
+    venue_only = selector(lists_count: 7, venue_selectable: true, online_lists_count: 0,
+                          options: [ pool_option("9", 28), all_option(28) ],
+                          tournament: selected_tournament(41), tournament_selectable: true,
+                          tournament_options: tournament_options(28))
+
+    assert_match(/The Sample and Venue counts above span every tournament/, both)
+    assert_match(%r{This report covers the <strong>7 lists</strong> of the tournament selected beside them\.}, both)
+    assert_no_match(/over both venues/, both)
+    assert_match(/The Sample counts above span every tournament/, pool_only)
+    assert_match(/The Venue counts above span every tournament/, venue_only)
+  end
+
+  # Nothing to qualify when the Tournament select is the only one: its own selected label is the
+  # sample.
+  test "no tournament note when no other select is on screen, nor when no event is chosen" do
+    alone = selector(lists_count: 7, options: [ pool_option("9", 12), all_option(12) ],
+                     tournament: selected_tournament(41), tournament_selectable: true,
+                     tournament_options: tournament_options(12))
+    unchosen = selector(lists_count: 118,
+                        options: [ pool_option("9", 118), pool_option("8", 56), all_option(174) ],
+                        tournament_selectable: true, tournament_options: tournament_options(118))
+
+    assert_no_match(/span every tournament/, alone)
+    assert_no_match(/span every tournament/, unchosen)
+  end
+
+  test "three selects sit in one form" do
+    html = selector(lists_count: 28, online_lists_count: 20, venue_selectable: true,
+                    options: [ pool_option("9", 28), pool_option("8", 22), all_option(50) ],
+                    tournament_selectable: true, tournament_options: tournament_options(28))
+
+    assert_equal 1, html.scan("<form").size
+    assert_equal 3, html.scan("archetype-sample-label").size
+  end
+
   private
+
+  def selected_tournament(id)
+    Archetypes::MetagameScope::SelectedTournament.new(id: id, name: "Regional Baltimore, MD",
+                                                      date: Date.new(2026, 9, 19))
+  end
+
+  def tournament_options(total)
+    [ Archetypes::MetagameScope::Option.new(value: ALL, label: "All tournaments — #{total} lists",
+                                            lists_count: total),
+      Archetypes::MetagameScope::Option.new(value: "41", label: "Regional Baltimore, MD (09/19/2026) — 7 lists",
+                                            lists_count: 7),
+      Archetypes::MetagameScope::Option.new(value: "40", label: "Regional Frankfurt (09/26/2026) — 5 lists",
+                                            lists_count: 5) ]
+  end
 
   # The venue members are spelled out rather than defaulted away, because a `Struct` built with
   # `keyword_init: true` stores `nil` for a keyword left out — only an *extra* one raises — so a
@@ -261,7 +358,8 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
   # venue regression observable in any test in this file.
   def selector(lists_count:, options:, unpooled: false, pool: :default, online_lists_count: 0,
                grouping: :type, venue: :all, venue_selectable: false, venue_options: nil,
-               unpooled_in_sample: nil)
+               unpooled_in_sample: nil, tournament: nil, tournament_selectable: false,
+               tournament_options: [])
     # Unpersisted on purpose: the component reads an id off each of these and nothing else —
     # `archetype_path` through `to_param`, and the pool only to decide which option is selected —
     # so this file never touches the database and cannot be broken by a fixture another test
@@ -277,7 +375,9 @@ class Archetypes::SampleSelectorTest < ActiveSupport::TestCase
       unpooled_in_sample: unpooled_in_sample.nil? ? unpooled : unpooled_in_sample,
       all_formats_lists_count: lists_count,
       venue: venue, venue_selectable: venue_selectable,
-      venue_options: venue_options || default_venue_options(lists_count, online_lists_count)
+      venue_options: venue_options || default_venue_options(lists_count, online_lists_count),
+      tournament: tournament, tournament_selectable: tournament_selectable,
+      tournament_options: tournament_options
     )
 
     ApplicationController.renderer.render(

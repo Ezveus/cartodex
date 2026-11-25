@@ -165,6 +165,41 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
     assert_match(/Lists exist under “All” venues/, html)
   end
 
+  # The tournament is re-emitted off the scope like the venue, and absent at "All tournaments" so a
+  # default never enters a copied URL. Dropped, switching to role mode would silently widen the
+  # report back to the whole selection.
+  test "the mode links re-emit the tournament the scope resolved to, and only when there is one" do
+    picked = Archetypes::CardReport.new(
+      stats: stats(:type), scope: scope(pool: @pool, tournament: tournament(41))
+    ).call
+    unpicked = report(grouping: :type, pool: @pool)
+
+    assert_equal 2, picked.scan(/tournament=41\b/).size
+    assert_no_match(/tournament=/, unpicked)
+  end
+
+  # Under one event, a pool change and a venue change both carry the event along and keep it, so
+  # neither is a click that would show lists; the one that would is "All tournaments". The venue
+  # suggestion reads venue options counted over every event, so it must withhold itself here.
+  test "an empty event points at All tournaments and not at the other venue" do
+    all_venues = Archetypes::MetagameScope::Option.new(
+      value: Archetypes::MetagameScope::ALL, label: "All — 9 lists", lists_count: 9
+    )
+    html = Archetypes::CardReport.new(
+      stats: empty_stats,
+      scope: scope(pool: @pool, venue: :paper, venue_options: [ all_venues ],
+                   tournament: tournament(41), tournament_options: [ all_tournaments(9) ])
+    ).call
+    nothing_elsewhere = Archetypes::CardReport.new(
+      stats: empty_stats,
+      scope: scope(pool: @pool, tournament: tournament(41), tournament_options: [ all_tournaments(0) ])
+    ).call
+
+    assert_match(/Lists exist under “All tournaments”/, html)
+    assert_no_match(/“All” venues/, html)
+    assert_no_match(/All tournaments/, nothing_elsewhere)
+  end
+
   # The row now names a printing while its share and its copies count every reprint of that card,
   # so the page has to say which of the two a figure is about — but only where the sample holds an
   # instance. Measured, 242 of the 246 reachable samples hold none, and a disclaimer on all of
@@ -246,12 +281,24 @@ class Archetypes::CardReportTest < ActiveSupport::TestCase
   # so a member added to the Result and forgotten here is a silent falsy value in whatever branch
   # reads it — which is how the empty state's two suggestions would have gone quiet rather than
   # wrong.
-  def scope(pool:, venue: :all, all_formats_lists_count: 0, venue_options: [])
+  def scope(pool:, venue: :all, all_formats_lists_count: 0, venue_options: [], tournament: nil,
+            tournament_options: [])
     Archetypes::MetagameScope::Result.new(
       archetype: @archetype, standings: nil, listed_standings: nil, pool: pool, options: [],
       lists_count: 4, online_lists_count: 0, unpooled: false, unpooled_in_sample: false,
       all_formats_lists_count: all_formats_lists_count, venue: venue,
-      venue_options: venue_options, venue_selectable: false
+      venue_options: venue_options, venue_selectable: false,
+      tournament: tournament, tournament_options: tournament_options,
+      tournament_selectable: tournament_options.size > 2
     )
+  end
+
+  def tournament(id)
+    Archetypes::MetagameScope::SelectedTournament.new(id: id, name: "Regional", date: Date.new(2026, 9, 19))
+  end
+
+  def all_tournaments(lists)
+    Archetypes::MetagameScope::Option.new(value: Archetypes::MetagameScope::ALL,
+                                          label: "All tournaments — #{lists} lists", lists_count: lists)
   end
 end
