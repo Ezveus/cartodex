@@ -168,7 +168,7 @@ Rails.application.routes.draw do
       end
       resources :decks, only: [ :index, :show ]
       resources :imports, only: [ :index, :destroy ] do
-        post :retry, on: :member
+        post :reimport, on: :member
         post :undo, on: :member
       end
       resources :archetypes

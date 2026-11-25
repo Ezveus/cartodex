@@ -20,7 +20,7 @@ module Tournaments
     # wiki-governed: any member may delete this row, or the event, which cascades onto it. Passed
     # as records, GlobalID would then fail to deserialize and raise *before* #perform is entered,
     # where no rescue of this method can see it — the Import row would sit at "pending" forever,
-    # with Admin::ImportsController#retry refusing this kind and nothing else able to clear it. As
+    # with nothing but a Delete able to clear it — a Reimport adds a new row, it finishes no old one. As
     # ids, the deletion is an ordinary lookup miss and reports itself like any other failure.
     def perform(standing_id, decklist, contributor_id, import_id)
       import = Import.find_by(id: import_id)

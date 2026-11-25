@@ -103,7 +103,15 @@ module Admin
       # beat the write would import an event every one of whose rows is blocked.
       persist_mappings if event?
 
-      import = current_user.imports.create!(kind: "limitless_standings", label: import_label)
+      import = current_user.imports.create!(
+        kind: "limitless_standings", label: import_label,
+        # Without the row count, on purpose. A replay from /admin/imports is how the lists an
+        # archetype gained since this run come in, and the count would refuse every one of them:
+        # the rows this run writes plan as :skip next time, so importable_rows shrinks and
+        # LimitlessImportJob#verify! raises PlanDrifted. The count guards *this* click against a
+        # page that moved since its preview; a replay is a different click, asking for what is new.
+        replay_params: job_options.except("expected_row_count")
+      )
       Tournaments::LimitlessImportJob.perform_later(import.id, current_user.id, job_options)
 
       redirect_to admin_imports_path,

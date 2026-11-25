@@ -48,7 +48,7 @@ module Admin
         return
       end
 
-      import = current_user.imports.create!(kind: "card_set", label: set_code)
+      import = current_user.imports.create!(kind: "card_set", label: set_code, replay_params: { "url" => url })
       ::CardSets::ImportJob.perform_later(url, current_user, import)
       render json: { import_id: import.id, set_code: set_code }
     end

@@ -4,7 +4,7 @@
 # label can be deleted from the admin panel while the run is queued, and a record handed to a job
 # that no longer exists raises ActiveRecord::DeserializationError *before* #perform is entered,
 # where the rescue below cannot see it — leaving the Import at "pending" forever, with
-# Admin::ImportsController#retry refusing this kind and no other way to clear it.
+# nothing but a Delete able to clear it (a Reimport adds a new row beside it, it does not finish this one).
 class CardLabels::ImportJob < ApplicationJob
   class LabelDeleted < StandardError; end
 

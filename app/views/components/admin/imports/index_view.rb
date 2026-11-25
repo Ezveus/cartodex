@@ -44,6 +44,15 @@ module Admin
           "so they can no longer be undone."
       end
 
+      # Names whose run it is, because the replay is theirs and not the admin's: a deck lands in that
+      # member's decks, which is worth saying before it happens rather than after.
+      def reimport_confirm(imp)
+        text = "Reimport #{imp.label} with the same parameters, as #{imp.user.email}?"
+        return text unless imp.kind == "deck"
+
+        "#{text} This adds another deck to their decks."
+      end
+
       def status_badge(imp)
         render Ui::StatusBadge.new(status: imp.status)
       end
@@ -112,10 +121,14 @@ module Admin
         "#{line} (real #{entry["owned_before"]} \u2192 #{entry["owned_after"]})"
       end
 
+      # Reimport, Undo, Delete — primary, secondary, danger, in the order an admin reaches for them.
+      # Reimport is offered on any status (a completed run is the main case: re-reading a set, or
+      # picking up an archetype's new lists) and only where there is something to replay — see
+      # Import#replayable?.
       def actions_cell(imp)
-        if imp.failed? || imp.pending?
-          link_to "Retry", retry_admin_import_path(imp),
-            data: { turbo_method: :post, turbo_confirm: "Retry import #{imp.label}?" },
+        if imp.replayable?
+          link_to "Reimport", reimport_admin_import_path(imp),
+            data: { turbo_method: :post, turbo_confirm: reimport_confirm(imp) },
             class: "btn btn-primary btn-sm"
           plain " "
         end
@@ -135,7 +148,7 @@ module Admin
         end
         link_to "Delete", admin_import_path(imp),
           data: { turbo_method: :delete, turbo_confirm: delete_confirm(imp) },
-          class: "btn-danger btn-sm"
+          class: "btn btn-danger btn-sm"
       end
     end
   end

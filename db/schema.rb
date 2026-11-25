@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_090000) do
   create_table "abilities", force: :cascade do |t|
     t.integer "card_id", null: false
     t.datetime "created_at", null: false
@@ -223,6 +223,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_090000) do
     t.integer "tournament_id"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
+    t.json "replay_params", default: {}, null: false
     t.index ["kind", "status"], name: "index_imports_on_kind_and_status"
     t.index ["tournament_id"], name: "index_imports_on_tournament_id"
     t.index ["user_id", "status"], name: "index_imports_on_user_id_and_status"

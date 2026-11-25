@@ -203,14 +203,17 @@ module Tournaments
         kind: "standing_list", label: "#{@standing.player_name} — #{@tournament.name}",
         # Which event's page should list this while it runs. Without it every event page listed
         # every field-list import the reader had in flight, wherever it was started.
-        tournament: @tournament
+        tournament: @tournament,
+        # The decklist is not stored anywhere else, so without it a field-list import could never be
+        # run again from /admin/imports (Imports::Replayer).
+        replay_params: { "standing_id" => @standing.id, "decklist" => decklist }
       )
       # Ids, not records: the job outlives the request, governance is wiki, so any member may
       # delete this standing (or the event, which cascades) while it is queued. GlobalID
       # deserialization of a deleted record raises ActiveJob::DeserializationError *before*
       # #perform runs, which no rescue inside the method can see — the import would then sit at
-      # "pending" forever, with Admin::ImportsController#retry refusing this kind and no other way
-      # to clear it.
+      # "pending" forever, with nothing but a Delete able to clear it — a Reimport from
+      # /admin/imports adds a new row beside it rather than finishing this one.
       Tournaments::StandingListImportJob.perform_later(
         @standing.id, decklist, current_user.id, import.id
       )

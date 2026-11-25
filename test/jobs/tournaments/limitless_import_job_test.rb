@@ -65,6 +65,33 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     assert_equal({ "masters" => 2, "senior" => 1, "junior" => 1 }, naic.standings.group(:division).count)
   end
 
+  # The reason Reimport exists: re-run an archetype's source and pick up the lists Limitless has
+  # published since, without the URL or the archetype being chosen again. The first run sees the
+  # page without Toby Clark; the replay sees it with him. Driven through the stored parameters and
+  # Imports::Replayer, so the row count the first click carried is exactly what the replay lacks —
+  # kept, the replay fails "0 importable rows, not the 5 that were previewed" on every completed run.
+  test "a replay of a completed run imports only what was published since, onto its own receipt" do
+    first_page = RESULTS_HTML.sub(%r{<tr>\s*<td><img[^>]*></td>\s*<td>31st</td>.*?</tr>}m, "")
+    assert_not_equal RESULTS_HTML, first_page, "the fixture still holds Toby Clark's row"
+    @results_html = first_page
+    @import.update!(replay_params: options(expected_row_count: IMPORTABLE - 1).except("expected_row_count"))
+    perform(expected_row_count: IMPORTABLE - 1)
+    first_receipt = @import.reload.created_standing_ids
+    assert_equal IMPORTABLE - 1, first_receipt.size
+
+    @results_html = RESULTS_HTML
+    replay = Imports::Replayer.call(@import)
+    assert_difference -> { TournamentStanding.count }, 1 do
+      perform_enqueued_jobs
+    end
+
+    replay.reload
+    assert_equal "completed", replay.status
+    new_standing = TournamentStanding.find(replay.created_standing_ids.sole)
+    assert_equal "Toby Clark", new_standing.player_name
+    assert_equal first_receipt, @import.reload.created_standing_ids, "the first run's receipt is untouched"
+  end
+
   # The admin approved a plan they were shown, and this job rebuilds it from a page that may have
   # changed since — Limitless publishes a new event the day it happens. Without this check a stale
   # browser tab silently imports rows nobody ever looked at.
@@ -358,6 +385,9 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
     Turbo::StreamsChannel.define_singleton_method(:broadcast_append_to, original)
   end
 
+  # Served for /results; a test that needs the page to change between two runs swaps it.
+  def results_html = @results_html || RESULTS_HTML
+
   def perform(**overrides)
     Tournaments::LimitlessImportJob.perform_now(@import.id, @admin.id, options(**overrides))
   end
@@ -391,8 +421,9 @@ class Tournaments::LimitlessImportJobTest < ActiveJob::TestCase
   end
 
   def stub_http(decklist: nil)
+    test_case = self
     HttpFetcher.define_singleton_method(:call) { |url|
-      next RESULTS_HTML if url.include?("/results")
+      next test_case.send(:results_html) if url.include?("/results")
       next decklist.call(url) if decklist
 
       DECKLIST_HTML

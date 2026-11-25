@@ -171,7 +171,7 @@ class Tournaments::StandingListImportJobTest < ActiveSupport::TestCase
   # Governance is wiki, so any member may delete this row — or the event, which cascades — while
   # the job sits in the queue. Handed records, GlobalID would raise ActiveJob::DeserializationError
   # before #perform is entered, where the method's own rescue cannot see it: the Import would stay
-  # "pending" forever, and Admin::ImportsController#retry refuses this kind.
+  # "pending" forever, and a Reimport adds a new row rather than finishing it.
   test "a standing deleted while the job waited reports a failure instead of staying pending" do
     id = @standing.id
     @standing.destroy!

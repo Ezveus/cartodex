@@ -74,7 +74,10 @@ module Admin
 
       import = current_user.imports.create!(
         kind: "card_labels",
-        label: "#{@card_label.name} (#{@card_label.source_query})"
+        label: "#{@card_label.name} (#{@card_label.source_query})",
+        # The id, not the token: a replay runs whatever search the label carries *then*, which is
+        # what the job has always read.
+        replay_params: { "card_label_id" => @card_label.id }
       )
       # Leading :: is load-bearing: this controller lives inside Admin, and Admin::CardLabels is
       # also this feature's Phlex namespace (Admin::CardLabels::IndexView etc.) — plain

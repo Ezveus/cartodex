@@ -9,106 +9,88 @@ class Admin::ImportsControllerTest < ActionDispatch::IntegrationTest
     sign_in @admin
   end
 
-  # The decklist text is not stored anywhere — an Import carries a label, not a payload — so
-  # there is nothing to re-run. Refused explicitly rather than left to fall through the case,
-  # which destroys the old row and enqueues nothing.
-  test "a field-list import cannot be retried" do
-    import = users(:one).imports.create!(kind: "standing_list", label: "Ash's list", status: "failed")
+  # The row belongs to users(:two) while users(:one) clicks: the replay is the member's run, and
+  # a row owned by the admin could not tell the two apart. A completed row, because replaying a
+  # finished run is the main case and Retry used to refuse it.
+  test "reimporting runs the import again as its owner and keeps the original" do
+    import = users(:two).imports.create!(kind: "card_set", label: "MEG", status: "completed",
+      replay_params: { "url" => "https://limitlesstcg.com/cards/MEG" })
 
-    assert_no_difference -> { Import.count } do
-      post retry_admin_import_path(import)
+    assert_difference -> { Import.count }, 1 do
+      assert_enqueued_with(job: ::CardSets::ImportJob) do
+        post reimport_admin_import_path(import)
+      end
     end
 
+    replay = Import.order(:id).last
+    assert_not_equal import.id, replay.id
+    assert_equal users(:two), replay.user
     assert_redirected_to admin_imports_path
-    assert_match(/cannot be retried/, flash[:alert])
-    assert Import.exists?(import.id)
+    assert_equal "Reimported as import ##{replay.id}.", flash[:notice]
+    assert_equal "completed", import.reload.status
   end
 
-  # Same class of reason one level up: a bulk run is defined by its deck id, archetype and event
-  # filters, none of which the Import row keeps. Retry is now an allowlist of the two kinds whose
-  # label really is the whole job, so this is refused by the rule rather than by a branch somebody
-  # had to remember to add — the row survives and nothing is enqueued.
-  test "a bulk standings import cannot be retried" do
-    import = users(:one).imports.create!(kind: "limitless_standings", label: "Raging Bolt (deck 280)", status: "failed")
+  # Refused through Imports::Replayer::Refused, which the action turns into an alert rather than a
+  # 500 — the button is not rendered for these rows, but the route is a POST any admin can reach.
+  test "a refused reimport is an alert and writes nothing" do
+    import = users(:two).imports.create!(kind: "standing_list", label: "Ash's list", status: "failed")
 
     assert_no_difference -> { Import.count } do
       assert_no_enqueued_jobs do
-        post retry_admin_import_path(import)
+        post reimport_admin_import_path(import)
       end
     end
 
     assert_redirected_to admin_imports_path
-    assert_match(/cannot be retried/, flash[:alert])
-    assert Import.exists?(import.id)
+    assert_match(/run before its parameters were stored/, flash[:alert])
   end
 
-  # The search token lives on the CardLabel row, not on the Import, so retrying means running the
-  # import again from the label. UNRETRYABLE_REASONS["card_labels"] is what makes that the admin's
-  # answer instead of the generic fallback sentence — nothing else pins that key is reachable.
-  test "a card-label import cannot be retried" do
-    import = users(:one).imports.create!(kind: "card_labels", label: "ACE SPEC (is:ace)", status: "failed")
+  test "a bulk card add cannot be reimported, and says why in its own words" do
+    import = users(:two).imports.create!(kind: "bulk_cards", label: "Collection — 5 copies", status: "completed")
 
     assert_no_difference -> { Import.count } do
-      assert_no_enqueued_jobs do
-        post retry_admin_import_path(import)
-      end
+      post reimport_admin_import_path(import)
     end
 
-    assert_redirected_to admin_imports_path
-    assert_match(/run it again from the label/, flash[:alert])
-    assert Import.exists?(import.id)
-  end
-
-  # A bulk card add is the one kind whose payload *is* stored — the receipt holds every printing
-  # and every before/after — so the generic fallback sentence ("what it was run from is not
-  # stored") tells the admin the opposite of the truth while still matching /cannot be retried/.
-  # What is refused here is replaying a *relative* add: run twice, it adds the copies twice. The
-  # row is built failed on purpose, since a real one is completed and the status guard above would
-  # answer first with a different message.
-  test "a bulk card add cannot be retried, and says why in its own words" do
-    import = users(:one).imports.create!(
-      kind: "bulk_cards",
-      label: "Collection — 5 copies over 3 printings",
-      status: "failed"
-    )
-
-    assert_no_difference -> { Import.count } do
-      assert_no_enqueued_jobs do
-        post retry_admin_import_path(import)
-      end
-    end
-
-    assert_redirected_to admin_imports_path
     assert_match(/adds copies rather than setting them/, flash[:alert])
-    assert_no_match(/what it was run from is not stored/, flash[:alert])
-    assert Import.exists?(import.id)
   end
 
-  # The allowlist has to keep saying yes to the two kinds that were always retryable. Inverting a
-  # refusal chain is exactly the change that silently takes a working button away, so both live
-  # branches are pinned rather than assumed.
-  test "a deck import is still retried" do
-    import = users(:one).imports.create!(kind: "deck", label: "Raging Bolt", status: "failed")
+  # Reimport, Undo, Delete — primary, secondary, danger — each only where it applies. Nothing
+  # rendered the Actions cell under test before.
+  test "the actions cell offers Reimport where there is something to replay, Undo on bulk runs, Delete everywhere" do
+    set = users(:two).imports.create!(kind: "card_set", label: "MEG", status: "completed",
+      replay_params: { "url" => "https://limitlesstcg.com/cards/MEG" })
+    deck = users(:two).imports.create!(kind: "deck", label: "Raging Bolt", status: "completed",
+      replay_params: { "decklist" => "4 Honedge POR 56", "name" => "Raging Bolt" })
+    old_deck = users(:two).imports.create!(kind: "deck", label: "Old", status: "failed")
+    bulk_cards = users(:two).imports.create!(kind: "bulk_cards", label: "Collection", status: "completed")
+    run = users(:two).imports.create!(kind: "limitless_standings", label: "Run", status: "completed",
+      replay_params: { "deck_id" => "280", "archetype_id" => 1 })
 
-    assert_enqueued_with(job: ::Decks::ImportJob) do
-      post retry_admin_import_path(import)
+    get admin_imports_path
+
+    assert_response :success
+    [ set, deck, run ].each do |imp|
+      assert_select "a.btn.btn-primary.btn-sm[href='#{reimport_admin_import_path(imp)}'][data-turbo-method='post']", 1
+    end
+    [ old_deck, bulk_cards ].each do |imp|
+      assert_select "a[href='#{reimport_admin_import_path(imp)}']", 0
     end
 
-    assert_redirected_to admin_imports_path
-    assert_equal "Import retried.", flash[:notice]
-    assert_not Import.exists?(import.id), "the retried row is replaced by the new one"
-  end
+    confirm = css_select("a[href='#{reimport_admin_import_path(set)}']").first["data-turbo-confirm"]
+    assert_includes confirm, "MEG"
+    assert_includes confirm, users(:two).email, "the confirm names whose run it is, not the admin's"
+    assert_not_includes confirm, "another deck"
+    assert_includes css_select("a[href='#{reimport_admin_import_path(deck)}']").first["data-turbo-confirm"],
+      "This adds another deck to their decks."
 
-  test "a card set import is still retried" do
-    import = users(:one).imports.create!(kind: "card_set", label: "MEG", status: "failed")
-
-    assert_enqueued_with(job: ::CardSets::ImportJob) do
-      post retry_admin_import_path(import)
+    assert_select "a.btn.btn-secondary.btn-sm[href='#{undo_admin_import_path(run)}']", 1
+    assert_select "a[href$='/undo']", 1
+    [ set, deck, old_deck, bulk_cards, run ].each do |imp|
+      assert_select "a.btn.btn-danger.btn-sm[href='#{admin_import_path(imp)}'][data-turbo-method='delete']", 1
     end
-
-    assert_redirected_to admin_imports_path
-    assert_equal "Import retried.", flash[:notice]
-    assert_not Import.exists?(import.id)
+    actions = css_select(".data-table-cell[data-label='Actions']").map { |cell| cell.css("a").map(&:text) }
+    assert_includes actions, %w[Reimport Undo Delete], "in the order an admin reaches for them"
   end
 
   # The error cell used to be a title= tooltip. Ui::DataTable stacks into a data-label card grid
