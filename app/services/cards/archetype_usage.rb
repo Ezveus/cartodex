@@ -12,8 +12,8 @@ module Cards
   # carries the analysis parameters it reproduces so a test can compare the two directly.
   #
   # One query for the rows, one for the archetypes, three for the pools and the two card-set bounds
-  # `StandardPool#name` reads: five for any card a list plays, and the first alone for one none
-  # does. On a production copy the widest card (Boss's Orders, 82 archetypes, 1104 played
+  # `StandardPool#name` reads: five once a list plays the card in a Standard pool, two when it is
+  # played only outside Standard (no pool to load), one when no list plays it. On a production copy the widest card (Boss's Orders, 82 archetypes, 1104 played
   # (archetype, tournament) pairs) reads 4606 rows in 46.6 ms. See
   # docs/superpowers/specs/2026-11-25-card-archetype-usage-design.md.
   class ArchetypeUsage < ApplicationService

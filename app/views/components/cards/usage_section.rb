@@ -110,7 +110,7 @@ module Cards
 
     # The link to the analysis the node reproduces trails the figures rather than wrapping the name:
     # inside a <summary>, a linked name takes the tap that was meant to open the node — measured in
-    # the 390px system test, where the summary's centre lands on the name and the click navigated
+    # the mobile system test (500px, Chrome's floor), where the summary's centre lands on the name and the click navigated
     # away instead of expanding. "Other formats" has no analysis to link to.
     #
     # `scope` names a sample the line's name does not: an archetype's first line blends every

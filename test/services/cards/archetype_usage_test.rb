@@ -279,7 +279,7 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     refute_predicate result, :venue_selectable?
   end
 
-  # Five statements for any card a list plays: the rows, the archetypes, the pools and the two bounds
+  # Five statements once a list plays the card in a Standard pool: the rows, the archetypes, the pools and the two bounds
   # `StandardPool#name` reads. Measured outside the query cache, on a one-pool card and on one
   # spanning three archetypes, both pools and a non-Standard event — the shape an N+1 per
   # archetype or per pool would separate.

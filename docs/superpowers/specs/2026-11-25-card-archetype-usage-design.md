@@ -44,7 +44,7 @@ playing the card: `archetype_id`, `tournaments.standard_pool_id`, `tournaments.o
 `tournament_id`, `tournaments.name`, `tournaments.date`, `deck_id`, and the deck's summed copies of
 the card (a `LEFT JOIN` on a per-deck `SUM`, NULL when the deck does not play it). One more loads the
 archetypes (for name and slug), and three the pools (`StandardPool.named` preloads the two card-set
-bounds `StandardPool#name` reads). **Five for any card a list plays** (one for a card none does) — asserted outside the query
+bounds `StandardPool#name` reads). **Five once a list plays the card in a Standard pool** (two when it is played only outside Standard, one when no list plays it) — asserted outside the query
 cache on a one-pool card and on one spanning three archetypes, both pools and a non-Standard event.
 
 A card with no fingerprint matches by its own id only — the `'card:<id>'` half of `GROUPING_KEY`.
@@ -90,7 +90,7 @@ Rendered by `Cards::ShowView` under the card's details, for visitors and members
   percentage spelled as `Archetypes::NameGroupRow` spells it) and, when played, the copies text
   (`Archetypes::CopiesText`), then an **"Analysis" link** carrying the node's parameters. The link
   trails the figures instead of wrapping the name because, inside a `<summary>`, a linked name
-  takes the tap meant to open the node: the 390px system test clicked the summary's centre and
+  takes the tap meant to open the node: the mobile system test (500px, Chrome's floor) clicked the summary's centre and
   navigated away. A 0 % pool reads "not played · 0 of 12 lists". The unplayed tournament count is a
   line inside the pool node.
 - Empty state: "No recorded list plays this card." — the card page is reached for every card, and
