@@ -19,9 +19,10 @@ class CardsController < ApplicationController
   IMAGE_RATE_LIMIT_TO = 300
   INDEX_RATE_LIMIT_TO = 60
   # A card page now aggregates every recorded list of every archetype playing the card (Boss's
-  # Orders: ~4600 rows, ~47 ms on a production copy), and /cards renders 48 hover-prefetched links
-  # to it. ArchetypesController#show's budget, for that same reason: a cursor down a listing, not a
-  # click, sets the peak rate of the page behind it (docs/architecture/public-surface.md).
+  # Orders: 476 KB, ~190 ms on a production copy), and /cards links to it from every card of a set
+  # (up to 295), each hover-prefetched. ArchetypesController#show's budget, for that same reason.
+  # It does refuse real browsing — 15 of 200 hovers down one set answered 429 — and the owner kept
+  # it at 120 on that measurement; see docs/architecture/public-surface.md before moving it.
   SHOW_RATE_LIMIT_TO = 120
   RATE_LIMIT_WITHIN = 1.minute
 

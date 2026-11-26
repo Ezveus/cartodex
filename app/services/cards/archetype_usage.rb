@@ -11,9 +11,10 @@ module Cards
   # label over-counts (one deck at two events; measured 0 such decks on 2026-11-25), and every node
   # carries the analysis parameters it reproduces so a test can compare the two directly.
   #
-  # One query for the rows, one for the archetypes, one for the pools: three whatever the card. On
-  # a production copy the widest card (Boss's Orders, 82 archetypes, 1104 played (archetype,
-  # tournament) pairs) reads 4606 rows in 46.6 ms. See
+  # One query for the rows, one for the archetypes, three for the pools and the two card-set bounds
+  # `StandardPool#name` reads: five for any card a list plays, and the first alone for one none
+  # does. On a production copy the widest card (Boss's Orders, 82 archetypes, 1104 played
+  # (archetype, tournament) pairs) reads 4606 rows in 46.6 ms. See
   # docs/superpowers/specs/2026-11-25-card-archetype-usage-design.md.
   class ArchetypeUsage < ApplicationService
     VENUES = %w[all paper online].freeze

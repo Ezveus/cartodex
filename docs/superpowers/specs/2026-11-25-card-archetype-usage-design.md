@@ -44,7 +44,7 @@ playing the card: `archetype_id`, `tournaments.standard_pool_id`, `tournaments.o
 `tournament_id`, `tournaments.name`, `tournaments.date`, `deck_id`, and the deck's summed copies of
 the card (a `LEFT JOIN` on a per-deck `SUM`, NULL when the deck does not play it). One more loads the
 archetypes (for name and slug), and three the pools (`StandardPool.named` preloads the two card-set
-bounds `StandardPool#name` reads). **Five in total, whatever the card** — asserted outside the query
+bounds `StandardPool#name` reads). **Five for any card a list plays** (one for a card none does) — asserted outside the query
 cache on a one-pool card and on one spanning three archetypes, both pools and a non-Standard event.
 
 A card with no fingerprint matches by its own id only — the `'card:<id>'` half of `GROUPING_KEY`.
@@ -102,6 +102,11 @@ Rendered by `Cards::ShowView` under the card's details, for visitors and members
 is added, 120/min under `name: "cards-show"`**, the `ArchetypesController#show` budget and the same
 reasoning (`docs/architecture/public-surface.md`): `/cards` renders 48 hover-prefetched links to
 this page, and this page now runs an aggregate over up to ~4600 rows. Signed-in members are exempt.
+
+The adversarial review then measured what the "48 links" premise missed: the set view of `/cards`
+renders the whole set (191 links on 30C, up to 295), and a visitor hovering 200 of them at 0.15 s
+each got 15 answers 429 (13 on a second run). Offered removal (the pre-branch state), 300/min, or
+120/min, **the owner kept 120/min** (2026-11-26).
 
 ### Cost of the widest card
 
