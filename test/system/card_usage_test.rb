@@ -17,7 +17,9 @@ class CardUsageSystemTest < ApplicationSystemTestCase
                                 format: "standard", standard_pool: pool, tier: "regional",
                                 created_by: users(:one))
     @online = Tournament.create!(
-      name: "Some Exceptionally Long Online Weekly Tournament Name For The Usage Tree #42",
+      # No space in it: a name that cannot break on a blank is what `overflow-wrap: anywhere`
+      # exists for — with spaces, the browser wraps it unaided and the rule is never exercised.
+      name: "SomeExceptionallyLongOnlineWeeklyTournamentNameWithNoSpaceForTheUsageTree#42",
       date: Date.new(2026, 6, 2), format: "standard", standard_pool: pool, tier: "other",
       online: true, created_by: users(:one)
     )

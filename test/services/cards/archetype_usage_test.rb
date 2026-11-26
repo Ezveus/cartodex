@@ -26,19 +26,26 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
   end
 
   # A Trainer's fingerprint is the hash of its name, so a sample of Trainers cannot tell "same
-  # fingerprint" from "same name". Two Pokémon of one name with different HP are two cards.
+  # fingerprint" from "same name". Two Pokémon of one name with different HP are two cards; the
+  # same Pokémon printed in another set is the same card, and its list counts — "in any printing",
+  # as the page says. Both halves, because a key on the card id alone passes the first.
   test "the card is its fingerprint, not its name" do
     played = pokemon("Usage Hoothoot", hp: 70)
     namesake = pokemon("Usage Hoothoot", hp: 80)
+    reprint = Card.create!(name: "Usage Hoothoot", card_type: "Pokémon", set_name: "UZR",
+                           set_number: "77", rarity: "Common", hp: 70, type_symbol: "Grass",
+                           retreat_cost: 1, stage: "Basic")
     refute_equal played.fingerprint, namesake.fingerprint
+    assert_equal played.fingerprint, reprint.fingerprint
     archetype = archetype_of_its_own
     event = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 6, 1))
     record(event, archetype, deck: field_list(played => 2))
     record(event, archetype, deck: field_list(namesake => 3))
+    record(event, archetype, deck: field_list(reprint => 4))
 
     usage = Cards::ArchetypeUsage.call(card: played).archetypes.sole.usage
 
-    assert_equal [ 2, 1, 50.0, 2, 2 ],
+    assert_equal [ 3, 2, 66.7, 2, 4 ],
       [ usage.lists_count, usage.playing_count, usage.pct, usage.min_copies, usage.max_copies ]
     assert_equal 3, walk_parity(played, "all"), "archetype, pool and tournament nodes, compared"
   end
@@ -133,6 +140,30 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     end
 
     assert_equal [ sample[:new_pool].id, sample[:old_pool].id, nil ], node.pools.map(&:pool_id)
+  end
+
+  # By each pool's *latest* event, not its earliest: here the pool holding the 30 June event comes
+  # first although the other pool's only event (15 June) is later than its first one. And two pools
+  # whose latest events share a date fall to the pool id, highest first, so the order cannot change
+  # between two loads.
+  test "pools order by their latest event, then by pool id" do
+    card = trainer("Usage Interleaved")
+    early, late = [ standard_pools(:twm_asc), standard_pools(:twm_por) ].sort_by(&:id)
+    archetype = archetype_of_its_own
+    record(standard_event(pool: early, date: Date.new(2026, 6, 1)), archetype, deck: field_list(card => 1))
+    record(standard_event(pool: early, date: Date.new(2026, 6, 30)), archetype, deck: field_list(card => 1))
+    record(standard_event(pool: late, date: Date.new(2026, 6, 15)), archetype, deck: field_list(card => 1))
+
+    # Recorded higher id first, so the rows reach the sort in the order a missing tiebreak would
+    # reverse into the wrong answer — recorded the other way round, insertion order alone passes.
+    tied = archetype_of_its_own
+    record(standard_event(pool: late, date: Date.new(2026, 7, 1)), tied, deck: field_list(card => 1))
+    record(standard_event(pool: early, date: Date.new(2026, 7, 1)), tied, deck: field_list(card => 1))
+
+    nodes = Cards::ArchetypeUsage.call(card: card).archetypes.index_by(&:archetype)
+
+    assert_equal [ early.id, late.id ], nodes[archetype].pools.map(&:pool_id)
+    assert_equal [ late.id, early.id ], nodes[tied].pools.map(&:pool_id)
   end
 
   # Played events only, newest first; the event where the archetype has a list and the card is
@@ -248,7 +279,7 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     refute_predicate result, :venue_selectable?
   end
 
-  # Five statements whatever the card: the rows, the archetypes, the pools and the two bounds
+  # Five statements for any card a list plays: the rows, the archetypes, the pools and the two bounds
   # `StandardPool#name` reads. Measured outside the query cache, on a one-pool card and on one
   # spanning three archetypes, both pools and a non-Standard event — the shape an N+1 per
   # archetype or per pool would separate.

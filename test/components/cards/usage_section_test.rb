@@ -39,6 +39,20 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
                  doc.css(".card-usage-unplayed").map(&:text)
   end
 
+  # Collapsed, as the class says: the widest card has 1383 nodes, and the first level is what a
+  # reader scans. And a pool whose every event plays the card prints no "0 other tournaments" line.
+  test "every node starts collapsed and an all-played pool prints no unplayed line" do
+    result = tree
+    result.archetypes.first.pools.first.unplayed_tournaments_count = 0
+    result.archetypes.first.pools.last.unplayed_tournaments_count = 0
+    doc = Nokogiri::HTML5(render_usage(result))
+
+    assert_operator doc.css("details").size, :>, 0
+    assert_empty doc.css("details[open]")
+    assert_empty doc.css(".card-usage-unplayed")
+    assert_no_match(/other tournament/, doc.text)
+  end
+
   test "the venue select renders only when both venues hold lists playing the card" do
     with = Nokogiri::HTML5(render_usage(tree))
     assert_equal %w[all paper online], with.css("select[name=venue] option").map { |option| option["value"] }
