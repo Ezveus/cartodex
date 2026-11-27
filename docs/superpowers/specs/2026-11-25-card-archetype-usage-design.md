@@ -124,9 +124,33 @@ its policy and rate limit, and a frame-navigated limited action that swallows it
 (`docs/architecture/deck-odds.md`); the visitor rate limit above bounds the same cost with none of
 that.
 
+## Follow-up: the Standard pool and Tournament selects (owner, 2026-11-27)
+
+After the first deploy the owner asked for the analysis's whole cascade, not the Venue axis alone,
+and chose **All formats as the default pool**, so the page opens on the tree shipped first. The
+analysis defaults to the newest pool because it reports one archetype; this section reports a card
+across all of them.
+
+- **Standard pool** — the pools a list plays the card in, most recent playing event first, then
+  "All formats"; each label counts the lists playing the card over **both venues**, so it does not
+  move when a venue is chosen (the analysis's stable-label rule). A control only where it is a
+  choice: two pools, or one plus a playing list outside Standard.
+- **Venue** — counted and clamped inside the pool selection.
+- **Tournament** — the events of the pool + venue selection where a list plays the card, newest
+  first, after "All tournaments"; a control from two such events.
+- **The tree loses the level a select fixes.** Under one pool an archetype opens onto its events in
+  that pool (its line is the pool's figure, links `{pool: id}`); under one event it is a leaf (links
+  `{pool: id|"all", tournament: id}` — the tournament never drives the pool).
+- Junk, out-of-selection or unoffered values resolve to "all" — compared as Strings, never `to_i`.
+
+Measured on the production copy: the parity walk over every selection the three selects offer
+(capped at 40 events per selection) compared 20846 nodes on 7 cards, 0 differences. Boss's Orders:
+517 KB / ~195 ms by default (41 KB more than before, the Tournament select's ~370 events), 319 KB
+under TEF-PBL, 56 KB under TEF-PBL + Paper. Still five queries.
+
 ## Out of scope
 
-- Any other filter (tier, date range, division).
+- Any other filter (tier, date range, division) — the analysis's three are now all here.
 - The figure for a *name* across fingerprints (the analysis's name group line): the card page
   describes one card.
 - Caching.

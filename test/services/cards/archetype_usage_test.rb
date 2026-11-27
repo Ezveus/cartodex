@@ -25,6 +25,19 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     assert_equal 22, nodes
   end
 
+  # The same comparison over every selection the filters offer. Each count is exact, for the reason
+  # the first test's is: a floor is satisfied while a whole class of node goes unwalked.
+  test "every node under every pool, venue and tournament reproduces the analysis" do
+    sample = parity_sample
+
+    selections, nodes = walk_every_selection(sample[:card])
+
+    # New pool: All (All tournaments + its 2 played events), Paper, Online — 5. Old pool, one paper
+    # event: 1. All formats: All (1 + 4 events), Paper (1 + 3), Online (1 event, no select) — 10.
+    assert_equal 16, selections
+    assert_equal 47, nodes
+  end
+
   # A Trainer's fingerprint is the hash of its name, so a sample of Trainers cannot tell "same
   # fingerprint" from "same name". Two Pokémon of one name with different HP are two cards; the
   # same Pokémon printed in another set is the same card, and its list counts — "in any printing",
@@ -279,6 +292,221 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     refute_predicate result, :venue_selectable?
   end
 
+  # Pool options are the pools a list plays the card in, counted as playing lists over both venues
+  # — so the labels do not move when a venue is chosen — most recent first, then All formats.
+  test "pool options list the played pools with venue-independent counts" do
+    sample = parity_sample
+    expected = [ [ sample[:new_pool].id.to_s, "#{sample[:new_pool].name} — 3 lists with this card" ],
+                 [ sample[:old_pool].id.to_s, "#{sample[:old_pool].name} — 1 list with this card" ],
+                 [ "all", "All formats — 5 lists with this card" ] ]
+
+    [ nil, "online", "paper" ].each do |venue|
+      options = Cards::ArchetypeUsage.call(card: sample[:card], venue_param: venue).pool_options
+      assert_equal expected, options.map { |option| [ option.value, option.label ] }, venue.inspect
+    end
+  end
+
+  # Distinct decks, not per-event counts added up the way MetagameScope's labels add them.
+  test "a pool label counts a deck recorded at two events once" do
+    card = trainer("Usage Twice Labelled")
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    deck = field_list(card => 2)
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 1)), archetype, deck: deck)
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 8)), archetype, deck: deck)
+
+    labels = Cards::ArchetypeUsage.call(card: card).pool_options.map(&:label)
+
+    assert_equal [ "#{pool.name} — 1 list with this card", "All formats — 1 list with this card" ], labels
+  end
+
+  # By each pool's latest *playing* event, the pool id breaking a tie — recorded in the order a
+  # missing tiebreak would reverse.
+  test "pool options order by their latest playing event, then by pool id" do
+    low, high = [ standard_pools(:twm_asc), standard_pools(:twm_por) ].sort_by(&:id)
+    card = trainer("Usage Option Order")
+    archetype = archetype_of_its_own
+    record(standard_event(pool: low, date: Date.new(2026, 6, 30)), archetype, deck: field_list(card => 1))
+    record(standard_event(pool: high, date: Date.new(2026, 6, 15)), archetype, deck: field_list(card => 1))
+    # A later event where the card is not played must not move the high pool ahead.
+    record(standard_event(pool: high, date: Date.new(2026, 7, 9)), archetype, deck: field_list(trainer("Usage Nope") => 1))
+    assert_equal [ low.id.to_s, high.id.to_s, "all" ], Cards::ArchetypeUsage.call(card: card).pool_options.map(&:value)
+
+    tied = trainer("Usage Option Tie")
+    record(standard_event(pool: high, date: Date.new(2026, 7, 1)), archetype, deck: field_list(tied => 1))
+    record(standard_event(pool: low, date: Date.new(2026, 7, 1)), archetype, deck: field_list(tied => 1))
+    assert_equal [ high.id.to_s, low.id.to_s, "all" ], Cards::ArchetypeUsage.call(card: tied).pool_options.map(&:value)
+  end
+
+  # One pool alone is All formats under another name, whatever the archetype's other lists hold;
+  # a list *playing the card* outside Standard is what makes the choice real. A value for a
+  # control that is not rendered resolves to All formats.
+  test "the pool control is a choice only with two played samples" do
+    pool = standard_pools(:twm_por)
+    card = trainer("Usage One Pool")
+    archetype = archetype_of_its_own
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 1)), archetype, deck: field_list(card => 1))
+    record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 1)), archetype,
+           deck: field_list(trainer("Usage Elsewhere") => 1))
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list(trainer("Usage GLC Only") => 1))
+
+    single = Cards::ArchetypeUsage.call(card: card, pool_param: pool.id.to_s)
+    refute_predicate single, :pool_selectable?
+    assert_nil single.pool
+    node = single.archetypes.sole
+    assert_equal [ "All formats", { pool: "all" } ], [ node.scope_label, node.analysis_params ]
+    refute_empty node.pools
+
+    record(unpooled_event(date: Date.new(2026, 5, 1)), archetype, deck: field_list(card => 1))
+    widened = Cards::ArchetypeUsage.call(card: card, pool_param: pool.id.to_s)
+    assert_predicate widened, :pool_selectable?
+    assert_equal pool, widened.pool
+  end
+
+  # The absent pool holds lists, so it is a node of the All-formats tree, but no option.
+  test "a pool the card is not played in is no option and resolves to all formats" do
+    card = trainer("Usage Not Here")
+    archetype = archetype_of_its_own
+    record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 1)), archetype, deck: field_list(card => 2))
+    record(standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 6, 1)), archetype,
+           deck: field_list(trainer("Usage Other Card") => 2))
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list(card => 1))
+
+    result = Cards::ArchetypeUsage.call(card: card, pool_param: standard_pools(:twm_por).id.to_s)
+
+    assert_equal [ standard_pools(:twm_asc).id.to_s, "all" ], result.pool_options.map(&:value)
+    assert_nil result.pool
+    assert_equal 3, result.archetypes.sole.pools.size
+  end
+
+  # Built from real ids, so a `to_i` reading would find something.
+  test "malformed pool and tournament values resolve to none" do
+    sample = parity_sample
+    [ "#{sample[:new_pool].id}junk", [ sample[:new_pool].id.to_s ], { "x" => "y" } ].each do |junk|
+      result = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: junk, tournament_param: junk)
+      assert_nil result.pool, junk.inspect
+      assert_nil result.tournament_id, junk.inspect
+    end
+    result = Cards::ArchetypeUsage.call(card: sample[:card], tournament_param: "#{sample[:paper_new].id}junk")
+    assert_nil result.tournament_id
+    refute_empty result.archetypes.first.pools
+  end
+
+  # The venue axis resolves inside the pool selection: the old pool holds no online list at all.
+  test "venue options and the venue clamp are counted inside the selected pool" do
+    sample = parity_sample
+
+    result = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: sample[:old_pool].id.to_s, venue_param: "online")
+
+    assert_equal :all, result.venue
+    refute_predicate result, :venue_selectable?
+    assert_equal [ "All — 1 list with this card", "Paper — 1 list with this card", "Online — 0 lists with this card" ],
+                 result.venue_options.map(&:label)
+  end
+
+  # Parity cannot see a leaked archetype: the analysis agrees with its 0 %.
+  test "under a pool or a tournament, only archetypes playing the card there are listed" do
+    sample = parity_sample
+
+    in_pool = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: sample[:old_pool].id.to_s)
+    assert_equal [ sample[:first] ], in_pool.archetypes.map(&:archetype)
+
+    at_event = Cards::ArchetypeUsage.call(card: sample[:card], tournament_param: sample[:online_new].id.to_s)
+    assert_equal sample[:online_new].id, at_event.tournament_id
+    assert_equal [ sample[:first] ], at_event.archetypes.map(&:archetype)
+  end
+
+  test "under a pool, an archetype opens onto its played events in that pool and venue" do
+    sample = parity_sample
+    pool = sample[:new_pool]
+
+    { "all" => [ [ sample[:online_new].id, sample[:paper_new].id ], 1 ],
+      "paper" => [ [ sample[:paper_new].id ], 1 ],
+      "online" => [ [ sample[:online_new].id ], 0 ] }.each do |venue, (ids, unplayed)|
+      node = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: pool.id.to_s, venue_param: venue)
+                                  .archetypes.find { |candidate| candidate.archetype == sample[:first] }
+      assert_equal [ pool.name, [], ids, unplayed ],
+                   [ node.scope_label, node.pools, node.tournaments.map(&:tournament_id), node.unplayed_tournaments_count ],
+                   venue
+    end
+  end
+
+  # The tournament never drives the pool: under All formats a tournament link says `pool: "all"`,
+  # which selects the same sample as the event's own pool and is not the same link.
+  test "nodes link with exactly their analysis parameters under a pool and under a tournament" do
+    sample = parity_sample
+    pool_id = sample[:new_pool].id.to_s
+    event_id = sample[:paper_new].id.to_s
+
+    in_pool = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: pool_id, venue_param: "paper")
+                                   .archetypes.find { |node| node.archetype == sample[:first] }
+    assert_equal({ pool: pool_id, venue: "paper" }, in_pool.analysis_params)
+    assert_equal [ { pool: pool_id, tournament: event_id, venue: "paper" } ], in_pool.tournaments.map(&:analysis_params)
+
+    at_event = Cards::ArchetypeUsage.call(card: sample[:card], venue_param: "paper", tournament_param: event_id)
+    assert_equal [ { pool: "all", tournament: event_id, venue: "paper" } ] * 2, at_event.archetypes.map(&:analysis_params)
+    at_event.archetypes.each do |node|
+      assert_equal [ nil, [], [], 0 ], [ node.scope_label, node.pools, node.tournaments, node.unplayed_tournaments_count ]
+    end
+
+    in_pool_at_event = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: pool_id, tournament_param: event_id)
+    assert_equal [ { pool: pool_id, tournament: event_id } ] * 2, in_pool_at_event.archetypes.map(&:analysis_params)
+  end
+
+  # Played events only, inside the pool and venue, newest first, the id breaking a tie.
+  test "tournament options are the played events of the selection" do
+    sample = parity_sample
+    pool_id = sample[:new_pool].id.to_s
+
+    result = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: pool_id)
+    assert_equal [ "all", sample[:online_new].id.to_s, sample[:paper_new].id.to_s ], result.tournament_options.map(&:value)
+    assert_equal "All tournaments — 3 lists with this card", result.tournament_options.first.label
+    assert_equal "#{sample[:paper_new].name} (#{I18n.l(sample[:paper_new].date)}) — 2 lists with this card",
+                 result.tournament_options.last.label
+    assert_predicate result, :tournament_selectable?
+
+    paper = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: pool_id, venue_param: "paper")
+    assert_equal "All tournaments — 2 lists with this card", paper.tournament_options.first.label
+
+    card = trainer("Usage Same Day")
+    archetype = archetype_of_its_own
+    lower, higher = Array.new(2) { standard_event(pool: sample[:new_pool], date: Date.new(2026, 6, 20)) }
+    # Recorded higher id first, so insertion order alone gives the wrong answer.
+    record(higher, archetype, deck: field_list(card => 1))
+    record(lower, archetype, deck: field_list(card => 1))
+    assert_equal [ "all", higher.id.to_s, lower.id.to_s ],
+                 Cards::ArchetypeUsage.call(card: card).tournament_options.map(&:value)
+  end
+
+  test "a tournament outside the selection, or under no select, resolves to none" do
+    sample = parity_sample
+
+    assert_nil Cards::ArchetypeUsage.call(card: sample[:card], pool_param: sample[:new_pool].id.to_s,
+                                          tournament_param: sample[:glc].id.to_s).tournament_id
+    assert_nil Cards::ArchetypeUsage.call(card: sample[:card], venue_param: "online",
+                                          tournament_param: sample[:paper_new].id.to_s).tournament_id
+    lone = Cards::ArchetypeUsage.call(card: sample[:card], pool_param: sample[:old_pool].id.to_s,
+                                      tournament_param: sample[:paper_old].id.to_s)
+    refute_predicate lone, :tournament_selectable?
+    assert_nil lone.tournament_id
+  end
+
+  # Ordered by the selection's playing count, not the archetype's overall one.
+  test "under a pool, archetypes order by their playing count in it" do
+    card = trainer("Usage Pool Rank")
+    old_event = standard_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 1))
+    new_event = standard_event(pool: standard_pools(:twm_por), date: Date.new(2026, 6, 1))
+    broad = archetype_of_its_own
+    recent = archetype_of_its_own
+    3.times { record(old_event, broad, deck: field_list(card => 1)) }
+    record(new_event, broad, deck: field_list(card => 1))
+    2.times { record(new_event, recent, deck: field_list(card => 1)) }
+
+    assert_equal [ broad, recent ], Cards::ArchetypeUsage.call(card: card).archetypes.map(&:archetype)
+    assert_equal [ recent, broad ],
+                 Cards::ArchetypeUsage.call(card: card, pool_param: standard_pools(:twm_por).id.to_s).archetypes.map(&:archetype)
+  end
+
   # Five statements once a list plays the card in a Standard pool: the rows, the archetypes, the pools and the two bounds
   # `StandardPool#name` reads. Measured outside the query cache, on a one-pool card and on one
   # spanning three archetypes, both pools and a non-Standard event — the shape an N+1 per
@@ -300,8 +528,14 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     costs = [ small, large ].map do |card|
       ActiveRecord::Base.uncached { count_queries { Cards::ArchetypeUsage.call(card: card) } }
     end
+    event = Tournament.where(standard_pool: standard_pools(:twm_por)).where("name LIKE 'Usage Event%'").last
+    costs << ActiveRecord::Base.uncached do
+      count_queries do
+        Cards::ArchetypeUsage.call(card: large, pool_param: standard_pools(:twm_por).id.to_s, tournament_param: event.id.to_s)
+      end
+    end
 
-    assert_equal [ 5, 5 ], costs
+    assert_equal [ 5, 5, 5 ], costs
   end
 
   private
@@ -341,20 +575,45 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     record(online_new, second, deck: field_list(filler => 1))
 
     { card: card, first: first, second: second, old_pool: old_pool, new_pool: new_pool,
-      paper_new: paper_new, online_new: online_new, glc: glc }
+      paper_old: paper_old, paper_new: paper_new, online_new: online_new, glc: glc }
   end
 
-  # Every linked node of one venue, compared. Returns how many it compared.
-  def walk_parity(card, venue)
-    result = Cards::ArchetypeUsage.call(card: card, venue_param: venue)
+  # Every linked node of one selection, compared. Returns how many it compared.
+  def walk_parity(card, venue, pool: nil, tournament: nil)
+    result = Cards::ArchetypeUsage.call(card: card, pool_param: pool, venue_param: venue, tournament_param: tournament)
     result.archetypes.sum do |archetype_node|
       archetype = archetype_node.archetype
       assert_parity(card, archetype, archetype_node) +
+        archetype_node.tournaments.sum { |tournament_node| assert_parity(card, archetype, tournament_node) } +
         archetype_node.pools.sum do |pool_node|
           (pool_node.analysis_params ? assert_parity(card, archetype, pool_node) : 0) +
             pool_node.tournaments.sum { |tournament_node| assert_parity(card, archetype, tournament_node) }
         end
     end
+  end
+
+  # Every selection the three selects can reach, by clicking through them as a reader would: each
+  # option of a select that is rendered, the default where it is not. Following the options of a
+  # select the page withholds would walk clamped duplicates of the default. Returns
+  # [selections walked, nodes compared].
+  def walk_every_selection(card)
+    selections = 0
+    nodes = choices(Cards::ArchetypeUsage.call(card: card), :pool).sum do |pool|
+      choices(Cards::ArchetypeUsage.call(card: card, pool_param: pool), :venue).sum do |venue|
+        result = Cards::ArchetypeUsage.call(card: card, pool_param: pool, venue_param: venue)
+        choices(result, :tournament).sum do |tournament|
+          selections += 1
+          walk_parity(card, venue, pool: pool, tournament: tournament)
+        end
+      end
+    end
+    [ selections, nodes ]
+  end
+
+  def choices(result, axis)
+    return [ nil ] unless result.public_send(:"#{axis}_selectable?")
+
+    result.public_send(:"#{axis}_options").map(&:value)
   end
 
   # Returns 1 so the caller can count the comparisons it actually made. The key is

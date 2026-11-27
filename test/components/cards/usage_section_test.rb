@@ -64,12 +64,59 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
   end
 
   test "a card no list plays says so" do
-    empty = Cards::ArchetypeUsage::Result.new(venue: :all, venue_options: [], venue_selectable: false,
-                                              archetypes: [])
-    doc = Nokogiri::HTML5(render_usage(empty))
+    doc = Nokogiri::HTML5(render_usage(result))
 
     assert_equal "No recorded list plays this card.", doc.at_css(".card-usage-empty").text
     assert_nil doc.at_css(".card-usage-tree")
+    assert_nil doc.at_css("form.card-usage-filters"), "no select is a choice, so no form"
+  end
+
+  # Each select renders on its own axis's rule, in the analysis's order, and marks the resolved
+  # value — a select built without it pre-selects its first option, "TWM-POR" here, above a tree
+  # showing All formats.
+  test "the pool and tournament selects render on their own rules and mark the resolved values" do
+    pool_only = Nokogiri::HTML5(render_usage(result(pool_selectable: true)))
+    assert_equal [ "pool" ], pool_only.css("form.card-usage-filters select").map { |select| select["name"] }
+    assert_equal "all", pool_only.at_css("select[name=pool] option[selected]")["value"]
+
+    pool = StandardPool.new(id: 7)
+    all = Nokogiri::HTML5(render_usage(result(pool: pool, pool_selectable: true, venue: :online,
+                                              venue_selectable: true, tournament_id: 10,
+                                              tournament_selectable: true)))
+    assert_equal %w[pool venue tournament], all.css("form.card-usage-filters select").map { |select| select["name"] }
+    assert_equal [ "7", "online", "10" ], all.css("option[selected]").map { |option| option["value"] }
+    assert_equal [ "Standard pool", "Venue", "Tournament" ], all.css(".archetype-sample-label > span").map(&:text)
+
+    tournament_only = Nokogiri::HTML5(render_usage(result(tournament_selectable: true)))
+    assert_equal "all", tournament_only.at_css("select[name=tournament] option[selected]")["value"]
+  end
+
+  # Under one pool an archetype opens onto its events directly; under one tournament it is a leaf.
+  test "an archetype opens onto its events under a pool and is a leaf under a tournament" do
+    event = Cards::ArchetypeUsage::TournamentNode.new(
+      tournament_id: 9, label: "Regional (6/1/2026)", usage: usage(1, 1, 100.0, 1, 1, [ 1 ]),
+      analysis_params: { pool: "7", tournament: "9" }
+    )
+    in_pool = Cards::ArchetypeUsage::ArchetypeNode.new(
+      archetype: archetypes(:ogerpon), usage: usage(2, 1, 50.0, 1, 1, [ 1 ]), scope_label: "TWM-POR",
+      pools: [], tournaments: [ event ], unplayed_tournaments_count: 1, analysis_params: { pool: "7" }
+    )
+    doc = Nokogiri::HTML5(render_usage(result(archetypes: [ in_pool ])))
+    assert_equal "TWM-POR · 50% · 1 of 2 lists · 1 copy",
+                 doc.at_css(".card-usage-archetype > details > summary .card-usage-figures").text
+    assert_equal [ "Regional (6/1/2026)" ],
+                 doc.css(".card-usage-archetype > details > .card-usage-children > .card-usage-tournament .card-usage-name").map(&:text)
+    assert_equal "1 other tournament here: not played.", doc.at_css(".card-usage-unplayed").text
+
+    leaf = Cards::ArchetypeUsage::ArchetypeNode.new(
+      archetype: archetypes(:ogerpon), usage: usage(2, 1, 50.0, 1, 1, [ 1 ]), scope_label: nil,
+      pools: [], tournaments: [], unplayed_tournaments_count: 0, analysis_params: { pool: "7", tournament: "9" }
+    )
+    doc = Nokogiri::HTML5(render_usage(result(archetypes: [ leaf ])))
+    assert_empty doc.css("details")
+    assert_equal "50% · 1 of 2 lists · 1 copy", doc.at_css(".card-usage-archetype > .card-usage-figures").text
+    assert_equal "/archetypes/#{archetypes(:ogerpon).to_param}/analysis?pool=7&tournament=9",
+                 doc.at_css(".card-usage-archetype > .card-usage-link")["href"]
   end
 
   private
@@ -101,11 +148,23 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
       unplayed_tournaments_count: 1, analysis_params: nil
     )
     archetype = Cards::ArchetypeUsage::ArchetypeNode.new(
-      archetype: archetypes(:ogerpon), usage: usage(3, 1, 33.3, 1, 2, [ 1, 2 ]),
-      pools: [ pool, outside ], analysis_params: { pool: "all", venue: "paper" }
+      archetype: archetypes(:ogerpon), usage: usage(3, 1, 33.3, 1, 2, [ 1, 2 ]), scope_label: "All formats",
+      pools: [ pool, outside ], tournaments: [], unplayed_tournaments_count: 0,
+      analysis_params: { pool: "all", venue: "paper" }
     )
-    options = %w[all paper online].map { |value| Cards::ArchetypeUsage::Option.new(value: value, label: value) }
-    Cards::ArchetypeUsage::Result.new(venue: :paper, venue_options: options, venue_selectable: true,
-                                      archetypes: [ archetype ])
+    result(venue: :paper, venue_selectable: true, archetypes: [ archetype ])
+  end
+
+  def result(**overrides)
+    Cards::ArchetypeUsage::Result.new(
+      pool: nil, pool_options: options(%w[7 all]), pool_selectable: false,
+      venue: :all, venue_options: options(%w[all paper online]), venue_selectable: false,
+      tournament_id: nil, tournament_options: options(%w[all 9 10]), tournament_selectable: false,
+      archetypes: [], **overrides
+    )
+  end
+
+  def options(values)
+    values.map { |value| Cards::ArchetypeUsage::Option.new(value: value, label: "#{value} label") }
   end
 end

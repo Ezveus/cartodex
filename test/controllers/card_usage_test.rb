@@ -57,6 +57,50 @@ class CardUsageTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # One event: the archetype is a leaf carrying the event's figure, and its link names the event
+  # under All formats — the tournament never drives the pool.
+  test "a tournament narrows the tree to the archetypes playing the card there" do
+    get card_path(@card, tournament: @paper.id)
+
+    assert_response :success
+    assert_select "#usage select[name=tournament] option[selected][value=?]", @paper.id.to_s
+    assert_select "#usage .card-usage-archetype details", count: 0
+    assert_select "#usage .card-usage-archetype > .card-usage-figures", text: "50% · 1 of 2 lists · 2 copies"
+    assert_select "#usage .card-usage-archetype > a[href=?]",
+                  analysis_archetype_path(@archetype, pool: "all", tournament: @paper.id)
+  end
+
+  # The pool select exists only once the card is played in a second sample, here a GLC event.
+  test "a pool narrows the tree to that pool's figure and events" do
+    glc = Tournament.create!(name: "Usage Request GLC", date: Date.new(2026, 4, 1), format: "glc",
+                             tier: "league_cup", created_by: users(:one))
+    record(glc, @card => 1)
+    pool = standard_pools(:twm_por)
+
+    get card_path(@card, pool: pool.id)
+
+    assert_response :success
+    assert_select "#usage select[name=pool] option[selected][value=?]", pool.id.to_s
+    assert_select "#usage .card-usage-archetype > details > summary .card-usage-figures",
+                  text: "#{pool.name} · 66.7% · 2 of 3 lists · 1-2 copies · most often 1 / 2 — tied"
+    assert_select "#usage .card-usage-pool", count: 0
+    assert_select "#usage .card-usage-tournament", count: 2
+    assert_select "#usage .card-usage-archetype > details > summary a[href=?]",
+                  analysis_archetype_path(@archetype, pool: pool.id)
+  end
+
+  test "malformed pool and tournament values fall back rather than failing" do
+    [ { pool: [ "1" ] }, { tournament: [ "1" ] } ].each do |params|
+      get card_path(@card, params)
+      assert_response :success
+    end
+    [ "pool[x]=y", "tournament[x]=y" ].each do |query|
+      get "#{card_path(@card)}?#{query}"
+      assert_response :success
+    end
+    assert_select "#usage select[name=tournament] option[selected][value=all]"
+  end
+
   # card_allocation_controller.js reloads this page on every collection +/- only to extract the
   # `#card-allocation` frame. Measured on the widest card, the tree was 466 KB of that 474 KB
   # response, so a frame request skips it — and its aggregate query — entirely.

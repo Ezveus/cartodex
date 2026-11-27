@@ -129,14 +129,16 @@ class CardsController < ApplicationController
     # :pokemon_subtype is already in the includes above and the payload reads only the card's own
     # columns, so this is free. Unconditional: the catalog is public, CardPolicy#og_image? is true.
     @og_payload = Og::CardPayload.call(@card)
-    # Public, like the archetype analysis whose figures it reproduces. `venue` is passed raw: the
-    # service `to_s`es it, so an Array- or Hash-shaped param falls back to All rather than raising.
+    # Public, like the archetype analysis whose figures it reproduces. The three filters are passed
+    # raw: the service `to_s`es each, so an Array- or Hash-shaped param falls back to All rather
+    # than raising.
     #
     # Not for the allocation frame's own refresh: card_allocation_controller.js reloads this page on
     # every collection +/- to extract `#card-allocation`, and measured on the widest card the tree
     # was 466 KB of the 474 KB it rendered for nothing.
     unless turbo_frame_request_id == Cards::AllocationSection::FRAME_ID
-      @usage = Cards::ArchetypeUsage.call(card: @card, venue_param: params[:venue])
+      @usage = Cards::ArchetypeUsage.call(card: @card, pool_param: params[:pool], venue_param: params[:venue],
+                                          tournament_param: params[:tournament])
     end
   end
 

@@ -1,7 +1,7 @@
 require "application_system_test_case"
 
 # The card page's usage tree, end to end and on both sides of the 768px breakpoint: the <details>
-# open, the Venue select submits on change, a node's link lands on the analysis printing the same
+# open, the filters submit on change, a node's link lands on the analysis printing the same
 # figure, and the tree — whose online event names are the longest strings this data holds — never
 # pushes the page into a horizontal scroll. Geometry is read off bounding boxes, because a tree
 # that overflows still renders every node a text assertion looks for.
@@ -56,10 +56,42 @@ class CardUsageSystemTest < ApplicationSystemTestCase
     assert_selector ".archetype-card-pct", text: "100% of lists (1)"
   end
 
-  test "the open tree never scrolls the page sideways, and a summary keeps its figures beside or under its name" do
+  # The cascade a reader clicks through: a pool, then one of its events, then that event's figure on
+  # the analysis it links to.
+  test "a visitor narrows the tree to a pool, then to one event, and follows it to the analysis" do
+    glc = Tournament.create!(name: "League Cup Usage System", date: Date.new(2026, 4, 1), format: "glc",
+                             tier: "league_cup", created_by: users(:one))
+    record(glc, @card => 3)
+    pool = standard_pools(:twm_por)
     visit card_path(@card)
+
+    within("#usage") { find("select[name=pool]").select("#{pool.name} — 2 lists with this card") }
+    assert_current_path(/pool=#{pool.id}/)
+    within "#usage" do
+      assert_text "#{pool.name} · 66.7% · 2 of 3 lists"
+      find("select[name=tournament]").select("#{@paper.name} (#{I18n.l(@paper.date)}) — 1 list with this card")
+    end
+
+    assert_current_path(/tournament=#{@paper.id}/)
+    within "#usage" do
+      assert_no_selector "details"
+      assert_text "50% · 1 of 2 lists · 2 copies"
+      click_link "Analysis"
+    end
+
+    assert_current_path(/analysis/)
+    assert_selector ".archetype-card-pct", text: "50% of lists (1)"
+  end
+
+  test "the open tree never scrolls the page sideways, and a summary keeps its figures beside or under its name" do
+    # A GLC list playing the card, so all three selects render: the Tournament select is as wide as
+    # its longest option, the space-less online name.
+    record(Tournament.create!(name: "League Cup Usage System", date: Date.new(2026, 4, 1), format: "glc",
+                              tier: "league_cup", created_by: users(:one)), @card => 1)
+    visit card_path(@card)
+    assert_selector "#usage select", count: 3
     page.execute_script("document.querySelectorAll('#usage details').forEach((d) => { d.open = true })")
-    assert_selector ".card-usage-tournament", count: 2
+    assert_selector ".card-usage-tournament", count: 3
 
     geometry = evaluate_script(<<~JS)
       (() => {
@@ -74,11 +106,15 @@ class CardUsageSystemTest < ApplicationSystemTestCase
           return { nameRight: all.right, figuresRight: figures.right, sectionRight: section.right,
                    besideOrUnder: figures.left >= name.right - 1 || figures.top >= name.bottom - 1 };
         });
-        return { page: document.documentElement.scrollWidth - window.innerWidth, rows: rows };
+        const section = document.querySelector("#usage").getBoundingClientRect();
+        const selects = Array.from(document.querySelectorAll("#usage select"))
+          .map((select) => select.getBoundingClientRect().right - section.right);
+        return { page: document.documentElement.scrollWidth - window.innerWidth, rows: rows, selects: selects };
       })()
     JS
 
     assert_operator geometry["page"], :<=, 0, "the usage tree scrolls the page sideways"
+    geometry["selects"].each { |overhang| assert_operator overhang, :<=, 1, "a filter select overflows the section" }
     geometry["rows"].each do |row|
       assert row["besideOrUnder"], row.inspect
       assert_operator row["figuresRight"], :<=, row["sectionRight"] + 1, row.inspect

@@ -11,12 +11,19 @@ module Cards
   # label over-counts (one deck at two events; measured 0 such decks on 2026-11-25), and every node
   # carries the analysis parameters it reproduces so a test can compare the two directly.
   #
+  # **The sample is chosen the way the analysis chooses it**: Standard pool, then venue, then
+  # tournament, each resolving inside the ones before it and clamping to "all" where it names
+  # nothing the card is played in. The default pool is "All formats", the owner's choice
+  # (2026-11-27), so the page opens on the whole tree; the analysis defaults to the newest pool
+  # because it reports one archetype, while this reports a card across all of them.
+  #
   # One query for the rows, one for the archetypes, three for the pools and the two card-set bounds
   # `StandardPool#name` reads: five once a list plays the card in a Standard pool, two when it is
   # played only outside Standard (no pool to load), one when no list plays it. On a production copy the widest card (Boss's Orders, 82 archetypes, 1104 played
   # (archetype, tournament) pairs) reads 4606 rows in 46.6 ms. See
   # docs/superpowers/specs/2026-11-25-card-archetype-usage-design.md.
   class ArchetypeUsage < ApplicationService
+    ALL = Archetypes::MetagameScope::ALL
     VENUES = %w[all paper online].freeze
     OTHER_FORMATS_LABEL = "Other formats".freeze
 
@@ -40,36 +47,62 @@ module Cards
     PoolNode = Struct.new(:pool_id, :label, :usage, :tournaments, :unplayed_tournaments_count,
                           :analysis_params, keyword_init: true)
 
-    ArchetypeNode = Struct.new(:archetype, :usage, :pools, :analysis_params, keyword_init: true)
+    # The archetype's line for the selected sample, and what opens under it: its pools under All
+    # formats, its played events under one pool (`pools` empty), nothing under one tournament
+    # (both empty — the node is a leaf). `scope_label` names a sample the line's own name does
+    # not: "All formats", the pool's name, or nil under a tournament, which its select names.
+    ArchetypeNode = Struct.new(:archetype, :usage, :scope_label, :pools, :tournaments,
+                               :unplayed_tournaments_count, :analysis_params, keyword_init: true)
     Option = Struct.new(:value, :label, keyword_init: true)
 
-    Result = Struct.new(:venue, :venue_options, :venue_selectable, :archetypes, keyword_init: true) do
-      # True when lists playing the card exist under both venues. Not `venue_options.size > 1`,
-      # which is always three: "All" beside the one venue holding every list is two labels over one
-      # sample, the non-choice `MetagameScope::Result#venue_selectable?` refuses too.
+    # `pool` is the StandardPool selected, nil for All formats; `tournament_id` the event selected,
+    # nil for every one. Both are the resolved values, never the parameters, so the selects and
+    # the tree cannot disagree.
+    Result = Struct.new(:pool, :pool_options, :pool_selectable,
+                        :venue, :venue_options, :venue_selectable,
+                        :tournament_id, :tournament_options, :tournament_selectable,
+                        :archetypes, keyword_init: true) do
+      # Each control is a genuine choice or it is not rendered, the three rules of
+      # `MetagameScope::Result`: two pool options, or one plus a playing list outside Standard (one
+      # pool alone is the same sample as All formats); playing lists under both venues (`venue_options`
+      # always number three); two played events or more.
+      def pool_selectable? = pool_selectable
       def venue_selectable? = venue_selectable
+      def tournament_selectable? = tournament_selectable
       def any? = archetypes.any?
     end
 
     Row = Struct.new(:archetype_id, :pool_id, :online, :tournament_id, :tournament_name,
                      :tournament_date, :deck_id, :copies, keyword_init: true)
 
-    # `venue_param` is whatever arrived in the query string — an Array or a Hash among the
-    # possibilities on a public page — so `to_s` first, then `VENUES.include?`.
-    def initialize(card:, venue_param: nil)
+    # Every parameter is whatever arrived in the query string — an Array or a Hash among the
+    # possibilities on a public page — so `to_s` first, then compared as a String against the
+    # values offered, never through `to_i`, which reads "12junk" as 12.
+    def initialize(card:, pool_param: nil, venue_param: nil, tournament_param: nil)
       @card = card
+      @pool_param = pool_param.to_s
       @venue_param = venue_param.to_s
+      @tournament_param = tournament_param.to_s
     end
 
     def call
-      venue = selected_venue
-      venue_rows = rows_in(venue)
+      pool = selected_pool
+      pool_rows = rows_in_pool(pool)
+      venue = selected_venue(pool_rows)
+      venue_rows = rows_in_venue(pool_rows, venue)
+      tournament_id = selected_tournament(venue_rows)
 
       Result.new(
+        pool: pool,
+        pool_options: pool_options,
+        pool_selectable: pool_selectable?,
         venue: venue,
-        venue_options: venue_options,
-        venue_selectable: playing_in?(:paper) && playing_in?(:online),
-        archetypes: archetype_nodes(venue, venue_rows)
+        venue_options: venue_options(pool_rows),
+        venue_selectable: playing?(rows_in_venue(pool_rows, :paper)) && playing?(rows_in_venue(pool_rows, :online)),
+        tournament_id: tournament_id,
+        tournament_options: tournament_options(venue_rows),
+        tournament_selectable: tournament_selectable?(venue_rows),
+        archetypes: archetype_nodes(pool, venue, venue_rows, tournament_id)
       )
     end
 
@@ -118,37 +151,107 @@ module Cards
       end
     end
 
-    def rows_in(venue)
-      return rows if venue == :all
-
-      rows.select { |row| row.online == (venue == :online) }
+    # The pool selection: one Standard pool's rows, or every row under All formats.
+    def rows_in_pool(pool)
+      pool ? rows.select { |row| row.pool_id == pool.id } : rows
     end
 
-    def playing_in?(venue)
-      rows_in(venue).any?(&:copies)
+    def rows_in_venue(sample, venue)
+      return sample if venue == :all
+
+      sample.select { |row| row.online == (venue == :online) }
     end
 
-    # A venue in which no list plays the card falls back to `:all` — the clamp, recorded in the
-    # Result so the select and the tree cannot disagree.
-    def selected_venue
+    def playing?(sample)
+      sample.any?(&:copies)
+    end
+
+    # The pools a list plays the card in, any venue, most recent playing event first and the pool
+    # id breaking a tie. Over both venues on purpose, so a pool's label does not move when a venue
+    # is chosen — the analysis's stable-label rule (`MetagameScope#options`), which the clamp in
+    # `selected_venue` keeps honest.
+    def played_pools
+      @played_pools ||= rows.select(&:copies).reject { |row| row.pool_id.nil? }.group_by(&:pool_id)
+                            .sort_by { |pool_id, pool_rows| [ pool_rows.map(&:tournament_date).max, pool_id ] }
+                            .reverse
+                            .map { |pool_id, pool_rows| [ pools.fetch(pool_id), pool_rows ] }
+    end
+
+    def pool_options
+      played_pools.map do |pool, pool_rows|
+        Option.new(value: pool.id.to_s, label: "#{pool.name} — #{lists_label(playing_decks(pool_rows).size)}")
+      end + [ Option.new(value: ALL, label: "All formats — #{lists_label(playing_decks(rows).size)}") ]
+    end
+
+    def pool_selectable?
+      played_pools.size > 1 || (played_pools.size == 1 && rows.any? { |row| row.copies && row.pool_id.nil? })
+    end
+
+    # All formats unless the parameter names a pool on offer, and only while the control is
+    # rendered: a page must not pin a filter it offers no way to remove.
+    def selected_pool
+      return nil unless pool_selectable?
+
+      played_pools.map(&:first).find { |pool| pool.id.to_s == @pool_param }
+    end
+
+    # A venue in which no list plays the card inside the pool selection falls back to `:all` — the
+    # clamp, recorded in the Result so the select and the tree cannot disagree.
+    def selected_venue(pool_rows)
       return :all unless VENUES.include?(@venue_param)
 
       venue = @venue_param.to_sym
-      return :all if venue != :all && !playing_in?(venue)
+      return :all if venue != :all && !playing?(rows_in_venue(pool_rows, venue))
 
       venue
     end
 
-    def venue_options
+    # Counted inside the pool selection, as the analysis counts its venue options.
+    def venue_options(pool_rows)
       VENUES.map do |value|
-        lists = playing_decks(rows_in(value.to_sym)).size
-        Option.new(value: value,
-                   label: "#{value.capitalize} — #{lists} #{'list'.pluralize(lists)} with this card")
+        lists = playing_decks(rows_in_venue(pool_rows, value.to_sym)).size
+        Option.new(value: value, label: "#{value.capitalize} — #{lists_label(lists)}")
       end
+    end
+
+    # The events of the pool + venue selection where a list plays the card, newest first, the id
+    # breaking a tie.
+    def played_events(venue_rows)
+      venue_rows.select(&:copies).group_by(&:tournament_id)
+                .sort_by { |tournament_id, event_rows| [ event_rows.first.tournament_date, tournament_id ] }
+                .reverse
+    end
+
+    def tournament_options(venue_rows)
+      [ Option.new(value: ALL, label: "All tournaments — #{lists_label(playing_decks(venue_rows).size)}") ] +
+        played_events(venue_rows).map do |tournament_id, event_rows|
+          Option.new(value: tournament_id.to_s,
+                     label: "#{event_label(event_rows.first)} — #{lists_label(playing_decks(event_rows).size)}")
+        end
+    end
+
+    def tournament_selectable?(venue_rows)
+      played_events(venue_rows).size > 1
+    end
+
+    def selected_tournament(venue_rows)
+      return nil unless tournament_selectable?(venue_rows)
+
+      played_events(venue_rows).map(&:first).find { |tournament_id| tournament_id.to_s == @tournament_param }
     end
 
     def playing_decks(sample)
       sample.select(&:copies).map(&:deck_id).to_set
+    end
+
+    def lists_label(count)
+      "#{count} #{'list'.pluralize(count)} with this card"
+    end
+
+    # Labelled the way `TournamentEntry#picker_label` and the analysis's Tournament select print an
+    # event, because the name alone is not an identity (55 events share theirs).
+    def event_label(row)
+      "#{row.tournament_name} (#{I18n.l(row.tournament_date)})"
     end
 
     # The analysis's denominator is distinct deck ids; its numerator distinct decks playing the
@@ -168,23 +271,41 @@ module Cards
       )
     end
 
-    # Archetypes playing the card in this venue, most lists playing it first, then by name.
-    def archetype_nodes(venue, venue_rows)
-      by_archetype = venue_rows.group_by(&:archetype_id)
+    # Archetypes playing the card in the selected sample, most lists playing it first, then by
+    # name. What opens under each follows the selection: its pools under All formats, its events
+    # under one pool, nothing under one tournament.
+    def archetype_nodes(pool, venue, venue_rows, tournament_id)
+      sample_rows = tournament_id ? venue_rows.select { |row| row.tournament_id == tournament_id } : venue_rows
+      by_archetype = sample_rows.group_by(&:archetype_id)
       archetypes = Archetype.where(id: by_archetype.keys).index_by(&:id)
 
       by_archetype.filter_map do |archetype_id, sample|
         usage = usage_for(sample)
         next unless usage.played?
 
-        archetype = archetypes.fetch(archetype_id)
-        ArchetypeNode.new(
-          archetype: archetype,
-          usage: usage,
-          pools: pool_nodes(venue, sample),
-          analysis_params: with_venue({ pool: Archetypes::MetagameScope::ALL }, venue)
-        )
+        archetype_node(archetypes.fetch(archetype_id), usage, pool, venue, sample, tournament_id)
       end.sort_by { |node| [ -node.usage.playing_count, node.archetype.name.to_s, node.archetype.id ] }
+    end
+
+    def archetype_node(archetype, usage, pool, venue, sample, tournament_id)
+      pool_value = pool ? pool.id.to_s : Archetypes::MetagameScope::ALL
+      node = ArchetypeNode.new(archetype: archetype, usage: usage, pools: [], tournaments: [],
+                               unplayed_tournaments_count: 0)
+
+      if tournament_id
+        node.analysis_params = with_venue({ pool: pool_value, tournament: tournament_id.to_s }, venue)
+      elsif pool
+        events = pool_node(venue, pool.id, pool.name, sample, nil)
+        node.scope_label = pool.name
+        node.tournaments = events.tournaments
+        node.unplayed_tournaments_count = events.unplayed_tournaments_count
+        node.analysis_params = with_venue({ pool: pool_value }, venue)
+      else
+        node.scope_label = "All formats"
+        node.pools = pool_nodes(venue, sample)
+        node.analysis_params = with_venue({ pool: pool_value }, venue)
+      end
+      node
     end
 
     # Every pool the archetype has a list in — 0 % included, since a card dropped after a
@@ -220,15 +341,13 @@ module Cards
       )
     end
 
-    # Played events only, newest first, the id breaking a tie. Labelled the way
-    # `TournamentEntry#picker_label` and the analysis's Tournament select print an event, because
-    # the name alone is not an identity (55 events share theirs).
+    # Played events only, newest first, the id breaking a tie, labelled as `event_label` says.
     def tournament_nodes(venue, pool_id, played)
       played.map do |tournament_id, event_rows|
         first = event_rows.first
         TournamentNode.new(
           tournament_id: tournament_id,
-          label: "#{first.tournament_name} (#{I18n.l(first.tournament_date)})",
+          label: event_label(first),
           usage: usage_for(event_rows),
           analysis_params: with_venue(
             { pool: pool_id ? pool_id.to_s : Archetypes::MetagameScope::ALL, tournament: tournament_id.to_s },
