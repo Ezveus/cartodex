@@ -533,8 +533,9 @@ the parameters it reproduces; a test walks each node through `MetagameScope` + `
 counts exactly, by deck-id sets, where this page's *selector labels* fold events; and it orders
 pools by their latest **listed** event in the venue, not by `buckets`' `MAX(date)` over every
 standing. Since 2026-11-27 it carries this page's three selects too — pool, venue, tournament,
-the same cascade and clamps, labels counting the lists *playing the card* — but defaults to All
-formats rather than to the newest pool. A change to this page's cascade (a new axis, a different
+the same cascade, labels counting the lists *playing the card* — but defaults to All formats
+rather than to the newest pool, offers the pool select by its own rule and applies a value only
+while its select is rendered (both written out in its spec). A change to this page's cascade (a new axis, a different
 clamp) is a change to that one as well. Changing how this report counts a card means changing that
 service too.
 

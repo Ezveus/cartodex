@@ -72,7 +72,10 @@ module Cards
     def filters
       form(action: "#{card_path(@card)}#usage", method: "get", class: "deck-filters card-usage-filters",
            data: { controller: "card-filter" }) do
-        filter_select("Standard pool", "pool", @usage.pool_options, @usage.pool&.id&.to_s || Cards::ArchetypeUsage::ALL) if @usage.pool_selectable?
+        if @usage.pool_selectable?
+          filter_select("Standard pool", "pool", @usage.pool_options,
+                        @usage.pool&.id&.to_s || Cards::ArchetypeUsage::ALL)
+        end
         filter_select("Venue", "venue", @usage.venue_options, @usage.venue.to_s) if @usage.venue_selectable?
         if @usage.tournament_selectable?
           filter_select("Tournament", "tournament", @usage.tournament_options,

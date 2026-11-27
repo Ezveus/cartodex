@@ -75,6 +75,9 @@ a test in `test/services/cards/archetype_usage_test.rb`, `test/components/cards/
 
 ## Follow-up: Standard pool and Tournament filters (2026-11-27)
 
+> Superseded on two points by the reviews — the pool selectability rule and the venue guard; the
+> spec's follow-up section holds the final rules.
+
 Owner request after the first deploy: the section gets the analysis page's whole cascade, not the
 Venue axis alone. Owner decision: the default pool is **All formats**, so the page opens on the
 tree shipped first.

@@ -151,9 +151,17 @@ across all of them.
 - Junk, out-of-selection or unoffered values resolve to "all" — compared as Strings, never `to_i`.
 
 Measured on the production copy: the parity walk over every selection the three selects offer
-(capped at 40 events per selection) compared 20846 nodes on 7 cards, 0 differences. Boss's Orders:
-517 KB / ~195 ms by default (41 KB more than before, the Tournament select's ~370 events), 319 KB
-under TEF-PBL, 56 KB under TEF-PBL + Paper. Still five queries.
+(capped at 40 events per selection) compared 20846 nodes on 7 cards and, in the truthfulness
+review, 36124 on 26, 0 differences; after the pool rule changed, the 179 one-pool cards that gained
+a select were checked — none yields All formats' tree, and 171 nodes on the first 40 match.
+Re-measured at the final head, Boss's Orders: 517 KB / ~230 ms by default (41 KB more than before,
+the Tournament select's ~370 events), 319 KB under TEF-PBL, 56 KB under TEF-PBL + Paper. Still five
+queries.
+
+One trade is left as shipped in #267: the Venue select needs lists *playing the card* in both
+venues, so a pool holding lists of both venues where the card is played in one only (167 such
+(card, pool) selections) offers no venue choice, although choosing the playing venue would drop the
+other venue's non-playing lists from the denominator.
 
 ## Out of scope
 
