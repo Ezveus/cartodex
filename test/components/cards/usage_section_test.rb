@@ -87,8 +87,25 @@ class Cards::UsageSectionTest < ActiveSupport::TestCase
     assert_equal [ "7", "online", "10" ], all.css("option[selected]").map { |option| option["value"] }
     assert_equal [ "Standard pool", "Venue", "Tournament" ], all.css(".archetype-sample-label > span").map(&:text)
 
-    tournament_only = Nokogiri::HTML5(render_usage(result(tournament_selectable: true)))
+    tournament_only = Nokogiri::HTML5(render_usage(result(venue_selectable: true, tournament_selectable: true)))
     assert_equal "all", tournament_only.at_css("select[name=tournament] option[selected]")["value"]
+    assert_equal %w[venue tournament], tournament_only.css("form.card-usage-filters select").map { |select| select["name"] },
+                 "a pool select that is no choice is not rendered beside the others"
+  end
+
+  # Each archetype links to its own analysis — the base path is built once per archetype, and a
+  # cache keyed on anything else would send every row to the first one's page.
+  test "each archetype's link names its own archetype" do
+    leaves = [ archetypes(:ogerpon), Archetype.where.not(id: archetypes(:ogerpon).id).first ].map do |archetype|
+      Cards::ArchetypeUsage::ArchetypeNode.new(
+        archetype: archetype, usage: usage(1, 1, 100.0, 1, 1, [ 1 ]), scope_label: nil, pools: [], tournaments: [],
+        unplayed_tournaments_count: 0, analysis_params: { pool: "all", tournament: "9" }
+      )
+    end
+    doc = Nokogiri::HTML5(render_usage(result(archetypes: leaves)))
+
+    assert_equal leaves.map { |node| "/archetypes/#{node.archetype.to_param}/analysis?pool=all&tournament=9" },
+                 doc.css(".card-usage-link").map { |anchor| anchor["href"] }
   end
 
   # Under one pool an archetype opens onto its events directly; under one tournament it is a leaf.

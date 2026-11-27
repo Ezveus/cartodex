@@ -90,10 +90,11 @@ module Cards
     end
 
     # Under one tournament the archetype's line is the whole answer, so it is a leaf rather than a
-    # <details> with nothing inside.
+    # <details> with nothing inside. An unplayed count never stands alone: an archetype is listed
+    # only where the selection holds a list playing the card, so under a pool it has a played event.
     def archetype_item(node)
       li(class: "card-usage-node card-usage-archetype") do
-        if node.pools.empty? && node.tournaments.empty? && node.unplayed_tournaments_count.zero?
+        if node.pools.empty? && node.tournaments.empty?
           node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype, scope: node.scope_label)
         else
           details do
