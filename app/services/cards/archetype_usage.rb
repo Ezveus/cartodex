@@ -200,14 +200,18 @@ module Cards
       played_pools.map(&:first).find { |pool| pool.id.to_s == @pool_param }
     end
 
-    # A venue in which no list plays the card inside the pool selection falls back to `:all` — the
-    # clamp, recorded in the Result so the select and the tree cannot disagree.
+    # `:all` unless the parameter names a venue and the Venue select is rendered — the clamp,
+    # recorded in the Result so the select and the tree cannot disagree. The rendered-control guard
+    # is the one `selected_pool` and `selected_tournament` carry, and it is not redundant here: a
+    # pool where one venue alone plays the card hides the select while the other venue's lists still
+    # sit in every denominator, and the form carries `venue` across a pool change. Without it, Online
+    # then TEF-PBL printed "3 of 18 lists" filtered to online, with no control on screen and an intro
+    # saying both venues are counted together (adversarial review, 2026-11-27).
     def selected_venue(pool_rows)
       return :all unless VENUES.include?(@venue_param)
+      return :all unless playing?(rows_in_venue(pool_rows, :paper)) && playing?(rows_in_venue(pool_rows, :online))
 
       venue = @venue_param.to_sym
-      return :all if venue != :all && !playing?(rows_in_venue(pool_rows, venue))
-
       venue
     end
 

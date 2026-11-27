@@ -138,7 +138,11 @@ across all of them.
   lists*, not of the card's: the first rule, copied from the analysis (two played pools, or one
   plus a playing list outside Standard), hid the select on 178 of 259 one-pool cards whose
   archetype lines blend other rotations (truthfulness review, 2026-11-27).
-- **Venue** — counted and clamped inside the pool selection.
+- **Venue** — counted and clamped inside the pool selection, and applied only while its select is
+  rendered: the form carries `venue` across a pool change, and in a pool where one venue alone
+  plays the card the other venue's lists are still in every denominator, so a kept venue narrowed
+  the figures with no control on screen (adversarial review, 2026-11-27: 3 of 18 lists instead of
+  3 of 29). Every axis now applies a value only while its select is rendered.
 - **Tournament** — the events of the pool + venue selection where a list plays the card, newest
   first, after "All tournaments"; a control from two such events.
 - **The tree loses the level a select fixes.** Under one pool an archetype opens onto its events in

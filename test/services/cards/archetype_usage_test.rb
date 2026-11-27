@@ -410,6 +410,26 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
                  result.venue_options.map(&:label)
   end
 
+  # The form carries `venue` across a pool change, and a pool where one venue alone plays the card
+  # renders no Venue select — yet the other venue's lists are in the denominator, so a venue kept
+  # there would narrow the figures with no control to undo it. Here the new pool's paper lists play
+  # the card and its online lists do not.
+  test "a venue whose select is not rendered is not applied" do
+    card = trainer("Usage Hidden Venue")
+    archetype = archetype_of_its_own
+    pool = standard_pools(:twm_por)
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 1)), archetype, deck: field_list(card => 1))
+    record(online_event(pool: pool, date: Date.new(2026, 6, 2)), archetype, deck: field_list(trainer("Usage Online Only") => 1))
+    record(online_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 2)), archetype, deck: field_list(card => 1))
+
+    result = Cards::ArchetypeUsage.call(card: card, pool_param: pool.id.to_s, venue_param: "paper")
+
+    refute_predicate result, :venue_selectable?
+    assert_equal :all, result.venue
+    node = result.archetypes.sole
+    assert_equal [ 2, 1, { pool: pool.id.to_s } ], [ node.usage.lists_count, node.usage.playing_count, node.analysis_params ]
+  end
+
   # Parity cannot see a leaked archetype: the analysis agrees with its 0 %.
   test "under a pool or a tournament, only archetypes playing the card there are listed" do
     sample = parity_sample
@@ -599,8 +619,8 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
   end
 
   # Every selection the three selects can reach, by clicking through them as a reader would: each
-  # option of a select that is rendered, the default where it is not. Following the options of a
-  # select the page withholds would walk clamped duplicates of the default. Returns
+  # option of a select that is rendered, the default where it is not. A withheld select's value is
+  # not applied (each axis clamps it), so its options would walk duplicates of the default. Returns
   # [selections walked, nodes compared].
   def walk_every_selection(card)
     selections = 0
