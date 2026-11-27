@@ -102,13 +102,17 @@ class CardAllocationTest < ActionDispatch::IntegrationTest
                   "collection-quantity:changed@window->card-allocation#refresh"
   end
 
-  test "a visitor sees no section and the page reads no deck" do
+  # The page does read `deck_cards` for a visitor now — Cards::ArchetypeUsage counts the recorded
+  # lists playing the card — so the guard names what the allocation section's two services emit:
+  # `owned_copies` and the `physical` filter (Allocations::Availability,
+  # Allocations::PhysicalDecksByCard), and the collection read.
+  test "a visitor sees no section and the page reads no allocation" do
     deck("Blade A").deck_cards.create!(card: @card, quantity: 2, owned_copies: 2)
 
     queries = capture_queries { get card_path(@card) }
 
     assert_response :success
     assert_select "#card-allocation", count: 0
-    assert_empty queries.grep(/deck_cards|"collections"/)
+    assert_empty queries.grep(/owned_copies|"physical"|"collections"/)
   end
 end

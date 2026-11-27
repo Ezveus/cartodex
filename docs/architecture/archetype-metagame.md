@@ -525,6 +525,15 @@ standings over 43 archetypes).
   its longest option, and online event names pushed the Tournament label to 905 px and the page
   into a horizontal scroll at 500 px, so the select is capped at its row.
 
+**The card page reproduces this report's card row, per archetype, pool and tournament**
+(`Cards::ArchetypeUsage`, 2026-11-26,
+`docs/superpowers/specs/2026-11-25-card-archetype-usage-design.md`). It counts the way `CardStats`
+does — distinct deck ids, `GROUPING_KEY`, copies summed per deck — and every node links here with
+the parameters it reproduces; a test walks each node through `MetagameScope` + `CardStats`. It
+counts exactly, by deck-id sets, where this page's *selector labels* fold events; and it orders
+pools by their latest **listed** event in the venue, not by `buckets`' `MAX(date)` over every
+standing. Changing how this report counts a card means changing that service too.
+
 **Out of scope, deliberately:** cross-archetype comparison and any page spanning archetypes (it
 would need a complete field, which no import produces), per-division card statistics (junior and
 senior hold 3 and 2 of the 94 measured standings), matchup data, and exporting the report.

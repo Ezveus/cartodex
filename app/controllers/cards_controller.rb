@@ -18,6 +18,12 @@ class CardsController < ApplicationController
   # export the public scope explicitly promises.
   IMAGE_RATE_LIMIT_TO = 300
   INDEX_RATE_LIMIT_TO = 60
+  # A card page now aggregates every recorded list of every archetype playing the card (Boss's
+  # Orders: 476 KB, ~190 ms on a production copy), and /cards links to it from every card of a set
+  # (up to 295), each hover-prefetched. ArchetypesController#show's budget, for that same reason.
+  # It does refuse real browsing — 15 of 200 hovers down one set answered 429 — and the owner kept
+  # it at 120 on that measurement; see docs/architecture/public-surface.md before moving it.
+  SHOW_RATE_LIMIT_TO = 120
   RATE_LIMIT_WITHIN = 1.minute
 
   rate_limit to: IMAGE_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
@@ -27,6 +33,10 @@ class CardsController < ApplicationController
   rate_limit to: INDEX_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
     name: "cards-index", unless: -> { user_signed_in? },
     store: RateLimitStore, only: :index
+
+  rate_limit to: SHOW_RATE_LIMIT_TO, within: RATE_LIMIT_WITHIN,
+    name: "cards-show", unless: -> { user_signed_in? },
+    store: RateLimitStore, only: :show
 
   def index
     authorize Card, :index?
@@ -119,6 +129,15 @@ class CardsController < ApplicationController
     # :pokemon_subtype is already in the includes above and the payload reads only the card's own
     # columns, so this is free. Unconditional: the catalog is public, CardPolicy#og_image? is true.
     @og_payload = Og::CardPayload.call(@card)
+    # Public, like the archetype analysis whose figures it reproduces. `venue` is passed raw: the
+    # service `to_s`es it, so an Array- or Hash-shaped param falls back to All rather than raising.
+    #
+    # Not for the allocation frame's own refresh: card_allocation_controller.js reloads this page on
+    # every collection +/- to extract `#card-allocation`, and measured on the widest card the tree
+    # was 466 KB of the 474 KB it rendered for nothing.
+    unless turbo_frame_request_id == Cards::AllocationSection::FRAME_ID
+      @usage = Cards::ArchetypeUsage.call(card: @card, venue_param: params[:venue])
+    end
   end
 
   def image
