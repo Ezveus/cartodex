@@ -62,9 +62,8 @@ module Cards
                         :venue, :venue_options, :venue_selectable,
                         :tournament_id, :tournament_options, :tournament_selectable,
                         :archetypes, keyword_init: true) do
-      # Each control is a genuine choice or it is not rendered, the three rules of
-      # `MetagameScope::Result`: two pool options, or one plus a playing list outside Standard (one
-      # pool alone is the same sample as All formats); playing lists under both venues (`venue_options`
+      # Each control is a genuine choice or it is not rendered: the pool where All formats and the
+      # one played pool are not the same sample; playing lists under both venues (`venue_options`
       # always number three); two played events or more.
       def pool_selectable? = pool_selectable
       def venue_selectable? = venue_selectable
@@ -183,8 +182,14 @@ module Cards
       end + [ Option.new(value: ALL, label: "All formats — #{lists_label(playing_decks(rows).size)}") ]
     end
 
+    # Not `MetagameScope#selectable?`'s rule, which counts samples of the *card*: an archetype line
+    # is over the archetype's lists, so with one played pool All formats is the same sample only
+    # when every listed row of every archetype listed sits in that pool. Counting played pools
+    # instead hid the select on 178 of 259 one-pool cards of a production copy whose archetype line
+    # blends other rotations — Mela under Dragapult ex read 1 of 959 lists with no way to its
+    # 1 of 56 in SVI-BLK but opening the node.
     def pool_selectable?
-      played_pools.size > 1 || (played_pools.size == 1 && rows.any? { |row| row.copies && row.pool_id.nil? })
+      played_pools.any? && rows.map(&:pool_id).uniq.size > 1
     end
 
     # All formats unless the parameter names a pool on offer, and only while the control is

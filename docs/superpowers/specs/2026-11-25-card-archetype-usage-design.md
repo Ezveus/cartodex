@@ -134,7 +134,10 @@ across all of them.
 - **Standard pool** — the pools a list plays the card in, most recent playing event first, then
   "All formats"; each label counts the lists playing the card over **both venues**, so it does not
   move when a venue is chosen (the analysis's stable-label rule). A control only where it is a
-  choice: two pools, or one plus a playing list outside Standard.
+  choice — where All formats and the one played pool are different samples *of the archetypes'
+  lists*, not of the card's: the first rule, copied from the analysis (two played pools, or one
+  plus a playing list outside Standard), hid the select on 178 of 259 one-pool cards whose
+  archetype lines blend other rotations (truthfulness review, 2026-11-27).
 - **Venue** — counted and clamped inside the pool selection.
 - **Tournament** — the events of the pool + venue selection where a list plays the card, newest
   first, after "All tournaments"; a control from two such events.

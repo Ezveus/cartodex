@@ -338,29 +338,35 @@ class Cards::ArchetypeUsageTest < ActiveSupport::TestCase
     assert_equal [ high.id.to_s, low.id.to_s, "all" ], Cards::ArchetypeUsage.call(card: tied).pool_options.map(&:value)
   end
 
-  # One pool alone is All formats under another name, whatever the archetype's other lists hold;
-  # a list *playing the card* outside Standard is what makes the choice real. A value for a
+  # One pool is All formats under another name only when every listed row sits in it: an archetype
+  # line is over the archetype's lists, so a non-playing list elsewhere — another pool or a GLC
+  # event — makes the pool a different sample, and the select a real choice. A value for a
   # control that is not rendered resolves to All formats.
-  test "the pool control is a choice only with two played samples" do
+  test "the pool control is a choice when All formats and the played pool are different samples" do
     pool = standard_pools(:twm_por)
     card = trainer("Usage One Pool")
     archetype = archetype_of_its_own
     record(standard_event(pool: pool, date: Date.new(2026, 6, 1)), archetype, deck: field_list(card => 1))
-    record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 1)), archetype,
-           deck: field_list(trainer("Usage Elsewhere") => 1))
-    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list(trainer("Usage GLC Only") => 1))
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 8)), archetype, deck: field_list(trainer("Usage Same Pool") => 1))
 
     single = Cards::ArchetypeUsage.call(card: card, pool_param: pool.id.to_s)
     refute_predicate single, :pool_selectable?
     assert_nil single.pool
     node = single.archetypes.sole
     assert_equal [ "All formats", { pool: "all" } ], [ node.scope_label, node.analysis_params ]
-    refute_empty node.pools
 
-    record(unpooled_event(date: Date.new(2026, 5, 1)), archetype, deck: field_list(card => 1))
+    record(unpooled_event(date: Date.new(2026, 4, 1)), archetype, deck: field_list(trainer("Usage GLC Only") => 1))
     widened = Cards::ArchetypeUsage.call(card: card, pool_param: pool.id.to_s)
     assert_predicate widened, :pool_selectable?
     assert_equal pool, widened.pool
+    assert_equal [ 2, 1 ], [ widened.archetypes.sole.usage.lists_count, widened.archetypes.sole.usage.playing_count ]
+
+    other = trainer("Usage Other Rotation")
+    rotated = archetype_of_its_own
+    record(standard_event(pool: pool, date: Date.new(2026, 6, 1)), rotated, deck: field_list(other => 1))
+    record(standard_event(pool: standard_pools(:twm_asc), date: Date.new(2026, 3, 1)), rotated,
+           deck: field_list(trainer("Usage Old Rotation") => 1))
+    assert_predicate Cards::ArchetypeUsage.call(card: other), :pool_selectable?
   end
 
   # The absent pool holds lists, so it is a node of the All-formats tree, but no option.

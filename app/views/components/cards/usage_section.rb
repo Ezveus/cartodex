@@ -53,8 +53,9 @@ module Cards
         p do
           plain "Below #{Archetypes::MetagameScope::SMALL_SAMPLE} lists a percentage rests on a " \
                 "handful of lists, and unless a venue is chosen, paper and online lists are " \
-                "counted together. Each filter counts the lists playing this card over every " \
-                "venue and tournament the filters after it leave open."
+                "counted together. A filter's own counts ignore the filters after it: the " \
+                "Standard pool counts span both venues and every tournament, the Venue counts " \
+                "every tournament."
         end
       end
     end
