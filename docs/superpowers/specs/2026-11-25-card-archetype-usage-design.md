@@ -124,9 +124,48 @@ its policy and rate limit, and a frame-navigated limited action that swallows it
 (`docs/architecture/deck-odds.md`); the visitor rate limit above bounds the same cost with none of
 that.
 
+## Follow-up: the Standard pool and Tournament selects (owner, 2026-11-27)
+
+After the first deploy the owner asked for the analysis's whole cascade, not the Venue axis alone,
+and chose **All formats as the default pool**, so the page opens on the tree shipped first. The
+analysis defaults to the newest pool because it reports one archetype; this section reports a card
+across all of them.
+
+- **Standard pool** — the pools a list plays the card in, most recent playing event first, then
+  "All formats"; each label counts the lists playing the card over **both venues**, so it does not
+  move when a venue is chosen (the analysis's stable-label rule). A control only where it is a
+  choice — where All formats and the one played pool are different samples *of the archetypes'
+  lists*, not of the card's: the first rule, copied from the analysis (two played pools, or one
+  plus a playing list outside Standard), hid the select on 178 of 259 one-pool cards whose
+  archetype lines blend other rotations (truthfulness review, 2026-11-27).
+- **Venue** — counted and clamped inside the pool selection, and applied only while its select is
+  rendered: the form carries `venue` across a pool change, and in a pool where one venue alone
+  plays the card the other venue's lists are still in every denominator, so a kept venue narrowed
+  the figures with no control on screen (adversarial review, 2026-11-27: 3 of 18 lists instead of
+  3 of 29). Every axis now applies a value only while its select is rendered.
+- **Tournament** — the events of the pool + venue selection where a list plays the card, newest
+  first, after "All tournaments"; a control from two such events.
+- **The tree loses the level a select fixes.** Under one pool an archetype opens onto its events in
+  that pool (its line is the pool's figure, links `{pool: id}`); under one event it is a leaf (links
+  `{pool: id|"all", tournament: id}` — the tournament never drives the pool).
+- Junk, out-of-selection or unoffered values resolve to "all" — compared as Strings, never `to_i`.
+
+Measured on the production copy: the parity walk over every selection the three selects offer
+(capped at 40 events per selection) compared 20846 nodes on 7 cards and, in the truthfulness
+review, 36124 on 26, 0 differences; after the pool rule changed, the 179 one-pool cards that gained
+a select were checked — none yields All formats' tree, and 171 nodes on the first 40 match.
+Re-measured at the final head, Boss's Orders: 517 KB / ~230 ms by default (41 KB more than before,
+the Tournament select's ~370 events), 319 KB under TEF-PBL, 56 KB under TEF-PBL + Paper. Still five
+queries.
+
+One trade is left as shipped in #267: the Venue select needs lists *playing the card* in both
+venues, so a pool holding lists of both venues where the card is played in one only (167 such
+(card, pool) selections) offers no venue choice, although choosing the playing venue would drop the
+other venue's non-playing lists from the denominator.
+
 ## Out of scope
 
-- Any other filter (tier, date range, division).
+- Any other filter (tier, date range, division) — the analysis's three are now all here.
 - The figure for a *name* across fingerprints (the analysis's name group line): the card page
   describes one card.
 - Caching.

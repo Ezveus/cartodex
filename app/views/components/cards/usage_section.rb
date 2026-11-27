@@ -19,7 +19,7 @@ module Cards
       section(class: "card-info-section card-usage", id: "usage") do
         h2 { "Played in recorded lists" }
         intro
-        venue_form if @usage.venue_selectable?
+        filters if any_filter?
 
         if @usage.any?
           ul(class: "card-usage-tree") { @usage.archetypes.each { |node| archetype_item(node) } }
@@ -33,11 +33,11 @@ module Cards
 
     # Three sentences, each answering a review finding about what the figures claim. Every linked
     # node is the analysis's figure for the same sample — "Other formats" has no such sample. An
-    # archetype's first line counts every rotation together, as the analysis's "All formats" does,
-    # and says so on the line itself. And the analysis's two qualifiers — a small-sample notice
-    # under MetagameScope::SMALL_SAMPLE lists, and the note that paper and online lists are
-    # counted together — apply here as much as there: on a production copy, two thirds of the
-    # linked nodes hold fewer than 10 lists.
+    # archetype's first line covers the sample the filters select, which under All formats counts
+    # every rotation together, as the analysis's "All formats" does, and says so on the line itself.
+    # And the analysis's two qualifiers — a small-sample notice under MetagameScope::SMALL_SAMPLE
+    # lists, and the note that paper and online lists are counted together — apply here as much as
+    # there: on a production copy, two thirds of the linked nodes hold fewer than 10 lists.
     def intro
       div(class: "card-usage-intro") do
         p do
@@ -46,40 +46,70 @@ module Cards
                 "prints for the same sample."
         end
         p do
-          plain "An archetype's first line counts every format and rotation together, as the " \
-                "analysis's All formats does; open it for one Standard pool at a time."
+          plain "An archetype's first line covers the sample the filters select. Under All formats " \
+                "it counts every format and rotation together, as the analysis's All formats does; " \
+                "open it, or choose a Standard pool, for one rotation at a time."
         end
         p do
           plain "Below #{Archetypes::MetagameScope::SMALL_SAMPLE} lists a percentage rests on a " \
                 "handful of lists, and unless a venue is chosen, paper and online lists are " \
-                "counted together."
+                "counted together. A filter's own counts ignore the filters after it: the " \
+                "Standard pool counts span both venues and every tournament, the Venue counts " \
+                "every tournament."
         end
       end
+    end
+
+    def any_filter?
+      @usage.pool_selectable? || @usage.venue_selectable? || @usage.tournament_selectable?
     end
 
     # A GET back onto this page, anchored on the section so the reload lands where the reader was.
-    def venue_form
+    # One form for the three selects, as Archetypes::SampleSelector has one: the form replaces the
+    # whole query string, so a change to one select carries the other two along, and the service's
+    # clamps settle any that the change left behind. Each select renders only where its own axis is
+    # a choice, and each reads its `selected:` off the Result, never off the parameter.
+    def filters
       form(action: "#{card_path(@card)}#usage", method: "get", class: "deck-filters card-usage-filters",
            data: { controller: "card-filter" }) do
-        label(class: "archetype-sample-label") do
-          span { "Venue" }
-          render Ui::FilterSelect.new(
-            name: "venue",
-            options: @usage.venue_options.map { |option| [ option.label, option.value ] },
-            selected: @usage.venue.to_s
-          )
+        if @usage.pool_selectable?
+          filter_select("Standard pool", "pool", @usage.pool_options,
+                        @usage.pool&.id&.to_s || Cards::ArchetypeUsage::ALL)
+        end
+        filter_select("Venue", "venue", @usage.venue_options, @usage.venue.to_s) if @usage.venue_selectable?
+        if @usage.tournament_selectable?
+          filter_select("Tournament", "tournament", @usage.tournament_options,
+                        @usage.tournament_id&.to_s || Cards::ArchetypeUsage::ALL)
         end
       end
     end
 
+    def filter_select(caption, name, options, selected)
+      label(class: "archetype-sample-label") do
+        span { caption }
+        render Ui::FilterSelect.new(name: name, options: options.map { |option| [ option.label, option.value ] },
+                                    selected: selected)
+      end
+    end
+
+    # Under one tournament the archetype's line is the whole answer, so it is a leaf rather than a
+    # <details> with nothing inside. An unplayed count never stands alone: an archetype is listed
+    # only where the selection holds a list playing the card, so under a pool it has a played event.
     def archetype_item(node)
       li(class: "card-usage-node card-usage-archetype") do
-        details do
-          summary do
-            node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype,
-                      scope: "All formats")
+        if node.pools.empty? && node.tournaments.empty?
+          node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype, scope: node.scope_label)
+        else
+          details do
+            summary do
+              node_line(node.archetype.name, node.usage, node.analysis_params, node.archetype,
+                        scope: node.scope_label)
+            end
+            ul(class: "card-usage-children") do
+              node.pools.each { |pool| pool_item(pool, node.archetype) }
+              tournament_items(node.tournaments, node.unplayed_tournaments_count, node.archetype)
+            end
           end
-          ul(class: "card-usage-children") { node.pools.each { |pool| pool_item(pool, node.archetype) } }
         end
       end
     end
@@ -89,15 +119,19 @@ module Cards
         details do
           summary { node_line(node.label, node.usage, node.analysis_params, archetype) }
           ul(class: "card-usage-children") do
-            node.tournaments.each do |tournament|
-              li(class: "card-usage-node card-usage-tournament") do
-                node_line(tournament.label, tournament.usage, tournament.analysis_params, archetype)
-              end
-            end
-            unplayed_line(node.unplayed_tournaments_count)
+            tournament_items(node.tournaments, node.unplayed_tournaments_count, archetype)
           end
         end
       end
+    end
+
+    def tournament_items(tournaments, unplayed_count, archetype)
+      tournaments.each do |tournament|
+        li(class: "card-usage-node card-usage-tournament") do
+          node_line(tournament.label, tournament.usage, tournament.analysis_params, archetype)
+        end
+      end
+      unplayed_line(unplayed_count)
     end
 
     def unplayed_line(count)
@@ -113,8 +147,9 @@ module Cards
     # the mobile system test (500px, Chrome's floor), where the summary's centre lands on the name and the click navigated
     # away instead of expanding. "Other formats" has no analysis to link to.
     #
-    # `scope` names a sample the line's name does not: an archetype's first line blends every
-    # rotation, which the analysis only shows under "All formats".
+    # `scope` names a sample the line's name does not: under All formats an archetype's first line
+    # blends every rotation, which the analysis only shows under "All formats"; under a pool it is
+    # that pool's figure.
     def node_line(name, usage, params, archetype, scope: nil)
       span(class: "card-usage-name") { name }
       span(class: "card-usage-figures") { [ scope, figures(usage) ].compact.join(" · ") }

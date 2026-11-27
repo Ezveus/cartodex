@@ -72,3 +72,57 @@ a test in `test/services/cards/archetype_usage_test.rb`, `test/components/cards/
 10. Component: links carry exactly the analysis params; Outside Standard has no link; empty state.
 11. System: the tree opens, the venue select submits, the figure equals the analysis page's for the
     linked node; at both sweep widths, no horizontal overflow.
+
+## Follow-up: Standard pool and Tournament filters (2026-11-27)
+
+> Superseded on two points by the reviews — the pool selectability rule and the venue guard; the
+> spec's follow-up section holds the final rules.
+
+Owner request after the first deploy: the section gets the analysis page's whole cascade, not the
+Venue axis alone. Owner decision: the default pool is **All formats**, so the page opens on the
+tree shipped first.
+
+### Frozen contract
+
+```ruby
+Cards::ArchetypeUsage.call(card:, pool_param: nil, venue_param: nil, tournament_param: nil)
+
+Result = Struct.new(:pool, :pool_options, :pool_selectable,
+                    :venue, :venue_options, :venue_selectable,
+                    :tournament_id, :tournament_options, :tournament_selectable,
+                    :archetypes, keyword_init: true)
+#   pool: StandardPool or nil (All formats). tournament_id: Integer or nil.
+#   #pool_selectable? #venue_selectable? #tournament_selectable? #any?
+
+ArchetypeNode = Struct.new(:archetype, :usage, :scope_label, :pools, :tournaments,
+                           :unplayed_tournaments_count, :analysis_params, keyword_init: true)
+```
+
+- **Pool** — options are the Standard pools in which a list plays the card (any venue), most recent
+  first, then "All formats"; labels `"TEF-PBL — N lists with this card"`, counted over both venues
+  so they do not move with the venue (the analysis's stable-label rule). Selectable when two pool
+  options exist, or one plus a playing list outside Standard (`MetagameScope::Result#selectable?`).
+  An unknown, junk or non-selectable value resolves to All formats.
+- **Venue** — counted and clamped inside the pool selection.
+- **Tournament** — options are the events of the pool + venue selection where a list plays the
+  card, newest first, the id breaking a tie, after `"All tournaments — N lists with this card"`.
+  Selectable when there are two or more; a value outside them, or under a non-selectable control,
+  resolves to none.
+- **Tree** — All formats: archetype → pool → tournament, as shipped (`scope_label` "All formats").
+  A pool: archetype (`scope_label` the pool's name, params `{pool: id}`) → its played events in the
+  pool and venue, plus the unplayed count; `pools` empty. A tournament: archetypes only (leaves,
+  `scope_label` nil, params `{pool: id|"all", tournament: id}`), `pools` and `tournaments` empty.
+  Every node keeps `venue:` when the venue is not `:all`.
+- Query count unchanged: everything resolves over the rows already loaded.
+
+### Tests (to be completed by the plan adversary)
+
+1. Parity walk extended to every pool and every tournament option of every venue.
+2. Pool options, labels, order and selectability (single-pool card: not selectable; one pool plus
+   GLC: selectable).
+3. Clamps: junk pool/tournament (Array, Hash, "12junk"), a pool the card is not played in, a
+   tournament outside the selected pool/venue.
+4. Tree shape under a pool and under a tournament; exact `analysis_params`.
+5. Component: three selects, `selected` read from the Result, leaf rendering under a tournament.
+6. Controller: params reach the service.
+7. System: choose a pool, then a tournament; the Analysis link's figure matches.
