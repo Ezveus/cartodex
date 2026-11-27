@@ -1,5 +1,28 @@
 require "test_helper"
 
+# Capybara 3.40 (the latest release) ends every Chrome `reset!` with
+# `Storage.clearDataForOrigin(origin: "*")`, and Chrome 158 refuses the wildcard:
+# "invalid argument: * is not a valid URL", raised from the teardown of every system test. The
+# ubuntu-26.04 runner image 20261122 ships Chrome 158 and failed the whole mobile job with it.
+#
+# The same two things are cleared by other means: every cookie through `Storage.clearCookies`,
+# which takes no origin, and local storage for the one origin the suite ever visits, the test
+# server's. It replaces the call on every Chrome, not only where the wildcard fails, so a local run
+# on an older browser exercises the path CI does. `BrowserResetTest` holds both halves. Remove this
+# once a Capybara release stops sending the wildcard.
+module ChromeResetWithoutWildcardOrigin
+  def execute_cdp(cmd, params = {})
+    return super unless cmd == "Storage.clearDataForOrigin" && params[:origin] == "*"
+
+    super("Storage.clearCookies")
+    server = Capybara.current_session.server
+    return unless server && params[:storageTypes].to_s.include?("local_storage")
+
+    super("Storage.clearDataForOrigin", origin: server.base_url, storageTypes: "local_storage")
+  end
+end
+Capybara::Selenium::Driver::ChromeDriver.prepend(ChromeResetWithoutWildcardOrigin)
+
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # Devise sign-in for system tests. Warden's test mode installs the session
   # server-side, so a test never has to drive the login form — which it could not
